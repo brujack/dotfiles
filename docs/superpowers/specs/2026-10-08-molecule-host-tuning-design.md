@@ -1,7 +1,7 @@
 # Molecule host tuning: persist the inotify instance limit
 
 - **Date:** 2026-10-08
-- **Status:** Draft (revised after Step 8 round 2)
+- **Status:** Draft (revised after Step 8 round 3, scoped)
 
 ## Problem
 
@@ -20,8 +20,8 @@ Measured here on 2026-10-08, the premise this design rests on:
 ```
 claude       fs.inotify.max_user_instances = 128   /etc/sysctl.d: README.sysctl only   sudo -n: ok
 workstation  fs.inotify.max_user_instances = 128   /etc/sysctl.d: README.sysctl only   sudo -n: ok
-workstation  systemd-sysctl active; no inotify key in /usr/lib/sysctl.d or /etc/sysctl.conf
-claude       /usr/lib/sysctl.d/30-localsearch.conf sets max_user_watches only (not instances)
+workstation  systemd-sysctl active; /usr/lib/sysctl.d/30-localsearch.conf sets max_user_watches only
+both         no max_user_instances key in /usr/lib/sysctl.d, /etc/sysctl.d or /etc/sysctl.conf
 both         rootful docker; in terraform_ansible's [github_runner] group (claude 12, workstation 6)
 cruncher     unreachable (ssh refused) -- WSL2 boot behaviour unmeasured
 ```
@@ -67,12 +67,14 @@ operator.
     file persists across reboot only where systemd-sysctl runs at boot; WSL2 without
     systemd (`cruncher` carries `HAS_DOCKER`) is skipped, and stays at its default with
     no signal from dotfiles: an accepted, stated gap.
-  - **Conf value.** Parsed from the conf as the value of key
-    `fs.inotify.max_user_instances`, whitespace around `=` ignored, so the `sysctl -w`
-    spelling `key=1024` counts as the same setting.
-  - **Write** only when the conf is absent or its parsed value is not an integer
-    `>= 1024`. Never rewrites a conf holding a higher value, so an operator's
-    deliberate raise survives. Content written: `fs.inotify.max_user_instances = 1024`.
+  - **Conf value.** Parsed as the **last** assignment of `fs.inotify.max_user_instances`
+    (or its `/`-separated spelling, optional leading `-`), whitespace around `=`
+    ignored, as systemd-sysctl reads it.
+  - **Write** only when the conf does not exist (`! -e`), or exists, parses, and holds a
+    value below 1024. A conf that exists but cannot be read or parsed is never
+    overwritten: rc 1, "exists but unreadable/unparseable; fix by hand". So a raise the
+    operator wrote in any spelling, or under a tighter mode, survives. Content written:
+    `fs.inotify.max_user_instances = 1024`, via `sudo tee <conf> >/dev/null`.
   - **Read-back** after any write. Unreadable conf → rc 1, "cannot read back <conf>".
     Parsed value not `>= 1024` → rc 1, "write failed". The read-back is the check, not
     tee's rc: `tests/mocks/tee` swallows failures.
@@ -80,12 +82,16 @@ operator.
     gated on `^[0-9]+$`) is below 1024 or non-numeric. Never applies when live is
     already `>= 1024`, so a higher live value is never lowered, even when the step just
     wrote the file. Failure → rc 1, "apply failed".
+  - **Boot ordering.** The file is named `90-` so it sorts after the packaged
+    `/usr/lib/sysctl.d` files (`10-` to `55-` on these hosts). A later-sorting file that
+    sets the key lower would win at boot and nothing here detects it; neither host has
+    one today (measured), and this is a stated gap.
   - Prints one line saying what it did: `inotify: conf written`, `inotify: applied`,
     `inotify: already 1024 or higher`, so the operator's run shows the step acted.
   - The loop names `inotify` as a failed step on rc 1; `install_ubuntu_packages`
     returns 2 and the run continues, like every other step.
 - Seams, all with production defaults:
-  - `_SYSCTL_CONF` — default `/etc/sysctl.d/60-dotfiles-inotify.conf`.
+  - `_SYSCTL_CONF` — default `/etc/sysctl.d/90-dotfiles-inotify.conf`.
   - `_SYSCTL_BIN` — default `sysctl` (`tests/mocks/sysctl` execs the real binary).
   - `_INOTIFY_PROC` — default `/proc/sys/fs/inotify/max_user_instances`.
   - `_SYSTEMD_RUN_DIR` — default `/run/systemd/system`.
@@ -98,9 +104,9 @@ operator.
 - Live value unreadable or non-numeric → `doctor_fail` "cannot read <path>".
 - Conf missing, unreadable, or parsed value not `>= 1024` → `doctor_fail`, then the fix
   printed on its own indented line:
-  `printf 'fs.inotify.max_user_instances = 1024\n' | sudo tee /etc/sysctl.d/60-dotfiles-inotify.conf && sudo sysctl -p /etc/sysctl.d/60-dotfiles-inotify.conf`
+  `printf 'fs.inotify.max_user_instances = 1024\n' | sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf && sudo sysctl -p /etc/sysctl.d/90-dotfiles-inotify.conf`
 - Conf `>= 1024`, live below 1024 → `doctor_fail`, then on its own line
-  `sudo sysctl -p /etc/sysctl.d/60-dotfiles-inotify.conf`.
+  `sudo sysctl -p /etc/sysctl.d/90-dotfiles-inotify.conf`.
 - Otherwise `doctor_pass` with the live value. A conf or live value above 1024 passes.
 
 Neither remedy is `-t developer`, a full package install for one kernel key. The check
@@ -118,20 +124,26 @@ not write `/etc` (N2).
   both subprocess `-t doctor` tests in `unit.bats`, none of which a per-file `setup()`
   export would reach. `workflows.bats`, `linux_ubuntu.bats`, `unit.bats` and
   `plugin_node_paths.bats` all call `load_mocks`.
+- Tests that reach the real step (`workflows.bats:584`, `linux_ubuntu.bats:331`, `:345`
+  and the clean-run test at `:4464`) set or unset `HAS_DOCKER` themselves, so the branch
+  taken does not depend on the shell running the suite. The two `eval` step lists at
+  `linux_ubuntu.bats:331`/`:345` gain `inotify` and their count assertion moves 12 to 13.
 - `_stub_ubuntu_steps` (`tests/setup_env/workflows.bats`) gains
   `_install_ubuntu_inotify() { :; }`; every stub-by-name `run_doctor` test
   (`unit.bats`, `plugin_node_paths.bats`) gains `_doctor_check_inotify_limits() { :; }`.
 - Step cases (each asserts status, the conf content, and the recorded sysctl calls):
   - conf absent, live 128 → conf holds the line; sysctl called `-p <conf>`; prints written + applied.
   - conf absent, live 4096 → conf written; **no** sysctl call.
-  - conf `key=1024` (no spaces), live 1024 → unchanged, no call.
-  - conf `= 4096`, live 4096 → unchanged, no call.
+  - conf `key=1024` (no spaces), live 1024 → unchanged, no call, prints `already`.
+  - conf `= 4096`, live 4096 → unchanged, no call, prints `already`.
+  - conf `fs/inotify/max_user_instances = 4096`, and conf with `= 512` then `= 4096` → unchanged.
+  - conf exists, mode 000 → rc 1 "unreadable", conf untouched; conf with no parseable key → rc 1, untouched.
   - conf `= 512` → rewritten to 1024.
   - conf right, live 128 → no write, sysctl called.
   - conf right, live non-numeric (and live file missing) → sysctl called.
   - write fails via `MOCK_TEE_EXIT=1` → rc 1 "write failed", no sysctl call.
   - tee exits 0 but writes nothing (a `SHIM_DIR` tee shim) → rc 1 "write failed".
-  - conf written but unreadable (`chmod 000` fixture) → rc 1 "cannot read back".
+  - read-back cannot read the written conf (a `SHIM_DIR` tee shim that writes then `chmod 000`) → rc 1 "cannot read back".
   - sysctl fails → rc 1 "apply failed".
   - `HAS_DOCKER` unset; systemd dir absent → rc 0, skip line, no write, no call.
 - Loop: inotify returns 1 → `inotify` in the failed list, rc 2, the next step still runs;
@@ -150,11 +162,12 @@ the code from a hand-pasted fix. No interactive shell is needed: sourcing
 hostname.
 
 ```bash
-cd ~/git-repos/personal/dotfiles && bash -c 'source ./setup_env.sh; detect_env; _install_ubuntu_inotify'
+cd ~/git-repos/personal/dotfiles && git pull --ff-only -q && bash -c 'source ./setup_env.sh; detect_env; _install_ubuntu_inotify'
 ssh workstation 'cd ~/git-repos/personal/dotfiles && git pull --ff-only -q && bash -c "source ./setup_env.sh; detect_env; _install_ubuntu_inotify"' < /dev/null
 ```
 
-Each must print `inotify: conf written` and `inotify: applied`. Then on each host:
+Precondition on each host: the checkout is on `master` with `git status --porcelain`
+empty; otherwise stop and ask the operator. Each must print `inotify: conf written` and `inotify: applied`. Then on each host:
 `sysctl fs.inotify.max_user_instances` → 1024 and `./setup_env.sh -t doctor` → inotify
 PASS. Persistence across reboot rests on systemd-sysctl reading `/etc/sysctl.d` at boot;
 no reboot is scheduled to prove it.
@@ -163,13 +176,13 @@ no reboot is scheduled to prove it.
 
 - **R1.** `[PR1]` `lib/constants.sh` defines `INOTIFY_MAX_USER_INSTANCES=1024`.
 - **R2.** `[PR1]` `_install_ubuntu_inotify` is the first step in `install_ubuntu_packages`' step loop.
-- **R3.** `[PR1]` `_install_ubuntu_inotify` writes `fs.inotify.max_user_instances = 1024` to `${_SYSCTL_CONF:-/etc/sysctl.d/60-dotfiles-inotify.conf}` only when the conf is absent or its value (whitespace around `=` ignored) is not an integer >= 1024, and returns 1 when a read-back afterwards cannot read the file or finds a value below 1024.
+- **R3.** `[PR1]` `_install_ubuntu_inotify` writes `fs.inotify.max_user_instances = 1024` to `${_SYSCTL_CONF:-/etc/sysctl.d/90-dotfiles-inotify.conf}` only when the conf does not exist or its last parsed value is below 1024; returns 1 without writing when the conf exists but cannot be read or parsed; and returns 1 when a read-back after a write cannot read the file or finds a value below 1024.
 - **R4.** `[PR1]` `_install_ubuntu_inotify` runs `sysctl -p <conf>` under sudo only when the live value read from `_INOTIFY_PROC` is below 1024 or not a non-negative integer, and returns 1 when that call fails.
 - **R5.** `[PR1]` `_install_ubuntu_inotify` returns 0 without writing or applying, and prints a skip line, when `HAS_DOCKER` is unset or `${_SYSTEMD_RUN_DIR:-/run/systemd/system}` is not a directory.
 - **R6.** `[PR1]` `_doctor_check_inotify_limits` is silent unless `LINUX`, `HAS_DOCKER` and the systemd directory are all present; fails "cannot read" on a non-numeric live value; fails and prints the `sudo tee ... && sudo sysctl -p` line on its own line when the conf is missing, unreadable or below 1024; fails and prints `sudo sysctl -p <conf>` on its own line when the live value is below 1024; passes any conf and live value >= 1024; and never names `-t developer`.
 - **R7.** `[PR1]` `load_mocks` in `tests/helpers/common.bash` exports `_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC` and `_SYSTEMD_RUN_DIR` pointing under `BATS_TEST_TMPDIR`; `_stub_ubuntu_steps` stubs `_install_ubuntu_inotify`; every stub-by-name `run_doctor` test stubs `_doctor_check_inotify_limits`.
 - **V1.** After merge, the step run on `claude` and over ssh on `workstation`, before any doctor run, prints `inotify: conf written` and `inotify: applied`; then `sysctl fs.inotify.max_user_instances` reports 1024 and `-t doctor` passes the inotify check on both.
-- **V2.** `make test` passes on `claude` from a shell that exports `HAS_DOCKER=1`, and `/etc/sysctl.d` holds no `60-dotfiles-inotify.conf` afterwards unless V1 already wrote it.
+- **V2.** `make test` passes on `claude` from a shell that exports `HAS_DOCKER=1` and from one that does not.
 - **N1.** No change to `fs.inotify.max_user_watches` or any other sysctl.
 - **N2.** No sysctl write from `-t update` or `-t setup_user`.
 - **N3.** No `PARALLEL_JOBS` export or default anywhere in dotfiles; that default belongs to terraform_ansible's `ansible/Makefile`.
@@ -222,3 +235,11 @@ Disposition: Addressed (operator "Keep in dotfiles, fix round 2"). (1) ssh form 
 Finding: (1) MEDIUM: `workflows.bats:584` runs the real `install_ubuntu_packages` unstubbed; seams only in `linux_ubuntu.bats` leave it reaching production paths, green as uid 1000, live as root. (2) MEDIUM: exact `= 1024` enforcement lowers a higher live limit and fails a deliberate raise. (3) Doctor tests and two subprocess `-t doctor` tests read real `/proc`. (4) Unreadable read-back reported as "write failed". (5) Step position, the tee-writes-nothing shim, and WSL's silent gap unstated.
 Assumption: same sizing question as above.
 Disposition: Addressed (operator "Keep in dotfiles, fix round 2"). (1)(3) Seam defaults moved into `load_mocks`, covering every file that calls it (R7). (2) Write only when absent or below 1024; apply only when live is below 1024; doctor passes >= 1024 (N4). (4) Own "cannot read back" message. (5) First in loop; `SHIM_DIR` tee shim named; WSL gap stated.
+
+### Round 3 (scoped: Risk only, Design/Testing/Verification/Requirements)
+
+Reviewed at commit: `63d6cd31` (round 2 revisions).
+
+Finding: (1) An unreadable conf, or a raise spelled with `/`, a leading `-` or a duplicate key, parses as "not >= 1024" and is overwritten to 1024, breaking N4. (2) The boot value comes from the merged sysctl.d set; a later-sorting file setting the key lower defeats the step, and doctor's remedy lasts one boot. Not present on either host. (3) The premise table had the localsearch row on the wrong host. (4) claude's verification line never pulls; no guard on a dirty or non-master checkout. (5) V2 cannot fail: the sudo mock never escalates. (6) Tests reaching the real step inherit `HAS_DOCKER` from the shell; the `linux_ubuntu.bats:331/345` step lists omit `inotify`; no-op cases should assert the `already` line; `tee` echoes to stdout.
+Assumption: 1024 covers root's budget under matrix plus busy runners; unmeasured; the lens named a root-count command.
+Disposition: Addressed within the operator's "Keep in dotfiles, fix round 2" scope (orchestrator-applied; operator confirms at spec review). (1) Write only when absent or parsed below 1024; existing unreadable/unparseable conf gives rc 1 and is never overwritten; last assignment and `/`/`-` spellings parsed. (2) File renamed `90-`; gap stated. (3) Table corrected. (4) claude line pulls; precondition stated. (5) V2 replaced with a suite run both with and without `HAS_DOCKER`. (6) Explicit `HAS_DOCKER` in the four tests; lists to 13; `already` asserted; `tee >/dev/null`. Review stops here: the corrections removed surface (no rewrite of existing confs) and the remaining findings are test apparatus.
