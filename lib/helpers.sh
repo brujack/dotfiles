@@ -949,13 +949,14 @@ _doctor_check_github_mcp() {
 }
 
 # Print the last value assigned to fs.inotify.max_user_instances in a sysctl
-# conf file, or nothing. Accepts the dotted and slash spellings, a leading `-`
+# conf file, or nothing -- including when that last value is invalid, so a
+# valid value followed by `08` reads as unparseable. Accepts the dotted and slash spellings, a leading `-`
 # (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
 # is IFS whitespace and would collapse fields.
 _inotify_conf_value() {
-  # Length/leading-zero checks are in code, not the regex: interval braces are
-  # not portable across awk implementations. A value that fails them is not
-  # printed, so the caller reports the conf as unparseable.
+  # Length/leading-zero checks are in code, not the regex: older awks lack
+  # interval braces. A value that fails them is not printed, so the caller
+  # reports the conf as unparseable.
   awk '
     {
       line = $0
