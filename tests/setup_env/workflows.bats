@@ -1538,27 +1538,11 @@ setup_constants_copy() {
   grep -q "gitleaks" "${_checked_tools}"
 }
 
-@test "run_check_versions checks oh-my-zsh tag" {
-  local _checked="${BATS_TEST_TMPDIR}/checked"
-  _check_cv_oh_my_zsh() { printf "oh-my-zsh\n" >> "${_checked}"; }
-  run_check_versions
-  grep -q "oh-my-zsh" "${_checked}"
-}
-
 @test "run_check_versions checks homebrew-install SHA" {
   local _checked="${BATS_TEST_TMPDIR}/checked"
   _check_cv_homebrew_install() { printf "homebrew-install\n" >> "${_checked}"; }
   run_check_versions
   grep -q "homebrew-install" "${_checked}"
-}
-
-@test "_check_cv_oh_my_zsh emits WARN when curl returns empty (no releases)" {
-  local _ok=0 _outdated=0 _warned=0
-  curl() { printf ""; }
-  export -f curl
-  local _out
-  _out=$(_check_cv_oh_my_zsh 2>&1)
-  [[ "${_out}" == *"[WARN]"* ]] || [[ "${_warned}" -eq 1 ]]
 }
 
 @test "_check_cv_homebrew_install emits OK when SHA matches" {
@@ -1579,6 +1563,7 @@ setup_constants_copy() {
   local _out
   _out=$(_check_cv_homebrew_install 2>&1)
   [[ "${_out}" == *"[OUTDATED]"* ]]
+  [[ "${_out}" == *"diff: https://github.com/Homebrew/install/compare/"* ]]
 }
 
 # ── run_update summary integration ────────────────────────────────────────────
@@ -3076,7 +3061,7 @@ _stub_cv_callees() {
   run run_check_versions
   [ "$status" -eq 2 ]
   [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
-  [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
+  [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
   [ "$(grep -c '^_check_cv_homebrew_install$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
   [ "$(grep -c '^_check_one_cargo_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
   [[ "$output" == *"7 not checked"* ]]
@@ -3101,17 +3086,16 @@ _stub_cv_callees() {
 }
 
 @test "run_check_versions counts warned tools in summary" {
-  # 7 tools via _run_cv_check emit [WARN] + 2 more functions (_check_cv_oh_my_zsh,
-  # _check_cv_homebrew_install) also emit [WARN] when curl fails in test env,
-  # plus the 8 CARGO_TOOLS pins via the real (unstubbed) _check_one_cargo_version,
-  # whose curl call also fails in test env = 17 total. Was 9 until the cargo
-  # loop was added to run_check_versions on 2026-09-17 (crates.io answers for
-  # pins GitHub releases and a command -v PATH probe both cannot). Was 8 + 2 =
-  # 10 until zsh was dropped from the _run_cv_check list on 2026-09-12
-  # (apt/brew choose that version, so an upstream comparison is not actionable).
+  # 7 tools via _run_cv_check emit [WARN] + 1 more function (_check_cv_homebrew_install)
+  # also emits [WARN] when curl fails in test env, plus the 8 CARGO_TOOLS pins
+  # via the real (unstubbed) _check_one_cargo_version, whose curl call also fails
+  # in test env = 16 total. Was 17 until _check_cv_oh_my_zsh was deleted on
+  # 2026-10-08 (oh-my-zsh has no releases; the endpoint returned 404 every run).
+  # Was 9 until the cargo loop was added to run_check_versions on 2026-09-17.
+  # Was 8 + 2 = 10 until zsh was dropped from the _run_cv_check list on 2026-09-12.
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"17 warnings"* ]]
+  [[ "$output" == *"16 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {

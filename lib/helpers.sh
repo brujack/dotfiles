@@ -312,7 +312,7 @@ Options:
   --mas-only      : (update only) Update Mac App Store apps only
   --pkgs-only     : (update only) Update Linux system packages only (apt/snap)
   --claude-only   : (update only) Update Claude plugins only
-  --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh
+  --update        : (check-versions only) Interactively prompt to update outdated version pins in lib/constants.sh (homebrew-install is report-only and is not prompted)
   --venv-name     : (recreate-venv only) Name of the pyenv virtualenv to recreate (default: ansible)
 EOF
   exit 0

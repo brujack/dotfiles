@@ -43,7 +43,6 @@ teardown() {
 
 @test "run_check_versions counts one OUTDATED cargo crate and returns non-zero" {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
-  _check_cv_oh_my_zsh() { :; }
   _check_cv_homebrew_install() { :; }
   # Deterministic on crate name rather than a call counter, so the result
   # does not depend on whether `run` executes run_check_versions in the
@@ -64,7 +63,6 @@ teardown() {
 
 @test "run_check_versions adds all-OK cargo crates to the OK total" {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
-  _check_cv_oh_my_zsh() { :; }
   _check_cv_homebrew_install() { :; }
   # A max_stable_version far below every CARGO_TOOLS pin makes all eight
   # crates OK (the pin is newer than upstream) -- exercises the real,
@@ -93,7 +91,6 @@ teardown() {
   # read back 0 afterward. A file write crosses that boundary because the
   # subshell inherits the real filesystem, not a copy of it.
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
-  _check_cv_oh_my_zsh() { :; }
   _check_cv_homebrew_install() { :; }
   local _prompt_log="${BATS_TEST_TMPDIR}/prompt_calls"
   : > "${_prompt_log}"
