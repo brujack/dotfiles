@@ -61,7 +61,8 @@ target is never touched.
 
 Match the key (either spelling, optional leading `-`, any whitespace around `=`)
 with **any** right-hand side. Every matching line resets `val`: to the value when it
-is `0` or a non-zero-led integer of at most 10 digits, otherwise to empty. An empty
+is `0` or a non-zero-led integer no greater than 2147483647 (the kernel's `INT_MAX`;
+compared as a string of at most 10 digits, then numerically), otherwise to empty. An empty
 `val` at end of file prints nothing, so install and doctor already report the conf as
 unparseable and "fix by hand". No caller changes.
 
@@ -70,12 +71,13 @@ unparseable and "fix by hand". No caller changes.
 1. Skips (HAS_DOCKER, systemd dir): unchanged.
 2. Classify the conf (unreadable or unparseable returns 1): unchanged.
 3. Read live. Return 1 with **nothing written** when it is unreadable, is not `0` or a
-   non-zero-led integer, or is longer than 10 digits (the read-back parser's cap; a
-   real kernel's int max is 10 digits). This moves the existing check earlier, because
-   the target needs it.
+   non-zero-led integer, or is above 2147483647 (the same `INT_MAX` cap as the
+   parser). This moves the existing check earlier, because the target needs it.
 4. Conf missing or below the target: write `fs.inotify.max_user_instances = <target>`,
    read back, and return 1 with `inotify: read-back mismatch` unless the read-back
-   value equals the target.
+   value equals the target. On success print `inotify: conf written (<target>)` when
+   the conf was missing, or `inotify: persisted <target> to <path> (was <old value>)`
+   when it existed.
 5. Live at or above 1024: return 0 (prints "already" unless it just wrote).
 6. Otherwise apply the conf value with `sysctl -w`.
 
@@ -84,13 +86,21 @@ live, so apply never lowers anything.
 
 ### 3. Doctor (`lib/helpers.sh:_doctor_check_inotify_limits`)
 
-After the existing live and conf validation (which also gets the 10-digit cap):
+After the existing live and conf validation (which also gets the `INT_MAX` cap),
+the first matching case wins:
 
-- Conf missing or below the target: fail, then print the `tee` line writing the
-  target. When live is below 1024, append `&& sudo sysctl -w
-  fs.inotify.max_user_instances=1024`. The fail message names the case: `missing`,
-  `below 1024`, or `<conf> below live <live>; next boot drops to <conf>`.
-- Otherwise live below 1024: unchanged (`sudo sysctl -w ...=<conf>`).
+- Conf missing: FAIL `<path> missing; next boot: kernel default`, then the `tee` line
+  writing the target.
+- Conf value below 1024: FAIL `<path> value <conf value> below 1024; next boot:
+  <conf value>`, then the `tee` line writing the target. This wins over "below live"
+  when both hold.
+- In both FAIL cases, when live is below 1024, the `tee` line gets
+  `&& sudo sysctl -w fs.inotify.max_user_instances=1024` appended.
+- Conf value below live (so live is above 1024): WARN, not FAIL, `<path> value
+  <conf value> below live <live>; a reboot may drop it`, then the `tee` line writing
+  the live value. A WARN does not fail doctor: a deliberate temporary raise, or a
+  later-sorting drop-in that already persists the value, is not a broken host.
+- Live below 1024: unchanged (`sudo sysctl -w ...=<conf value>`).
 - Otherwise pass.
 
 ### 4. sysctl seam
@@ -125,33 +135,42 @@ existing seams. Every case asserting an absence also asserts a positive outcome.
 - Install:
   - conf absent, live 4096: writes 4096 and applies nothing (replaces the test that
     pins 1024).
-  - conf 1024, live 4096: rewrites the conf to 4096 and prints `conf written`.
+  - conf 1024, live 4096: rewrites the conf to 4096 and prints
+    `persisted 4096 to <path> (was 1024)`.
   - conf 8192, live 4096: conf byte-identical, prints `already`.
   - conf 512, live 2048: writes 2048.
   - conf absent, live 128: writes and applies 1024.
   - conf absent, live unreadable: rc 1, stderr `cannot read live value`, conf absent.
-  - live of 11 digits: rc 1, conf absent.
+  - live 2147483648: rc 1, conf absent; live 2147483647 is accepted.
+  - conf `3000000000`: rc 1, stderr `unparseable`, conf byte-identical.
   - a tee that writes 1024 when the target is 4096: rc 1 and stderr
     `read-back mismatch`.
 - Doctor:
   - conf missing, live 4096: `tee` with 4096 and no `sysctl -w`.
   - conf missing, live 128: `tee` with 1024 plus the `sysctl -w` half.
-  - conf 1024, live 4096: FAIL naming `below live 4096`, `tee` with 4096.
+  - conf 1024, live 4096: WARN naming `value 1024 below live 4096`, `tee` with 4096,
+    and `run_doctor` still exits 0 with only this finding.
+  - conf 512, live 4096: FAIL naming `value 512 below 1024`, not `below live`;
+    `tee` with 4096 and no `sysctl -w`.
+  - conf missing: FAIL message contains `next boot: kernel default`.
   - conf 8192, live 4096: PASS.
+  - conf `3000000000`: FAIL `unparseable; fix by hand`, no `tee` line.
 - Seam: with `_SYSCTL_BIN` set and live 128, the log has the stub's `sysctl -w` line
   and no `sudo` line; with it unset and the PATH stub, the marker is present and the
   log has `sudo sysctl -w`.
 - Mutation controls, each must turn a test red: drop the `val = ""` reset; replace the
-  target with 1024; compare the conf only against 1024; drop the `live < 1024`
+  target with 1024; compare the conf only against 1024; raise the cap to 9999999999;
+swap the "below 1024" and "below live" order; make the below-live case FAIL; drop the
+`live < 1024`
   condition on the doctor suffix; always use sudo.
 
 ## Requirements
 
-- **R1.** `[PR1]` `_inotify_conf_value` prints the value of the last line assigning `fs.inotify.max_user_instances` (dotted or slash spelling, optional leading `-`), and prints nothing when that last right-hand side is not `0` or a non-zero-led integer of at most 10 digits, including empty.
-- **R2.** `[PR1]` `_install_ubuntu_inotify` returns 1 without writing the conf or applying when the live value is unreadable, not `0`/a non-zero-led integer, or longer than 10 digits, whatever the conf state.
-- **R3.** `[PR1]` When the conf is missing or its value is below `max(live, 1024)`, `_install_ubuntu_inotify` writes `fs.inotify.max_user_instances = <max(live, 1024)>`, and returns 1 printing `read-back mismatch` when the read-back value differs from that number.
+- **R1.** `[PR1]` `_inotify_conf_value` prints the value of the last line assigning `fs.inotify.max_user_instances` (dotted or slash spelling, optional leading `-`), and prints nothing when that last right-hand side is not `0` or a non-zero-led integer no greater than 2147483647, including empty.
+- **R2.** `[PR1]` `_install_ubuntu_inotify` returns 1 without writing the conf or applying when the live value is unreadable, not `0`/a non-zero-led integer, or above 2147483647, whatever the conf state.
+- **R3.** `[PR1]` When the conf is missing or its value is below `max(live, 1024)`, `_install_ubuntu_inotify` writes `fs.inotify.max_user_instances = <max(live, 1024)>`, returns 1 printing `read-back mismatch` when the read-back value differs from that number, and on success prints the written value, plus the previous value when a conf existed.
 - **R4.** `[PR1]` `_install_ubuntu_inotify` applies only when the live value is below 1024; runs `"${_SYSCTL_BIN}" -w` without sudo when `_SYSCTL_BIN` is non-empty and `sudo sysctl -w` otherwise; and names `_SYSCTL_BIN` in the failure message when the seam was set.
-- **R5.** `[PR1]` When the conf is missing or below `max(live, 1024)`, `_doctor_check_inotify_limits` fails naming the case (missing, below 1024, or below live) and prints a `tee` line writing `max(live, 1024)`, followed by `&& sudo sysctl -w fs.inotify.max_user_instances=1024` only when the live value is below 1024.
+- **R5.** `[PR1]` `_doctor_check_inotify_limits` FAILs when the conf is missing (message names `next boot: kernel default`) or its value is below 1024 (message names the value and that it is next boot's value, and wins over below-live), and WARNs, not FAILs, when the conf value is at least 1024 but below live (`a reboot may drop it`); each prints a `tee` line writing `max(live, 1024)`, followed by `&& sudo sysctl -w fs.inotify.max_user_instances=1024` only when the live value is below 1024.
 - **R6.** `[PR1]` CLAUDE.md's `setup` entry and Test Seams bullet describe R3 and R4 and the known limit; ADR-0044 carries a dated Consequences note with the known limit; Backlog rows 180-183 are deleted and one row is added for N4.
 - **V1.** After merge, on `claude`: `-t doctor` passes the inotify check, and the step prints `inotify: already 1024 or higher` with `/etc/sysctl.d/90-dotfiles-inotify.conf` byte-identical before and after. This is a no-regression check only; R3-R5 are evidenced by V2.
 - **V2.** `make test` passes; each mutation in Testing turns at least one test red.
@@ -236,7 +255,7 @@ message is true on both today. (2) Option B's cost for states no host has reache
 recorded operator choice, not reopened.
 Assumption: that live above our conf means the raise is unpersisted. Settle per host
 with `systemd-analyze cat-config sysctl.d | grep -n max_user_instances`.
-Disposition:
+Disposition: Addressed (operator, 2026-10-08) — below-live is a WARN reading `a reboot may drop it`; the second-owner case stays under the accepted cost.
 
 ### Ergonomics
 
@@ -248,7 +267,7 @@ conf" is drift, suggest WARN. (3) The label is unspecified when two cases hold (
 `missing` and `below 1024` messages do not say what happens at next boot.
 Assumption: that nothing raises the key at runtime (k3s, LXD, a snap, a unit). Grep
 of systemd unit and snap trees on `claude` found no writer.
-Disposition:
+Disposition: Addressed (operator, 2026-10-08) — install names the persisted and previous values; below-live is a WARN; below-1024 wins the label and messages carry the value; missing and below-1024 messages name next boot.
 
 ### Risk
 
@@ -262,7 +281,7 @@ doctor; the seam test's failing branch is inert unless run as root.
 Assumption: that live above 1024 is an operator's deliberate raise, not a privileged
 molecule container writing the global key. No terraform_ansible role sets it; live on
 `claude` is 1024 after molecule runs.
-Disposition:
+Disposition: Addressed (operator, 2026-10-08) — parser and live read capped at 2147483647; label order fixed (below 1024 wins).
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
