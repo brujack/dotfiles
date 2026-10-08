@@ -218,3 +218,52 @@ Disposition: Addressed (operator, 2026-10-08) — (1) option B plus stated known
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — round 2
+
+Reviewed at commit: `006a5308` (option B revision). All three lenses re-ran.
+
+### Goal-Fit
+
+Finding: (1) The doctor "below live" branch says `next boot drops to <conf>`, which
+holds only when no file sorting after `90-` sets the key. An operator who persists a
+raise in `/etc/sysctl.d/99-local.conf` gets a doctor FAIL with a false message on a
+correctly configured host, and install copies the value into our conf, creating a
+second owner that N3 then forbids lowering. Measured 2026-10-08 with
+`systemd-analyze cat-config sysctl.d` on `claude` and `workstation`: our `90-` file is
+the last loaded and neither host has `/etc/sysctl.conf` or `99-sysctl.conf`, so the
+message is true on both today. (2) Option B's cost for states no host has reached;
+recorded operator choice, not reopened.
+Assumption: that live above our conf means the raise is unpersisted. Settle per host
+with `systemd-analyze cat-config sysctl.d | grep -n max_user_instances`.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) A persisted hand raise prints the same `inotify: conf written` as a
+first write; it should name the value and the previous one. (2) Doctor FAILs (exit
+non-zero) on a deliberate temporary raise until it is made permanent; "live above
+conf" is drift, suggest WARN. (3) The label is unspecified when two cases hold (conf
+512, live 4096), and `<conf>` in the message must be the value, not the path. (4) The
+`missing` and `below 1024` messages do not say what happens at next boot.
+Assumption: that nothing raises the key at runtime (k3s, LXD, a snap, a unit). Grep
+of systemd unit and snap trees on `claude` found no writer.
+Disposition:
+
+### Risk
+
+Finding: (1) The 10-digit cap admits values the kernel rejects: `INT_MAX` is
+2147483647, so a conf of `3000000000` parses, is "never touched", fails at boot
+(live 128), and every run then applies a value the kernel refuses (EINVAL): rc 1
+forever with a remedy that cannot work. Cap parser and live read at 2147483647 so it
+lands in N1's "fix by hand". Pre-existing, repeated by round 1. (2) Same two-case
+label gap as Ergonomics (3). R×N clean; edge-value walk agrees between install and
+doctor; the seam test's failing branch is inert unless run as root.
+Assumption: that live above 1024 is an operator's deliberate raise, not a privileged
+molecule container writing the global key. No terraform_ansible role sets it; live on
+`claude` is 1024 after molecule runs.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
