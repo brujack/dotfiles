@@ -948,6 +948,26 @@ _doctor_check_github_mcp() {
   fi
 }
 
+# Print the last value assigned to fs.inotify.max_user_instances in a sysctl
+# conf file, or nothing. Accepts the dotted and slash spellings, a leading `-`
+# (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
+# is IFS whitespace and would collapse fields.
+_inotify_conf_value() {
+  awk '
+    /^[ \t]*[#;]/ { next }
+    {
+      line = $0
+      sub(/^[ \t]*-?/, "", line)
+      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=[ \t]*[0-9]+[ \t]*$/)) {
+        sub(/^[^=]*=[ \t]*/, "", line)
+        sub(/[ \t]*$/, "", line)
+        val = line
+      }
+    }
+    END { if (val != "") print val }
+  ' "$1"
+}
+
 _doctor_check_conffile_dist() {
   # Why this exists: apt/dpkg installs here answer conffile prompts unattended
   # (confold keeps the operator's file), which removed the prompt that used to

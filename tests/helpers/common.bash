@@ -45,6 +45,23 @@ exit "${MOCK_BREW_AZ_EXIT:-0}"
 STUB
     chmod +x "${_BREW_AZ_BIN}"
   fi
+  # inotify step/doctor seams: the real conf, /proc file and sysctl binary must
+  # never be reached (tdd.md E2). Live value starts at 1024 so no apply happens
+  # unless a test lowers it.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    mkdir -p "${BATS_TEST_TMPDIR}/sysctl.d" "${BATS_TEST_TMPDIR}/run-systemd"
+    export _SYSCTL_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-inotify.conf"
+    export _INOTIFY_PROC="${BATS_TEST_TMPDIR}/inotify_max_user_instances"
+    printf '1024\n' > "${_INOTIFY_PROC}"
+    export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
+    export _SYSCTL_BIN="${BATS_TEST_TMPDIR}/sysctl-stub"
+    cat > "${_SYSCTL_BIN}" << 'STUB'
+#!/usr/bin/env bash
+printf "sysctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit "${MOCK_SYSCTL_STUB_EXIT:-0}"
+STUB
+    chmod +x "${_SYSCTL_BIN}"
+  fi
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY

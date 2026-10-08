@@ -21,7 +21,7 @@ install_ubuntu_packages() {
   # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
   # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
-  for _step in workstation powershell go docker nvidia k8s_tools hashicorp \
+  for _step in inotify workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
     if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
@@ -45,6 +45,77 @@ install_ubuntu_packages() {
     return 2
   fi
   return 0
+}
+
+# Docker hosts running parallel molecule/CI jobs exhaust the default
+# fs.inotify.max_user_instances (128). Persist 1024 and apply it, never lowering
+# a higher value already configured or live. Only this one key is applied (never
+# `sysctl -p`, which would apply every key in a kept conf). Spec:
+# docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
+_install_ubuntu_inotify() {
+  local _conf="${_SYSCTL_CONF:-/etc/sysctl.d/90-dotfiles-inotify.conf}"
+  local _proc="${_INOTIFY_PROC:-/proc/sys/fs/inotify/max_user_instances}"
+  local _bin="${_SYSCTL_BIN:-sysctl}"
+  local _rundir="${_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+  if [[ -z ${HAS_DOCKER} ]]; then
+    printf 'inotify: skipped (HAS_DOCKER unset)\n'
+    return 0
+  fi
+  if [[ ! -d ${_rundir} ]]; then
+    printf 'inotify: skipped (no systemd at %s)\n' "${_rundir}"
+    return 0
+  fi
+
+  local _val="" _wrote=0
+  if [[ -e ${_conf} ]]; then
+    if [[ ! -r ${_conf} ]]; then
+      printf 'inotify: %s exists but is unreadable; fix by hand\n' "${_conf}" >&2
+      return 1
+    fi
+    _val="$(_inotify_conf_value "${_conf}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
+      printf 'inotify: %s exists but is unparseable; fix by hand\n' "${_conf}" >&2
+      return 1
+    fi
+  fi
+
+  if [[ -z ${_val} ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+    printf 'fs.inotify.max_user_instances = %s\n' "${INOTIFY_MAX_USER_INSTANCES}" |
+      sudo tee "${_conf}" > /dev/null || {
+      printf 'inotify: write failed (%s)\n' "${_conf}" >&2
+      return 1
+    }
+    if [[ ! -r ${_conf} ]]; then
+      printf 'inotify: cannot read back %s\n' "${_conf}" >&2
+      return 1
+    fi
+    _val="$(_inotify_conf_value "${_conf}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+      printf 'inotify: write failed (%s)\n' "${_conf}" >&2
+      return 1
+    fi
+    _wrote=1
+    printf 'inotify: conf written\n'
+  fi
+
+  local _live=""
+  if [[ -r ${_proc} ]]; then
+    _live="$(<"${_proc}")"
+    _live="${_live//[[:space:]]/}"
+  fi
+  if [[ ! ${_live} =~ ^[0-9]+$ ]]; then
+    printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
+    return 1
+  fi
+  if ((_live >= INOTIFY_MAX_USER_INSTANCES)); then
+    ((_wrote == 1)) || printf 'inotify: already %s or higher\n' "${INOTIFY_MAX_USER_INSTANCES}"
+    return 0
+  fi
+  sudo "${_bin}" -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
+    printf 'inotify: apply failed\n' >&2
+    return 1
+  }
+  printf 'inotify: applied\n'
 }
 
 # Install the packages named in a list file, skipping comments and blank lines.
