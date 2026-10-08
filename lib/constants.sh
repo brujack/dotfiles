@@ -212,11 +212,10 @@ readonly DOTFILES_REPO_ROOT
 HOSTNAME=$(hostname -s)
 
 # oh-my-zsh bootstrap branch — no tagged releases; master is the distribution branch
-# update check: ./setup_env.sh -t check-versions --update
-# read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:_check_cv_oh_my_zsh
+# read by lib/helpers.sh:setup_dotfile_symlinks
 OH_MY_ZSH_VER="master"
 
 # Homebrew install script commit SHA — content-addressable; avoids HEAD which can change
-# update check: ./setup_env.sh -t check-versions --update
+# check: ./setup_env.sh -t check-versions (report-only — update manually after reviewing the diff URL)
 # read by lib/macos.sh:install_homebrew, lib/workflows.sh:_check_cv_homebrew_install, scripts/bootstrap_linux.sh, scripts/bootstrap_mac.sh
 HOMEBREW_INSTALL_SHA="5e78e698e405a17b63b5fe41ff747f9fccf39472"
