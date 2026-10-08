@@ -125,3 +125,60 @@ existing seams.
 - **N3.** No path writes a conf value or applies a live value lower than the live value or an existing conf value above 1024.
 - **N4.** No change to `sudo tee "${_conf}"` when `_SYSCTL_CONF` is set; that shape gets its own Backlog row.
 - **N5.** No change to `fs.inotify.max_user_watches` or any other key.
+
+## Multi-Lens Review
+
+Reviewed at commit: `2fcd878e` (spec as first written; Step 7 found nothing to fix)
+
+### Goal-Fit
+
+Finding: (1) The claim that ADR-0044's title "becomes true" is false. Once
+`90-dotfiles-inotify.conf` exists at 1024 (both hosts today), a later `50-` drop-in at
+4096 is applied at boot, then overridden by our `90-` file; the step only consults live
+when our conf is missing or below 1024, so it never re-checks. N3 is scoped to writes,
+so no R/N pair catches it. Suggests fixing rows 180/183 and treating 181/182 as a
+wording fix. (2) The read-back test ("tee writes 1024, target 4096") expects rc 1,
+which an empty parser also produces via "unparseable"; it must assert the read-back
+message. (3) V1 exercises only the unchanged "already" branch: a no-regression check,
+not evidence for R3-R5.
+Assumption: that a drop-in raising the key will ever appear on fleet hosts. Settle with
+`grep -rl max_user_instances` over every sysctl.d directory on each host.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) "Persist the live value" never fires on an existing host. The realistic
+event is a hand raise (`sudo sysctl -w ...=4096`) after our 1024 conf exists: the step
+prints "already", doctor passes on the live value, and the next boot drops to 1024
+silently. Fix: in the conf-present case, when live exceeds the conf, rewrite the conf
+(install) or fail with a `tee` remedy (doctor). (2) Minor: with `_SYSCTL_BIN` set the
+call runs without sudo, and a real-host failure says only "apply failed"; name the
+seam in the message.
+Assumption: that a value hand-raised after the conf exists is meant to survive reboot.
+A question for the operator.
+Disposition:
+
+### Risk
+
+Finding: (1) Same as Goal-Fit (1), plus a second exposure: once the step writes
+`max(live, 1024)` into `90-`, any later raise in an earlier-sorting file is shadowed at
+boot. (2) The seam test cannot tell which `sysctl` ran: the `load_mocks` stub,
+`tests/mocks/sysctl` and the planned PATH stub log identical lines, and
+`tests/mocks/sysctl` execs `/usr/sbin/sysctl`. If the stub directory sits behind
+`tests/mocks` on PATH, the real binary runs and the log assertion still passes (E2; as
+root it changes the live kernel). Fix: the stub writes a unique marker, and the test
+asserts `command -v sysctl` resolves to the stub. The case must also set live below
+1024, or apply never runs. (3) The live check has no length cap while the read-back
+caps at 10 digits; an 11-digit fixture leaves an "unparseable" conf behind. Not
+reachable on a real kernel (int max 2147483647). (4) "No sudo line" and "conf does not
+exist" are absence checks; each needs a positive companion.
+Assumption: that no file sorting after `90-`, or in `/run/sysctl.d` or
+`/usr/local/lib/sysctl.d`, sets the key. Measured 2026-10-08 on `claude` and
+`workstation` over `/etc/sysctl.d /run/sysctl.d /usr/lib/sysctl.d
+/usr/local/lib/sysctl.d /lib/sysctl.d /etc/sysctl.conf`: the only hit is our own
+`90-dotfiles-inotify.conf:1` at 1024, live 1024. `cruncher` not measured.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
