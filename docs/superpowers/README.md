@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-08 | [molecule-host-tuning](plans/2026-10-08-molecule-host-tuning.md) | [molecule-host-tuning](specs/2026-10-08-molecule-host-tuning-design.md) | In Progress |
 | 2026-10-07 | [check-versions-curl-max-time](plans/2026-10-07-check-versions-curl-max-time.md) | [check-versions-curl-max-time](specs/2026-10-07-check-versions-curl-max-time-design.md) | Done |
 | 2026-10-07 | [github-token-off-argv](plans/2026-10-07-github-token-off-argv.md) | [spec](specs/2026-10-07-github-token-off-argv-design.md) | Done |
 | 2026-10-04 | [ubuntu-step-midstep-failures](plans/2026-10-04-ubuntu-step-midstep-failures.md) | [spec](specs/2026-10-04-ubuntu-step-midstep-failures-design.md) | Done |

@@ -189,6 +189,11 @@ no reboot is scheduled to prove it.
 - **N3.** No `PARALLEL_JOBS` export or default anywhere in dotfiles; that default belongs to terraform_ansible's `ansible/Makefile`.
 - **N4.** The step never lowers a live value or a conf value that is already above 1024.
 
+## Amendments
+
+- R4 -> `_install_ubuntu_inotify` runs `sysctl -w fs.inotify.max_user_instances=<conf value>` under sudo only when the live value read from `_INOTIFY_PROC` is a non-negative integer below 1024; returns 1 without applying when the live value cannot be read or is not an integer; and returns 1 when the apply fails. — plan non-goal check: `sysctl -p` applies every key in a kept conf (N1), and applying on an unreadable live value could lower a real value above 1024 (N4).
+- R6 -> `_doctor_check_inotify_limits` is silent unless `LINUX`, `HAS_DOCKER` and the systemd directory are all present; fails "cannot read" on a non-numeric live value; fails and prints the `sudo tee ... && sudo sysctl -w fs.inotify.max_user_instances=1024` line on its own line when the conf is missing, unreadable or below 1024; fails and prints `sudo sysctl -w fs.inotify.max_user_instances=<conf value>` on its own line when the live value is below 1024; passes any conf and live value >= 1024; and never names `-t developer`. — same reason as R4: the remedies must touch only this key.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `a341e58c` (Step 7 self-review commit, before Step 8 dispatch)
