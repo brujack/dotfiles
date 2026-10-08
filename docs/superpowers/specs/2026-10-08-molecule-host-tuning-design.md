@@ -194,6 +194,8 @@ no reboot is scheduled to prove it.
 - R4 -> `_install_ubuntu_inotify` runs `sysctl -w fs.inotify.max_user_instances=<conf value>` under sudo only when the live value read from `_INOTIFY_PROC` is a non-negative integer below 1024; returns 1 without applying when the live value cannot be read or is not an integer; and returns 1 when the apply fails. — plan non-goal check: `sysctl -p` applies every key in a kept conf (N1), and applying on an unreadable live value could lower a real value above 1024 (N4).
 - R6 -> `_doctor_check_inotify_limits` is silent unless `LINUX`, `HAS_DOCKER` and the systemd directory are all present; fails "cannot read" on a non-numeric live value; fails and prints the `sudo tee ... && sudo sysctl -w fs.inotify.max_user_instances=1024` line on its own line when the conf is missing, unreadable or below 1024; fails and prints `sudo sysctl -w fs.inotify.max_user_instances=<conf value>` on its own line when the live value is below 1024; passes any conf and live value >= 1024; and never names `-t developer`. — same reason as R4: the remedies must touch only this key.
 - R6 -> `_doctor_check_inotify_limits` is silent unless `LINUX`, `HAS_DOCKER` and the systemd directory are all present; fails "cannot read" on a live value that is not `0` or a non-zero-led integer; fails and prints the `sudo tee ... && sudo sysctl -w fs.inotify.max_user_instances=1024` line on its own line only when the conf is missing or parses below 1024; fails with "fix by hand" and no `tee` line when the conf exists but is unreadable or unparseable; fails and prints `sudo sysctl -w fs.inotify.max_user_instances=<conf value>` on its own line when the live value is below 1024; passes any conf and live value >= 1024; and never names `-t developer`. — Task 2 code review: the earlier R6 prescribed `tee` over a conf the install step deliberately refuses to touch (N4), which would erase any other key in it.
+- finding R4 (2026-10-08, reviewer A): DIFFERS — The apply path matches (sudo `${_bin}` -w with the conf value, only below 1024, rc 1 on apply failure, rc 1 on unreadable or non-numeric live), but the integer test at lib/linux_ubuntu.sh:106 is `^(0|[1-9][0-9]*)$` after stripping all whitespace, so a leading-zero live value such as `08` (a non-negative integer below 1024, which R4 says to apply) instead returns 1 without applying (test 'a leading-zero live value returns 1 and applies nothing'); R6 states that stricter definition for doctor, R4 does not.
+- R4 -> `_install_ubuntu_inotify` runs `sysctl -w fs.inotify.max_user_instances=<conf value>` under sudo only when the live value read from `_INOTIFY_PROC` is `0` or a non-zero-led integer below 1024; returns 1 without applying when the live value cannot be read or is any other form (a leading zero such as `08` included); and returns 1 when the apply fails. — Phase 3 maintainability fix aligned the install step's live-value rule with doctor's (amended R6); bash reads `08` as invalid octal, so accepting it would compare wrongly.
 
 ## Multi-Lens Review
 
@@ -250,3 +252,25 @@ Reviewed at commit: `63d6cd31` (round 2 revisions).
 Finding: (1) An unreadable conf, or a raise spelled with `/`, a leading `-` or a duplicate key, parses as "not >= 1024" and is overwritten to 1024, breaking N4. (2) The boot value comes from the merged sysctl.d set; a later-sorting file setting the key lower defeats the step, and doctor's remedy lasts one boot. Not present on either host. (3) The premise table had the localsearch row on the wrong host. (4) claude's verification line never pulls; no guard on a dirty or non-master checkout. (5) V2 cannot fail: the sudo mock never escalates. (6) Tests reaching the real step inherit `HAS_DOCKER` from the shell; the `linux_ubuntu.bats:331/345` step lists omit `inotify`; no-op cases should assert the `already` line; `tee` echoes to stdout.
 Assumption: 1024 covers root's budget under matrix plus busy runners; unmeasured; the lens named a root-count command.
 Disposition: Addressed within the operator's "Keep in dotfiles, fix round 2" scope (orchestrator-applied; operator confirms at spec review). (1) Write only when absent or parsed below 1024; existing unreadable/unparseable conf gives rc 1 and is never overwritten; last assignment and `/`/`-` spellings parsed. (2) File renamed `90-`; gap stated. (3) Table corrected. (4) claude line pulls; precondition stated. (5) V2 replaced with a suite run both with and without `HAS_DOCKER`. (6) Explicit `HAS_DOCKER` in the four tests; lists to 13; `already` asserted; `tee >/dev/null`. Review stops here: the corrections removed surface (no rewrite of existing confs) and the remaining findings are test apparatus.
+
+## Spec alignment (2026-10-08)
+
+- spec: docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
+- anchor: a4cd7b77b80b4c2cc1a41da5aeb41c1fab5c97f2
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R4 | A | DIFFERS | The apply path matches (sudo `${_bin}` -w with the conf value, only below 1024, rc 1 on apply failure, rc 1 on unreadable or non-numeric live), but the integer test at lib/linux_ubuntu.sh:106 is `^(0\|[1-9][0-9]*)$` after stripping all whitespace, so a leading-zero live value such as `08` (a non-negative integer below 1024, which R4 says to apply) instead returns 1 without applying (test 'a leading-zero live value returns 1 and applies nothing'); R6 states that stricter definition for doctor, R4 does not. | - R4 -> `_install_ubuntu_inotify` runs `sysctl -w fs.inotify.max_user_instances=<conf value>` under sudo only when the live value read from `_INOTIFY_PROC` is `0` or a non-zero-led integer below 1024; returns 1 without applying when the live value cannot be read or is any other form (a leading zero such as `08` included); and returns 1 when the apply fails. — Phase 3 maintainability fix aligned the install step's live-value rule with doctor's (amended R6); bash reads `08` as invalid octal, so accepting it would compare wrongly. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: pending: post-merge run on claude and workstation (spec Verification section)
+- V2: make test at ea40719e: 1..2675 ok=2675 not ok=0 EXIT=0 with HAS_DOCKER=1 and with env -u HAS_DOCKER
