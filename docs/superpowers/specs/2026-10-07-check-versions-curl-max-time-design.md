@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-07
 - **Backlog row:** `_check_cv_oh_my_zsh` / `_check_cv_homebrew_install` call api.github.com with no `--max-time` (P2 — bugs and security)
+- **Approved:** 2026-10-07
 
 ## Problem
 
@@ -212,12 +213,12 @@ Reviewed at commit: `91fabd46` (all three lenses; rescoped body)
 
 - **Goal-Fit.** Finding: `commits/HEAD` is the wrong reference; the pin guards `install.sh`, and most repo commits do not touch it, so OUTDATED would be near-permanent. Assumption checked by the orchestrator: 74 commits in 90 days, 9 touching `install.sh`. Disposition: Addressed — operator chose the `install.sh` path reference, 2026-10-07.
 - **Ergonomics.** Finding: same reference problem; and fixing the check makes `--update`'s one-keystroke, no-diff bump of an executed installer pin reachable. Assumption: whether the operator bumps promptly; moot under the path reference. Disposition: Addressed — operator chose report-only plus compare URL, 2026-10-07.
-- **Risk.** Finding: R7 as written was vacuous once the recorder stub was deleted; exact test edits unstated (`:1541`, `:3079`, `:3115` 17 to 16). Assumption: top-level `sha` precedes nested ones; measured true for both object and list responses, left as the existing parse. Revision made: recorder stub kept with `-eq 0` plus positive control, edits stated, mutation added to V1. Disposition:
+- **Risk.** Finding: R7 as written was vacuous once the recorder stub was deleted; exact test edits unstated (`:1541`, `:3079`, `:3115` 17 to 16). Assumption: top-level `sha` precedes nested ones; measured true for both object and list responses, left as the existing parse. Revision made: recorder stub kept with `-eq 0` plus positive control, edits stated, mutation added to V1. Disposition: Addressed — operator, 2026-10-07.
 
 ### Round 3
 
 Reviewed at commit: `092408c2` (Risk lens only, scoped to Design items 2-3, Testing, Docs, Out of scope, Requirements)
 
-- **Risk.** Finding: `HOMEBREW_INSTALL_SHA` comment and `--update` help line go stale under report-only; R7's recorder must write to a file or a `$(...)` subshell discards it; the WARN-count comment at ~`:3104` must change with the literal. Checked clean: mock records the `?`/`&` URL verbatim, compare URL valid (12 files incl. `install.sh`), stated line numbers correct, nothing else reaches the homebrew prompt. Assumption: none uncertain beyond the R7 subshell point, settled by V1's mutation. Revision made: all three folded into Design item 3, Testing, R2, R7. Disposition:
+- **Risk.** Finding: `HOMEBREW_INSTALL_SHA` comment and `--update` help line go stale under report-only; R7's recorder must write to a file or a `$(...)` subshell discards it; the WARN-count comment at ~`:3104` must change with the literal. Checked clean: mock records the `?`/`&` URL verbatim, compare URL valid (12 files incl. `install.sh`), stated line numbers correct, nothing else reaches the homebrew prompt. Assumption: none uncertain beyond the R7 subshell point, settled by V1's mutation. Revision made: all three folded into Design item 3, Testing, R2, R7. Disposition: Addressed — operator, 2026-10-07.
 
 Stopping review here: round 3's findings are all in test apparatus and comment wording, not design, and the design shrank across rounds (oh-my-zsh check removed, `--update` path removed for homebrew).
