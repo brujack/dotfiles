@@ -953,15 +953,18 @@ _doctor_check_github_mcp() {
 # (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
 # is IFS whitespace and would collapse fields.
 _inotify_conf_value() {
+  # Length/leading-zero checks are in code, not the regex: interval braces are
+  # not portable across awk implementations. A value that fails them is not
+  # printed, so the caller reports the conf as unparseable.
   awk '
-    /^[ \t]*[#;]/ { next }
     {
       line = $0
       sub(/^[ \t]*-?/, "", line)
       if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=[ \t]*[0-9]+[ \t]*$/)) {
         sub(/^[^=]*=[ \t]*/, "", line)
         sub(/[ \t]*$/, "", line)
-        val = line
+        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10) val = line
+        else val = ""
       }
     }
     END { if (val != "") print val }

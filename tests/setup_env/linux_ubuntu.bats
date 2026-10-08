@@ -4506,6 +4506,7 @@ SHIM
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 0 ]
   [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  [[ "$output" == *"inotify: conf written"* ]]
   grep -q "nala install" "${MOCK_CALLS_FILE}"
   grep -q "snap install" "${MOCK_CALLS_FILE}"
   grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
@@ -4597,10 +4598,13 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs/inotify/max_user_instances = 4096" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
   printf -- '-fs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "-fs.inotify.max_user_instances = 2048" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
 @test "inotify: the last assignment wins, in both directions" {
@@ -4608,20 +4612,29 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   printf 'fs.inotify.max_user_instances = 512\nfs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
-  [ "$(wc -l < "${_SYSCTL_CONF}")" -eq 2 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 512\nfs.inotify.max_user_instances = 4096')" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
   printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
   _inotify_live 128
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [[ "$output" == *"inotify: conf written"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
 }
 
 @test "inotify: a conf below 1024 is rewritten to 1024" {
   export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [[ "$output" == *"inotify: conf written"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
 }
 
 @test "inotify: a correct conf with live 128 is not rewritten but is applied" {
@@ -4646,7 +4659,10 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _inotify_live 128
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
   grep -q '^sysctl -w fs.inotify.max_user_instances=4096$' "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"inotify: applied"* ]]
 }
 
 @test "inotify: a non-numeric live value returns 1 and applies nothing" {
@@ -4748,6 +4764,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"apply failed"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
 }
 
 @test "inotify: HAS_DOCKER unset skips with a reason and touches nothing" {
@@ -4785,4 +4802,45 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"failed: inotify"* ]]
   [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | head -1)" = "ran inotify" ]
+}
+
+@test "inotify: a leading-zero conf value is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 08" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a 20-digit conf value is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 99999999999999999999\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 99999999999999999999" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a longer key name is not the instances key" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances_extra = 5\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances_extra = 5" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: tabs around the equals sign and trailing are accepted" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances\t=\t2048\t\n' > "${_SYSCTL_CONF}"
+  _inotify_live 2048
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances\t=\t2048\t')" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
