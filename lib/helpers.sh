@@ -475,6 +475,7 @@ run_doctor() {
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
   _doctor_check_conffile_dist
+  _doctor_check_inotify_limits
   _doctor_check_pyenv_shims
   _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
@@ -970,6 +971,35 @@ _inotify_conf_value() {
     }
     END { if (val != "") print val }
   ' "$1"
+}
+
+# Seams mirror _install_ubuntu_inotify. The remedies touch only this one key
+# (sysctl -w, never -p, which would apply every key in a kept conf).
+_doctor_check_inotify_limits() {
+  local _conf="${_SYSCTL_CONF:-/etc/sysctl.d/90-dotfiles-inotify.conf}"
+  local _proc="${_INOTIFY_PROC:-/proc/sys/fs/inotify/max_user_instances}"
+  local _rundir="${_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+  [[ -n ${LINUX} && -n ${HAS_DOCKER} && -d ${_rundir} ]] || return 0
+
+  printf "\ninotify instances:\n"
+  local _live _val=""
+  _live="$(cat "${_proc}" 2>/dev/null)"
+  if [[ ! ${_live} =~ ^[0-9]+$ ]]; then
+    doctor_fail "inotify" "cannot read ${_proc}"
+    return 0
+  fi
+  [[ -r ${_conf} ]] && _val="$(_inotify_conf_value "${_conf}")"
+  if [[ ! ${_val} =~ ^[0-9]+$ ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+    doctor_fail "inotify" "${_conf} missing or below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
+    printf '    %s\n' "printf 'fs.inotify.max_user_instances = ${INOTIFY_MAX_USER_INSTANCES}\\n' | sudo tee ${_conf} && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
+    return 0
+  fi
+  if ((_live < INOTIFY_MAX_USER_INSTANCES)); then
+    doctor_fail "inotify" "live value ${_live} below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
+    printf '    sudo sysctl -w fs.inotify.max_user_instances=%s\n' "${_val}"
+    return 0
+  fi
+  doctor_pass "inotify max_user_instances ${_live}"
 }
 
 _doctor_check_conffile_dist() {
