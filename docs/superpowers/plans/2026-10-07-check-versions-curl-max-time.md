@@ -1,3 +1,5 @@
+> **Status: DONE** — library change merged as #321; the tests and README this plan required merged as #322.
+
 # Check-Versions Curl Fix Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-07-check-versions-curl-max-time-design.md
