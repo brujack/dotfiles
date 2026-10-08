@@ -46,3 +46,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0040](0040-apt-conffile-prompts-answered-unattended.md) | apt/dpkg conffile prompts are answered unattended | 2026-10-03 | Accepted |
 | [0041](0041-ubuntu-installs-stage-then-rename-and-stamp.md) | Ubuntu installs stage, then rename, and stamp on success | 2026-10-05 | Accepted |
 | [0042](0042-credentials-reach-curl-on-stdin.md) | GitHub credentials reach curl on stdin, and credential-carrying seams are allowlisted | 2026-10-07 | Accepted |
+| [0043](0043-executed-installer-pins-are-report-only.md) | Pins on executed installers are report-only, checked against the installer's own history | 2026-10-08 | Accepted |

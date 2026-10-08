@@ -68,6 +68,7 @@ formula or APT package from the upstream maintainer.
   version (formula version, package version, commit SHA, or branch ref).
 - Update tracking: the check-versions framework (`./setup_env.sh -t check-versions`)
   covers all pinned values including SHA-pinned bootstrap scripts and branch refs.
+  [2026-10-08: this was not true when written. Both the SHA-pin and branch-ref checks failed on every run. See ADR-0043, which also stops branch refs being version-checked.]
 
 **Harder / required going forward:**
 
