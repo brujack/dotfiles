@@ -1,7 +1,8 @@
 # Molecule host tuning: persist the inotify instance limit
 
 - **Date:** 2026-10-08
-- **Status:** Draft (revised after Step 8 round 3, scoped)
+- **Status:** Approved
+- **Approved:** 2026-10-08
 
 ## Problem
 
