@@ -1550,8 +1550,12 @@ setup_constants_copy() {
   HOMEBREW_INSTALL_SHA="abc123abc123abc123abc123abc123abc123abc1"
   curl() { printf '{"sha":"abc123abc123abc123abc123abc123abc123abc1","commit":{}}'; }
   export -f curl
-  _check_cv_homebrew_install
+  # To a file, not $(...): the counter must survive in this shell.
+  _check_cv_homebrew_install > "${BATS_TEST_TMPDIR}/out"
   [[ "${_ok}" -eq 1 ]]
+  grep -qF '[OK]' "${BATS_TEST_TMPDIR}/out"
+  # A count, not `! grep`: bats ignores a negated command unless it is last.
+  [ "$(grep -c 'compare/' "${BATS_TEST_TMPDIR}/out")" -eq 0 ]
 }
 
 @test "_check_cv_homebrew_install emits OUTDATED when SHA differs" {
@@ -1564,6 +1568,30 @@ setup_constants_copy() {
   _out=$(_check_cv_homebrew_install 2>&1)
   [[ "${_out}" == *"[OUTDATED]"* ]]
   [[ "${_out}" == *"diff: https://github.com/Homebrew/install/compare/"* ]]
+}
+
+@test "_check_cv_homebrew_install queries install.sh history with max-time 10" {
+  local _ok=0 _outdated=0 _warned=0
+  _check_cv_homebrew_install >/dev/null
+  # Whole tokens: a substring match would accept --max-time 100 or per_page=10.
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" \
+    | grep -qE 'https://api\.github\.com/repos/Homebrew/install/commits\?path=install\.sh&per_page=1( |$)'
+}
+
+@test "_check_cv_homebrew_install is report-only under --update and prints a compare URL" {
+  local _ok=0 _outdated=0 _warned=0
+  # shellcheck disable=SC2034 # read by _check_cv_homebrew_install after source; shellcheck cannot see the consumer
+  HOMEBREW_INSTALL_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  export UPDATE_VERSIONS=1
+  # Records to a file: a variable would be lost in the $(...) subshell below.
+  _prompt_version_update() { printf 'called\n' >> "${BATS_TEST_TMPDIR}/prompt_rec"; }
+  curl() { printf '[{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","commit":{}}]'; }
+  export -f curl
+  local _out
+  _out=$(_check_cv_homebrew_install 2>&1)
+  [[ "${_out}" == *"[OUTDATED]"* ]]
+  [[ "${_out}" == *"https://github.com/Homebrew/install/compare/aaaaaaaaaaaa...bbbbbbbbbbbb"* ]]
+  [ ! -s "${BATS_TEST_TMPDIR}/prompt_rec" ]
 }
 
 # ── run_update summary integration ────────────────────────────────────────────

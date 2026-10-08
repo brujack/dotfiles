@@ -201,3 +201,9 @@ teardown() {
   # network call) -- this asserts the override is actually consulted.
   grep -qF -- "${_CRATES_API}/cargo-audit" "${MOCK_CALLS_FILE}"
 }
+
+@test "_check_one_cargo_version bounds the crates.io request with max-time 10" {
+  _check_one_cargo_version "cargo-audit" "0.21.0" >/dev/null
+  # Whole token: a substring match would accept --max-time 100.
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF "${_CRATES_API}/cargo-audit"
+}

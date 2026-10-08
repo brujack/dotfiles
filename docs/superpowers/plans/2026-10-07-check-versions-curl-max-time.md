@@ -145,7 +145,7 @@ acceptance:
     exit_code: 0
   - cmd: make lint
     exit_code: 0
-  - cmd: 'grep -n "_check_cv_oh_my_zsh" lib/'
+  - cmd: 'grep -rn "_check_cv_oh_my_zsh" lib/'
     exit_code: 1
 max_retries: 3
 files_touched: [lib/workflows.sh, lib/constants.sh, tests/setup_env/workflows.bats, tests/setup_env/check_versions_cargo.bats]
@@ -200,3 +200,8 @@ Reviewer: fresh subagent, `nongoal-check.md`, 2026-10-07.
 - **N1** CLEAR.
 - **N2** CLEAR.
 - **N3** UNCLEAR. Quote: Task 1 "replace the curl line with `_latest=$(curl -fsSL --max-time 10 "https://api.github.com/repos/Homebrew/install/commits?path=install.sh&per_page=1" \`". Concern: replacing the whole line could drop auth/header flags. Resolution: no plan change needed. The current line is `_latest=$(curl -fsSL "https://api.github.com/repos/Homebrew/install/commits/master" \` (`lib/workflows.sh:1399` at `e2982ec1`): it carries no `-H`, token or `-A`, so the replacement keeps the call unauthenticated, as N3 requires.
+
+## Execution notes
+
+- Task 3's third gate was written `grep -n ... lib/`. grep on a directory without `-r` exits 2 ("Is a directory"), so the gate could never return its expected 1. Corrected to `grep -rn`, 2026-10-08.
+- While this plan's branch was in Phase 3, PR #321 merged the same library changes to master from another session (2026-10-08 11:35Z). Its code meets R1-R5; its tests did not pin R6-R8, and README carried no report-only wording. The branch was rebuilt from master as that delta only: the R6/R7/R8 tests, an OK-path no-URL assertion, and the two README lines. Master's code was kept as merged, including its `diff:` label and 12-character SHAs in the compare URL, which GitHub resolves.

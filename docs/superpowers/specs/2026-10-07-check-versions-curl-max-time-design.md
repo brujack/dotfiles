@@ -222,3 +222,34 @@ Reviewed at commit: `092408c2` (Risk lens only, scoped to Design items 2-3, Test
 - **Risk.** Finding: `HOMEBREW_INSTALL_SHA` comment and `--update` help line go stale under report-only; R7's recorder must write to a file or a `$(...)` subshell discards it; the WARN-count comment at ~`:3104` must change with the literal. Checked clean: mock records the `?`/`&` URL verbatim, compare URL valid (12 files incl. `install.sh`), stated line numbers correct, nothing else reaches the homebrew prompt. Assumption: none uncertain beyond the R7 subshell point, settled by V1's mutation. Revision made: all three folded into Design item 3, Testing, R2, R7. Disposition: Addressed — operator, 2026-10-07.
 
 Stopping review here: round 3's findings are all in test apparatus and comment wording, not design, and the design shrank across rounds (oh-my-zsh check removed, `--update` path removed for homebrew).
+
+## Amendments
+
+- finding R5 (2026-10-08, reviewer A): DIFFERS — On origin/master the OUTDATED branch has no _prompt_version_update call (that half is met), but the printed URL is compare/${_pin_short}...${_latest_short} — 12-char prefixes of the pin and latest SHA, not <pin>...<latest> as the requirement words it (the new workflows.bats test also asserts the 12-char form).
+- R5 -> On OUTDATED, `_check_cv_homebrew_install` never calls `_prompt_version_update`, and prints `https://github.com/Homebrew/install/compare/<pin12>...<latest12>`, using 12-character prefixes of the pin and latest SHAs. — #321 merged this form to master first; the operator chose on 2026-10-08 to keep master's code and ship only the missing tests, and GitHub resolves an unambiguous 12-character prefix in a compare URL.
+- finding R9 (2026-10-08, reviewer A): NOT-BUILT — diffA.patch contains no call-recording test with a _check_cv_oh_my_zsh recorder stub asserted 0 times beside a 1-time _check_cv_homebrew_install assertion; tests/ on origin/master is outside the paths I was permitted to inspect, so it may exist there unverified.
+- R9 reviewed: met on origin/master, where #321 put it. `tests/setup_env/workflows.bats:3051` keeps the `_check_cv_oh_my_zsh` recorder stub, and `:3064` asserts it is called 0 times beside the `-eq 1` assertion for `_check_cv_homebrew_install` at `:3065`; it is outside this branch's diff because it already merged.
+
+## Spec alignment (2026-10-08)
+
+- spec: docs/superpowers/specs/2026-10-07-check-versions-curl-max-time-design.md
+- anchor: c302dee5aa6116c8ce70478b1c8ba22af3015c20
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R5 | A | DIFFERS | On origin/master the OUTDATED branch has no _prompt_version_update call (that half is met), but the printed URL is compare/${_pin_short}...${_latest_short} — 12-char prefixes of the pin and latest SHA, not <pin>...<latest> as the requirement words it (the new workflows.bats test also asserts the 12-char form). | - R5 -> On OUTDATED, `_check_cv_homebrew_install` never calls `_prompt_version_update`, and prints `https://github.com/Homebrew/install/compare/<pin12>...<latest12>`, using 12-character prefixes of the pin and latest SHAs. — #321 merged this form to master first; the operator chose on 2026-10-08 to keep master's code and ship only the missing tests, and GitHub resolves an unambiguous 12-character prefix in a compare URL. |
+| R9 | A | NOT-BUILT | diffA.patch contains no call-recording test with a _check_cv_oh_my_zsh recorder stub asserted 0 times beside a 1-time _check_cv_homebrew_install assertion; tests/ on origin/master is outside the paths I was permitted to inspect, so it may exist there unverified. | - R9 reviewed: met on origin/master, where #321 put it. `tests/setup_env/workflows.bats:3051` keeps the `_check_cv_oh_my_zsh` recorder stub, and `:3064` asserts it is called 0 times beside the `-eq 1` assertion for `_check_cv_homebrew_install` at `:3065`; it is outside this branch's diff because it already merged. |
+
+### Reviewed
+
+- R9 reviewed: met on origin/master, where #321 put it. `tests/setup_env/workflows.bats:3051` keeps the `_check_cv_oh_my_zsh` recorder stub, and `:3064` asserts it is called 0 times beside the `-eq 1` assertion for `_check_cv_homebrew_install` at `:3065`; it is outside this branch's diff because it already merged.
+
+### Verifications
+
+- V1: On #321's code, each mutation turned exactly one test red: homebrew --max-time removed, endpoint reverted to commits/master, _prompt_version_update restored in OUTDATED, cargo --max-time removed, compare URL printed on OK; after the token fix, --max-time 100 and per_page=10 are also red (2026-10-08).
+- V2: make test at f6ec26bf: MAKE_TEST_RC=0, 1..2633, 2633 ok, 0 not ok; re-run at final HEAD before push.
+- V3: ./setup_env.sh -t check-versions on claude, 2026-10-08: homebrew-install [OUTDATED] 5e78e698e405 -> 09c62fc577ec with a compare URL; no oh-my-zsh line.
