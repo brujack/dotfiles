@@ -1,5 +1,7 @@
 # Molecule Host Tuning (inotify limit) Implementation Plan
 
+> **Status: DONE** — merged in #323 (cf5577e8), 2026-10-08.
+
 spec: docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
