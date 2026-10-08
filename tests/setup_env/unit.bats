@@ -1024,6 +1024,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_inotify_limits() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -1044,6 +1045,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_inotify_limits() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
@@ -1453,6 +1455,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_inotify_limits() { :; }
   _doctor_check_plugin_node_paths() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
@@ -2776,9 +2779,35 @@ STUB
   _doctor_check_github_mcp()    { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_inotify_limits() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
+}
+
+@test "run_doctor runs the inotify check, and its FAIL fails doctor" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '128\n' > "${_INOTIFY_PROC}"
+  _doctor_check_profile()        { :; }
+  _doctor_check_symlinks()       { :; }
+  _doctor_check_symlink_roots()  { :; }
+  _doctor_check_tools()          { :; }
+  _doctor_check_dev_tools()      { :; }
+  _doctor_check_login_shell()    { :; }
+  _doctor_check_cred_dirs()      { :; }
+  _doctor_check_hooks_path()     { :; }
+  _doctor_check_versions()       { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()     { :; }
+  _doctor_check_gnu_coreutils()  { :; }
+  _doctor_check_pyenv_shims()    { :; }
+  _doctor_check_conffile_dist()  { :; }
+  _doctor_check_plugin_node_paths() { :; }
+  _doctor_check_renovate_cadence()     { :; }
+  _doctor_check_ledger_drift_cadence() { :; }
+  run run_doctor
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing or below 1024"* ]]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
@@ -2823,4 +2852,128 @@ STUB
   [ "${APT_CONFFILE_OPTS[1]}" = "Dpkg::Options::=--force-confdef" ]
   [ "${APT_CONFFILE_OPTS[2]}" = "-o" ]
   [ "${APT_CONFFILE_OPTS[3]}" = "Dpkg::Options::=--force-confold" ]
+}
+
+# ── _doctor_check_inotify_limits ─────────────────────────────────────────────
+# Seams (_SYSCTL_CONF, _INOTIFY_PROC, _SYSTEMD_RUN_DIR) come from load_mocks;
+# the live value starts at 1024 and the conf is absent.
+
+_inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "${_SYSCTL_CONF}"; }
+
+@test "inotify doctor: passes at conf 1024 and live 1024" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify"*"1024"* ]]
+}
+
+@test "inotify doctor: missing conf fails and prints the tee remedy on its own line" {
+  export LINUX=1 HAS_DOCKER=1
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"inotify"* ]]
+  printf '%s\n' "${output}" | grep -qF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
+  [[ "${output}" != *"-t developer"* ]]
+}
+
+@test "inotify doctor: live below 1024 prints the conf-valued sysctl -w remedy on its own line" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 4096
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"inotify"*"128"* ]]
+  printf '%s\n' "${output}" | grep -qE '^    sudo sysctl -w fs\.inotify\.max_user_instances=4096$'
+  [[ "${output}" != *"-t developer"* ]]
+}
+
+@test "inotify doctor: passes at conf 4096 and live 4096" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 4096
+  printf '4096\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"4096"* ]]
+}
+
+@test "inotify doctor: conf below 1024 fails with the tee remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 512
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"* ]]
+  printf '%s\n' "${output}" | grep -qE "^    printf 'fs\.inotify\.max_user_instances = 1024.*sudo tee '"
+}
+
+@test "inotify doctor: unreadable conf (mode 000) fails by hand with no tee line" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 4096
+  chmod 000 "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  chmod 600 "${_SYSCTL_CONF}"
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unreadable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: unparseable conf fails by hand with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 08\nnet.core.somaxconn = 4096\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a valid assignment followed by an invalid one is unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: leading-zero live value fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: non-numeric live value fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf 'abc\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: unreadable /proc file fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  rm -f "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"cannot read"* ]]
+}
+
+@test "inotify doctor: silent with status 0 when LINUX unset" {
+  unset LINUX; export HAS_DOCKER=1
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "inotify doctor: silent with status 0 when HAS_DOCKER unset" {
+  export LINUX=1; unset HAS_DOCKER
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "inotify doctor: silent with status 0 when the systemd dir is absent" {
+  export LINUX=1 HAS_DOCKER=1
+  rmdir "${_SYSTEMD_RUN_DIR}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }

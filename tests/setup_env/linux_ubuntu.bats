@@ -333,13 +333,13 @@ EOF
   export LINUX=1 UBUNTU=1 NOBLE=1
   _install_ubuntu_base_packages() { return 2; }
   local _s
-  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
 }
 
 @test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
@@ -349,20 +349,20 @@ EOF
   cd "${REPO_ROOT}"
   export MOCK_XARGS_EXIT=1
   local _s
-  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 12 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
 }
 
 @test "install_ubuntu_packages: base rc 1 stops before any later step" {
   unset MACOS NOBLE RESOLUTE
   export LINUX=1 UBUNTU=1
   local _s
-  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   : > "${MOCK_CALLS_FILE}"
@@ -2334,7 +2334,7 @@ STUB
 
 _stub_all_steps_but_docker() {
   local _s
-  for _s in workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   _install_ubuntu_base_packages() { return 0; }
@@ -4362,7 +4362,7 @@ _albert_assert_last_good_untouched() {
   export MOCK_CURL_EXIT=22
   _install_ubuntu_base_packages() { :; }
   local _s
-  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
     eval "_install_ubuntu_${_s}() { :; }"
   done
   run --separate-stderr install_ubuntu_packages
@@ -4506,6 +4506,7 @@ SHIM
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 0 ]
   [[ "$stderr" != *"ubuntu packages: failed"* ]]
+  [[ "$output" == *"inotify: conf written"* ]]
   grep -q "nala install" "${MOCK_CALLS_FILE}"
   grep -q "snap install" "${MOCK_CALLS_FILE}"
   grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
@@ -4541,4 +4542,326 @@ SHIM
   for _t in go consul vault nomad packer vagrant kind telepresence cf-terraforming docker-compose yq; do
     [[ "$output$stderr" == *"${_t}: up to date (stamp"* ]]
   done
+}
+
+# ── _install_ubuntu_inotify ──────────────────────────────────────────────────
+# load_mocks points _SYSCTL_CONF, _INOTIFY_PROC, _SYSTEMD_RUN_DIR and
+# _SYSCTL_BIN at BATS_TEST_TMPDIR; the live value starts at 1024.
+
+_inotify_live() { printf '%s\n' "$1" > "${_INOTIFY_PROC}"; }
+_inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
+
+@test "inotify: absent conf and live 128 writes the conf and applies 1024" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" == *"inotify: applied"* ]]
+}
+
+@test "inotify: absent conf and live 4096 writes the conf and never applies" {
+  export HAS_DOCKER=1
+  _inotify_live 4096
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" != *"already"* ]]
+}
+
+@test "inotify: conf key=1024 with live 1024 is left alone and says already" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances=1024\n' > "${_SYSCTL_CONF}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances=1024" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+}
+
+@test "inotify: a conf raised to 4096 is not lowered" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
+  _inotify_live 4096
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  [[ "$output" == *"inotify: already"* ]]
+}
+
+@test "inotify: slash spelling and leading dash count as the value" {
+  export HAS_DOCKER=1
+  printf 'fs/inotify/max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs/inotify/max_user_instances = 4096" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  printf -- '-fs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "-fs.inotify.max_user_instances = 2048" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: the last assignment wins, in both directions" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\nfs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 512\nfs.inotify.max_user_instances = 4096')" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+  printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [[ "$output" == *"inotify: conf written"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+}
+
+@test "inotify: a conf below 1024 is rewritten to 1024" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [[ "$output" == *"inotify: conf written"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+}
+
+@test "inotify: a correct conf with live 128 is not rewritten but is applied" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  # -nt against a marker made after the conf proves no write: BSD stat lacks -c.
+  touch -r "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/marker"
+  sleep 1
+  touch "${BATS_TEST_TMPDIR}/marker"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ ! "${_SYSCTL_CONF}" -nt "${BATS_TEST_TMPDIR}/marker" ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"conf written"* ]]
+}
+
+@test "inotify: conf 4096 with live 128 applies the conf value" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=4096$' "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"inotify: applied"* ]]
+}
+
+@test "inotify: a non-numeric live value returns 1 and applies nothing" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  _inotify_live abc
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a missing live file returns 1 and applies nothing" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  rm -f "${_INOTIFY_PROC}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a valid assignment followed by an invalid one is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08')" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a leading-zero live value returns 1 and applies nothing" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  _inotify_live 08
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: only the instances key is applied when the conf carries another" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 1\nfs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(_inotify_sysctl_calls)" -eq 1 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  ! grep -q 'sysctl -p' "${MOCK_CALLS_FILE}"
+}
+
+@test "inotify: an unreadable conf returns 1 and is left untouched" {
+  # root reads mode-000 files, so the premise cannot be built there.
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
+  chmod 000 "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  chmod 600 "${_SYSCTL_CONF}"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unreadable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: an unparseable conf returns 1 and is left untouched" {
+  export HAS_DOCKER=1
+  printf '# nothing\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "# nothing" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a failing tee returns 1 and applies nothing" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"write failed"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a tee that exits 0 but writes nothing is caught by the read-back" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  # An existing stale conf keeps the file readable, so the failure is the value check.
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '#!/usr/bin/env bash\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"write failed"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a tee that writes then locks the conf reports cannot read back" {
+  # root reads mode-000 files, so the read-back never fails there.
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  export HAS_DOCKER=1
+  _inotify_live 128
+  printf '#!/usr/bin/env bash\nfor _a in "$@"; do _f="${_a}"; done\ncat > "${_f}"\nchmod 000 "${_f}"\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_inotify
+  chmod 600 "${_SYSCTL_CONF}" 2> /dev/null || true
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read back"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a failing sysctl returns 1 and says apply failed" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  export MOCK_SYSCTL_STUB_EXIT=1
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"apply failed"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+}
+
+@test "inotify: HAS_DOCKER unset skips with a reason and touches nothing" {
+  unset HAS_DOCKER
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: skipped"* ]]
+  [ ! -e "${_SYSCTL_CONF}" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a missing systemd run dir skips with a reason and touches nothing" {
+  export HAS_DOCKER=1
+  rmdir "${_SYSTEMD_RUN_DIR}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: skipped"* ]]
+  [ ! -e "${_SYSCTL_CONF}" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "install_ubuntu_packages: a failing inotify step is named, rc 2, and later steps still run" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _install_ubuntu_base_packages() { :; }
+  _install_ubuntu_inotify() { printf 'ran inotify\n' >> "${MOCK_CALLS_FILE}"; return 1; }
+  local _s
+  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"failed: inotify"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
+  [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | head -1)" = "ran inotify" ]
+}
+
+@test "inotify: a leading-zero conf value is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 08" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a 20-digit conf value is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 99999999999999999999\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 99999999999999999999" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a longer key name is not the instances key" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances_extra = 5\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances_extra = 5" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: tabs around the equals sign and trailing are accepted" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances\t=\t2048\t\n' > "${_SYSCTL_CONF}"
+  _inotify_live 2048
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances\t=\t2048\t')" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }

@@ -582,7 +582,7 @@ _mode_of() {
 }
 
 @test "run_setup_or_developer calls apt-get on Ubuntu" {
-  unset MACOS
+  unset MACOS HAS_DOCKER
   export LINUX=1
   export UBUNTU=1
   export NOBLE=1
@@ -714,6 +714,7 @@ _mode_of() {
 # the return code of the step under test.
 _stub_ubuntu_steps() {
   _install_ubuntu_base_packages() { :; }
+  _install_ubuntu_inotify() { :; }
   _install_ubuntu_workstation() { :; }
   _install_ubuntu_powershell() { :; }
   _install_ubuntu_go() { :; }

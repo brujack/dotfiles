@@ -475,6 +475,7 @@ run_doctor() {
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
   _doctor_check_conffile_dist
+  _doctor_check_inotify_limits
   _doctor_check_pyenv_shims
   _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
@@ -946,6 +947,73 @@ _doctor_check_github_mcp() {
   else
     doctor_pass "GITHUB_PAT_EXPIRY (${GITHUB_PAT_EXPIRY}, ${_diff_days} days)"
   fi
+}
+
+# Print the last value assigned to fs.inotify.max_user_instances in a sysctl
+# conf file, or nothing -- including when that last value is invalid, so a
+# valid value followed by `08` reads as unparseable. Accepts the dotted and slash spellings, a leading `-`
+# (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
+# is IFS whitespace and would collapse fields.
+_inotify_conf_value() {
+  # Length/leading-zero checks are in code, not the regex: older awks lack
+  # interval braces. A value that fails them is not printed, so the caller
+  # reports the conf as unparseable.
+  awk '
+    {
+      line = $0
+      sub(/^[ \t]*-?/, "", line)
+      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=[ \t]*[0-9]+[ \t]*$/)) {
+        sub(/^[^=]*=[ \t]*/, "", line)
+        sub(/[ \t]*$/, "", line)
+        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10) val = line
+        else val = ""
+      }
+    }
+    END { if (val != "") print val }
+  ' "$1"
+}
+
+# Seams mirror _install_ubuntu_inotify. The remedies touch only this one key
+# (sysctl -w, never -p, which would apply every key in a kept conf).
+_doctor_check_inotify_limits() {
+  local _conf="${_SYSCTL_CONF:-${INOTIFY_SYSCTL_CONF}}"
+  local _proc="${_INOTIFY_PROC:-${INOTIFY_PROC}}"
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
+  [[ -n ${LINUX} && -n ${HAS_DOCKER} && -d ${_rundir} ]] || return 0
+
+  printf "\ninotify instances:\n"
+  local _live _val=""
+  _live="$(cat "${_proc}" 2>/dev/null)"
+  # Same leading-zero rule as _inotify_conf_value: bash arithmetic reads 08 as
+  # an invalid octal.
+  if [[ ! ${_live} =~ ^(0|[1-9][0-9]*)$ ]]; then
+    doctor_fail "inotify" "cannot read ${_proc}"
+    return 0
+  fi
+  # Classify the conf as _install_ubuntu_inotify does: an existing conf it
+  # will not touch is never answered with a tee that would overwrite it.
+  if [[ -e ${_conf} ]]; then
+    if [[ ! -r ${_conf} ]]; then
+      doctor_fail "inotify" "${_conf} exists but is unreadable; fix by hand"
+      return 0
+    fi
+    _val="$(_inotify_conf_value "${_conf}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
+      doctor_fail "inotify" "${_conf} exists but is unparseable; fix by hand"
+      return 0
+    fi
+  fi
+  if [[ -z ${_val} ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+    doctor_fail "inotify" "${_conf} missing or below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
+    printf '    %s\n' "printf 'fs.inotify.max_user_instances = ${INOTIFY_MAX_USER_INSTANCES}\\n' | sudo tee '${_conf}' && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
+    return 0
+  fi
+  if ((_live < INOTIFY_MAX_USER_INSTANCES)); then
+    doctor_fail "inotify" "live value ${_live} below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
+    printf '    sudo sysctl -w fs.inotify.max_user_instances=%s\n' "${_val}"
+    return 0
+  fi
+  doctor_pass "inotify max_user_instances ${_live}"
 }
 
 _doctor_check_conffile_dist() {
