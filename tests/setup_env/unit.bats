@@ -2848,7 +2848,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   run _doctor_check_inotify_limits
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"inotify"* ]]
-  printf '%s\n' "${output}" | grep -qF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee ${_SYSCTL_CONF} && sudo sysctl -w fs.inotify.max_user_instances=1024"
+  printf '%s\n' "${output}" | grep -qF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
   [[ "${output}" != *"-t developer"* ]]
 }
 
@@ -2877,18 +2877,34 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _inotify_doctor_conf 512
   run _doctor_check_inotify_limits
   [[ "${output}" == *"[FAIL]"* ]]
-  printf '%s\n' "${output}" | grep -qE "^    printf 'fs\.inotify\.max_user_instances = 1024.*sudo tee "
+  printf '%s\n' "${output}" | grep -qE "^    printf 'fs\.inotify\.max_user_instances = 1024.*sudo tee '"
 }
 
-@test "inotify doctor: unreadable conf (mode 000) fails with the tee remedy" {
+@test "inotify doctor: unreadable conf (mode 000) fails by hand with no tee line" {
   [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
   export LINUX=1 HAS_DOCKER=1
   _inotify_doctor_conf 4096
   chmod 000 "${_SYSCTL_CONF}"
   run _doctor_check_inotify_limits
   chmod 600 "${_SYSCTL_CONF}"
-  [[ "${output}" == *"[FAIL]"* ]]
-  printf '%s\n' "${output}" | grep -qE "^    printf 'fs\.inotify\.max_user_instances = 1024.*sudo tee "
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unreadable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: unparseable conf fails by hand with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 08\nnet.core.somaxconn = 4096\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: leading-zero live value fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
 }
 
 @test "inotify doctor: non-numeric live value fails with cannot read" {

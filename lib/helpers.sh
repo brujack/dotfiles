@@ -984,14 +984,28 @@ _doctor_check_inotify_limits() {
   printf "\ninotify instances:\n"
   local _live _val=""
   _live="$(cat "${_proc}" 2>/dev/null)"
-  if [[ ! ${_live} =~ ^[0-9]+$ ]]; then
+  # Same leading-zero rule as _inotify_conf_value: bash arithmetic reads 08 as
+  # an invalid octal.
+  if [[ ! ${_live} =~ ^(0|[1-9][0-9]*)$ ]]; then
     doctor_fail "inotify" "cannot read ${_proc}"
     return 0
   fi
-  [[ -r ${_conf} ]] && _val="$(_inotify_conf_value "${_conf}")"
-  if [[ ! ${_val} =~ ^[0-9]+$ ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+  # Classify the conf as _install_ubuntu_inotify does: an existing conf it
+  # will not touch is never answered with a tee that would overwrite it.
+  if [[ -e ${_conf} ]]; then
+    if [[ ! -r ${_conf} ]]; then
+      doctor_fail "inotify" "${_conf} exists but is unreadable; fix by hand"
+      return 0
+    fi
+    _val="$(_inotify_conf_value "${_conf}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
+      doctor_fail "inotify" "${_conf} exists but is unparseable; fix by hand"
+      return 0
+    fi
+  fi
+  if [[ -z ${_val} ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
     doctor_fail "inotify" "${_conf} missing or below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
-    printf '    %s\n' "printf 'fs.inotify.max_user_instances = ${INOTIFY_MAX_USER_INSTANCES}\\n' | sudo tee ${_conf} && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
+    printf '    %s\n' "printf 'fs.inotify.max_user_instances = ${INOTIFY_MAX_USER_INSTANCES}\\n' | sudo tee '${_conf}' && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
     return 0
   fi
   if ((_live < INOTIFY_MAX_USER_INSTANCES)); then
