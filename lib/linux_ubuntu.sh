@@ -53,10 +53,10 @@ install_ubuntu_packages() {
 # `sysctl -p`, which would apply every key in a kept conf). Spec:
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 _install_ubuntu_inotify() {
-  local _conf="${_SYSCTL_CONF:-/etc/sysctl.d/90-dotfiles-inotify.conf}"
-  local _proc="${_INOTIFY_PROC:-/proc/sys/fs/inotify/max_user_instances}"
+  local _conf="${_SYSCTL_CONF:-${INOTIFY_SYSCTL_CONF}}"
+  local _proc="${_INOTIFY_PROC:-${INOTIFY_PROC}}"
   local _bin="${_SYSCTL_BIN:-sysctl}"
-  local _rundir="${_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
   if [[ -z ${HAS_DOCKER} ]]; then
     printf 'inotify: skipped (HAS_DOCKER unset)\n'
     return 0
@@ -103,7 +103,7 @@ _install_ubuntu_inotify() {
     _live="$(<"${_proc}")"
     _live="${_live//[[:space:]]/}"
   fi
-  if [[ ! ${_live} =~ ^[0-9]+$ ]]; then
+  if [[ ! ${_live} =~ ^(0|[1-9][0-9]*)$ ]]; then
     printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
     return 1
   fi

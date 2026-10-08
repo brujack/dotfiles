@@ -976,9 +976,9 @@ _inotify_conf_value() {
 # Seams mirror _install_ubuntu_inotify. The remedies touch only this one key
 # (sysctl -w, never -p, which would apply every key in a kept conf).
 _doctor_check_inotify_limits() {
-  local _conf="${_SYSCTL_CONF:-/etc/sysctl.d/90-dotfiles-inotify.conf}"
-  local _proc="${_INOTIFY_PROC:-/proc/sys/fs/inotify/max_user_instances}"
-  local _rundir="${_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+  local _conf="${_SYSCTL_CONF:-${INOTIFY_SYSCTL_CONF}}"
+  local _proc="${_INOTIFY_PROC:-${INOTIFY_PROC}}"
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
   [[ -n ${LINUX} && -n ${HAS_DOCKER} && -d ${_rundir} ]] || return 0
 
   printf "\ninotify instances:\n"

@@ -2785,6 +2785,31 @@ STUB
   [ "${_called}" -eq 1 ]
 }
 
+@test "run_doctor runs the inotify check, and its FAIL fails doctor" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '128\n' > "${_INOTIFY_PROC}"
+  _doctor_check_profile()        { :; }
+  _doctor_check_symlinks()       { :; }
+  _doctor_check_symlink_roots()  { :; }
+  _doctor_check_tools()          { :; }
+  _doctor_check_dev_tools()      { :; }
+  _doctor_check_login_shell()    { :; }
+  _doctor_check_cred_dirs()      { :; }
+  _doctor_check_hooks_path()     { :; }
+  _doctor_check_versions()       { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()     { :; }
+  _doctor_check_gnu_coreutils()  { :; }
+  _doctor_check_pyenv_shims()    { :; }
+  _doctor_check_conffile_dist()  { :; }
+  _doctor_check_plugin_node_paths() { :; }
+  _doctor_check_renovate_cadence()     { :; }
+  _doctor_check_ledger_drift_cadence() { :; }
+  run run_doctor
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing or below 1024"* ]]
+}
+
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
 
 @test "_update_record_start legacy-rsync case skips via _update_skip when not studio" {
@@ -2894,6 +2919,14 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
 @test "inotify doctor: unparseable conf fails by hand with no tee line" {
   export LINUX=1 HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 08\nnet.core.somaxconn = 4096\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a valid assignment followed by an invalid one is unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
   run _doctor_check_inotify_limits
   [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* ]]

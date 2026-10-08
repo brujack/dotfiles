@@ -191,6 +191,10 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
 # docker-host floor for fs.inotify.max_user_instances; see
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 readonly INOTIFY_MAX_USER_INSTANCES=1024
+# read by lib/linux_ubuntu.sh:_install_ubuntu_inotify and lib/helpers.sh:_doctor_check_inotify_limits
+readonly INOTIFY_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-inotify.conf
+readonly INOTIFY_PROC=/proc/sys/fs/inotify/max_user_instances
+readonly SYSTEMD_RUN_DIR=/run/systemd/system
 readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
 readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"

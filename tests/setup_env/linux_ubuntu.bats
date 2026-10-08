@@ -4570,6 +4570,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
   [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" != *"already"* ]]
 }
 
 @test "inotify: conf key=1024 with live 1024 is left alone and says already" {
@@ -4679,6 +4680,26 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
   rm -f "${_INOTIFY_PROC}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a valid assignment followed by an invalid one is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 4096\nfs.inotify.max_user_instances = 08')" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a leading-zero live value returns 1 and applies nothing" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  _inotify_live 08
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"cannot read live value"* ]]
