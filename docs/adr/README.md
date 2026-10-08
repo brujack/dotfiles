@@ -47,3 +47,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0041](0041-ubuntu-installs-stage-then-rename-and-stamp.md) | Ubuntu installs stage, then rename, and stamp on success | 2026-10-05 | Accepted |
 | [0042](0042-credentials-reach-curl-on-stdin.md) | GitHub credentials reach curl on stdin, and credential-carrying seams are allowlisted | 2026-10-07 | Accepted |
 | [0043](0043-executed-installer-pins-are-report-only.md) | Pins on executed installers are report-only, checked against the installer's own history | 2026-10-08 | Accepted |
+| [0044](0044-host-kernel-limits-persist-via-sysctl-d.md) | Host kernel limits persist via sysctl.d, never lowering a higher value | 2026-10-08 | Accepted |
