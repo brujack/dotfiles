@@ -62,7 +62,9 @@ target is never touched.
 Match the key (either spelling, optional leading `-`, any whitespace around `=`)
 with **any** right-hand side. Every matching line resets `val`: to the value when it
 is `0` or a non-zero-led integer no greater than 2147483647 (the kernel's `INT_MAX`;
-compared as a string of at most 10 digits, then numerically), otherwise to empty. An empty
+at most 10 digits, then compared numerically as `line + 0 <= 2147483647`; after
+`sub()` the field is a string, so a bare `line <= 2147483647` compares as strings and
+rejects `4096`), otherwise to empty. An empty
 `val` at end of file prints nothing, so install and doctor already report the conf as
 unparseable and "fix by hand". No caller changes.
 
@@ -71,8 +73,8 @@ unparseable and "fix by hand". No caller changes.
 1. Skips (HAS_DOCKER, systemd dir): unchanged.
 2. Classify the conf (unreadable or unparseable returns 1): unchanged.
 3. Read live. Return 1 with **nothing written** when it is unreadable, is not `0` or a
-   non-zero-led integer, or is above 2147483647 (the same `INT_MAX` cap as the
-   parser). This moves the existing check earlier, because the target needs it.
+   non-zero-led integer, or is longer than 10 digits, or is above 2147483647. The
+   length check comes first: bash arithmetic wraps, so a 20-digit value reads as 0. This moves the existing check earlier, because the target needs it.
 4. Conf missing or below the target: write `fs.inotify.max_user_instances = <target>`,
    read back, and return 1 with `inotify: read-back mismatch` unless the read-back
    value equals the target. On success print `inotify: conf written (<target>)` when
@@ -141,7 +143,9 @@ existing seams. Every case asserting an absence also asserts a positive outcome.
   - conf 512, live 2048: writes 2048.
   - conf absent, live 128: writes and applies 1024.
   - conf absent, live unreadable: rc 1, stderr `cannot read live value`, conf absent.
-  - live 2147483648: rc 1, conf absent; live 2147483647 is accepted.
+  - live 2147483648: rc 1, conf absent.
+  - live 18446744073709551616 (20 digits, wraps to 0): rc 1, conf absent.
+  - live 2147483647, conf absent: rc 0, conf holds 2147483647, `conf written (2147483647)`.
   - conf `3000000000`: rc 1, stderr `unparseable`, conf byte-identical.
   - a tee that writes 1024 when the target is 4096: rc 1 and stderr
     `read-back mismatch`.
@@ -159,7 +163,8 @@ existing seams. Every case asserting an absence also asserts a positive outcome.
   and no `sudo` line; with it unset and the PATH stub, the marker is present and the
   log has `sudo sysctl -w`.
 - Mutation controls, each must turn a test red: drop the `val = ""` reset; replace the
-  target with 1024; compare the conf only against 1024; raise the cap to 9999999999;
+  target with 1024; compare the conf only against 1024; raise the cap to 9999999999; compare the cap as a string in awk;
+drop the live length check;
 swap the "below 1024" and "below live" order; make the below-live case FAIL; drop the
 `live < 1024`
   condition on the doctor suffix; always use sudo.
@@ -167,7 +172,7 @@ swap the "below 1024" and "below live" order; make the below-live case FAIL; dro
 ## Requirements
 
 - **R1.** `[PR1]` `_inotify_conf_value` prints the value of the last line assigning `fs.inotify.max_user_instances` (dotted or slash spelling, optional leading `-`), and prints nothing when that last right-hand side is not `0` or a non-zero-led integer no greater than 2147483647, including empty.
-- **R2.** `[PR1]` `_install_ubuntu_inotify` returns 1 without writing the conf or applying when the live value is unreadable, not `0`/a non-zero-led integer, or above 2147483647, whatever the conf state.
+- **R2.** `[PR1]` `_install_ubuntu_inotify` returns 1 without writing the conf or applying when the live value is unreadable, not `0`/a non-zero-led integer, longer than 10 digits, or above 2147483647, whatever the conf state.
 - **R3.** `[PR1]` When the conf is missing or its value is below `max(live, 1024)`, `_install_ubuntu_inotify` writes `fs.inotify.max_user_instances = <max(live, 1024)>`, returns 1 printing `read-back mismatch` when the read-back value differs from that number, and on success prints the written value, plus the previous value when a conf existed.
 - **R4.** `[PR1]` `_install_ubuntu_inotify` applies only when the live value is below 1024; runs `"${_SYSCTL_BIN}" -w` without sudo when `_SYSCTL_BIN` is non-empty and `sudo sysctl -w` otherwise; and names `_SYSCTL_BIN` in the failure message when the seam was set.
 - **R5.** `[PR1]` `_doctor_check_inotify_limits` FAILs when the conf is missing (message names `next boot: kernel default`) or its value is below 1024 (message names the value and that it is next boot's value, and wins over below-live), and WARNs, not FAILs, when the conf value is at least 1024 but below live (`a reboot may drop it`); each prints a `tee` line writing `max(live, 1024)`, followed by `&& sudo sysctl -w fs.inotify.max_user_instances=1024` only when the live value is below 1024.
@@ -286,3 +291,21 @@ Disposition: Addressed (operator, 2026-10-08) — parser and live read capped at
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — round 3 (scoped, Risk only)
+
+Reviewed at commit: `30732a3a`, scoped to the round-2 changes.
+
+### Risk
+
+Finding: (1) After `sub()` the awk field is a string, so `line <= 2147483647` compares
+as strings and rejects `4096`/`8192`; the spec must say `line + 0`. (2) R2 dropped the
+live length guard; bash arithmetic wraps (`$((18446744073709551616))` is 0), so a
+20-digit seam value would pass as 0. Seam-only. (3) "live 2147483647 is accepted" had
+no positive assertion. Verified clean: `doctor_warn` never sets `_DOCTOR_FAILED`
+(`run_doctor` exit stays 0); install and doctor agree on every requested pair; R×N
+clean; no test reaches `/etc` or the kernel. Applied to the spec text at the next
+commit, pending operator disposition.
+Assumption: that a live value above 1024 is an operator raise, not molecule/k3s/LXD.
+Settle with `cat /proc/sys/fs/inotify/max_user_instances` and a writer grep per host.
+Disposition:
