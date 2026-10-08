@@ -655,7 +655,7 @@ two-second grep appears to refute the rule.
 
 - `_SYSCTL_CONF`/`_SYSCTL_BIN`/`_INOTIFY_PROC`/`_SYSTEMD_RUN_DIR` (`lib/linux_ubuntu.sh:_install_ubuntu_inotify`, `lib/helpers.sh:_doctor_check_inotify_limits`)
   - `load_mocks` exports all four under `BATS_TEST_TMPDIR`: conf absent, live value 1024, the systemd run dir present, and a recording `sysctl` stub that honours `MOCK_SYSCTL_STUB_EXIT`.
-  - They exist because `tests/mocks/sudo` and `tests/mocks/sysctl` exec real binaries, so unset seams would write the real `/etc/sysctl.d` and change the live kernel limit (`tdd.md` E2).
+  - They exist because `tests/mocks/sudo` and `tests/mocks/sysctl` exec real binaries, so unset seams would aim `tee` and `sysctl` at the real `/etc/sysctl.d` and kernel: failing as a normal user, writing as root (`tdd.md` E2).
   - `tests/mocks/tee` swallows failures, so the step reads the conf back rather than trusting `tee`'s status.
   - The step applies only the one key (`sysctl -w`, never `-p`); an unreadable or non-numeric live value returns 1 without applying.
   - Tests that reach the real step set or unset `HAS_DOCKER` themselves; doctor prints the `tee` remedy only for a missing or below-1024 conf, and "fix by hand" for an unreadable or unparseable one.
