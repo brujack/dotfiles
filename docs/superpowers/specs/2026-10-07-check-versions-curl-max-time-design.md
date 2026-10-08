@@ -88,7 +88,10 @@ WARN; that is accepted (see Failure path).
    installer diff is one click. The pin is executed by `lib/macos.sh:82` and both bootstrap
    scripts, and `_update_version_pin` is a bare `sed` with no diff shown; fixing the check
    would otherwise make a one-keystroke, unreviewed bump of that pin reachable for the first
-   time. Bumping stays a manual edit.
+   time. Bumping stays a manual edit. The `HOMEBREW_INSTALL_SHA` comment in
+   `lib/constants.sh` (`update check: ./setup_env.sh -t check-versions --update`) and the
+   `--update` help line in `lib/helpers.sh` (`Interactively prompt to update outdated version
+   pins`) are reworded so neither claims `--update` bumps this pin.
 4. **Add `--max-time 10`** to `_check_cv_homebrew_install`'s and `_check_one_cargo_version`'s
    curl, matching `_fetch_github_latest`'s value and spelling.
 
@@ -122,7 +125,9 @@ and the Studio, unchecked on `workstation` and CI.
   (`grep -- '--max-time 10' | grep -qF 'commits?path=install.sh'`), so the flag is tied to
   that call and the case fails if the function stops calling curl.
 - **homebrew-install, report-only:** with `UPDATE_VERSIONS=1` and a differing SHA, a
-  recorder stub for `_prompt_version_update` is never called, and the output contains
+  recorder stub for `_prompt_version_update` that appends to a file under
+  `BATS_TEST_TMPDIR` (not a shell variable, which `_out=$(...)`'s subshell would discard)
+  is never called, and the output contains
   `https://github.com/Homebrew/install/compare/<pin>...<latest>`. A positive control in the
   same test asserts the OUTDATED line was printed, so the not-called assertion cannot pass
   because the function printed nothing.
@@ -135,7 +140,7 @@ and the Studio, unchecked on `workstation` and CI.
   from `-eq 1` to `-eq 0`, alongside the existing `-eq 1` for `_check_cv_homebrew_install`
   as the positive control: without the stub a reinstated call fails only with "command not
   found" on stderr and the count stays 0 regardless. The WARN-count literal at ~`:3115`
-  goes from 17 to 16. The no-op `_check_cv_oh_my_zsh` stubs in `check_versions_cargo.bats`
+  goes from 17 to 16, and its explanatory comment (~`:3104-3111`) is rewritten to match. The no-op `_check_cv_oh_my_zsh` stubs in `check_versions_cargo.bats`
   (`:46`, `:67`, `:96`) are removed.
 - Existing tests that override `curl()` as a function ignore argv and are unaffected.
 
@@ -158,12 +163,12 @@ still run without the token, and say homebrew-install is report-only under `--up
 ## Requirements
 
 - **R1.** `[PR1]` `_check_cv_oh_my_zsh` no longer exists in `lib/workflows.sh`, and `run_check_versions` does not call it.
-- **R2.** `[PR1]` `OH_MY_ZSH_VER` remains in `lib/constants.sh`, and its comment names no check-versions consumer.
+- **R2.** `[PR1]` `OH_MY_ZSH_VER` remains in `lib/constants.sh`, and its comment names no check-versions consumer; the `HOMEBREW_INSTALL_SHA` comment and the `--update` help line in `lib/helpers.sh` do not claim `--update` bumps that pin.
 - **R3.** `[PR1]` `_check_cv_homebrew_install`'s curl requests `https://api.github.com/repos/Homebrew/install/commits?path=install.sh&per_page=1` with `--max-time 10`.
 - **R4.** `[PR1]` `_check_one_cargo_version`'s curl passes `--max-time 10`.
 - **R5.** `[PR1]` On OUTDATED, `_check_cv_homebrew_install` never calls `_prompt_version_update`, and prints `https://github.com/Homebrew/install/compare/<pin>...<latest>`.
 - **R6.** `[PR1]` A `workflows.bats` case asserts one curl call line carrying both `commits?path=install.sh` and `--max-time 10`.
-- **R7.** `[PR1]` A `workflows.bats` case with `UPDATE_VERSIONS=1` asserts the OUTDATED line and compare URL are printed and `_prompt_version_update` is not called.
+- **R7.** `[PR1]` A `workflows.bats` case with `UPDATE_VERSIONS=1` asserts the OUTDATED line and compare URL are printed and `_prompt_version_update` is not called, recording calls to a file.
 - **R8.** `[PR1]` A `check_versions_cargo.bats` case asserts one curl call line carrying both the `_CRATES_API` crate URL and `--max-time 10`.
 - **R9.** `[PR1]` The call-recording test keeps a `_check_cv_oh_my_zsh` recorder stub and asserts it is called 0 times, beside a 1-time assertion for `_check_cv_homebrew_install`.
 - **R10.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet does not name `_check_cv_oh_my_zsh` and states homebrew-install is report-only.
@@ -208,3 +213,11 @@ Reviewed at commit: `91fabd46` (all three lenses; rescoped body)
 - **Goal-Fit.** Finding: `commits/HEAD` is the wrong reference; the pin guards `install.sh`, and most repo commits do not touch it, so OUTDATED would be near-permanent. Assumption checked by the orchestrator: 74 commits in 90 days, 9 touching `install.sh`. Disposition: Addressed — operator chose the `install.sh` path reference, 2026-10-07.
 - **Ergonomics.** Finding: same reference problem; and fixing the check makes `--update`'s one-keystroke, no-diff bump of an executed installer pin reachable. Assumption: whether the operator bumps promptly; moot under the path reference. Disposition: Addressed — operator chose report-only plus compare URL, 2026-10-07.
 - **Risk.** Finding: R7 as written was vacuous once the recorder stub was deleted; exact test edits unstated (`:1541`, `:3079`, `:3115` 17 to 16). Assumption: top-level `sha` precedes nested ones; measured true for both object and list responses, left as the existing parse. Revision made: recorder stub kept with `-eq 0` plus positive control, edits stated, mutation added to V1. Disposition:
+
+### Round 3
+
+Reviewed at commit: `092408c2` (Risk lens only, scoped to Design items 2-3, Testing, Docs, Out of scope, Requirements)
+
+- **Risk.** Finding: `HOMEBREW_INSTALL_SHA` comment and `--update` help line go stale under report-only; R7's recorder must write to a file or a `$(...)` subshell discards it; the WARN-count comment at ~`:3104` must change with the literal. Checked clean: mock records the `?`/`&` URL verbatim, compare URL valid (12 files incl. `install.sh`), stated line numbers correct, nothing else reaches the homebrew prompt. Assumption: none uncertain beyond the R7 subshell point, settled by V1's mutation. Revision made: all three folded into Design item 3, Testing, R2, R7. Disposition:
+
+Stopping review here: round 3's findings are all in test apparatus and comment wording, not design, and the design shrank across rounds (oh-my-zsh check removed, `--update` path removed for homebrew).
