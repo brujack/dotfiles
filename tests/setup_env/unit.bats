@@ -2924,6 +2924,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   run run_doctor
   [ "$status" -eq 0 ]
   [[ "$output" == *"[WARN]"*"inotify"*"value 1024 below live 4096"* ]]
+  [[ "$output" == *", 0 failed, 1 warnings"* ]]
 }
 
 @test "inotify doctor: live below 1024 prints the conf-valued sysctl -w remedy on its own line" {
@@ -2951,6 +2952,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _inotify_doctor_conf 512
   printf '4096\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} value 512 below 1024; next boot: 512; fix:"* ]]
   [[ "${output}" != *"below live"* ]]
   printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 4096\\n' | sudo tee '${_SYSCTL_CONF}'"
@@ -2962,6 +2964,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _inotify_doctor_conf 512
   printf '128\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"value 512 below 1024; next boot: 512; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
 }
@@ -2980,6 +2983,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   export LINUX=1 HAS_DOCKER=1
   _inotify_doctor_conf 3000000000
   run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* ]]
 }
@@ -2989,6 +2993,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _inotify_doctor_conf 1024
   printf '2147483648\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
 }
 
@@ -2997,7 +3002,17 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _inotify_doctor_conf 1024
   printf '18446744073709551616\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: live and conf at INT_MAX 2147483647 pass" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 2147483647
+  printf '2147483647\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 2147483647"* ]]
 }
 
 @test "inotify doctor: unreadable conf (mode 000) fails by hand with no tee line" {
