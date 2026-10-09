@@ -4870,13 +4870,17 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
-@test "inotify: a conf at INT_MAX is parsed, and 4096 then a non-numeric last line is unparseable" {
+@test "inotify: a conf at INT_MAX is parsed" {
   export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 2147483647\n' > "${_SYSCTL_CONF}"
   _inotify_live 4096
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [[ "$output" == *"inotify: already 1024 or higher"* ]]
+}
+
+@test "inotify: 2048 then a non-numeric last line is unparseable" {
+  export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances = abc\n' > "${_SYSCTL_CONF}"
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
@@ -4884,12 +4888,16 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances = abc')" ]
 }
 
-@test "inotify: a valid line then an empty right-hand side is unparseable; abc then 2048 reads 2048" {
+@test "inotify: a valid line then an empty right-hand side is unparseable" {
   export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances =\n' > "${_SYSCTL_CONF}"
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"unparseable"* ]]
+}
+
+@test "inotify: a non-numeric line then 2048 reads 2048" {
+  export HAS_DOCKER=1
   printf 'fs.inotify.max_user_instances = abc\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
@@ -4899,11 +4907,32 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 @test "inotify: with _SYSCTL_BIN set apply runs the seam without sudo" {
   export HAS_DOCKER=1
   _inotify_live 128
+  local seam="${BATS_TEST_TMPDIR}/seam-stub" stub="${BATS_TEST_TMPDIR}/pathstub-real"
+  mkdir -p "${stub}"
+  printf '#!/usr/bin/env bash\nprintf "SEAM-STUB-b41e2d %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${seam}"
+  printf '#!/usr/bin/env bash\nprintf "PATH-STUB-95c0aa %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${stub}/sysctl"
+  chmod +x "${seam}" "${stub}/sysctl"
+  export _SYSCTL_BIN="${seam}"
+  PATH="${stub}:${PATH}"
+  [ "$(command -v sysctl)" = "${stub}/sysctl" ]
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
-  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
-  [ "$(grep -c "^sudo .*${_SYSCTL_BIN} -w" "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  grep -q '^SEAM-STUB-b41e2d -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  [ "$(grep -c '^PATH-STUB-95c0aa' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  [ "$(grep -cE '^sudo (sysctl|[^ ]*seam-stub)( |$)' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
   [[ "$output" == *"inotify: applied"* ]]
+}
+
+@test "inotify: a conf below target with an out-of-range live value returns 1 and leaves the conf untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/conf.before"
+  _inotify_live 2147483648
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"inotify: cannot read live value ${_INOTIFY_PROC}"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/conf.before"
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
 @test "inotify: with _SYSCTL_BIN unset apply goes through sudo sysctl -w" {

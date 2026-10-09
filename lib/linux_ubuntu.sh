@@ -48,8 +48,8 @@ install_ubuntu_packages() {
 }
 
 # Docker hosts running parallel molecule/CI jobs exhaust the default
-# fs.inotify.max_user_instances (128). Persist max(live, 1024) and apply 1024
-# when live is below it, never lowering a higher conf or live value. Only this
+# fs.inotify.max_user_instances (128). Persist max(live, 1024) and apply the
+# persisted value when live is below 1024, never lowering a higher conf or live value. Only this
 # one key is applied (never `sysctl -p`, which would apply every key in a kept
 # conf). When _SYSCTL_BIN is set it is run WITHOUT sudo (a test seam must not
 # run an env-chosen binary as root). Specs:
