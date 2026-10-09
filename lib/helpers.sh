@@ -950,26 +950,52 @@ _doctor_check_github_mcp() {
 }
 
 # Print the last value assigned to fs.inotify.max_user_instances in a sysctl
-# conf file, or nothing -- including when that last value is invalid, so a
-# valid value followed by `08` reads as unparseable. Accepts the dotted and slash spellings, a leading `-`
+# conf file, or nothing. EVERY line assigning the key resets the value, so a
+# valid value followed by `08`, `abc` or an empty right-hand side reads as
+# unparseable (systemd-sysctl applies the last assignment and fails on it). A
+# valid value is `0` or a non-zero-led integer no greater than 2147483647, the
+# kernel's INT_MAX. Accepts the dotted and slash spellings, a leading `-`
 # (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
 # is IFS whitespace and would collapse fields.
 _inotify_conf_value() {
   # Length/leading-zero checks are in code, not the regex: older awks lack
-  # interval braces. A value that fails them is not printed, so the caller
-  # reports the conf as unparseable.
+  # interval braces. After sub() the field is a string, so the cap is compared
+  # as `line + 0`; a bare `line <= 2147483647` compares strings and rejects 4096.
   awk '
     {
       line = $0
       sub(/^[ \t]*-?/, "", line)
-      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=[ \t]*[0-9]+[ \t]*$/)) {
+      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=/)) {
         sub(/^[^=]*=[ \t]*/, "", line)
         sub(/[ \t]*$/, "", line)
-        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10) val = line
+        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10 && line + 0 <= 2147483647) val = line
         else val = ""
       }
     }
     END { if (val != "") print val }
+  ' "$1"
+}
+
+# Exit 0 when the conf holds anything besides blank lines, comments (# or ;)
+# and assignments of max_user_instances (optional leading -). Why: both the
+# step and the doctor remedy rewrite the whole file with tee, which would
+# silently delete such a line. Default-deny: a line without "=" (a sysctl.d
+# "-key" exclusion, a bare key, garbage) is not ours either, so it counts.
+_inotify_conf_has_other_keys() {
+  awk '
+    {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      if (line == "" || line ~ /^[#;]/) next
+      sub(/^-/, "", line)
+      key = line
+      if (line ~ /=/) {
+        sub(/[ \t]*=.*$/, "", key)
+        if (key == "fs.inotify.max_user_instances" || key == "fs/inotify/max_user_instances") next
+      }
+      found = 1
+    }
+    END { exit found ? 0 : 1 }
   ' "$1"
 }
 
@@ -985,8 +1011,9 @@ _doctor_check_inotify_limits() {
   local _live _val=""
   _live="$(cat "${_proc}" 2>/dev/null)"
   # Same leading-zero rule as _inotify_conf_value: bash arithmetic reads 08 as
-  # an invalid octal.
-  if [[ ! ${_live} =~ ^(0|[1-9][0-9]*)$ ]]; then
+  # an invalid octal. Shape is checked before arithmetic (bash wraps a 20-digit
+  # value), and the cap is the kernel's INT_MAX.
+  if [[ ! ${_live} =~ ^(0|[1-9][0-9]{0,9})$ ]] || ((_live > 2147483647)); then
     doctor_fail "inotify" "cannot read ${_proc}"
     return 0
   fi
@@ -997,15 +1024,38 @@ _doctor_check_inotify_limits() {
       doctor_fail "inotify" "${_conf} exists but is unreadable; fix by hand"
       return 0
     fi
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      doctor_fail "inotify" "${_conf} holds other keys; fix by hand"
+      return 0
+    fi
     _val="$(_inotify_conf_value "${_conf}")"
     if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
       doctor_fail "inotify" "${_conf} exists but is unparseable; fix by hand"
       return 0
     fi
   fi
-  if [[ -z ${_val} ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
-    doctor_fail "inotify" "${_conf} missing or below ${INOTIFY_MAX_USER_INSTANCES}; fix:"
-    printf '    %s\n' "printf 'fs.inotify.max_user_instances = ${INOTIFY_MAX_USER_INSTANCES}\\n' | sudo tee '${_conf}' && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
+  # The step persists the higher of the live value and the floor, so the
+  # remedy does the same rather than lowering a live value that is above it.
+  local _target="${_live}" _tee _sysctl=""
+  ((_target < INOTIFY_MAX_USER_INSTANCES)) && _target="${INOTIFY_MAX_USER_INSTANCES}"
+  # The live-apply half only matters while the live value is under the floor.
+  ((_live < INOTIFY_MAX_USER_INSTANCES)) && _sysctl=" && sudo sysctl -w fs.inotify.max_user_instances=${INOTIFY_MAX_USER_INSTANCES}"
+  _tee="printf 'fs.inotify.max_user_instances = ${_target}\\n' | sudo tee '${_conf}'"
+  # First match wins; below-floor is checked before below-live so a conf under
+  # 1024 is reported as the failure it is, not as the softer warning.
+  if [[ -z ${_val} ]]; then
+    doctor_fail "inotify" "${_conf} missing; next boot: kernel default; fix:"
+    printf '    %s\n' "${_tee}${_sysctl}"
+    return 0
+  fi
+  if ((_val < INOTIFY_MAX_USER_INSTANCES)); then
+    doctor_fail "inotify" "${_conf} value ${_val} below ${INOTIFY_MAX_USER_INSTANCES}; next boot: ${_val}; fix:"
+    printf '    %s\n' "${_tee}${_sysctl}"
+    return 0
+  fi
+  if ((_val < _live)); then
+    doctor_warn "inotify" "${_conf} value ${_val} below live ${_live}; a reboot may drop it; fix:"
+    printf '    %s\n' "${_tee}"
     return 0
   fi
   if ((_live < INOTIFY_MAX_USER_INSTANCES)); then

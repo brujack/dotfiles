@@ -48,14 +48,16 @@ install_ubuntu_packages() {
 }
 
 # Docker hosts running parallel molecule/CI jobs exhaust the default
-# fs.inotify.max_user_instances (128). Persist 1024 and apply it, never lowering
-# a higher value already configured or live. Only this one key is applied (never
-# `sysctl -p`, which would apply every key in a kept conf). Spec:
+# fs.inotify.max_user_instances (128). Persist max(live, 1024) and apply the
+# persisted value when live is below 1024, never lowering a higher conf or
+# live value. Only this one key is applied (never `sysctl -p`, which would
+# apply every key in a kept conf). When _SYSCTL_BIN is set it is run WITHOUT
+# sudo (a test seam must not run an env-chosen binary as root). Specs:
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
+# docs/superpowers/specs/2026-10-08-inotify-followups-design.md
 _install_ubuntu_inotify() {
   local _conf="${_SYSCTL_CONF:-${INOTIFY_SYSCTL_CONF}}"
   local _proc="${_INOTIFY_PROC:-${INOTIFY_PROC}}"
-  local _bin="${_SYSCTL_BIN:-sysctl}"
   local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
   if [[ -z ${HAS_DOCKER} ]]; then
     printf 'inotify: skipped (HAS_DOCKER unset)\n'
@@ -66,10 +68,16 @@ _install_ubuntu_inotify() {
     return 0
   fi
 
-  local _val="" _wrote=0
+  local _val="" _wrote=0 _existed=0
   if [[ -e ${_conf} ]]; then
+    _existed=1
     if [[ ! -r ${_conf} ]]; then
       printf 'inotify: %s exists but is unreadable; fix by hand\n' "${_conf}" >&2
+      return 1
+    fi
+    # Before the parse check: a conf of only other keys is that case, not unparseable.
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      printf 'inotify: %s holds other keys; fix by hand\n' "${_conf}" >&2
       return 1
     fi
     _val="$(_inotify_conf_value "${_conf}")"
@@ -79,8 +87,20 @@ _install_ubuntu_inotify() {
     fi
   fi
 
-  if [[ -z ${_val} ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
-    printf 'fs.inotify.max_user_instances = %s\n' "${INOTIFY_MAX_USER_INSTANCES}" |
+  # Length check first: bash arithmetic wraps, so a 20-digit value reads as 0.
+  local _live=""
+  if [[ -r ${_proc} ]]; then
+    _live="$(<"${_proc}")"
+    _live="${_live//[[:space:]]/}"
+  fi
+  if [[ ! ${_live} =~ ^(0|[1-9][0-9]{0,9})$ ]] || ((_live > 2147483647)); then
+    printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
+    return 1
+  fi
+
+  local _target=$((_live > INOTIFY_MAX_USER_INSTANCES ? _live : INOTIFY_MAX_USER_INSTANCES))
+  if [[ -z ${_val} ]] || ((_val < _target)); then
+    printf 'fs.inotify.max_user_instances = %s\n' "${_target}" |
       sudo tee "${_conf}" > /dev/null || {
       printf 'inotify: write failed (%s)\n' "${_conf}" >&2
       return 1
@@ -89,32 +109,35 @@ _install_ubuntu_inotify() {
       printf 'inotify: cannot read back %s\n' "${_conf}" >&2
       return 1
     fi
+    local _old="${_val}"
     _val="$(_inotify_conf_value "${_conf}")"
-    if [[ ! ${_val} =~ ^[0-9]+$ ]] || ((_val < INOTIFY_MAX_USER_INSTANCES)); then
-      printf 'inotify: write failed (%s)\n' "${_conf}" >&2
+    if [[ ${_val} != "${_target}" ]]; then
+      printf 'inotify: read-back mismatch (%s)\n' "${_conf}" >&2
       return 1
     fi
     _wrote=1
-    printf 'inotify: conf written\n'
+    if ((_existed == 1)); then
+      printf 'inotify: persisted %s to %s (was %s)\n' "${_target}" "${_conf}" "${_old}"
+    else
+      printf 'inotify: conf written (%s)\n' "${_target}"
+    fi
   fi
 
-  local _live=""
-  if [[ -r ${_proc} ]]; then
-    _live="$(<"${_proc}")"
-    _live="${_live//[[:space:]]/}"
-  fi
-  if [[ ! ${_live} =~ ^(0|[1-9][0-9]*)$ ]]; then
-    printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
-    return 1
-  fi
   if ((_live >= INOTIFY_MAX_USER_INSTANCES)); then
     ((_wrote == 1)) || printf 'inotify: already %s or higher\n' "${INOTIFY_MAX_USER_INSTANCES}"
     return 0
   fi
-  sudo "${_bin}" -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
-    printf 'inotify: apply failed\n' >&2
-    return 1
-  }
+  if [[ -n ${_SYSCTL_BIN} ]]; then
+    "${_SYSCTL_BIN}" -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
+      printf 'inotify: apply failed (_SYSCTL_BIN set, ran without sudo)\n' >&2
+      return 1
+    }
+  else
+    sudo sysctl -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
+      printf 'inotify: apply failed\n' >&2
+      return 1
+    }
+  fi
   printf 'inotify: applied\n'
 }
 

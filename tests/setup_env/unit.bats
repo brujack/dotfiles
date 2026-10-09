@@ -2807,7 +2807,7 @@ STUB
   _doctor_check_ledger_drift_cadence() { :; }
   run run_doctor
   [ "$status" -eq 1 ]
-  [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing or below 1024"* ]]
+  [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing; next boot: kernel default"* ]]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
@@ -2868,13 +2868,63 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" == *"[PASS]"*"inotify"*"1024"* ]]
 }
 
-@test "inotify doctor: missing conf fails and prints the tee remedy on its own line" {
+@test "inotify doctor: missing conf, live 4096, fails next-boot and tees 4096 with no sysctl -w" {
   export LINUX=1 HAS_DOCKER=1
+  printf '4096\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"[FAIL]"*"inotify"* ]]
-  printf '%s\n' "${output}" | grep -qF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
+  [[ "${output}" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 4096\\n' | sudo tee '${_SYSCTL_CONF}'"
+  [[ "${output}" != *"sysctl -w"* ]]
   [[ "${output}" != *"-t developer"* ]]
+}
+
+@test "inotify doctor: missing conf, live 128, tees 1024 and adds the sysctl -w half" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
+}
+
+@test "inotify doctor: conf 1024 below live 4096 warns, naming the values, and tees live" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '4096\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"inotify"*"${_SYSCTL_CONF} value 1024 below live 4096; a reboot may drop it; fix:"* ]]
+  [[ "${output}" != *"[FAIL]"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 4096\\n' | sudo tee '${_SYSCTL_CONF}'"
+  [[ "${output}" != *"sysctl -w"* ]]
+}
+
+@test "run_doctor: a below-live WARN does not fail doctor" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '4096\n' > "${_INOTIFY_PROC}"
+  _doctor_check_profile()        { :; }
+  _doctor_check_symlinks()       { :; }
+  _doctor_check_symlink_roots()  { :; }
+  _doctor_check_tools()          { :; }
+  _doctor_check_dev_tools()      { :; }
+  _doctor_check_login_shell()    { :; }
+  _doctor_check_cred_dirs()      { :; }
+  _doctor_check_hooks_path()     { :; }
+  _doctor_check_versions()       { :; }
+  _doctor_check_aws_key_expiry() { :; }
+  _doctor_check_github_mcp()     { :; }
+  _doctor_check_gnu_coreutils()  { :; }
+  _doctor_check_pyenv_shims()    { :; }
+  _doctor_check_conffile_dist()  { :; }
+  _doctor_check_plugin_node_paths() { :; }
+  _doctor_check_renovate_cadence()     { :; }
+  _doctor_check_ledger_drift_cadence() { :; }
+  run run_doctor
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"*"inotify"*"value 1024 below live 4096"* ]]
+  [[ "$output" == *", 0 failed, 1 warnings"* ]]
 }
 
 @test "inotify doctor: live below 1024 prints the conf-valued sysctl -w remedy on its own line" {
@@ -2897,12 +2947,72 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" == *"[PASS]"*"4096"* ]]
 }
 
-@test "inotify doctor: conf below 1024 fails with the tee remedy" {
+@test "inotify doctor: conf 512 with live 4096 fails below 1024 (not below live), tees 4096, no sysctl -w" {
   export LINUX=1 HAS_DOCKER=1
   _inotify_doctor_conf 512
+  printf '4096\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
-  [[ "${output}" == *"[FAIL]"* ]]
-  printf '%s\n' "${output}" | grep -qE "^    printf 'fs\.inotify\.max_user_instances = 1024.*sudo tee '"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} value 512 below 1024; next boot: 512; fix:"* ]]
+  [[ "${output}" != *"below live"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 4096\\n' | sudo tee '${_SYSCTL_CONF}'"
+  [[ "${output}" != *"sysctl -w"* ]]
+}
+
+@test "inotify doctor: conf 512 with live 128 tees 1024 and adds the sysctl -w half" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 512
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"value 512 below 1024; next boot: 512; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'fs.inotify.max_user_instances = 1024\\n' | sudo tee '${_SYSCTL_CONF}' && sudo sysctl -w fs.inotify.max_user_instances=1024"
+}
+
+@test "inotify doctor: conf 8192 above live 4096 passes" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 8192
+  printf '4096\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 4096"* ]]
+  [[ "${output}" != *"[WARN]"* && "${output}" != *"[FAIL]"* ]]
+}
+
+@test "inotify doctor: conf 3000000000 is unparseable, fix by hand, no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 3000000000
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: live 2147483648 (above INT_MAX) fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '2147483648\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: a 20-digit live value fails with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '18446744073709551616\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: live and conf at INT_MAX 2147483647 pass" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 2147483647
+  printf '2147483647\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 2147483647"* ]]
 }
 
 @test "inotify doctor: unreadable conf (mode 000) fails by hand with no tee line" {
@@ -2918,7 +3028,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
 
 @test "inotify doctor: unparseable conf fails by hand with no tee line" {
   export LINUX=1 HAS_DOCKER=1
-  printf 'fs.inotify.max_user_instances = 08\nnet.core.somaxconn = 4096\n' > "${_SYSCTL_CONF}"
+  printf 'fs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
   run _doctor_check_inotify_limits
   [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* ]]
@@ -2976,4 +3086,76 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   run _doctor_check_inotify_limits
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
+}
+
+@test "inotify doctor: a conf with another key fails by hand and prints no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 524288\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  printf '8192\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: slash-spelled other key also fails by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs/inotify/max_user_watches = 1\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  printf '8192\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"other keys; fix by hand"* ]]
+}
+
+@test "inotify doctor: comments around our key keep the normal remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '# fs.inotify.max_user_watches = 1\n; x = 2\n\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"value 512 below 1024"* ]]
+  [[ "${output}" == *"sudo tee"* ]]
+  [[ "${output}" != *"other keys"* ]]
+}
+
+@test "inotify doctor: a sysctl.d exclusion line fails as other keys with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n-net.ipv4.conf.all.rp_filter\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a bare garbage line fails as other keys with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'foo\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a conf holding only another key reports other keys, not unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 1\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"unparseable"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a comments-only conf is unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '# nothing\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+}
+
+@test "inotify doctor: an indented comment around our key keeps the normal remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '   # indented comment\n\n\tfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"value 512 below 1024"* ]]
+  [[ "${output}" != *"other keys"* ]]
 }

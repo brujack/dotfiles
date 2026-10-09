@@ -151,6 +151,31 @@ requirements: [R6]
 - [ ] `docs/superpowers/README.md`: delete Backlog rows 180-183; add a row `| \`_SYSCTL_CONF\` seam writes an env-chosen path as root | \`sudo tee "${_conf}"\` in \`_install_ubuntu_inotify\` honours the seam under sudo, the same shape \`_SYSCTL_BIN\` had (inotify-followups spec N4) |`.
 - [ ] Commit.
 
+### Task 4: Refuse confs with other keys (Phase 3 bug-scan fix)
+
+```yaml-task
+id: 4
+description: R7 (amendment) - step returns 1 and doctor FAILs "other keys; fix by hand" when the conf assigns any key besides max_user_instances; pin the sudo apply arm to the conf value
+role: executor
+model: sonnet
+tdd: required
+acceptance:
+  - cmd: 'bats tests/setup_env/linux_ubuntu.bats tests/setup_env/unit.bats < /dev/null'
+    exit_code: 0
+  - cmd: 'grep -q "other keys; fix by hand" lib/helpers.sh'
+    exit_code: 0
+  - cmd: 'make lint < /dev/null'
+    exit_code: 0
+max_retries: 3
+files_touched: [lib/helpers.sh, lib/linux_ubuntu.sh, tests/setup_env/linux_ubuntu.bats, tests/setup_env/unit.bats]
+depends_on: [3]
+requirements: [R7]
+```
+
+Added in Phase 3 after the bug-scan HOLD: a whole-file `tee` deleted any other key in the conf, newly reachable for a valid conf below live. Also fixes the test-quality HOLD (sudo apply arm `${_val}` unpinned).
+
+---
+
 ## Orchestrator steps
 
 - [ ] After Task 2: `make test < /dev/null > <scratch>/test.log 2>&1; echo rc=$?`, then grep `not ok`. rc must be 0.
