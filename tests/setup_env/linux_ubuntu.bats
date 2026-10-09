@@ -4558,18 +4558,18 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
   grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
-  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" == *"inotify: conf written (1024)"* ]]
   [[ "$output" == *"inotify: applied"* ]]
 }
 
-@test "inotify: absent conf and live 4096 writes the conf and never applies" {
+@test "inotify: absent conf and live 4096 writes 4096 and never applies" {
   export HAS_DOCKER=1
   _inotify_live 4096
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
-  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
-  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" == *"inotify: conf written (4096)"* ]]
   [[ "$output" != *"already"* ]]
 }
 
@@ -4621,7 +4621,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
-  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" == *"inotify: persisted 1024 to ${_SYSCTL_CONF} (was 512)"* ]]
   [ "$(_inotify_sysctl_calls)" -eq 1 ]
   grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
 }
@@ -4633,7 +4633,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
-  [[ "$output" == *"inotify: conf written"* ]]
+  [[ "$output" == *"inotify: persisted 1024 to ${_SYSCTL_CONF} (was 512)"* ]]
   [ "$(_inotify_sysctl_calls)" -eq 1 ]
   grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
 }
@@ -4760,7 +4760,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   /bin/chmod +x "${SHIM_DIR}/tee"
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"write failed"* ]]
+  [[ "$stderr" == *"read-back mismatch (${_SYSCTL_CONF})"* ]]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
@@ -4784,7 +4784,170 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   export MOCK_SYSCTL_STUB_EXIT=1
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"apply failed"* ]]
+  [[ "$stderr" == *"apply failed (_SYSCTL_BIN set, ran without sudo)"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+}
+
+@test "inotify: conf 1024 with live 4096 is raised to 4096 and never applies" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  _inotify_live 4096
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  [[ "$output" == *"inotify: persisted 4096 to ${_SYSCTL_CONF} (was 1024)"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: conf 8192 with live 4096 stays byte-identical and says already" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 8192\n' > "${_SYSCTL_CONF}"
+  _inotify_live 4096
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 8192" ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  [[ "$output" != *"persisted"* ]]
+}
+
+@test "inotify: conf 512 with live 2048 is raised to 2048" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 2048
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 2048" ]
+  [[ "$output" == *"inotify: persisted 2048 to ${_SYSCTL_CONF} (was 512)"* ]]
+}
+
+@test "inotify: an unreadable live value with no conf returns 1 and writes nothing" {
+  export HAS_DOCKER=1
+  rm -f "${_INOTIFY_PROC}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"inotify: cannot read live value ${_INOTIFY_PROC}"* ]]
+  [ ! -e "${_SYSCTL_CONF}" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: live 2147483648 returns 1 and writes no conf" {
+  export HAS_DOCKER=1
+  _inotify_live 2147483648
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ ! -e "${_SYSCTL_CONF}" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a 20-digit live value that wraps to 0 returns 1 and writes no conf" {
+  export HAS_DOCKER=1
+  _inotify_live 18446744073709551616
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"cannot read live value"* ]]
+  [ ! -e "${_SYSCTL_CONF}" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: live 2147483647 with no conf is accepted and persisted" {
+  export HAS_DOCKER=1
+  _inotify_live 2147483647
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 2147483647" ]
+  [[ "$output" == *"inotify: conf written (2147483647)"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a conf above INT_MAX is unparseable and untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 3000000000\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 3000000000" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a conf at INT_MAX is parsed, and 4096 then a non-numeric last line is unparseable" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 2147483647\n' > "${_SYSCTL_CONF}"
+  _inotify_live 4096
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+  printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances = abc\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances = abc')" ]
+}
+
+@test "inotify: a valid line then an empty right-hand side is unparseable; abc then 2048 reads 2048" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 2048\nfs.inotify.max_user_instances =\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"unparseable"* ]]
+  printf 'fs.inotify.max_user_instances = abc\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+}
+
+@test "inotify: with _SYSCTL_BIN set apply runs the seam without sudo" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  grep -q '^sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  [ "$(grep -c '^sudo .*sysctl' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  [[ "$output" == *"inotify: applied"* ]]
+}
+
+@test "inotify: with _SYSCTL_BIN unset apply goes through sudo sysctl -w" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  unset _SYSCTL_BIN
+  local stub="${BATS_TEST_TMPDIR}/pathstub"
+  mkdir -p "${stub}"
+  printf '#!/usr/bin/env bash\nprintf "STUB-MARKER-7f3a9c %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${stub}/sysctl"
+  chmod +x "${stub}/sysctl"
+  PATH="${stub}:${PATH}"
+  [ "$(command -v sysctl)" = "${stub}/sysctl" ]
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  grep -q '^STUB-MARKER-7f3a9c -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  grep -q '^sudo sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"inotify: applied"* ]]
+}
+
+@test "inotify: a failing sudo sysctl with the seam unset says plain apply failed" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  unset _SYSCTL_BIN
+  local stub="${BATS_TEST_TMPDIR}/pathstub"
+  mkdir -p "${stub}"
+  printf '#!/usr/bin/env bash\nprintf "STUB-MARKER-7f3a9c %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${stub}/sysctl"
+  chmod +x "${stub}/sysctl"
+  PATH="${stub}:${PATH}"
+  [ "$(command -v sysctl)" = "${stub}/sysctl" ]
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  grep -q '^STUB-MARKER-7f3a9c ' "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"inotify: apply failed"* ]]
+  [[ "$stderr" != *"_SYSCTL_BIN"* ]]
+}
+
+@test "inotify: a tee that writes 1024 when the target is 4096 reports a read-back mismatch" {
+  export HAS_DOCKER=1
+  _inotify_live 4096
+  printf '#!/usr/bin/env bash\nfor _a in "$@"; do _f="${_a}"; done\nprintf "fs.inotify.max_user_instances = 1024\\n" > "${_f}"\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"read-back mismatch (${_SYSCTL_CONF})"* ]]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
 }
 
