@@ -998,7 +998,7 @@ _inotify_conf_value() {
 # drops NUL. tr's own status is carried out because the pipe returns wc's.
 _inotify_conf_has_nontext() {
   local _out _n _rc
-  _out="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c; printf ' %s' "${PIPESTATUS[0]}")" || return 0
+  _out="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c; printf ' %s' "${PIPESTATUS[0]}")"
   # BSD wc left-pads its count, so split on wc's newline and strip blanks.
   _n="${_out%%$'\n'*}"
   _n="${_n//[[:space:]]/}"
