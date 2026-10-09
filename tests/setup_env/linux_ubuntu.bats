@@ -5223,3 +5223,25 @@ _inotify_nontext_fixture() {
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
 }
+
+@test "inotify: non-text is reported ahead of other keys" {
+  export HAS_DOCKER=1
+  _inotify_live 1024
+  printf 'other.key = 5\nfs.inotify.max_user_instances = 1024\r\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"non-text bytes"* ]]
+  [[ "$stderr" != *"other keys"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+}
+
+@test "inotify: a failed conf write returns 1 at the write, not at the read-back" {
+  export HAS_DOCKER=1 MOCK_TEE_EXIT=1
+  _inotify_live 1024
+  rm -f "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"write failed"* ]]
+  [[ "$stderr" != *"cannot read back"* ]]
+}

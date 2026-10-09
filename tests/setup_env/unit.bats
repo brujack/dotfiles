@@ -3269,3 +3269,22 @@ TABLE
   PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 1 ]
 }
+
+@test "inotify doctor: non-text is reported ahead of other keys" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  printf 'other.key = 5\nfs.inotify.max_user_instances = 1024\r\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"non-text bytes"* ]]
+  [[ "${output}" != *"other keys"* ]]
+}
+
+@test "_inotify_conf_has_nontext fails closed on a non-numeric wc count" {
+  local _shim="${BATS_TEST_TMPDIR}/wcshim"
+  mkdir "${_shim}"
+  printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "x\\n"\n' > "${_shim}/wc"
+  chmod +x "${_shim}/wc"
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  [ "$status" -eq 0 ]
+}
