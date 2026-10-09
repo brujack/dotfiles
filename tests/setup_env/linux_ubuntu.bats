@@ -4741,6 +4741,34 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
+@test "inotify_conf_write: seam set writes via tee and never calls sudo" {
+  : > "${MOCK_CALLS_FILE}"
+  run _inotify_conf_write 4096
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  grep -q '^tee ' "${MOCK_CALLS_FILE}"
+  ! grep -q '^sudo ' "${MOCK_CALLS_FILE}"
+}
+
+@test "inotify_conf_write: seam unset pipes to sudo tee on the constant path" {
+  # A recording shim that drains stdin and runs nothing: the real path is /etc.
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
+  /bin/chmod +x "${SHIM_DIR}/sudo"
+  [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  unset _SYSCTL_CONF
+  : > "${MOCK_CALLS_FILE}"
+  run _inotify_conf_write 4096
+  [ "$status" -eq 0 ]
+  [ "$(cat "${MOCK_CALLS_FILE}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+}
+
+@test "inotify_conf_write: seam set and tee failing returns 1 naming _SYSCTL_CONF" {
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _inotify_conf_write 4096
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"_SYSCTL_CONF"* ]]
+}
+
 @test "inotify: a failing tee returns 1 and applies nothing" {
   export HAS_DOCKER=1
   _inotify_live 128
