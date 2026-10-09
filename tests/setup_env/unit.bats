@@ -3159,3 +3159,132 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" == *"value 512 below 1024"* ]]
   [[ "${output}" != *"other keys"* ]]
 }
+
+# ── _inotify_read_live ───────────────────────────────────────────────────────
+# Fixed-value boundary table: exact stdout on accept, empty output on reject.
+
+@test "_inotify_read_live: accepts and normalizes valid live values" {
+  local _f="${BATS_TEST_TMPDIR}/live" _in _want
+  while IFS='|' read -r _in _want; do
+    printf '%b' "${_in}" > "${_f}"
+    run _inotify_read_live "${_f}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "${_want}" ]
+  done <<'TABLE'
+0\n|0
+1024\n|1024
+ 1024\n|1024
+2147483647\n|2147483647
+TABLE
+}
+
+@test "_inotify_read_live: rejects out-of-range and malformed live values with empty output" {
+  local _f="${BATS_TEST_TMPDIR}/live" _in
+  for _in in '' '08\n' '2147483648\n' '12345678901\n' '12345678901234567890\n' 'abc\n'; do
+    printf '%b' "${_in}" > "${_f}"
+    run _inotify_read_live "${_f}"
+    [ "${status}" -eq 1 ]
+    [ -z "${output}" ]
+  done
+}
+
+@test "_inotify_read_live: a nonexistent path is rejected with empty output" {
+  run _inotify_read_live "${BATS_TEST_TMPDIR}/nope"
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_inotify_read_live: an unreadable file is rejected with empty output" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
+  local _f="${BATS_TEST_TMPDIR}/live"
+  printf '1024\n' > "${_f}"
+  chmod 000 "${_f}"
+  run _inotify_read_live "${_f}"
+  chmod 600 "${_f}"
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "inotify doctor: live ' 1024' with surrounding whitespace is accepted" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf ' 1024\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 1024"* ]]
+}
+
+@test "inotify doctor: live '08' is rejected with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}
+
+@test "inotify doctor: a conf with CR, NUL or non-ASCII bytes fails by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  local _f
+  for _f in crlf barecr nul nonascii; do
+    case "${_f}" in
+      crlf) printf 'fs.inotify.max_user_instances = 1024\r\n' ;;
+      barecr) printf 'fs.inotify.max_user_instances = 1024\r' ;;
+      nul) printf '# c\0other.key = 5\nfs.inotify.max_user_instances = 512\n' ;;
+      nonascii) printf '# caf\303\251\nfs.inotify.max_user_instances = 512\n' ;;
+    esac > "${_SYSCTL_CONF}"
+    run _doctor_check_inotify_limits
+    [[ "${output}" == *"[FAIL]"*"non-text bytes"* ]] || { printf 'fixture %s: %s\n' "${_f}" "${output}" >&2; return 1; }
+    [[ "${output}" != *"sudo tee"* ]]
+  done
+}
+
+@test "inotify doctor: a tab-spaced conf is not non-text" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances\t=\t1024\n' > "${_SYSCTL_CONF}"
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 1024"* ]]
+  [[ "${output}" != *"[FAIL]"* ]]
+  [[ "${output}" != *"non-text"* ]]
+}
+
+@test "_inotify_conf_has_nontext fails closed when the conf cannot be read" {
+  mkdir "${BATS_TEST_TMPDIR}/adir"
+  run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
+  [ "$status" -eq 0 ]
+}
+
+# BSD wc left-pads its count ("       1"); the parse must not depend on GNU's bare number.
+@test "_inotify_conf_has_nontext reads a left-padded BSD-style wc count" {
+  local _shim="${BATS_TEST_TMPDIR}/wcshim"
+  mkdir "${_shim}"
+  printf '#!/usr/bin/env bash\n/usr/bin/wc "$@" | sed "s/^/       /"\n' > "${_shim}/wc"
+  chmod +x "${_shim}/wc"
+  printf 'fs.inotify.max_user_instances = 1024\r\n' > "${BATS_TEST_TMPDIR}/crlf.conf"
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
+  [ "$status" -eq 0 ]
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  [ "$status" -eq 1 ]
+}
+
+@test "inotify doctor: non-text is reported ahead of other keys" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  printf 'other.key = 5\nfs.inotify.max_user_instances = 1024\r\n' > "${_SYSCTL_CONF}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"non-text bytes"* ]]
+  [[ "${output}" != *"other keys"* ]]
+}
+
+@test "_inotify_conf_has_nontext fails closed on a non-numeric wc count" {
+  local _shim="${BATS_TEST_TMPDIR}/wcshim"
+  mkdir "${_shim}"
+  printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "x\\n"\n' > "${_shim}/wc"
+  chmod +x "${_shim}/wc"
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  [ "$status" -eq 0 ]
+}

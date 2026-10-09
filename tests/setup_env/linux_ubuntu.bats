@@ -4741,6 +4741,37 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
+@test "inotify_conf_write: seam set writes via tee and never calls sudo" {
+  : > "${MOCK_CALLS_FILE}"
+  run _inotify_conf_write 4096
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
+  grep -q '^tee ' "${MOCK_CALLS_FILE}"
+  ! grep -q '^sudo ' "${MOCK_CALLS_FILE}"
+}
+
+@test "inotify_conf_write: seam unset pipes to sudo tee on the constant path" {
+  # A recording shim that drains stdin and runs nothing: the real path is /etc.
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
+  /bin/chmod +x "${SHIM_DIR}/sudo"
+  [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  # If the else branch ever lost sudo, plain tee would write the real /etc as
+  # root in a root container (tdd.md E2); a failing tee keeps that path inert.
+  export MOCK_TEE_EXIT=1
+  unset _SYSCTL_CONF
+  : > "${MOCK_CALLS_FILE}"
+  run _inotify_conf_write 4096
+  [ "$status" -eq 0 ]
+  [ "$(cat "${MOCK_CALLS_FILE}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+}
+
+@test "inotify_conf_write: seam set and tee failing returns 1 naming _SYSCTL_CONF" {
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _inotify_conf_write 4096
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"_SYSCTL_CONF"* ]]
+}
+
 @test "inotify: a failing tee returns 1 and applies nothing" {
   export HAS_DOCKER=1
   _inotify_live 128
@@ -5132,4 +5163,85 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+}
+
+@test "inotify: a live value with surrounding whitespace is accepted" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  printf ' 1024\n' > "${_INOTIFY_PROC}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+}
+
+@test "inotify: a live value of 08 is rejected as unreadable" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"inotify: cannot read live value ${_INOTIFY_PROC}"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+# systemd-sysctl ends a line at CR and NUL where awk does not, so a conf with
+# such a byte can hide a key the whole-file rewrite would delete.
+_inotify_nontext_fixture() {
+  case "$1" in
+    crlf) printf 'fs.inotify.max_user_instances = 1024\r\n' ;;
+    barecr) printf 'fs.inotify.max_user_instances = 1024\r' ;;
+    nul) printf '# c\0other.key = 5\nfs.inotify.max_user_instances = 512\n' ;;
+    nonascii) printf '# caf\303\251\nfs.inotify.max_user_instances = 512\n' ;;
+  esac
+}
+
+@test "inotify: a conf with CR, NUL or non-ASCII bytes is refused, byte-identical, nothing written" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  local _f
+  for _f in crlf barecr nul nonascii; do
+    _inotify_nontext_fixture "${_f}" > "${_SYSCTL_CONF}"
+    cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+    : > "${MOCK_CALLS_FILE}"
+    run --separate-stderr _install_ubuntu_inotify
+    [ "$status" -eq 1 ] || { printf 'fixture %s: status %s\n' "${_f}" "$status" >&2; return 1; }
+    [[ "$stderr" == *"non-text bytes"* && "$stderr" == *"fix by hand"* ]] || { printf 'fixture %s: stderr %s\n' "${_f}" "$stderr" >&2; return 1; }
+    cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before" || { printf 'fixture %s: conf changed\n' "${_f}" >&2; return 1; }
+    ! grep -q 'tee ' "${MOCK_CALLS_FILE}" || { printf 'fixture %s: tee called\n' "${_f}" >&2; return 1; }
+  done
+}
+
+@test "inotify: plain and tab-spaced confs are not non-text and are rewritten" {
+  export HAS_DOCKER=1
+  _inotify_live 1024
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  printf 'fs.inotify.max_user_instances\t=\t512\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+}
+
+@test "inotify: non-text is reported ahead of other keys" {
+  export HAS_DOCKER=1
+  _inotify_live 1024
+  printf 'other.key = 5\nfs.inotify.max_user_instances = 1024\r\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"non-text bytes"* ]]
+  [[ "$stderr" != *"other keys"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+}
+
+@test "inotify: a failed conf write returns 1 at the write, not at the read-back" {
+  export HAS_DOCKER=1 MOCK_TEE_EXIT=1
+  _inotify_live 1024
+  rm -f "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"write failed"* ]]
+  [[ "$stderr" != *"cannot read back"* ]]
 }

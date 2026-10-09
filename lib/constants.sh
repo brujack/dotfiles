@@ -191,6 +191,8 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
 # docker-host floor for fs.inotify.max_user_instances; see
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 readonly INOTIFY_MAX_USER_INSTANCES=1024
+# kernel INT_MAX: the largest value fs.inotify.max_user_instances accepts
+readonly INOTIFY_INT_MAX=2147483647
 # read by lib/linux_ubuntu.sh:_install_ubuntu_inotify and lib/helpers.sh:_doctor_check_inotify_limits
 readonly INOTIFY_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-inotify.conf
 readonly INOTIFY_PROC=/proc/sys/fs/inotify/max_user_instances

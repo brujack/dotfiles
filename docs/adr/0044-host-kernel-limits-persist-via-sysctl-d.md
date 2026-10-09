@@ -50,6 +50,7 @@ Nothing in dotfiles managed a kernel tunable before this. Three placements were 
   - The doctor remedy can lower a value that was raised by hand.
 - 2026-10-08: the step now persists `max(live, 1024)`. A drop-in that sorts before `90-` with a higher value is still overridden at boot and cannot be detected from the live value. Renaming the conf to sort earlier was declined.
 - 2026-10-09 (#324): the step and doctor refuse a conf that holds anything besides comments, blank lines and this key ("other keys; fix by hand"), because the whole-file `tee` rewrite would delete it. The non-numeric last assignment and the doctor remedy lowering a hand-raised value, listed above, are fixed by the same PR.
+- 2026-10-09: the step and doctor refuse a conf holding non-text bytes (control or non-ASCII, e.g. CR, NUL), since systemd splits lines on CR and NUL where awk does not; CRLF confs are refused, not parsed. The `_SYSCTL_CONF` seam is written without sudo.
 - Whether 1024 covers a local matrix and busy runners at the same time is unmeasured. The
   constant `INOTIFY_MAX_USER_INSTANCES` is the one place to raise it.
 
