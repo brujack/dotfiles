@@ -954,9 +954,9 @@ _doctor_check_github_mcp() {
 # 08 as invalid octal. Whitespace anywhere is dropped (procfs adds a newline).
 # Shared by the step and the doctor so they cannot disagree on what is readable.
 _inotify_read_live() {
-  local _v
-  [[ -r $1 ]] || return 1
-  _v="$(<"$1")"
+  local _path="${1}" _v
+  [[ -r ${_path} ]] || return 1
+  _v="$(<"${_path}")"
   _v="${_v//[[:space:]]/}"
   [[ ${_v} =~ ^(0|[1-9][0-9]{0,9})$ ]] || return 1
   ((_v > INOTIFY_INT_MAX)) && return 1
