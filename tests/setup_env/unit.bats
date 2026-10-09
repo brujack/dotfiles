@@ -3245,5 +3245,13 @@ TABLE
   printf 'fs.inotify.max_user_instances\t=\t1024\n' > "${_SYSCTL_CONF}"
   printf '1024\n' > "${_INOTIFY_PROC}"
   run _doctor_check_inotify_limits
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 1024"* ]]
+  [[ "${output}" != *"[FAIL]"* ]]
   [[ "${output}" != *"non-text"* ]]
+}
+
+@test "_inotify_conf_has_nontext fails closed when the conf cannot be read" {
+  mkdir "${BATS_TEST_TMPDIR}/adir"
+  run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
+  [ "$status" -eq 0 ]
 }

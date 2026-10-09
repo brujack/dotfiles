@@ -990,13 +990,18 @@ _inotify_conf_value() {
   ' "$1"
 }
 
-# Exit 0 when the conf holds any byte outside 0x20-0x7E, tab or newline.
+# Exit 0 when the conf holds any byte outside 0x20-0x7E, tab or newline, or
+# when it cannot be read (fail closed: unknown is refused).
 # Why: systemd-sysctl ends a line at CR and NUL where awk does not, so such a
 # byte can hide a key that the whole-file tee would delete. tr|wc rather than
-# awk or $(...): awks differ on NUL, and command substitution drops NUL.
+# awk or $(...) of raw bytes: awks differ on NUL, and command substitution
+# drops NUL. tr's own status is carried out because the pipe returns wc's.
 _inotify_conf_has_nontext() {
-  local _n
-  _n="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c)"
+  local _out _n _rc
+  _out="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c; printf ' %s' "${PIPESTATUS[0]}")" || return 0
+  _n="${_out%% *}"
+  _rc="${_out##* }"
+  [[ ${_rc} == 0 ]] || return 0
   ((_n > 0))
 }
 
@@ -1045,7 +1050,7 @@ _doctor_check_inotify_limits() {
       return 0
     fi
     if _inotify_conf_has_nontext "${_conf}"; then
-      doctor_fail "inotify" "${_conf} holds non-text bytes (CR, NUL or non-ASCII); fix by hand"
+      doctor_fail "inotify" "${_conf} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"
       return 0
     fi
     if _inotify_conf_has_other_keys "${_conf}"; then

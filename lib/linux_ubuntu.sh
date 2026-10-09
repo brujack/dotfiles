@@ -95,7 +95,7 @@ _install_ubuntu_inotify() {
       return 1
     fi
     if _inotify_conf_has_nontext "${_conf}"; then
-      printf 'inotify: %s holds non-text bytes (CR, NUL or non-ASCII); fix by hand\n' "${_conf}" >&2
+      printf 'inotify: %s holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand\n' "${_conf}" >&2
       return 1
     fi
     # Before the parse check: a conf of only other keys is that case, not unparseable.
