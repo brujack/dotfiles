@@ -1,6 +1,9 @@
 # inotify: unprivileged conf seam, non-text confs refused, one live-value check
 
 Status: Approved (2026-10-09, after Multi-Lens Review round 1)
+
+- **Approved:** 2026-10-09
+
 Date: 2026-10-09
 Backlog rows addressed (`docs/superpowers/README.md`):
 
