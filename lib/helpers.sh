@@ -950,22 +950,25 @@ _doctor_check_github_mcp() {
 }
 
 # Print the last value assigned to fs.inotify.max_user_instances in a sysctl
-# conf file, or nothing -- including when that last value is invalid, so a
-# valid value followed by `08` reads as unparseable. Accepts the dotted and slash spellings, a leading `-`
+# conf file, or nothing. EVERY line assigning the key resets the value, so a
+# valid value followed by `08`, `abc` or an empty right-hand side reads as
+# unparseable (systemd-sysctl applies the last assignment and fails on it). A
+# valid value is `0` or a non-zero-led integer no greater than 2147483647, the
+# kernel's INT_MAX. Accepts the dotted and slash spellings, a leading `-`
 # (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
 # is IFS whitespace and would collapse fields.
 _inotify_conf_value() {
   # Length/leading-zero checks are in code, not the regex: older awks lack
-  # interval braces. A value that fails them is not printed, so the caller
-  # reports the conf as unparseable.
+  # interval braces. After sub() the field is a string, so the cap is compared
+  # as `line + 0`; a bare `line <= 2147483647` compares strings and rejects 4096.
   awk '
     {
       line = $0
       sub(/^[ \t]*-?/, "", line)
-      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=[ \t]*[0-9]+[ \t]*$/)) {
+      if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=/)) {
         sub(/^[^=]*=[ \t]*/, "", line)
         sub(/[ \t]*$/, "", line)
-        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10) val = line
+        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10 && line + 0 <= 2147483647) val = line
         else val = ""
       }
     }
