@@ -4755,6 +4755,9 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
   /bin/chmod +x "${SHIM_DIR}/sudo"
   [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  # If the else branch ever lost sudo, plain tee would write the real /etc as
+  # root in a root container (tdd.md E2); a failing tee keeps that path inert.
+  export MOCK_TEE_EXIT=1
   unset _SYSCTL_CONF
   : > "${MOCK_CALLS_FILE}"
   run _inotify_conf_write 4096

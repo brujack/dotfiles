@@ -47,8 +47,8 @@ install_ubuntu_packages() {
   return 0
 }
 
-# Write the conf. A set _SYSCTL_CONF is a test seam and must never be written
-# as root (mirrors _SYSCTL_BIN), so it goes through plain tee.
+# A set _SYSCTL_CONF is a test seam and must never be written as root
+# (mirrors _SYSCTL_BIN), so it goes through plain tee.
 _inotify_conf_write() {
   if [[ -n ${_SYSCTL_CONF} ]]; then
     printf 'fs.inotify.max_user_instances = %s\n' "${1}" |
