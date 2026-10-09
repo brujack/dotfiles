@@ -1,7 +1,8 @@
 # inotify follow-ups: parser, persisted value, doctor remedy, sysctl seam
 
 - **Date:** 2026-10-08
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-10-08
 - **Follows:** `2026-10-08-molecule-host-tuning-design.md` (#323)
 
 ## Problem
@@ -304,8 +305,7 @@ live length guard; bash arithmetic wraps (`$((18446744073709551616))` is 0), so 
 20-digit seam value would pass as 0. Seam-only. (3) "live 2147483647 is accepted" had
 no positive assertion. Verified clean: `doctor_warn` never sets `_DOCTOR_FAILED`
 (`run_doctor` exit stays 0); install and doctor agree on every requested pair; R×N
-clean; no test reaches `/etc` or the kernel. Applied to the spec text at the next
-commit, pending operator disposition.
+clean; no test reaches `/etc` or the kernel. Applied to the spec text at `a3a699da`.
 Assumption: that a live value above 1024 is an operator raise, not molecule/k3s/LXD.
 Settle with `cat /proc/sys/fs/inotify/max_user_instances` and a writer grep per host.
-Disposition:
+Disposition: Addressed (operator, 2026-10-08) — `line + 0` cap, live length check before arithmetic, positive assertion on the 2147483647 case.
