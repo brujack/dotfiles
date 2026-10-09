@@ -990,6 +990,16 @@ _inotify_conf_value() {
   ' "$1"
 }
 
+# Exit 0 when the conf holds any byte outside 0x20-0x7E, tab or newline.
+# Why: systemd-sysctl ends a line at CR and NUL where awk does not, so such a
+# byte can hide a key that the whole-file tee would delete. tr|wc rather than
+# awk or $(...): awks differ on NUL, and command substitution drops NUL.
+_inotify_conf_has_nontext() {
+  local _n
+  _n="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c)"
+  ((_n > 0))
+}
+
 # Exit 0 when the conf holds anything besides blank lines, comments (# or ;)
 # and assignments of max_user_instances (optional leading -). Why: both the
 # step and the doctor remedy rewrite the whole file with tee, which would
@@ -1032,6 +1042,10 @@ _doctor_check_inotify_limits() {
   if [[ -e ${_conf} ]]; then
     if [[ ! -r ${_conf} ]]; then
       doctor_fail "inotify" "${_conf} exists but is unreadable; fix by hand"
+      return 0
+    fi
+    if _inotify_conf_has_nontext "${_conf}"; then
+      doctor_fail "inotify" "${_conf} holds non-text bytes (CR, NUL or non-ASCII); fix by hand"
       return 0
     fi
     if _inotify_conf_has_other_keys "${_conf}"; then
