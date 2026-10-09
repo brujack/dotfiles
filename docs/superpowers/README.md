@@ -19,6 +19,7 @@ Master status index for all specs and implementation plans in this directory.
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 2026-10-08 | [molecule-host-tuning](plans/2026-10-08-molecule-host-tuning.md) | [molecule-host-tuning](specs/2026-10-08-molecule-host-tuning-design.md) | Done |
 | 2026-10-08 | [inotify-followups](plans/2026-10-08-inotify-followups.md) | [inotify-followups](specs/2026-10-08-inotify-followups-design.md) | Done |
+| 2026-10-09 | [inotify-seam-crlf-dedup](plans/2026-10-09-inotify-seam-crlf-dedup.md) | [inotify-seam-crlf-dedup](specs/2026-10-09-inotify-seam-crlf-dedup-design.md) | In Progress |
 | 2026-10-07 | [check-versions-curl-max-time](plans/2026-10-07-check-versions-curl-max-time.md) | [check-versions-curl-max-time](specs/2026-10-07-check-versions-curl-max-time-design.md) | Done |
 | 2026-10-07 | [github-token-off-argv](plans/2026-10-07-github-token-off-argv.md) | [spec](specs/2026-10-07-github-token-off-argv-design.md) | Done |
 | 2026-10-04 | [ubuntu-step-midstep-failures](plans/2026-10-04-ubuntu-step-midstep-failures.md) | [spec](specs/2026-10-04-ubuntu-step-midstep-failures-design.md) | Done |
