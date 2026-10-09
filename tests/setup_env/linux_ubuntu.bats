@@ -4919,7 +4919,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   grep -q '^SEAM-STUB-b41e2d -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
   [ "$(grep -c '^PATH-STUB-95c0aa' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
-  [ "$(grep -cE '^sudo (sysctl|[^ ]*seam-stub)( |$)' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
+  [ "$(grep -cE '^sudo( [^ ]+)*( |/)(sysctl|[^ ]*seam-stub)( |$)' "${MOCK_CALLS_FILE}" || true)" -eq 0 ]
   [[ "$output" == *"inotify: applied"* ]]
 }
 
