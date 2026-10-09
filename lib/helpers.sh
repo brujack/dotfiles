@@ -976,9 +976,11 @@ _inotify_conf_value() {
   ' "$1"
 }
 
-# Exit 0 when the conf assigns any key besides max_user_instances. Why: both
-# the step and the doctor remedy rewrite the whole file with tee, which would
-# silently delete such a key. Comments (# or ;) and blank lines are not keys.
+# Exit 0 when the conf holds anything besides blank lines, comments (# or ;)
+# and assignments of max_user_instances (optional leading -). Why: both the
+# step and the doctor remedy rewrite the whole file with tee, which would
+# silently delete such a line. Default-deny: a line without "=" (a sysctl.d
+# "-key" exclusion, a bare key, garbage) is not ours either, so it counts.
 _inotify_conf_has_other_keys() {
   awk '
     {
@@ -986,10 +988,12 @@ _inotify_conf_has_other_keys() {
       sub(/^[ \t]+/, "", line)
       if (line == "" || line ~ /^[#;]/) next
       sub(/^-/, "", line)
-      if (line !~ /^[^=]+=/) next
       key = line
-      sub(/[ \t]*=.*$/, "", key)
-      if (key != "fs.inotify.max_user_instances" && key != "fs/inotify/max_user_instances") found = 1
+      if (line ~ /=/) {
+        sub(/[ \t]*=.*$/, "", key)
+        if (key == "fs.inotify.max_user_instances" || key == "fs/inotify/max_user_instances") next
+      }
+      found = 1
     }
     END { exit found ? 0 : 1 }
   ' "$1"
@@ -1020,13 +1024,13 @@ _doctor_check_inotify_limits() {
       doctor_fail "inotify" "${_conf} exists but is unreadable; fix by hand"
       return 0
     fi
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      doctor_fail "inotify" "${_conf} holds other keys; fix by hand"
+      return 0
+    fi
     _val="$(_inotify_conf_value "${_conf}")"
     if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
       doctor_fail "inotify" "${_conf} exists but is unparseable; fix by hand"
-      return 0
-    fi
-    if _inotify_conf_has_other_keys "${_conf}"; then
-      doctor_fail "inotify" "${_conf} holds other keys; fix by hand"
       return 0
     fi
   fi

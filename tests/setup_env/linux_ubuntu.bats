@@ -5043,7 +5043,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   printf 'fs.inotify.max_user_instances_extra = 5\n' > "${_SYSCTL_CONF}"
   run --separate-stderr _install_ubuntu_inotify
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"unparseable"* ]]
+  [[ "$stderr" == *"holds other keys"* ]]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances_extra = 5" ]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
@@ -5088,4 +5088,48 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
   [[ "$output" == *"inotify: persisted 1024 to ${_SYSCTL_CONF} (was 512)"* ]]
+}
+
+@test "inotify: a sysctl.d exclusion line is another key and the conf is refused untouched" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n-net.ipv4.conf.all.rp_filter\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  _inotify_live 2048
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a bare garbage line is another key and the conf is refused untouched" {
+  export HAS_DOCKER=1
+  printf 'foo\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  _inotify_live 2048
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"holds other keys; fix by hand"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a conf holding only another key reports other keys, not unparseable" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 1\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"holds other keys; fix by hand"* ]]
+  [[ "$stderr" != *"unparseable"* ]]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_watches = 1" ]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: an indented comment and blanks around our key still persist" {
+  export HAS_DOCKER=1
+  printf '   # indented comment\n\n\tfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
 }

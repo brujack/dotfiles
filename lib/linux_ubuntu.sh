@@ -75,14 +75,14 @@ _install_ubuntu_inotify() {
       printf 'inotify: %s exists but is unreadable; fix by hand\n' "${_conf}" >&2
       return 1
     fi
+    # Before the parse check: a conf of only other keys is that case, not unparseable.
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      printf 'inotify: %s holds other keys; fix by hand\n' "${_conf}" >&2
+      return 1
+    fi
     _val="$(_inotify_conf_value "${_conf}")"
     if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
       printf 'inotify: %s exists but is unparseable; fix by hand\n' "${_conf}" >&2
-      return 1
-    fi
-    # After the parse check so its message stays byte-identical; before any write.
-    if _inotify_conf_has_other_keys "${_conf}"; then
-      printf 'inotify: %s holds other keys; fix by hand\n' "${_conf}" >&2
       return 1
     fi
   fi

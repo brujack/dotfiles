@@ -3028,7 +3028,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
 
 @test "inotify doctor: unparseable conf fails by hand with no tee line" {
   export LINUX=1 HAS_DOCKER=1
-  printf 'fs.inotify.max_user_instances = 08\nnet.core.somaxconn = 4096\n' > "${_SYSCTL_CONF}"
+  printf 'fs.inotify.max_user_instances = 08\n' > "${_SYSCTL_CONF}"
   run _doctor_check_inotify_limits
   [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* ]]
@@ -3112,5 +3112,50 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   run _doctor_check_inotify_limits
   [[ "${output}" == *"[FAIL]"*"value 512 below 1024"* ]]
   [[ "${output}" == *"sudo tee"* ]]
+  [[ "${output}" != *"other keys"* ]]
+}
+
+@test "inotify doctor: a sysctl.d exclusion line fails as other keys with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 512\n-net.ipv4.conf.all.rp_filter\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a bare garbage line fails as other keys with no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'foo\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a conf holding only another key reports other keys, not unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 1\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"unparseable"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: a comments-only conf is unparseable" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '# nothing\n' > "${_SYSCTL_CONF}"
+  printf '2048\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"${_SYSCTL_CONF} exists but is unparseable; fix by hand"* ]]
+}
+
+@test "inotify doctor: an indented comment around our key keeps the normal remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '   # indented comment\n\n\tfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"value 512 below 1024"* ]]
   [[ "${output}" != *"other keys"* ]]
 }
