@@ -3159,3 +3159,66 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" == *"value 512 below 1024"* ]]
   [[ "${output}" != *"other keys"* ]]
 }
+
+# ── _inotify_read_live ───────────────────────────────────────────────────────
+# Fixed-value boundary table: exact stdout on accept, empty output on reject.
+
+@test "_inotify_read_live: accepts and normalizes valid live values" {
+  local _f="${BATS_TEST_TMPDIR}/live" _in _want
+  while IFS='|' read -r _in _want; do
+    printf '%b' "${_in}" > "${_f}"
+    run _inotify_read_live "${_f}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "${_want}" ]
+  done <<'TABLE'
+0\n|0
+1024\n|1024
+ 1024\n|1024
+2147483647\n|2147483647
+TABLE
+}
+
+@test "_inotify_read_live: rejects out-of-range and malformed live values with empty output" {
+  local _f="${BATS_TEST_TMPDIR}/live" _in
+  for _in in '' '08\n' '2147483648\n' '12345678901\n' '12345678901234567890\n' 'abc\n'; do
+    printf '%b' "${_in}" > "${_f}"
+    run _inotify_read_live "${_f}"
+    [ "${status}" -eq 1 ]
+    [ -z "${output}" ]
+  done
+}
+
+@test "_inotify_read_live: a nonexistent path is rejected with empty output" {
+  run _inotify_read_live "${BATS_TEST_TMPDIR}/nope"
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_inotify_read_live: an unreadable file is rejected with empty output" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
+  local _f="${BATS_TEST_TMPDIR}/live"
+  printf '1024\n' > "${_f}"
+  chmod 000 "${_f}"
+  run _inotify_read_live "${_f}"
+  chmod 600 "${_f}"
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "inotify doctor: live ' 1024' with surrounding whitespace is accepted" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf ' 1024\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[PASS]"*"inotify max_user_instances 1024"* ]]
+}
+
+@test "inotify doctor: live '08' is rejected with cannot read" {
+  export LINUX=1 HAS_DOCKER=1
+  _inotify_doctor_conf 1024
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
+}

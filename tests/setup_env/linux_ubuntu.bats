@@ -5133,3 +5133,22 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
 }
+
+@test "inotify: a live value with surrounding whitespace is accepted" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  printf ' 1024\n' > "${_INOTIFY_PROC}"
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"inotify: already 1024 or higher"* ]]
+}
+
+@test "inotify: a live value of 08 is rejected as unreadable" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  printf '08\n' > "${_INOTIFY_PROC}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"inotify: cannot read live value ${_INOTIFY_PROC}"* ]]
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
