@@ -32,7 +32,8 @@ refuses before any body is written. A mid-body connection reset already had this
 a timeout makes it reachable on every slow link.
 
 The `run_setup_user` completion fetch is the worse case: it runs only when `_cht` is
-absent, so a truncated `_cht` it writes is never re-fetched by `setup_user`.
+absent, so a truncated `_cht` it writes is never re-fetched by `setup_user`; it survives
+until the next `-t update`, which re-fetches `_cht` whenever it exists.
 
 ### Bound size
 
@@ -54,7 +55,7 @@ fixed its own tests with `grep -E -- '--max-time 10( |$)'`; this one was out of 
 
 Add `_cheat_fetch <url> <dest> <mode>` to `lib/workflows.sh`:
 
-1. `mktemp "${dest}.XXXXXX"` — same directory as the destination, so the final `mv` is a
+1. `mktemp "${dest%/*}/.${dest##*/}.XXXXXX"` — same directory as the destination, so the final `mv` is a
    rename on one filesystem. Same idiom as `setup_claude_mcp` (`lib/workflows.sh:44`).
 2. `curl -fsS -o "${tmp}" --max-time 10 "${url}"`. The argument order is fixed: `-o` stays
    the third argument because existing tests override `curl` as a function and write to
@@ -75,6 +76,11 @@ On rc 1 or 2 the helper removes the temp file (when one was created) and has not
 `dest`. It prints nothing; callers own the message, so each call site keeps naming its own
 artifact. Splitting fetch from local failure keeps a `chmod` or `mv` failure from being
 reported as a network failure.
+
+The temp name is dot-prefixed (`.cht.sh.XXXXXX`, `._cht.XXXXXX`). `~/.zsh.d` is on `fpath`
+(`.config/.zshrc.d/5_general.zsh:195`) and compinit loads any file whose name starts with
+`_`, so an undotted `_cht.XXXXXX` left by an interrupted `setup_user` fetch (with `_cht`
+absent) would own the `cht.sh` completion while truncated; compinit skips dot files.
 
 The explicit `chmod` is required for the completion file too: `mktemp` creates mode 0600,
 where `curl -o` previously produced a umask-default file (measured on `claude`: `_cht`
@@ -111,25 +117,38 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
   remains — for the binary in both functions and for the completion in `run_update`.
 - **Bound.** For each of the four call sites, assert
   `grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF <url>`.
-- **Local failure.** Make the destination directory non-writable so `mktemp` fails; assert
+- **Local failure, mv.** Fail the rename with the existing per-argument `MOCK_MV_FAIL_ARGS`
+  matching the temp name; assert the `install failed` message, an unchanged destination, a
+  FAIL section and no temp file left. `MOCK_CHMOD_EXIT` is not used: it is global and would
+  fail every `chmod` in the run.
+- **Local failure, mktemp.** Make the destination directory non-writable so `mktemp` fails,
+  restoring its mode in teardown; assert
   the destination is unchanged, the section is FAIL with the `install failed` message, and
   no fetch was attempted.
 - **Mode.** On success the binary has the function's mode (750 / 754) and `_cht` is 644.
 - **Substring test.** Change `workflows.bats:1492` to the whole-token form.
-- The existing cheat.sh tests (`workflows.bats:267`–`:327`, `:2252`–`:2430`) pass unchanged.
+- **setup_user warning.** A failed fetch under `run_setup_user` prints the stderr warning
+  naming the artifact.
+- The existing test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails`
+  (`workflows.bats:309`) refutes `chmod 750 ${HOME}/bin/cht.sh`, which can never appear once
+  chmod targets the temp file. It is re-pointed at the temp name (`chmod 750 ${HOME}/bin/.cht.sh.`).
+- The other existing cheat.sh tests (`workflows.bats:267`–`:327`, `:2252`–`:2430`) pass unchanged.
 
 ## Requirements
 
-- **R1.** `[PR1]` `lib/workflows.sh` defines `_cheat_fetch <url> <dest> <mode>`, which creates its temp file with `mktemp "${dest}.XXXXXX"`, fetches with `curl -fsS -o "${tmp}" --max-time 10 "${url}"` in that argument order, requires the temp file non-empty, applies `chmod "${mode}"`, and replaces the destination with `mv -f`.
+- **R1.** `[PR1]` `lib/workflows.sh` defines `_cheat_fetch <url> <dest> <mode>`, which creates its temp file with `mktemp "${dest%/*}/.${dest##*/}.XXXXXX"`, fetches with `curl -fsS -o "${tmp}" --max-time 10 "${url}"` in that argument order, requires the temp file non-empty, applies `chmod "${mode}"`, and replaces the destination with `mv -f`.
 - **R2.** `[PR1]` `_cheat_fetch` returns 1 when curl exits non-zero or writes nothing, returns 2 when `mktemp`, `chmod` or `mv` fails, removes any temp file it created on both, and leaves `dest` unmodified on both.
 - **R3.** `[PR1]` All four cheat.sh fetches in `lib/workflows.sh` go through `_cheat_fetch`; no `curl` call fetching `cht.sh/:cht.sh` or `cheat.sh/:zsh` remains outside it.
 - **R4.** `[PR1]` `run_setup_user` installs the binary with mode 750 and the completion with mode 644, prints a stderr warning naming the artifact when `_cheat_fetch` returns non-zero, and does not return non-zero for that reason.
 - **R5.** `[PR1]` `run_update` installs the binary with mode 754 and the completion with mode 644, prints `cheat.sh <binary|completion> fetch failed` on rc 1 and `cheat.sh <binary|completion> install failed` on rc 2, and records the section FAIL on either.
-- **R6.** `[PR1]` A test fails the binary fetch through `MOCK_CURL_FAIL_URL` with a pre-seeded `PRE-EXISTING` file and asserts the file is byte-identical and no `cht.sh.??????` file remains, once under `run_setup_user` and once under `run_update`; the same is asserted for `_cht` under `run_update`.
+- **R6.** `[PR1]` A test fails the binary fetch through `MOCK_CURL_FAIL_URL` with a pre-seeded `PRE-EXISTING` file and asserts the file is byte-identical and no `.cht.sh.??????` file remains, once under `run_setup_user` and once under `run_update`; the same is asserted for `_cht` under `run_update`.
 - **R7.** `[PR1]` For each of the four call sites a test asserts `grep -E -- '--max-time 10( |$)'` matches a recorded curl call carrying that call site's URL.
-- **R8.** `[PR1]` A test makes the destination directory non-writable and asserts the destination is unchanged, the `install failed` message appears, and the cheat.sh section is FAIL.
+- **R8.** `[PR1]` A test makes the destination directory non-writable, restores its mode in teardown, and asserts the destination is unchanged, the `install failed` message appears, and the cheat.sh section is FAIL.
 - **R9.** `[PR1]` `tests/setup_env/workflows.bats`'s `_fetch_github_latest passes max-time 10` test asserts with `grep -E -- '--max-time 10( |$)'`.
 - **R10.** `[PR1]` The two backlog rows named above are removed from `docs/superpowers/README.md`, and `CLAUDE.md`'s cheat.sh bullet states that a failed or timed-out fetch never replaces the existing file.
+- **R11.** `[PR1]` A test fails the binary's rename through `MOCK_MV_FAIL_ARGS` under `run_update` and asserts the `cheat.sh binary install failed` message, the pre-seeded destination unchanged, the cheat.sh section FAIL, and no `.cht.sh.??????` file left.
+- **R12.** `[PR1]` A test asserts that a failed binary fetch under `run_setup_user` prints a stderr warning naming the binary.
+- **R13.** `[PR1]` The test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails` refutes a `chmod 750` of the temp name `${HOME}/bin/.cht.sh.` rather than of `${HOME}/bin/cht.sh`.
 - **V1.** Mutation: change `_cheat_fetch` to `curl -o "${dest}"` directly (no temp file); the R6 tests go red.
 - **V2.** Mutation: change `--max-time 10` to `--max-time 100` in `_cheat_fetch`; the R7 tests go red. Change `_fetch_github_latest`'s `--max-time 10` to `--max-time 100`; the R9 test goes red.
 - **V3.** Run `_cheat_fetch` with real curl against a local listener that sends part of a body and stalls; it returns 1 within the bound and the pre-seeded destination is unchanged.
@@ -149,16 +168,16 @@ Reviewed at commit: `b64f0a7` (Step 7 self-review commit, before Step 8 dispatch
 
 Finding: Worth building. The existing test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails` (`tests/setup_env/workflows.bats:309`) goes vacuous: it refutes `chmod 750 ${HOME}/bin/cht.sh`, and under `_cheat_fetch` chmod only ever targets the temp path, so the assertion holds whatever the helper does. Also, "a truncated `_cht` is never re-fetched" is true of `setup_user` only; `run_update` re-fetches it whenever it exists.
 Assumption: `--max-time 10` clears every development machine. Measured 2026-10-09, 10 fetches of `cht.sh/:cht.sh` each: `claude` max 0.50 s, `workstation` max 0.61 s, `studio` max 0.90 s. Refuted as a risk on all three.
-Disposition:
+Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to re-point the `:309` test at the temp name (R13) and correct the "never re-fetched" wording.
 
 ### Ergonomics
 
 Finding: No blocking flaw. `mktemp "${dest}.XXXXXX"` names the completion temp file `_cht.XXXXXX` inside `~/.zsh.d`, which is on `fpath` (`.config/.zshrc.d/5_general.zsh:195`); compinit loads any `_*` file, so an interrupted `setup_user` fetch (`_cht` absent) leaves a truncated file owning the `cht.sh` completion (probed: `_comps[cht.sh]=_cht.Ab12Cd`). A dot-prefixed template `"${dest%/*}/.${dest##*/}.XXXXXX"` is not matched by compinit (probed) and is hidden in `~/bin`. R8's non-writable directory also needs a teardown that restores the mode.
 Assumption: same 10 s question as Goal-Fit; settled by the measurement above.
-Disposition:
+Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to dot-prefix the temp name (R1, Design) and restore the directory mode in R8's teardown.
 
 ### Risk
 
 Finding: Design proportionate. R2's temp-file cleanup on rc 2 is never exercised: R8 fails at `mktemp`, before any temp file exists, so a helper that leaks the temp file after a failed `chmod`/`mv`, or returns 0 after a failed `mv`, passes R6–R8 and V1–V3. `tests/mocks/mv` and `tests/mocks/chmod` swallow real failures (`|| true`), so nothing catches it by accident. The existing per-argument `MOCK_MV_FAIL_ARGS="cht.sh."` drives the `mv` branch without a new knob (N5 holds). Also confirms the `:309` vacuity, and notes R4's stderr warning has no assertion.
 Assumption: no uncertain assumption found; symlink acceptance checked by `ls -l` on `claude`, `workstation` and `studio` (all regular files).
-Disposition:
+Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to add an `mv`-failure test via `MOCK_MV_FAIL_ARGS` (R11) and a `setup_user` warning assertion (R12).
