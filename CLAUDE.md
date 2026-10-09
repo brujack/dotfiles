@@ -658,7 +658,7 @@ two-second grep appears to refute the rule.
   - They exist because `tests/mocks/sudo` and `tests/mocks/sysctl` exec real binaries, so unset seams would aim `tee` and `sysctl` at the real `/etc/sysctl.d` and kernel: failing as a normal user, writing as root (`tdd.md` E2).
   - `tests/mocks/tee` swallows failures, so the step reads the conf back rather than trusting `tee`'s status.
   - The step applies only the one key (`sysctl -w`, never `-p`); an unreadable or non-numeric live value returns 1 without applying.
-  - Tests that reach the real step set or unset `HAS_DOCKER` themselves; doctor FAILs on a missing or below-1024 conf and WARNs (does not fail) on a conf below the live value, printing the `tee` remedy for all three, and says "fix by hand" for an unreadable or unparseable one.
+  - Tests that reach the real step set or unset `HAS_DOCKER` themselves; doctor FAILs on a missing or below-1024 conf and WARNs (does not fail) on a conf below the live value, printing the `tee` remedy for all three, and says "fix by hand" for an unreadable or unparseable conf, or one that assigns any other key. The step refuses those too, rather than rewriting the file and dropping the other keys.
   - When `_SYSCTL_BIN` is set the step runs it without sudo; unset, it runs `sudo sysctl -w`.
 
 - `_GITHUB_API` (`lib/helpers.sh:_github_api_base`, read by `_doctor_check_github_mcp` and `lib/workflows.sh:_fetch_github_latest`)
