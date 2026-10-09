@@ -4947,8 +4947,8 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(command -v sysctl)" = "${stub}/sysctl" ]
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
-  grep -q '^STUB-MARKER-7f3a9c -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
-  grep -q '^sudo sysctl -w fs.inotify.max_user_instances=1024$' "${MOCK_CALLS_FILE}"
+  grep -q '^STUB-MARKER-7f3a9c -w fs.inotify.max_user_instances=4096$' "${MOCK_CALLS_FILE}"
+  grep -q '^sudo sysctl -w fs.inotify.max_user_instances=4096$' "${MOCK_CALLS_FILE}"
   [[ "$output" == *"inotify: applied"* ]]
 }
 
