@@ -3087,3 +3087,30 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
 }
+
+@test "inotify doctor: a conf with another key fails by hand and prints no tee line" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 524288\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  printf '8192\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* ]]
+}
+
+@test "inotify doctor: slash-spelled other key also fails by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs/inotify/max_user_watches = 1\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  printf '8192\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"other keys; fix by hand"* ]]
+}
+
+@test "inotify doctor: comments around our key keep the normal remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '# fs.inotify.max_user_watches = 1\n; x = 2\n\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  printf '128\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" == *"[FAIL]"*"value 512 below 1024"* ]]
+  [[ "${output}" == *"sudo tee"* ]]
+  [[ "${output}" != *"other keys"* ]]
+}

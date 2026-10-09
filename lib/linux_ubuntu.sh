@@ -80,6 +80,11 @@ _install_ubuntu_inotify() {
       printf 'inotify: %s exists but is unparseable; fix by hand\n' "${_conf}" >&2
       return 1
     fi
+    # After the parse check so its message stays byte-identical; before any write.
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      printf 'inotify: %s holds other keys; fix by hand\n' "${_conf}" >&2
+      return 1
+    fi
   fi
 
   # Length check first: bash arithmetic wraps, so a 20-digit value reads as 0.

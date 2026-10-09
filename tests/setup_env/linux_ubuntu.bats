@@ -4706,9 +4706,9 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
 
-@test "inotify: only the instances key is applied when the conf carries another" {
+@test "inotify: only the instances key is applied, never sysctl -p" {
   export HAS_DOCKER=1
-  printf 'fs.inotify.max_user_watches = 1\nfs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
+  printf '# tuned\n\n; old\n# fs.inotify.max_user_watches = 1\nfs.inotify.max_user_instances = 1024\n' > "${_SYSCTL_CONF}"
   _inotify_live 128
   run _install_ubuntu_inotify
   [ "$status" -eq 0 ]
@@ -4937,6 +4937,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 
 @test "inotify: with _SYSCTL_BIN unset apply goes through sudo sysctl -w" {
   export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances = 4096\n' > "${_SYSCTL_CONF}"
   _inotify_live 128
   unset _SYSCTL_BIN
   local stub="${BATS_TEST_TMPDIR}/pathstub"
@@ -5056,4 +5057,35 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(cat "${_SYSCTL_CONF}")" = "$(printf 'fs.inotify.max_user_instances\t=\t2048\t')" ]
   [[ "$output" == *"inotify: already 1024 or higher"* ]]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: a conf with another key is refused, byte-identical, nothing applied" {
+  export HAS_DOCKER=1
+  printf 'fs.inotify.max_user_watches = 524288\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  _inotify_live 8192
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"${_SYSCTL_CONF} holds other keys; fix by hand"* ]]
+  cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_inotify_sysctl_calls)" -eq 0 ]
+}
+
+@test "inotify: the slash spelling of another key counts as another key" {
+  export HAS_DOCKER=1
+  printf 'fs/inotify/max_user_watches = 1\nfs.inotify.max_user_instances = 2048\n' > "${_SYSCTL_CONF}"
+  _inotify_live 8192
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"other keys; fix by hand"* ]]
+}
+
+@test "inotify: a commented-out other key is ignored and the conf is still persisted" {
+  export HAS_DOCKER=1
+  printf '# fs.inotify.max_user_watches = 1\n; net.core.somaxconn = 1\n\nfs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  _inotify_live 128
+  run _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  [[ "$output" == *"inotify: persisted 1024 to ${_SYSCTL_CONF} (was 512)"* ]]
 }

@@ -976,6 +976,25 @@ _inotify_conf_value() {
   ' "$1"
 }
 
+# Exit 0 when the conf assigns any key besides max_user_instances. Why: both
+# the step and the doctor remedy rewrite the whole file with tee, which would
+# silently delete such a key. Comments (# or ;) and blank lines are not keys.
+_inotify_conf_has_other_keys() {
+  awk '
+    {
+      line = $0
+      sub(/^[ \t]+/, "", line)
+      if (line == "" || line ~ /^[#;]/) next
+      sub(/^-/, "", line)
+      if (line !~ /^[^=]+=/) next
+      key = line
+      sub(/[ \t]*=.*$/, "", key)
+      if (key != "fs.inotify.max_user_instances" && key != "fs/inotify/max_user_instances") found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$1"
+}
+
 # Seams mirror _install_ubuntu_inotify. The remedies touch only this one key
 # (sysctl -w, never -p, which would apply every key in a kept conf).
 _doctor_check_inotify_limits() {
@@ -1004,6 +1023,10 @@ _doctor_check_inotify_limits() {
     _val="$(_inotify_conf_value "${_conf}")"
     if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
       doctor_fail "inotify" "${_conf} exists but is unparseable; fix by hand"
+      return 0
+    fi
+    if _inotify_conf_has_other_keys "${_conf}"; then
+      doctor_fail "inotify" "${_conf} holds other keys; fix by hand"
       return 0
     fi
   fi
