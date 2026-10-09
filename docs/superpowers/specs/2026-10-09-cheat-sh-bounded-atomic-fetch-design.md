@@ -53,14 +53,15 @@ fixed its own tests with `grep -E -- '--max-time 10( |$)'`; this one was out of 
 
 ### One helper
 
-Add `_cheat_fetch <url> <dest> <mode>` to `lib/workflows.sh`:
+Add `_cheat_fetch <url> <dest> <mode> <head>` to `lib/workflows.sh`:
 
 1. `mktemp "${dest%/*}/.${dest##*/}.XXXXXX"` — same directory as the destination, so the final `mv` is a
    rename on one filesystem. Same idiom as `setup_claude_mcp` (`lib/workflows.sh:44`).
 2. `curl -fsS -o "${tmp}" --max-time 10 "${url}"`. The argument order is fixed: `-o` stays
    the third argument because existing tests override `curl` as a function and write to
    `"$3"`, and the URL stays last because the stubs match on `"${*: -1}"`.
-3. Require `[[ -s "${tmp}" ]]`.
+3. Require `[[ -s "${tmp}" ]]`, and require the temp file's first line to begin with
+   `<head>`: `#!` for the binary, `#compdef` for the completion.
 4. `chmod "${mode}" "${tmp}"`.
 5. `mv -f "${tmp}" "${dest}"`.
 
@@ -69,13 +70,19 @@ Return codes:
 | rc  | meaning                                                  |
 | --- | -------------------------------------------------------- |
 | 0   | destination replaced                                     |
-| 1   | fetch failed: curl non-zero (timeout included), or empty |
+| 1   | fetch failed: curl non-zero (timeout included), empty, or wrong first line |
 | 2   | local failure: `mktemp`, `chmod` or `mv`                 |
 
 On rc 1 or 2 the helper removes the temp file (when one was created) and has not modified
 `dest`. It prints nothing; callers own the message, so each call site keeps naming its own
 artifact. Splitting fetch from local failure keeps a `chmod` or `mv` failure from being
 reported as a network failure.
+
+The first-line check exists because cheat.sh answers HTTP 200 with an error page, which `-f`
+cannot refuse. Measured 2026-10-09 on `claude`: `https://cht.sh/:nonexistent-topic-xyz`
+returned 200, 118 bytes, beginning `error: unexpected argument '-v' found`. Without the
+check, the same response for `:cht.sh` would be installed executable over a working binary.
+The live artifacts begin `#!/bin/bash` and `#compdef cht.sh`.
 
 The temp name is dot-prefixed (`.cht.sh.XXXXXX`, `._cht.XXXXXX`). `~/.zsh.d` is on `fpath`
 (`.config/.zshrc.d/5_general.zsh:195`) and compinit loads any file whose name starts with
@@ -113,8 +120,16 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - **Atomicity.** `MOCK_CURL_FAIL_URL` already models a partial download: it truncates the
   `-o` target, then exits 22. Against today's code that destroys a pre-seeded file; through
   the helper it truncates only the temp file. Tests pre-seed `PRE-EXISTING`, fail the fetch
-  this way, and assert the destination is byte-identical and no `<dest>.??????` file
-  remains — for the binary in both functions and for the completion in `run_update`.
+  this way, and assert the destination is byte-identical — for the binary in both functions
+  and for the completion in `run_update`.
+- **No temp file left.** Each failure test reads the temp path the helper actually used from
+  the recorded `curl ... -o <tmp>` line in `MOCK_CALLS_FILE`, asserts that line exists, and
+  asserts that exact path does not exist. Never a quoted glob, `*` or `ls`: a quoted
+  `".cht.sh.??????"` does not expand, and `*`/`ls` skip dot files, so each passes with a
+  leftover present.
+- **Wrong content.** `MOCK_CURL_STDOUT` set to a body that does not begin with `#!` makes
+  the binary fetch fail with `cheat.sh binary fetch failed` and leaves the destination
+  unchanged.
 - **Bound.** For each of the four call sites, assert
   `grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF <url>`.
 - **Local failure, mv.** Fail the rename with the existing per-argument `MOCK_MV_FAIL_ARGS`
@@ -132,27 +147,36 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - The existing test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails`
   (`workflows.bats:309`) refutes `chmod 750 ${HOME}/bin/cht.sh`, which can never appear once
   chmod targets the temp file. It is re-pointed at the temp name (`chmod 750 ${HOME}/bin/.cht.sh.`).
-- The other existing cheat.sh tests (`workflows.bats:267`–`:327`, `:2252`–`:2430`) pass unchanged.
+- The four existing success fixtures carry bodies with no valid first line
+  (`cheat.sh binary body`, `cheat.sh completion body`, `binary-body`, `completion-body`,
+  in `workflows.bats:2252`–`:2430`); each is prefixed with `#!` or `#compdef` as appropriate.
+  The other existing cheat.sh tests pass unchanged.
 
 ## Requirements
 
-- **R1.** `[PR1]` `lib/workflows.sh` defines `_cheat_fetch <url> <dest> <mode>`, which creates its temp file with `mktemp "${dest%/*}/.${dest##*/}.XXXXXX"`, fetches with `curl -fsS -o "${tmp}" --max-time 10 "${url}"` in that argument order, requires the temp file non-empty, applies `chmod "${mode}"`, and replaces the destination with `mv -f`.
-- **R2.** `[PR1]` `_cheat_fetch` returns 1 when curl exits non-zero or writes nothing, returns 2 when `mktemp`, `chmod` or `mv` fails, removes any temp file it created on both, and leaves `dest` unmodified on both.
+- **R1.** `[PR1]` `lib/workflows.sh` defines `_cheat_fetch <url> <dest> <mode> <head>`, which creates its temp file with `mktemp "${dest%/*}/.${dest##*/}.XXXXXX"`, fetches with `curl -fsS -o "${tmp}" --max-time 10 "${url}"` in that argument order, requires the temp file non-empty with a first line beginning `<head>`, applies `chmod "${mode}"`, and replaces the destination with `mv -f`.
+- **R2.** `[PR1]` `_cheat_fetch` returns 1 when curl exits non-zero, writes nothing, or writes a first line not beginning `<head>`, returns 2 when `mktemp`, `chmod` or `mv` fails, removes any temp file it created on both, and leaves `dest` unmodified on both.
 - **R3.** `[PR1]` All four cheat.sh fetches in `lib/workflows.sh` go through `_cheat_fetch`; no `curl` call fetching `cht.sh/:cht.sh` or `cheat.sh/:zsh` remains outside it.
 - **R4.** `[PR1]` `run_setup_user` installs the binary with mode 750 and the completion with mode 644, prints a stderr warning naming the artifact when `_cheat_fetch` returns non-zero, and does not return non-zero for that reason.
 - **R5.** `[PR1]` `run_update` installs the binary with mode 754 and the completion with mode 644, prints `cheat.sh <binary|completion> fetch failed` on rc 1 and `cheat.sh <binary|completion> install failed` on rc 2, and records the section FAIL on either.
-- **R6.** `[PR1]` A test fails the binary fetch through `MOCK_CURL_FAIL_URL` with a pre-seeded `PRE-EXISTING` file and asserts the file is byte-identical and no `.cht.sh.??????` file remains, once under `run_setup_user` and once under `run_update`; the same is asserted for `_cht` under `run_update`.
+- **R6.** `[PR1]` A test fails the binary fetch through `MOCK_CURL_FAIL_URL` with a pre-seeded `PRE-EXISTING` file and asserts the file is byte-identical and no temp file remains (R16), once under `run_setup_user` and once under `run_update`; the same is asserted for `_cht` under `run_update`.
 - **R7.** `[PR1]` For each of the four call sites a test asserts `grep -E -- '--max-time 10( |$)'` matches a recorded curl call carrying that call site's URL.
 - **R8.** `[PR1]` A test makes the destination directory non-writable, restores its mode in teardown, and asserts the destination is unchanged, the `install failed` message appears, and the cheat.sh section is FAIL.
 - **R9.** `[PR1]` `tests/setup_env/workflows.bats`'s `_fetch_github_latest passes max-time 10` test asserts with `grep -E -- '--max-time 10( |$)'`.
 - **R10.** `[PR1]` The two backlog rows named above are removed from `docs/superpowers/README.md`, and `CLAUDE.md`'s cheat.sh bullet states that a failed or timed-out fetch never replaces the existing file.
-- **R11.** `[PR1]` A test fails the binary's rename through `MOCK_MV_FAIL_ARGS` under `run_update` and asserts the `cheat.sh binary install failed` message, the pre-seeded destination unchanged, the cheat.sh section FAIL, and no `.cht.sh.??????` file left.
+- **R11.** `[PR1]` A test fails the binary's rename through `MOCK_MV_FAIL_ARGS` under `run_update` and asserts the `cheat.sh binary install failed` message, the pre-seeded destination unchanged, the cheat.sh section FAIL, and no temp file left (R16).
 - **R12.** `[PR1]` A test asserts that a failed binary fetch under `run_setup_user` prints a stderr warning naming the binary.
 - **R13.** `[PR1]` The test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails` refutes a `chmod 750` of the temp name `${HOME}/bin/.cht.sh.` rather than of `${HOME}/bin/cht.sh`.
+- **R14.** `[PR1]` The binary is fetched with `<head>` `#!` and the completion with `#compdef` at all four call sites.
+- **R15.** `[PR1]` A test sets `MOCK_CURL_STDOUT` to a body not beginning `#!` under `run_update` and asserts `cheat.sh binary fetch failed`, the pre-seeded destination unchanged, and the section FAIL.
+- **R16.** `[PR1]` Every no-temp-file-left assertion (R6, R11, R15) reads the temp path from the recorded `curl ... -o <tmp>` line, asserts that line exists, and asserts the path does not exist.
+- **R17.** `[PR1]` The four existing success fixtures in `tests/setup_env/workflows.bats` begin with `#!` (binary) or `#compdef` (completion).
 - **V1.** Mutation: change `_cheat_fetch` to `curl -o "${dest}"` directly (no temp file); the R6 tests go red.
 - **V2.** Mutation: change `--max-time 10` to `--max-time 100` in `_cheat_fetch`; the R7 tests go red. Change `_fetch_github_latest`'s `--max-time 10` to `--max-time 100`; the R9 test goes red.
 - **V3.** Run `_cheat_fetch` with real curl against a local listener that sends part of a body and stalls; it returns 1 within the bound and the pre-seeded destination is unchanged.
 - **V4.** `make test` exits 0 locally and every CI job passes on the PR.
+- **V5.** Mutation: delete the helper's `rm -f` of the temp file; the R16 assertions go red.
+- **V6.** Mutation: delete the first-line check; R15 goes red.
 - **N1.** No URL or timeout seam is added to `_cheat_fetch`.
 - **N2.** No retry logic.
 - **N3.** The 750 / 754 binary-mode difference between `run_setup_user` and `run_update` is not changed.
@@ -181,3 +205,23 @@ Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendat
 Finding: Design proportionate. R2's temp-file cleanup on rc 2 is never exercised: R8 fails at `mktemp`, before any temp file exists, so a helper that leaks the temp file after a failed `chmod`/`mv`, or returns 0 after a failed `mv`, passes R6–R8 and V1–V3. `tests/mocks/mv` and `tests/mocks/chmod` swallow real failures (`|| true`), so nothing catches it by accident. The existing per-argument `MOCK_MV_FAIL_ARGS="cht.sh."` drives the `mv` branch without a new knob (N5 holds). Also confirms the `:309` vacuity, and notes R4's stderr warning has no assertion.
 Assumption: no uncertain assumption found; symlink acceptance checked by `ls -l` on `claude`, `workstation` and `studio` (all regular files).
 Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to add an `mv`-failure test via `MOCK_MV_FAIL_ARGS` (R11) and a `setup_user` warning assertion (R12).
+
+### Round 2 — reviewed at `fdbbbb5` (all three lenses; round 1's dot-prefix fix was design substance)
+
+#### Goal-Fit
+
+Finding: No blocking issues; the round-1 revisions add no defect found. Advisory: R6 alone is satisfied by a helper that never calls curl (the suite still catches it via the success tests); R8 does not pin which function and artifact it covers.
+Assumption: cheat.sh fails only at the transport or HTTP level. Refuted 2026-10-09 on `claude`: `https://cht.sh/:nonexistent-topic-xyz` returned HTTP 200, 118 bytes, `error: unexpected argument '-v' found`; `https://cheat.sh/:nonexistent-zsh-xyz` likewise (200, 122 bytes). An error page under 200 would pass `-s` and be installed executable over a working binary.
+Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to require a first line beginning `#!` (binary) or `#compdef` (completion) before replacing (R1, R2, R14, R15, V6; existing success fixtures updated, R17).
+
+#### Ergonomics
+
+Finding: Defect introduced by round 1: the Testing → Atomicity bullet still asserted no `<dest>.??????` file, a name the dot-prefixed helper never creates, so the check passes whatever is left; R6 left the `_cht` pattern unnamed; no V item leaks a temp file. Probe: with only `.cht.sh.abc123` present, `*` matched nothing and `ls | wc -l` printed 0.
+Assumption: no uncertain assumption found; BSD `mktemp` accepting a dot-prefixed path template is settled by the `test-macos` job.
+Disposition: Addressed — operator: "Accepted" (2026-10-09), on the recommendation to replace the glob with the recorded temp path (R16) and add a cleanup-deletion mutation (V5).
+
+#### Risk
+
+Finding: Same defect as Ergonomics, plus: a quoted glob `[ ! -e "$H/bin/.cht.sh.??????" ]` passed with a real `.cht.sh.1dB3YS` present, because quoting stops expansion (tdd.md E5). Proposed a positive control — read the temp path from the recorded `curl ... -o <tmp>` line and assert that exact path is gone — and a mutation deleting the `rm`. Minor, not raised for change: `run` merges stderr into stdout so R12 cannot distinguish streams; a `chmod`-failure rc 2 stays untested because the mock hides real failures; a directory at the destination path would swallow the `mv`.
+Assumption: no uncertain assumption found; the residual claim that existing tests pass unchanged is settled by running them (now superseded by R17).
+Disposition: Addressed — operator: "Accepted" (2026-10-09), folded into the Ergonomics disposition (R16, V5).
