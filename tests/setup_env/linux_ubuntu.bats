@@ -5183,3 +5183,43 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"inotify: cannot read live value ${_INOTIFY_PROC}"* ]]
   [ "$(_inotify_sysctl_calls)" -eq 0 ]
 }
+
+# systemd-sysctl ends a line at CR and NUL where awk does not, so a conf with
+# such a byte can hide a key the whole-file rewrite would delete.
+_inotify_nontext_fixture() {
+  case "$1" in
+    crlf) printf 'fs.inotify.max_user_instances = 1024\r\n' ;;
+    barecr) printf 'fs.inotify.max_user_instances = 1024\r' ;;
+    nul) printf '# c\0other.key = 5\nfs.inotify.max_user_instances = 512\n' ;;
+    nonascii) printf '# caf\303\251\nfs.inotify.max_user_instances = 512\n' ;;
+  esac
+}
+
+@test "inotify: a conf with CR, NUL or non-ASCII bytes is refused, byte-identical, nothing written" {
+  export HAS_DOCKER=1
+  _inotify_live 128
+  local _f
+  for _f in crlf barecr nul nonascii; do
+    _inotify_nontext_fixture "${_f}" > "${_SYSCTL_CONF}"
+    cp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before"
+    : > "${MOCK_CALLS_FILE}"
+    run --separate-stderr _install_ubuntu_inotify
+    [ "$status" -eq 1 ] || { printf 'fixture %s: status %s\n' "${_f}" "$status" >&2; return 1; }
+    [[ "$stderr" == *"non-text bytes"* && "$stderr" == *"fix by hand"* ]] || { printf 'fixture %s: stderr %s\n' "${_f}" "$stderr" >&2; return 1; }
+    cmp "${_SYSCTL_CONF}" "${BATS_TEST_TMPDIR}/before" || { printf 'fixture %s: conf changed\n' "${_f}" >&2; return 1; }
+    ! grep -q 'tee ' "${MOCK_CALLS_FILE}" || { printf 'fixture %s: tee called\n' "${_f}" >&2; return 1; }
+  done
+}
+
+@test "inotify: plain and tab-spaced confs are not non-text and are rewritten" {
+  export HAS_DOCKER=1
+  _inotify_live 1024
+  printf 'fs.inotify.max_user_instances = 512\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+  printf 'fs.inotify.max_user_instances\t=\t512\n' > "${_SYSCTL_CONF}"
+  run --separate-stderr _install_ubuntu_inotify
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 1024" ]
+}

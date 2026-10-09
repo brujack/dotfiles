@@ -3222,3 +3222,28 @@ TABLE
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"cannot read ${_INOTIFY_PROC}"* ]]
 }
+
+@test "inotify doctor: a conf with CR, NUL or non-ASCII bytes fails by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  local _f
+  for _f in crlf barecr nul nonascii; do
+    case "${_f}" in
+      crlf) printf 'fs.inotify.max_user_instances = 1024\r\n' ;;
+      barecr) printf 'fs.inotify.max_user_instances = 1024\r' ;;
+      nul) printf '# c\0other.key = 5\nfs.inotify.max_user_instances = 512\n' ;;
+      nonascii) printf '# caf\303\251\nfs.inotify.max_user_instances = 512\n' ;;
+    esac > "${_SYSCTL_CONF}"
+    run _doctor_check_inotify_limits
+    [[ "${output}" == *"[FAIL]"*"non-text bytes"* ]] || { printf 'fixture %s: %s\n' "${_f}" "${output}" >&2; return 1; }
+    [[ "${output}" != *"sudo tee"* ]]
+  done
+}
+
+@test "inotify doctor: a tab-spaced conf is not non-text" {
+  export LINUX=1 HAS_DOCKER=1
+  printf 'fs.inotify.max_user_instances\t=\t1024\n' > "${_SYSCTL_CONF}"
+  printf '1024\n' > "${_INOTIFY_PROC}"
+  run _doctor_check_inotify_limits
+  [[ "${output}" != *"non-text"* ]]
+}
