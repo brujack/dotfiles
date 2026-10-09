@@ -3255,3 +3255,17 @@ TABLE
   run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
   [ "$status" -eq 0 ]
 }
+
+# BSD wc left-pads its count ("       1"); the parse must not depend on GNU's bare number.
+@test "_inotify_conf_has_nontext reads a left-padded BSD-style wc count" {
+  local _shim="${BATS_TEST_TMPDIR}/wcshim"
+  mkdir "${_shim}"
+  printf '#!/usr/bin/env bash\n/usr/bin/wc "$@" | sed "s/^/       /"\n' > "${_shim}/wc"
+  chmod +x "${_shim}/wc"
+  printf 'fs.inotify.max_user_instances = 1024\r\n' > "${BATS_TEST_TMPDIR}/crlf.conf"
+  printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
+  [ "$status" -eq 0 ]
+  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  [ "$status" -eq 1 ]
+}

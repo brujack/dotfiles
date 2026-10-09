@@ -999,9 +999,11 @@ _inotify_conf_value() {
 _inotify_conf_has_nontext() {
   local _out _n _rc
   _out="$(LC_ALL=C tr -d '[:print:]\t\n' < "${1}" | wc -c; printf ' %s' "${PIPESTATUS[0]}")" || return 0
-  _n="${_out%% *}"
+  # BSD wc left-pads its count, so split on wc's newline and strip blanks.
+  _n="${_out%%$'\n'*}"
+  _n="${_n//[[:space:]]/}"
   _rc="${_out##* }"
-  [[ ${_rc} == 0 ]] || return 0
+  [[ ${_rc} == 0 && ${_n} =~ ^[0-9]+$ ]] || return 0
   ((_n > 0))
 }
 
