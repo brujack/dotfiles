@@ -309,3 +309,8 @@ clean; no test reaches `/etc` or the kernel. Applied to the spec text at `a3a699
 Assumption: that a live value above 1024 is an operator raise, not molecule/k3s/LXD.
 Settle with `cat /proc/sys/fs/inotify/max_user_instances` and a writer grep per host.
 Disposition: Addressed (operator, 2026-10-08) — `line + 0` cap, live length check before arithmetic, positive assertion on the 2147483647 case.
+
+## Amendments
+
+- adds R7 [PR1]: When the conf assigns any key other than `fs.inotify.max_user_instances` (dotted or slash spelling, optional leading `-`), `_install_ubuntu_inotify` returns 1 without writing the conf or applying, and `_doctor_check_inotify_limits` FAILs with a message naming `other keys; fix by hand` and prints no `tee` line. — bug-scan HOLD 2026-10-08: the whole-file `tee` deletes other keys, newly reachable for a valid conf below live; operator chose fail-closed.
+- N1 -> No change to the unreadable/unparseable "fix by hand" messages; a conf assigning other keys joins that path with its own message (R7). — follows from R7.
