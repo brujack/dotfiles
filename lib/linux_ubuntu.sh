@@ -87,16 +87,11 @@ _install_ubuntu_inotify() {
     fi
   fi
 
-  # Length check first: bash arithmetic wraps, so a 20-digit value reads as 0.
-  local _live=""
-  if [[ -r ${_proc} ]]; then
-    _live="$(<"${_proc}")"
-    _live="${_live//[[:space:]]/}"
-  fi
-  if [[ ! ${_live} =~ ^(0|[1-9][0-9]{0,9})$ ]] || ((_live > 2147483647)); then
+  local _live
+  _live="$(_inotify_read_live "${_proc}")" || {
     printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
     return 1
-  fi
+  }
 
   local _target=$((_live > INOTIFY_MAX_USER_INSTANCES ? _live : INOTIFY_MAX_USER_INSTANCES))
   if [[ -z ${_val} ]] || ((_val < _target)); then

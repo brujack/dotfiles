@@ -949,26 +949,40 @@ _doctor_check_github_mcp() {
   fi
 }
 
+# Print the live value of an inotify proc file, or nothing and return 1. The
+# shape is checked before any arithmetic: bash wraps a 20-digit value and reads
+# 08 as invalid octal. Whitespace anywhere is dropped (procfs adds a newline).
+# Shared by the step and the doctor so they cannot disagree on what is readable.
+_inotify_read_live() {
+  local _v
+  [[ -r $1 ]] || return 1
+  _v="$(<"$1")"
+  _v="${_v//[[:space:]]/}"
+  [[ ${_v} =~ ^(0|[1-9][0-9]{0,9})$ ]] || return 1
+  ((_v > INOTIFY_INT_MAX)) && return 1
+  printf '%s\n' "${_v}"
+}
+
 # Print the last value assigned to fs.inotify.max_user_instances in a sysctl
 # conf file, or nothing. EVERY line assigning the key resets the value, so a
 # valid value followed by `08`, `abc` or an empty right-hand side reads as
 # unparseable (systemd-sysctl applies the last assignment and fails on it). A
-# valid value is `0` or a non-zero-led integer no greater than 2147483647, the
-# kernel's INT_MAX. Accepts the dotted and slash spellings, a leading `-`
+# valid value is `0` or a non-zero-led integer no greater than INOTIFY_INT_MAX,
+# the kernel's INT_MAX. Accepts the dotted and slash spellings, a leading `-`
 # (ignore-errors prefix) and any whitespace around `=`. awk, not `read`: a tab
 # is IFS whitespace and would collapse fields.
 _inotify_conf_value() {
   # Length/leading-zero checks are in code, not the regex: older awks lack
   # interval braces. After sub() the field is a string, so the cap is compared
-  # as `line + 0`; a bare `line <= 2147483647` compares strings and rejects 4096.
-  awk '
+  # as `line + 0`; a bare `line <= max` compares strings and rejects 4096.
+  awk -v max="${INOTIFY_INT_MAX}" '
     {
       line = $0
       sub(/^[ \t]*-?/, "", line)
       if (match(line, /^(fs\.inotify\.max_user_instances|fs\/inotify\/max_user_instances)[ \t]*=/)) {
         sub(/^[^=]*=[ \t]*/, "", line)
         sub(/[ \t]*$/, "", line)
-        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10 && line + 0 <= 2147483647) val = line
+        if (line ~ /^(0|[1-9][0-9]*)$/ && length(line) <= 10 && line + 0 <= max) val = line
         else val = ""
       }
     }
@@ -1009,14 +1023,10 @@ _doctor_check_inotify_limits() {
 
   printf "\ninotify instances:\n"
   local _live _val=""
-  _live="$(cat "${_proc}" 2>/dev/null)"
-  # Same leading-zero rule as _inotify_conf_value: bash arithmetic reads 08 as
-  # an invalid octal. Shape is checked before arithmetic (bash wraps a 20-digit
-  # value), and the cap is the kernel's INT_MAX.
-  if [[ ! ${_live} =~ ^(0|[1-9][0-9]{0,9})$ ]] || ((_live > 2147483647)); then
+  _live="$(_inotify_read_live "${_proc}")" || {
     doctor_fail "inotify" "cannot read ${_proc}"
     return 0
-  fi
+  }
   # Classify the conf as _install_ubuntu_inotify does: an existing conf it
   # will not touch is never answered with a tee that would overwrite it.
   if [[ -e ${_conf} ]]; then
