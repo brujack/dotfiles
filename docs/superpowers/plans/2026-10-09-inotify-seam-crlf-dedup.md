@@ -1,5 +1,7 @@
 # inotify seam, non-text confs, live-value dedup Implementation Plan
 
+> **Status: DONE** (PR #325, merged 2026-10-09)
+
 spec: docs/superpowers/specs/2026-10-09-inotify-seam-crlf-dedup-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
