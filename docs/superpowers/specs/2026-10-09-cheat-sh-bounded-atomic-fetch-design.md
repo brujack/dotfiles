@@ -140,3 +140,25 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - **N4.** `run_setup_user` gains no new non-zero return for a cheat.sh failure.
 - **N5.** No new mode or knob is added to `tests/mocks/curl`.
 - **N6.** No signal trap is added to clean up a temp file left by an interrupt.
+
+## Multi-Lens Review
+
+Reviewed at commit: `b64f0a7` (Step 7 self-review commit, before Step 8 dispatch). Adversarial Spec Review Gate: not triggered — no comparison or evaluator design, and every acceptance criterion is concrete.
+
+### Goal-Fit
+
+Finding: Worth building. The existing test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails` (`tests/setup_env/workflows.bats:309`) goes vacuous: it refutes `chmod 750 ${HOME}/bin/cht.sh`, and under `_cheat_fetch` chmod only ever targets the temp path, so the assertion holds whatever the helper does. Also, "a truncated `_cht` is never re-fetched" is true of `setup_user` only; `run_update` re-fetches it whenever it exists.
+Assumption: `--max-time 10` clears every development machine. Measured 2026-10-09, 10 fetches of `cht.sh/:cht.sh` each: `claude` max 0.50 s, `workstation` max 0.61 s, `studio` max 0.90 s. Refuted as a risk on all three.
+Disposition:
+
+### Ergonomics
+
+Finding: No blocking flaw. `mktemp "${dest}.XXXXXX"` names the completion temp file `_cht.XXXXXX` inside `~/.zsh.d`, which is on `fpath` (`.config/.zshrc.d/5_general.zsh:195`); compinit loads any `_*` file, so an interrupted `setup_user` fetch (`_cht` absent) leaves a truncated file owning the `cht.sh` completion (probed: `_comps[cht.sh]=_cht.Ab12Cd`). A dot-prefixed template `"${dest%/*}/.${dest##*/}.XXXXXX"` is not matched by compinit (probed) and is hidden in `~/bin`. R8's non-writable directory also needs a teardown that restores the mode.
+Assumption: same 10 s question as Goal-Fit; settled by the measurement above.
+Disposition:
+
+### Risk
+
+Finding: Design proportionate. R2's temp-file cleanup on rc 2 is never exercised: R8 fails at `mktemp`, before any temp file exists, so a helper that leaks the temp file after a failed `chmod`/`mv`, or returns 0 after a failed `mv`, passes R6–R8 and V1–V3. `tests/mocks/mv` and `tests/mocks/chmod` swallow real failures (`|| true`), so nothing catches it by accident. The existing per-argument `MOCK_MV_FAIL_ARGS="cht.sh."` drives the `mv` branch without a new knob (N5 holds). Also confirms the `:309` vacuity, and notes R4's stderr warning has no assertion.
+Assumption: no uncertain assumption found; symlink acceptance checked by `ls -l` on `claude`, `workstation` and `studio` (all regular files).
+Disposition:
