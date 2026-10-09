@@ -47,12 +47,31 @@ install_ubuntu_packages() {
   return 0
 }
 
+# Write the conf. A set _SYSCTL_CONF is a test seam and must never be written
+# as root (mirrors _SYSCTL_BIN), so it goes through plain tee.
+_inotify_conf_write() {
+  if [[ -n ${_SYSCTL_CONF} ]]; then
+    printf 'fs.inotify.max_user_instances = %s\n' "${1}" |
+      tee "${_SYSCTL_CONF}" > /dev/null || {
+      printf 'inotify: write failed (%s; _SYSCTL_CONF set, ran without sudo)\n' "${_SYSCTL_CONF}" >&2
+      return 1
+    }
+  else
+    printf 'fs.inotify.max_user_instances = %s\n' "${1}" |
+      sudo tee "${INOTIFY_SYSCTL_CONF}" > /dev/null || {
+      printf 'inotify: write failed (%s)\n' "${INOTIFY_SYSCTL_CONF}" >&2
+      return 1
+    }
+  fi
+}
+
 # Docker hosts running parallel molecule/CI jobs exhaust the default
 # fs.inotify.max_user_instances (128). Persist max(live, 1024) and apply the
 # persisted value when live is below 1024, never lowering a higher conf or
 # live value. Only this one key is applied (never `sysctl -p`, which would
-# apply every key in a kept conf). When _SYSCTL_BIN is set it is run WITHOUT
-# sudo (a test seam must not run an env-chosen binary as root). Specs:
+# apply every key in a kept conf). When _SYSCTL_BIN or _SYSCTL_CONF is set the
+# binary is run / the conf is written WITHOUT sudo (a test seam must not act as
+# root on an env-chosen binary or path). Specs:
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 # docs/superpowers/specs/2026-10-08-inotify-followups-design.md
 _install_ubuntu_inotify() {
@@ -95,11 +114,7 @@ _install_ubuntu_inotify() {
 
   local _target=$((_live > INOTIFY_MAX_USER_INSTANCES ? _live : INOTIFY_MAX_USER_INSTANCES))
   if [[ -z ${_val} ]] || ((_val < _target)); then
-    printf 'fs.inotify.max_user_instances = %s\n' "${_target}" |
-      sudo tee "${_conf}" > /dev/null || {
-      printf 'inotify: write failed (%s)\n' "${_conf}" >&2
-      return 1
-    }
+    _inotify_conf_write "${_target}" || return 1
     if [[ ! -r ${_conf} ]]; then
       printf 'inotify: cannot read back %s\n' "${_conf}" >&2
       return 1
