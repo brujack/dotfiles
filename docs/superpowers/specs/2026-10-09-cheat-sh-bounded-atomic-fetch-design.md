@@ -1,6 +1,7 @@
 # Bound and make atomic the cheat.sh fetches
 
 - **Date:** 2026-10-09
+- **Approved:** 2026-10-09
 - **Backlog rows:** "cheat.sh curls in `-t update` have no `--max-time`" and "`_fetch_github_latest passes max-time 10` test matches a substring" (both P2)
 
 ## Problem
@@ -84,7 +85,7 @@ true, so an empty or omitted argument would otherwise switch the check off silen
 Read the first line with `IFS= read -r line < "${tmp}"` and do not treat its rc as failure:
 it returns 1 on a file with no trailing newline while still setting `line`, and every mock
 and fixture body is written with `printf "%s"`. An empty file leaves `line` empty and fails
-the match; NUL bytes are dropped by bash and fail it too.
+the match.
 
 The first-line check exists because cheat.sh answers HTTP 200 with an error page, which `-f`
 cannot refuse. Measured 2026-10-09 on `claude`: `https://cht.sh/:nonexistent-topic-xyz`
@@ -149,7 +150,11 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
   restoring its mode in teardown; assert
   the destination is unchanged, the section is FAIL with the `install failed` message, and
   no fetch was attempted.
-- **Mode.** On success the binary has the function's mode (750 / 754) and `_cht` is 644.
+- **Mode.** On success the binary has the function's mode (750 / 754) and `_cht` is 644,
+  read with `stat -c '%a'` falling back to `stat -f '%Lp'` (GNU first, per shell.md). The
+  mode is load-bearing only under this design: `curl -o` over an existing file kept its mode,
+  while `mktemp` creates 0600 and `mv` replaces the file, so a missing or wrong `chmod`
+  leaves `cht.sh` non-executable.
 - **Substring test.** Change `workflows.bats:1492` to the whole-token form.
 - **setup_user warning.** A failed binary fetch under `run_setup_user` prints the exact
   string `cheat.sh binary fetch failed`. A looser match on `cht.sh` passes with the warning
@@ -173,7 +178,7 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - **R5.** `[PR1]` `run_update` installs the binary with mode 754 and the completion with mode 644, prints `cheat.sh <binary|completion> fetch failed` on rc 1 and `cheat.sh <binary|completion> install failed` on rc 2, and records the section FAIL on either.
 - **R6.** `[PR1]` A test fails the binary fetch through `MOCK_CURL_FAIL_URL` with a pre-seeded `PRE-EXISTING` file and asserts the file is byte-identical and no temp file remains (R16), once under `run_setup_user` and once under `run_update`; the same is asserted for `_cht` under `run_update`.
 - **R7.** `[PR1]` For each of the four call sites a test asserts `grep -E -- '--max-time 10( |$)'` matches a recorded curl call carrying that call site's URL.
-- **R8.** `[PR1]` A test makes the destination directory non-writable, restores its mode in teardown, and asserts the destination is unchanged, no curl call was recorded, the `install failed` message appears, and the cheat.sh section is FAIL.
+- **R8.** `[PR1]` A test makes the destination directory non-writable, restores its mode in teardown, and asserts the destination is unchanged, no curl call to `cht.sh/:cht.sh` was recorded, the `install failed` message appears, and the cheat.sh section is FAIL.
 - **R9.** `[PR1]` `tests/setup_env/workflows.bats`'s `_fetch_github_latest passes max-time 10` test asserts with `grep -E -- '--max-time 10( |$)'`.
 - **R10.** `[PR1]` The two backlog rows named above are removed from `docs/superpowers/README.md`, and `CLAUDE.md`'s cheat.sh bullet states that a failed or timed-out fetch never replaces the existing file.
 - **R11.** `[PR1]` A test fails the binary's rename through `MOCK_MV_FAIL_ARGS` under `run_update` and asserts the `cheat.sh binary install failed` message, the pre-seeded destination unchanged, the cheat.sh section FAIL, and no temp file left (R16).
@@ -185,6 +190,7 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - **R17.** `[PR1]` The four existing success fixtures in `tests/setup_env/workflows.bats` begin with `#!` (binary) or `#compdef` (completion).
 - **R18.** `[PR1]` A test sets the completion fetch's body to one not beginning `#compdef` under `run_update` and asserts `cheat.sh completion fetch failed`, the pre-seeded `_cht` unchanged, and the section FAIL.
 - **R19.** `[PR1]` A test calls `_cheat_fetch` with an empty `<head>` and asserts rc 2, no curl call recorded, and the destination unchanged.
+- **R20.** `[PR1]` Tests assert the installed mode after a successful fetch: the binary at 750 under `run_setup_user` and 754 under `run_update`, and `_cht` at 644, read with `stat -c '%a'` falling back to `stat -f '%Lp'`.
 - **V1.** Mutation: change `_cheat_fetch` to `curl -o "${dest}"` directly (no temp file); the R6 tests go red.
 - **V2.** Mutation: change `--max-time 10` to `--max-time 100` in `_cheat_fetch`; the R7 tests go red. Change `_fetch_github_latest`'s `--max-time 10` to `--max-time 100`; the R9 test goes red.
 - **V3.** Run `_cheat_fetch` with real curl against a local listener that sends part of a body and stalls; it returns 1 within the bound and the pre-seeded destination is unchanged.
@@ -193,6 +199,7 @@ function override, so the call is recorded in `MOCK_CALLS_FILE`.
 - **V6.** Mutation: delete the first-line check; R15 goes red.
 - **V7.** Mutation: delete the `run_setup_user` binary warning; R12 goes red, including on `claude`, where `cht.sh` is on the bats `PATH`.
 - **V8.** Mutation: pass `""` as `<head>` at the `run_update` completion call site; R18 goes red. A wrong non-empty `<head>` at the two `run_setup_user` sites has no wrong-content test, by decision.
+- **V9.** Mutation: delete `_cheat_fetch`'s `chmod`; the R20 tests go red.
 - **N1.** No URL or timeout seam is added to `_cheat_fetch`.
 - **N2.** No retry logic.
 - **N3.** The 750 / 754 binary-mode difference between `run_setup_user` and `run_update` is not changed.
@@ -261,3 +268,25 @@ Disposition: Addressed — operator: "Accept 1 and 2" (2026-10-09): `run_setup_u
 Finding: R14 is pinned at one of four call sites. Only R15 is a wrong-content test (binary, `run_update`); the R17 fixtures pass any lax check. Passing `""` or omitting `<head>` at any other site keeps every R and V green, since `[[ $l == ""* ]]` is always true. Minor: the Testing bullet claimed every failure test reads a curl `-o` line, which R8 has none of; R8 omitted the promised "no fetch attempted"; `IFS= read -r` returns 1 on a file with no trailing newline while still setting the line, so `read … || return 1` would reject every fixture.
 Assumption: no uncertain assumption found.
 Disposition: Addressed — operator: "Accept 1 and 2" (2026-10-09): empty `<head>` returns 2 (R2, R19), `_cht` wrong-content test (R18), V8 mutation; the two `run_setup_user` sites' non-empty wrong head left untested by decision (V8); Testing bullet narrowed, R8 asserts no curl call, `read` rc behaviour stated in Design.
+
+### Round 4 — reviewed at `e2fc558` (all three lenses, at the operator's request)
+
+#### Goal-Fit
+
+Finding: No blocking issues; every requirement traces to a measured defect. One false sentence: the Design said NUL bytes "are dropped by bash and fail" the head check, but a leading NUL is dropped and the line then matches (`\0#!/bin/bash\n` read with `IFS= read -r` gave rc 0 and `#!/bin/bash`).
+Assumption: no uncertain assumption found.
+Disposition: Addressed — operator: "I accept 1-3, onto the plan" (2026-10-09): the clause is deleted.
+
+#### Ergonomics
+
+Finding: Nothing in R1–R19 or V1–V8 checks the installed mode, and this design is what makes it load-bearing. `curl -o` over an existing file kept 754; under the helper, `mktemp` creates 0600 and `mv` replaces the file, so deleting the `chmod` or passing `644` for the binary leaves `cht.sh` non-executable while every R and V passes. The Testing "Mode" bullet had no R number.
+Assumption: no uncertain assumption found; measured that `run_update` records exactly one curl call with only `cht.sh` seeded.
+Disposition: Addressed — operator: "I accept 1-3, onto the plan" (2026-10-09): R20 pins 750 / 754 / 644 via portable `stat`, V9 deletes the `chmod`.
+
+#### Risk
+
+Finding: No blocking issues; named a red-turning mutation for each of R6, R8, R11, R12, R15, R18 and R19, all buildable with existing mocks. Measured that with `~/bin` at 0555 today's code reports cheat.sh OK, so R8 can only go red against the new design. Minor: R8's "no curl call recorded" breaks against a correct helper if `_cht` is also seeded. Accepted behaviour changes: a writable `cht.sh` in a non-writable `~/bin` now FAILs with `install failed`; a symlinked destination becomes a regular file.
+Assumption: no uncertain assumption found.
+Disposition: Addressed — operator: "I accept 1-3, onto the plan" (2026-10-09): R8 is scoped to the `cht.sh/:cht.sh` URL.
+
+Review stopped after round 4 by operator decision: round 4's findings were test coverage and wording, with no design change.
