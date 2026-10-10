@@ -2387,7 +2387,7 @@ assert_all_npm_globals_pinned() {
   # so an unset stdout leaves the mock's default empty touch, which (as of
   # this branch) correctly FAILs the section instead of reporting OK over a
   # zeroed file -- exactly the production defect this task exists to fix.
-  export MOCK_CURL_STDOUT="cheat.sh binary body"
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\ncheat.sh binary body'
   # Bare call so _DOTFILES_RUN_TMPDIR survives. Capture run_update's own
   # return rather than calling it bare: bats runs test bodies under errexit,
   # so a bare non-zero at the run_update line would abort the test right
@@ -2416,7 +2416,7 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/.zsh.d"
   touch "${HOME}/.zsh.d/_cht"
-  export MOCK_CURL_STDOUT="cheat.sh completion body"
+  export MOCK_CURL_STDOUT=$'#compdef cht.sh\ncheat.sh completion body'
   # Bare call -- this test reads _DOTFILES_RUN_TMPDIR-derived files, which
   # `run`'s subshell would discard. Capture run_update's return rather than
   # calling it bare: a bare non-zero at that line would abort the test right
@@ -2489,7 +2489,7 @@ assert_all_npm_globals_pinned() {
       # code gates success on [[ -s target ]], and the fixture already
       # `touch`ed the target, so a bare `return 0` here would leave it
       # empty and misreport the binary half as failed too.
-      *"cht.sh/:cht.sh") printf "binary-body" > "$3"; return 0 ;;
+      *"cht.sh/:cht.sh") printf '#!binary-body' > "$3"; return 0 ;;
       *"cheat.sh/:zsh") return 22 ;;
       *) command curl "$@" ;;
     esac
@@ -2546,7 +2546,7 @@ assert_all_npm_globals_pinned() {
   curl() {
     case "${*: -1}" in
       *"cht.sh/:cht.sh") return 22 ;;
-      *"cheat.sh/:zsh") printf "completion-body" > "$3"; return 0 ;;
+      *"cheat.sh/:zsh") printf '#compdef completion-body' > "$3"; return 0 ;;
       *) command curl "$@" ;;
     esac
   }
@@ -2563,6 +2563,143 @@ assert_all_npm_globals_pinned() {
   # first -- the accumulator, not a short-circuiting exit, let execution
   # continue into the completion branch.
   [ -s "${HOME}/.zsh.d/_cht" ]
+}
+
+_cheat_update_env() {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+}
+
+_cheat_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%OLp' "$1"
+}
+
+@test "run_update cheat.sh binary fetch failure leaves dest intact and no temp file" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export MOCK_CURL_FAIL_URL="cht.sh/:cht.sh"
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh completion fetch failure leaves _cht intact and no temp file" {
+  _cheat_update_env
+  mkdir -p "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  export MOCK_CURL_FAIL_URL="cheat.sh/:zsh"
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh bounds both fetches with --max-time 10" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  # Binary passes its head check, completion fails its own: both curls run.
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  local _rc=0
+  run_update || _rc=$?
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cht.sh/:cht.sh'
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cheat.sh/:zsh'
+}
+
+@test "run_update cheat.sh FAILs with install failed when the bin dir is not writable" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  chmod 555 "${HOME}/bin"
+  local _rc=0
+  run_update || _rc=$?
+  chmod 755 "${HOME}/bin"
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  refute_grep 'cht.sh/:cht.sh' "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update cheat.sh FAILs with install failed when the rename fails" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  export MOCK_MV_FAIL_ARGS=".cht.sh."
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh refuses a binary body that does not start with #!" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export MOCK_CURL_STDOUT='Unknown topic.'
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh refuses a completion body that does not start with #compdef" {
+  _cheat_update_env
+  mkdir -p "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh installs the binary at 754 and the completion at 644" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  curl() {
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") printf '#!/bin/bash\n' > "$3"; return 0 ;;
+      *"cheat.sh/:zsh") printf '#compdef cht.sh\n' > "$3"; return 0 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "$(_cheat_mode "${HOME}/bin/cht.sh")" = "754" ]
+  [ "$(_cheat_mode "${HOME}/.zsh.d/_cht")" = "644" ]
 }
 
 @test "run_update updates zsh-autosuggestions when plugin dir exists" {
