@@ -301,6 +301,30 @@ _cheat_seed() {
   [ ! -e "${tmp}" ]
 }
 
+@test "_cheat_fetch: a #-prefixed body that is not the head returns 1, dest untouched, temp removed" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'# Unknown topic\nx'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 1 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: head appearing mid-line (not as a prefix) returns 1" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'x #!/bin/bash\n'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 1 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
 @test "_cheat_fetch: empty head returns 2 without fetching" {
   _cheat_seed
   export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
@@ -519,6 +543,97 @@ _cheat_seed() {
   [ "$status" -eq 0 ]
   grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cht.sh/:cht.sh'
   grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cheat.sh/:zsh'
+}
+
+# Installs a curl() override for run_setup_user that gives each cheat.sh URL its
+# own body (CHEAT_BIN_BODY / CHEAT_COMP_BODY) and records the call so
+# _cheat_tmp_from_calls can find the temp file.
+_cheat_su_curl() {
+  curl() {
+    local _o="" _i; local -a _a=("$@")
+    for ((_i = 0; _i < ${#_a[@]}; _i++)); do [[ ${_a[_i]} == -o ]] && _o=${_a[_i + 1]}; done
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '%s' "${CHEAT_BIN_BODY}" > "${_o:?}" ;;
+      *"cheat.sh/:zsh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '%s' "${CHEAT_COMP_BODY}" > "${_o:?}" ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+}
+
+@test "run_setup_user refuses a binary body whose first line is not #! and keeps the old file" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export CHEAT_BIN_BODY=$'# Unknown topic\nx' CHEAT_COMP_BODY=$'#compdef cht.sh\n'
+  _cheat_su_curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cheat.sh binary fetch failed"* ]]
+  [[ "$output" != *"cheat.sh completion fetch failed"* ]]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_setup_user refuses a completion body whose first line is not #compdef and creates nothing" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  rm -f "${HOME}/.zsh.d/_cht"
+  export CHEAT_BIN_BODY=$'#!/bin/bash\n' CHEAT_COMP_BODY=$'# x\n'
+  _cheat_su_curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cheat.sh completion fetch failed"* ]]
+  [[ "$output" != *"cheat.sh binary fetch failed"* ]]
+  [ ! -e "${HOME}/.zsh.d/_cht" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_setup_user reports a binary rename failure as install failed, not fetch failed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export CHEAT_BIN_BODY=$'#!/bin/bash\nx' CHEAT_COMP_BODY=$'#compdef cht.sh\n'
+  export MOCK_MV_FAIL_ARGS=".cht.sh."
+  _cheat_su_curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cheat.sh binary install failed"* ]]
+  [[ "$output" != *"cheat.sh binary fetch failed"* ]]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_setup_user reports a completion rename failure as install failed, not fetch failed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  rm -f "${HOME}/.zsh.d/_cht"
+  export CHEAT_BIN_BODY=$'#!/bin/bash\nx' CHEAT_COMP_BODY=$'#compdef cht.sh\n'
+  export MOCK_MV_FAIL_ARGS="._cht."
+  _cheat_su_curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cheat.sh completion install failed"* ]]
+  [[ "$output" != *"cheat.sh completion fetch failed"* ]]
+  [[ "$output" != *"cheat.sh binary"* ]]
+  [ ! -e "${HOME}/.zsh.d/_cht" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
 }
 
 @test "run_setup_user installs the cheat.sh binary 750 and completion 644" {
@@ -2777,6 +2892,38 @@ _cheat_mode() {
   mkdir -p "${HOME}/.zsh.d"
   printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
   export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh refuses a #-prefixed binary body that is not #!" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export MOCK_CURL_STDOUT=$'# Unknown topic\nx'
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_update cheat.sh refuses a #-prefixed completion body that is not #compdef" {
+  _cheat_update_env
+  mkdir -p "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  export MOCK_CURL_STDOUT=$'# x\n'
   local _rc=0 tmp
   run_update || _rc=$?
   [ "${_rc}" -ne 0 ]
