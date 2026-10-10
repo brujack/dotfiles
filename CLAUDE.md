@@ -655,7 +655,7 @@ two-second grep appears to refute the rule.
 
 - `_SYSCTL_CONF`/`_SYSCTL_BIN`/`_INOTIFY_PROC`/`_SYSTEMD_RUN_DIR` (`lib/linux_ubuntu.sh:_install_ubuntu_inotify`, `lib/helpers.sh:_doctor_check_inotify_limits`)
   - `_KEYS_MAXKEYS_CONF`/`_KEYS_MAXKEYS_PROC`/`_KEYS_MAXBYTES_CONF`/`_KEYS_MAXBYTES_PROC` are the kernel keys equivalents, read by `_install_ubuntu_kernel_keys` and `_doctor_check_kernel_keys`. `load_mocks` exports them under `BATS_TEST_TMPDIR` with the procs seeded at the floors (2000, 500000) and the confs absent. `_SYSCTL_CONF` governs only the inotify conf; `_SYSCTL_BIN` is shared by every key.
-  - `load_mocks` exports all four under `BATS_TEST_TMPDIR`: conf absent, live value 1024, the systemd run dir present, and a recording `sysctl` stub that honours `MOCK_SYSCTL_STUB_EXIT`.
+  - `load_mocks` exports the four inotify seams under `BATS_TEST_TMPDIR`: conf absent, live value 1024, the systemd run dir present, and a recording `sysctl` stub that honours `MOCK_SYSCTL_STUB_EXIT`.
   - They exist because `tests/mocks/sudo` and `tests/mocks/sysctl` exec real binaries, so unset seams would aim `tee` and `sysctl` at the real `/etc/sysctl.d` and kernel: failing as a normal user, writing as root (`tdd.md` E2).
   - `tests/mocks/tee` swallows failures, so the step reads the conf back rather than trusting `tee`'s status.
   - The step applies only the one key (`sysctl -w`, never `-p`), and only when the live value is below 1024; an unreadable or non-numeric live value returns 1 without applying.
