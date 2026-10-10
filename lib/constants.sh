@@ -199,7 +199,7 @@ readonly INOTIFY_PROC=/proc/sys/fs/inotify/max_user_instances
 # docker-host floors for the kernel keys limits; the rootless CI daemon charges every
 # container's keys to one uid, so the default 200 keys is exhausted by concurrent runners.
 # See docs/superpowers/specs/2026-10-10-kernel-keyring-limits-design.md
-# Read by lib/linux_ubuntu.sh:_install_ubuntu_kernel_keys.
+# Read by lib/linux_ubuntu.sh:_install_ubuntu_kernel_keys and lib/helpers.sh:_doctor_check_kernel_keys.
 readonly KEYS_MAXKEYS=2000
 readonly KEYS_MAXBYTES=500000
 readonly KEYS_MAXKEYS_CONF=/etc/sysctl.d/90-dotfiles-keys-maxkeys.conf

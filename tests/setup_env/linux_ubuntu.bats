@@ -5459,3 +5459,21 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"kernel-keys maxkeys: read-back mismatch (${_KEYS_MAXKEYS_CONF})"* ]]
   [[ "$stderr" != *inotify* ]]
 }
+
+@test "kernel-keys: a failing sudo sysctl with the seam unset says kernel-keys maxkeys apply failed" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  unset _SYSCTL_BIN
+  local stub="${BATS_TEST_TMPDIR}/pathstub"
+  mkdir -p "${stub}"
+  printf '#!/usr/bin/env bash\nprintf "STUB-MARKER-7f3a9c %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${stub}/sysctl"
+  chmod +x "${stub}/sysctl"
+  PATH="${stub}:${PATH}"
+  [ "$(command -v sysctl)" = "${stub}/sysctl" ]
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  grep -q '^STUB-MARKER-7f3a9c -w kernel.keys.maxkeys=2000$' "${MOCK_CALLS_FILE}"
+  [[ "$stderr" == *"kernel-keys maxkeys: apply failed"* ]]
+  [[ "$stderr" != *"_SYSCTL_BIN"* ]]
+  [[ "$stderr" != *inotify* ]]
+}
