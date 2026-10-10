@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-10
 - **Requested by:** the terraform_ansible session (cross-session message, 2026-10-10)
+- **Approved:** 2026-10-10
 - **Operator:** approved starting the work and changing live sysctl on `claude` and `workstation`
 
 ## Problem
