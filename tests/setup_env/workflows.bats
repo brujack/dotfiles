@@ -240,6 +240,97 @@ _mode_of() {
   grep -q "pat-from-local-sh" "${HOME}/.claude/mcp.json"
 }
 
+# ── _cheat_fetch ──────────────────────────────────────────────────────────────
+
+# Prints the -o path curl was given for URL $1, read from the recorded call.
+_cheat_tmp_from_calls() {
+  sed -n "s|^curl .* -o \([^ ]*\) --max-time .*${1}\$|\1|p" "${MOCK_CALLS_FILE}" | tail -1
+}
+
+_cheat_seed() {
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+}
+
+@test "_cheat_fetch: good body replaces dest with mode and leaves no temp file" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\necho hi'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 0 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "${MOCK_CURL_STDOUT}" ]
+  [ "$(stat -c '%a' "${HOME}/bin/cht.sh" 2>/dev/null || stat -f '%OLp' "${HOME}/bin/cht.sh")" = "750" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: curl failure returns 1, dest untouched, temp removed" {
+  _cheat_seed
+  export MOCK_CURL_FAIL_URL=example.test
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 1 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: empty body returns 1, dest untouched, temp removed" {
+  _cheat_seed
+  unset MOCK_CURL_STDOUT
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 1 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: wrong first line returns 1, dest untouched, temp removed" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT='Unknown topic.'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 1 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: empty head returns 2 without fetching" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 ""
+  [ "$status" -eq 2 ]
+  refute_grep 'example.test' "${MOCK_CALLS_FILE}"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+}
+
+@test "_cheat_fetch: mv failure returns 2, dest untouched, temp removed" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  export MOCK_MV_FAIL_ARGS=".cht.sh."
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 2 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "_cheat_fetch: bounds the transfer with --max-time 10" {
+  _cheat_seed
+  export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
+  run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+  [ "$status" -eq 0 ]
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://example.test/x'
+}
+
 # ── run_setup_user — coarse-grained (macOS) ───────────────────────────────────
 
 @test "run_setup_user clones dotfiles repo on macOS when missing" {

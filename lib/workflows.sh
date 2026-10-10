@@ -389,6 +389,30 @@ _dotfiles_run_tmpdir_setup() {
   ensure_state_ledger || true
 }
 
+# Fetch <url> into <dest> through a dot-prefixed temp file in the same
+# directory, so a failed, timed-out or wrong-content transfer never replaces a
+# working copy: curl -o truncates its target as soon as the body starts, and
+# cheat.sh answers HTTP 200 with an error page, which -f cannot refuse.
+# Returns 0 replaced, 1 fetch failed, 2 local failure (or empty <head>).
+_cheat_fetch() {
+  local _url="$1" _dest="$2" _mode="$3" _head="$4" _tmp _line=""
+  [[ -n "${_head}" ]] || return 2
+  _tmp="$(mktemp "${_dest%/*}/.${_dest##*/}.XXXXXX")" || return 2
+  if ! curl -fsS -o "${_tmp}" --max-time 10 "${_url}" || [[ ! -s "${_tmp}" ]]; then
+    rm -f "${_tmp}"
+    return 1
+  fi
+  IFS= read -r _line < "${_tmp}" || true
+  if [[ "${_line}" != "${_head}"* ]]; then
+    rm -f "${_tmp}"
+    return 1
+  fi
+  if ! chmod "${_mode}" "${_tmp}" || ! mv -f "${_tmp}" "${_dest}"; then
+    rm -f "${_tmp}"
+    return 2
+  fi
+}
+
 run_setup_user() {
   _dotfiles_run_tmpdir_setup || return 1
   if [[ -n ${MACOS} ]]; then
