@@ -456,8 +456,10 @@ run_setup_user() {
       sudo -H apt update
       sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" curl -y
     fi
-    curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
-      && chmod 750 "${HOME}"/bin/cht.sh
+    _cheat_fetch https://cht.sh/:cht.sh "${HOME}/bin/cht.sh" 750 '#!' || case $? in
+      1) printf "cheat.sh binary fetch failed\\n" >&2 ;;
+      *) printf "cheat.sh binary install failed\\n" >&2 ;;
+    esac
   fi
   if [[ -x $(command -v cht.sh) ]]; then
     printf "cht.sh is installed\\n"
@@ -466,7 +468,10 @@ run_setup_user() {
   printf "Creating %s/.zsh.d\\n" "${HOME}"
   mkdir -p "${HOME}"/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
-    curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh
+    _cheat_fetch https://cheat.sh/:zsh "${HOME}/.zsh.d/_cht" 644 '#compdef' || case $? in
+      1) printf "cheat.sh completion fetch failed\\n" >&2 ;;
+      *) printf "cheat.sh completion install failed\\n" >&2 ;;
+    esac
   fi
 
   printf "Creating %s/go-work\\n" "${HOME}"
