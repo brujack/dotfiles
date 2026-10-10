@@ -2792,6 +2792,9 @@ STUB
 @test "run_doctor runs the inotify check, and its FAIL fails doctor" {
   export LINUX=1 HAS_DOCKER=1
   printf '128\n' > "${_INOTIFY_PROC}"
+  # Kernel keys confs at floor so the inotify FAIL is the only one counted.
+  printf 'kernel.keys.maxkeys = 2000\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 500000\n' > "${_KEYS_MAXBYTES_CONF}"
   _doctor_check_profile()        { :; }
   _doctor_check_symlinks()       { :; }
   _doctor_check_symlink_roots()  { :; }
@@ -2812,6 +2815,7 @@ STUB
   run run_doctor
   [ "$status" -eq 1 ]
   [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing; next boot: kernel default"* ]]
+  [[ "$output" == *", 1 failed"* ]]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
@@ -3177,8 +3181,8 @@ _keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
   # tests/mocks/git shadows git on PATH; count with the real one.
   local _clean_path _n_ino _n_keys
   _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
-  _n_ino="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "_doctor_check_inotify_limits() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
-  _n_keys="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "_doctor_check_kernel_keys() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  _n_ino="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "^ *_doctor_check_inotify_limits() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  _n_keys="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "^ *_doctor_check_kernel_keys() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
   [ "${_n_ino}" -gt 0 ]
   [ "${_n_keys}" -gt 0 ]
   [ "${_n_ino}" -eq "${_n_keys}" ]
@@ -3231,6 +3235,13 @@ _keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
 @test "kernel keys doctor: gate off (HAS_DOCKER unset) prints nothing" {
   export LINUX=1
   unset HAS_DOCKER
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kernel keys doctor: gate off (LINUX unset) prints nothing" {
+  unset LINUX; export HAS_DOCKER=1
   run _doctor_check_kernel_keys
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
