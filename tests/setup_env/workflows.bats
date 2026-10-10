@@ -408,10 +408,9 @@ _cheat_seed() {
   export -f curl
   run run_setup_user
   [ "$status" -eq 0 ]
-  # This is the truncation hazard: the shell no longer uses `>` at all (only
-  # -o), so there is nothing left to truncate before curl runs -- confirming
-  # the file the failed fetch left behind is exactly the one that was there
-  # before the call, not an empty one that chmod then succeeded over.
+  # The fetch goes into a mktemp temp file and replaces the destination with
+  # mv only on success, so a failed fetch must leave the file that was there
+  # before the call byte-for-byte, not an empty one.
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
 }
 
@@ -425,21 +424,19 @@ _cheat_seed() {
   export -f curl
   run run_setup_user
   [ "$status" -eq 0 ]
-  # This is the never-retry hazard, and it is the sharper of the two: the
-  # install path guards this fetch with `[[ ! -f ]]`, so a failed fetch that
-  # still creates a 0-byte file via `>` would satisfy that guard forever and
-  # the completion would never be retried on any later run. With -o, curl
-  # writes nothing on failure, so the target must be ABSENT, not merely
-  # empty -- that absence is what lets a subsequent run retry.
+  # Never-retry hazard: the install path guards this fetch with `[[ ! -f ]]`,
+  # so a failed fetch that left a 0-byte destination would satisfy that guard
+  # forever. The fetch lands in a mktemp temp file and is mv'd into place only
+  # on success, so the target must be ABSENT, not merely empty -- that absence
+  # is what lets a subsequent run retry.
   [ ! -f "${HOME}/.zsh.d/_cht" ]
 }
 
 @test "run_setup_user does not attempt chmod when the cht.sh binary fetch fails" {
   export MACOS=1
   unset LINUX UBUNTU
-  # No pre-seeded target: on a real failed fetch curl -o writes nothing, so
-  # chmod is reachable against a file that was never created unless it is
-  # gated behind the fetch succeeding.
+  # chmod must only run after a successful fetch; a failed one must never
+  # reach it, for the temp file or the destination.
   curl() {
     [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
     command curl "$@"
@@ -450,21 +447,28 @@ _cheat_seed() {
   # The mock chmod is a pass-through that silences its own errors and exit
   # code (`/bin/chmod "$@" 2>/dev/null || true`), so asserting on stderr
   # text or a non-zero status cannot discriminate here -- only the call log
-  # can. Before the fix, chmod ran unconditionally against a target curl
-  # never wrote.
-  refute_grep "chmod 750 ${HOME}/bin/.cht.sh." "${MOCK_CALLS_FILE}"
+  # can. -F with the directory prefix covers both the temp and the destination.
+  refute_grep "chmod 750 ${HOME}/bin/" "${MOCK_CALLS_FILE}" -F
 }
 
 @test "run_setup_user warns that the cht.sh binary fetch failed and continues" {
   export MACOS=1
   unset LINUX UBUNTU
+  # The sibling completion fetch must succeed, or the default mock's empty
+  # body would fail it too and this test could not tell the two warnings apart.
   curl() {
-    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
-    command curl "$@"
+    local _o="" _i; local -a _a=("$@")
+    for ((_i = 0; _i < ${#_a[@]}; _i++)); do [[ ${_a[_i]} == -o ]] && _o=${_a[_i + 1]}; done
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") return 22 ;;
+      *"cheat.sh/:zsh") printf '#compdef cht.sh\n' > "${_o:?}" ;;
+      *) command curl "$@" ;;
+    esac
   }
   export -f curl
   run run_setup_user
   [ "$status" -eq 0 ]
+  [[ "$output" != *"cheat.sh completion fetch failed"* ]]
   # Exact phrase: a looser `cht.sh` match also passes on a box where the real
   # binary is on PATH, because run_setup_user then prints "cht.sh is installed".
   [[ "$output" == *"cheat.sh binary fetch failed"* ]]
@@ -474,14 +478,22 @@ _cheat_seed() {
 @test "run_setup_user warns that the cheat.sh completion fetch failed" {
   export MACOS=1
   unset LINUX UBUNTU
+  # The binary fetch must succeed, or the default mock's empty body would fail
+  # it too and this test could not tell the two warnings apart.
   curl() {
-    [[ "${*: -1}" == *"cheat.sh/:zsh" ]] && return 22
-    command curl "$@"
+    local _o="" _i; local -a _a=("$@")
+    for ((_i = 0; _i < ${#_a[@]}; _i++)); do [[ ${_a[_i]} == -o ]] && _o=${_a[_i + 1]}; done
+    case "${*: -1}" in
+      *"cheat.sh/:zsh") return 22 ;;
+      *"cht.sh/:cht.sh") printf '#!/bin/bash\n' > "${_o:?}" ;;
+      *) command curl "$@" ;;
+    esac
   }
   export -f curl
   run run_setup_user
   [ "$status" -eq 0 ]
   [[ "$output" == *"cheat.sh completion fetch failed"* ]]
+  [[ "$output" != *"cheat.sh binary fetch failed"* ]]
 }
 
 @test "run_setup_user keeps a pre-seeded binary and removes the temp when curl fails" {
@@ -517,9 +529,11 @@ _cheat_seed() {
   chmod 600 "${HOME}/bin/cht.sh"
   rm -f "${HOME}/.zsh.d/_cht"
   curl() {
+    local _o="" _i; local -a _a=("$@")
+    for ((_i = 0; _i < ${#_a[@]}; _i++)); do [[ ${_a[_i]} == -o ]] && _o=${_a[_i + 1]}; done
     case "${*: -1}" in
-      *"cht.sh/:cht.sh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#!/bin/bash\n' > "$3" ;;
-      *"cheat.sh/:zsh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#compdef cht.sh\n' > "$3" ;;
+      *"cht.sh/:cht.sh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#!/bin/bash\n' > "${_o:?}" ;;
+      *"cheat.sh/:zsh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#compdef cht.sh\n' > "${_o:?}" ;;
       *) command curl "$@" ;;
     esac
   }
