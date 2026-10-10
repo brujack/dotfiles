@@ -2474,21 +2474,20 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
   touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
-  # The shared curl mock has no per-URL exit control (MOCK_CURL_HTTP_STATUS
-  # applies to every call in the test), so it cannot make one fetch succeed
-  # while the other fails within a single run_update invocation. A local
-  # function override, positioned ahead of the mock in command lookup, is
-  # the only way to discriminate by URL -- falling through to the real mock
-  # for every other call (see the sibling FAIL test above for why a global
-  # failure knob is unsafe: an unguarded failure elsewhere in run_update's
-  # chain kills the test silently under bats' errexit).
+  # This test needs the binary fetch to succeed with a chosen body while the
+  # completion fetch fails, which MOCK_CURL_FAIL_URL alone cannot express (it
+  # only fails, it cannot supply a per-URL body). A local function override,
+  # positioned ahead of the mock in command lookup, discriminates by URL and
+  # falls through to the real mock for every other call (a global failure
+  # knob is unsafe: an unguarded failure elsewhere in run_update's chain
+  # kills the test silently under bats' errexit).
   curl() {
     case "${*: -1}" in
-      # $3 is the -o target -- the production call shape is fixed as
-      # `curl -fsS -o <path> <url>`. Content must actually be written: the
-      # code gates success on [[ -s target ]], and the fixture already
-      # `touch`ed the target, so a bare `return 0` here would leave it
-      # empty and misreport the binary half as failed too.
+      # $3 is the -o target -- the mktemp temp file, since _cheat_fetch calls
+      # `curl -fsS -o <tmp> --max-time 10 <url>`. Content must actually be
+      # written: _cheat_fetch requires the temp file non-empty and starting
+      # with the expected head, so a bare `return 0` would leave it empty and
+      # misreport the binary half as failed too.
       *"cht.sh/:cht.sh") printf '#!binary-body' > "$3"; return 0 ;;
       *"cheat.sh/:zsh") return 22 ;;
       *) command curl "$@" ;;
@@ -2651,6 +2650,23 @@ _cheat_mode() {
   [ ! -e "${tmp}" ]
 }
 
+@test "run_update cheat.sh FAILs with completion install failed when the rename fails" {
+  _cheat_update_env
+  mkdir -p "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  export MOCK_CURL_STDOUT=$'#compdef cht.sh\nx'
+  export MOCK_MV_FAIL_ARGS="._cht."
+  local _rc=0 tmp
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh completion install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
+  tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
 @test "run_update cheat.sh refuses a binary body that does not start with #!" {
   _cheat_update_env
   mkdir -p "${HOME}/bin"
@@ -2687,6 +2703,9 @@ _cheat_mode() {
   _cheat_update_env
   mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
   touch "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
+  # Start from a mode neither assertion expects, so the final mode can only
+  # come from a replacement (umask 022 would leave a touched file at 644).
+  chmod 600 "${HOME}/bin/cht.sh" "${HOME}/.zsh.d/_cht"
   curl() {
     case "${*: -1}" in
       *"cht.sh/:cht.sh") printf '#!/bin/bash\n' > "$3"; return 0 ;;
