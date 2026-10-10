@@ -3288,3 +3288,30 @@ TABLE
   PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 0 ]
 }
+
+# ── _sysctl_conf_value: exact key match (near-miss keys are not the key) ─────
+
+@test "_sysctl_conf_value: a near-miss key (one dot replaced by X) prints nothing, for every key" {
+  local _key _near _conf="${BATS_TEST_TMPDIR}/near.conf"
+  for _key in fs.inotify.max_user_instances kernel.keys.maxkeys kernel.keys.maxbytes; do
+    _near="${_key/./X}"
+    printf '%s = 4242\n' "${_near}" > "${_conf}"
+    [ -s "${_conf}" ]
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { printf 'key %s matched near-miss %s: %s\n' "${_key}" "${_near}" "$output" >&3; return 1; }
+  done
+}
+
+@test "_sysctl_conf_value: the exact dotted and slash spellings print the value, for every key" {
+  local _key _slash _conf="${BATS_TEST_TMPDIR}/exact.conf"
+  for _key in fs.inotify.max_user_instances kernel.keys.maxkeys kernel.keys.maxbytes; do
+    _slash="${_key//./\/}"
+    printf '%s = 4242\n' "${_key}" > "${_conf}"
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$output" = "4242" ] || { printf 'dotted %s: [%s]\n' "${_key}" "$output" >&3; return 1; }
+    printf '%s = 4343\n' "${_slash}" > "${_conf}"
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$output" = "4343" ] || { printf 'slash %s: [%s]\n' "${_slash}" "$output" >&3; return 1; }
+  done
+}

@@ -21,7 +21,7 @@ install_ubuntu_packages() {
   # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
   # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
-  for _step in inotify workstation powershell go docker nvidia k8s_tools hashicorp \
+  for _step in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
     if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
@@ -85,6 +85,30 @@ _install_ubuntu_inotify() {
     return 0
   fi
   _sysctl_floor_step inotify fs.inotify.max_user_instances "${INOTIFY_MAX_USER_INSTANCES}" "${_conf}" "${_proc}" "${_SYSCTL_CONF:+_SYSCTL_CONF}"
+}
+
+# Docker hosts running many concurrent containers under one uid exhaust the default
+# kernel.keys.maxkeys (200) and maxbytes (20000). One key per conf file, each through
+# the shared floor step. Both keys are always attempted. Spec:
+# docs/superpowers/specs/2026-10-10-kernel-keyring-limits-design.md
+_install_ubuntu_kernel_keys() {
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
+  if [[ -z ${HAS_DOCKER} ]]; then
+    printf 'kernel-keys: skipped (HAS_DOCKER unset)\n'
+    return 0
+  fi
+  if [[ ! -d ${_rundir} ]]; then
+    printf 'kernel-keys: skipped (no systemd at %s)\n' "${_rundir}"
+    return 0
+  fi
+  local _rc=0
+  _sysctl_floor_step "kernel-keys maxkeys" kernel.keys.maxkeys "${KEYS_MAXKEYS}" \
+    "${_KEYS_MAXKEYS_CONF:-${KEYS_MAXKEYS_CONF}}" "${_KEYS_MAXKEYS_PROC:-${KEYS_MAXKEYS_PROC}}" \
+    "${_KEYS_MAXKEYS_CONF:+_KEYS_MAXKEYS_CONF}" || _rc=1
+  _sysctl_floor_step "kernel-keys maxbytes" kernel.keys.maxbytes "${KEYS_MAXBYTES}" \
+    "${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}" "${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}" \
+    "${_KEYS_MAXBYTES_CONF:+_KEYS_MAXBYTES_CONF}" || _rc=1
+  return "${_rc}"
 }
 
 # Persist max(live, floor) for one sysctl key in its own conf and apply it when

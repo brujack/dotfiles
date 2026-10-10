@@ -333,13 +333,13 @@ EOF
   export LINUX=1 UBUNTU=1 NOBLE=1
   _install_ubuntu_base_packages() { return 2; }
   local _s
-  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
 }
 
 @test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
@@ -349,20 +349,20 @@ EOF
   cd "${REPO_ROOT}"
   export MOCK_XARGS_EXIT=1
   local _s
-  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
 }
 
 @test "install_ubuntu_packages: base rc 1 stops before any later step" {
   unset MACOS NOBLE RESOLUTE
   export LINUX=1 UBUNTU=1
   local _s
-  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   : > "${MOCK_CALLS_FILE}"
@@ -2334,7 +2334,7 @@ STUB
 
 _stub_all_steps_but_docker() {
   local _s
-  for _s in inotify workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   _install_ubuntu_base_packages() { return 0; }
@@ -4362,7 +4362,7 @@ _albert_assert_last_good_untouched() {
   export MOCK_CURL_EXIT=22
   _install_ubuntu_base_packages() { :; }
   local _s
-  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
     eval "_install_ubuntu_${_s}() { :; }"
   done
   run --separate-stderr install_ubuntu_packages
@@ -5039,13 +5039,13 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_inotify() { printf 'ran inotify\n' >> "${MOCK_CALLS_FILE}"; return 1; }
   local _s
-  for _s in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: inotify"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 13 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | head -1)" = "ran inotify" ]
 }
 
@@ -5244,4 +5244,160 @@ _inotify_nontext_fixture() {
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"write failed"* ]]
   [[ "$stderr" != *"cannot read back"* ]]
+}
+
+# ── _install_ubuntu_kernel_keys ──────────────────────────────────────────────
+# load_mocks points _KEYS_MAXKEYS_CONF / _KEYS_MAXBYTES_CONF (absent) and
+# _KEYS_MAXKEYS_PROC / _KEYS_MAXBYTES_PROC (seeded at the floors 2000 / 500000)
+# at BATS_TEST_TMPDIR, beside the inotify seams. Every test sets HAS_DOCKER and
+# the systemd run dir itself rather than inheriting the parent shell's exports.
+
+_kk_env() {
+  export HAS_DOCKER=1
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
+  mkdir -p "${_SYSTEMD_RUN_DIR}"
+}
+_kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
+
+@test "kernel-keys: absent confs at the floors write both confs and apply nothing" {
+  _kk_env
+  [ -x "${_SYSCTL_BIN}" ]
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 2000" ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+  [ "$(_kk_sysctl_calls)" -eq 0 ]
+  [[ "$output" == *"kernel-keys maxkeys: conf written (2000)"* ]]
+  [[ "$output" == *"kernel-keys maxbytes: conf written (500000)"* ]]
+}
+
+@test "kernel-keys: maxkeys live 200 writes 2000 and applies only that key" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 2000" ]
+  grep -q '^sysctl -w kernel.keys.maxkeys=2000$' "${MOCK_CALLS_FILE}"
+  [ "$(_kk_sysctl_calls)" -eq 1 ]
+  [[ "$output" == *"kernel-keys maxkeys: applied"* ]]
+}
+
+@test "kernel-keys: maxbytes live 20000 writes 500000 and applies only that key" {
+  _kk_env
+  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+  grep -q '^sysctl -w kernel.keys.maxbytes=500000$' "${MOCK_CALLS_FILE}"
+  [ "$(_kk_sysctl_calls)" -eq 1 ]
+  [[ "$output" == *"kernel-keys maxbytes: applied"* ]]
+}
+
+@test "kernel-keys: swap - only maxbytes below floor leaves maxkeys unapplied and in its own conf" {
+  _kk_env
+  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 2000" ]
+  ! grep -q 'kernel.keys.maxkeys=' "${MOCK_CALLS_FILE}"
+}
+
+@test "kernel-keys: live above the floors writes the live values and applies nothing" {
+  _kk_env
+  printf '9000\n' > "${_KEYS_MAXKEYS_PROC}"
+  printf '900000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 9000" ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 900000" ]
+  [ "$(_kk_sysctl_calls)" -eq 0 ]
+}
+
+@test "kernel-keys: higher existing confs are kept byte for byte and say already" {
+  _kk_env
+  printf 'kernel.keys.maxkeys = 5000\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 700000\n' > "${_KEYS_MAXBYTES_CONF}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 5000" ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 700000" ]
+  [ "$(_kk_sysctl_calls)" -eq 0 ]
+  [[ "$output" == *"kernel-keys maxkeys: already 2000 or higher"* ]]
+  [[ "$output" == *"kernel-keys maxbytes: already 500000 or higher"* ]]
+}
+
+@test "kernel-keys: a maxkeys conf holding maxbytes is refused while maxbytes is still written" {
+  _kk_env
+  printf 'kernel.keys.maxbytes = 700000\n' > "${_KEYS_MAXKEYS_CONF}"
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxkeys: ${_KEYS_MAXKEYS_CONF} holds other keys; fix by hand"* ]]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxbytes = 700000" ]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+}
+
+@test "kernel-keys: a near-miss key in a conf is not the key and is refused as another key" {
+  _kk_env
+  printf 'kernel.keysXmaxkeys = 5000\n' > "${_KEYS_MAXKEYS_CONF}"
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"holds other keys"* ]]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keysXmaxkeys = 5000" ]
+}
+
+@test "kernel-keys: HAS_DOCKER unset skips once and writes nothing" {
+  _kk_env
+  unset HAS_DOCKER
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$output" = "kernel-keys: skipped (HAS_DOCKER unset)" ]
+  [ ! -e "${_KEYS_MAXKEYS_CONF}" ]
+  [ ! -e "${_KEYS_MAXBYTES_CONF}" ]
+  [ "$(_kk_sysctl_calls)" -eq 0 ]
+}
+
+@test "kernel-keys: no systemd run dir skips once and writes nothing" {
+  _kk_env
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/no-such-systemd"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$output" = "kernel-keys: skipped (no systemd at ${BATS_TEST_TMPDIR}/no-such-systemd)" ]
+  [ ! -e "${_KEYS_MAXKEYS_CONF}" ]
+  [ ! -e "${_KEYS_MAXBYTES_CONF}" ]
+}
+
+@test "kernel-keys: no sysctl call ever uses -p or --system" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [ "$(_kk_sysctl_calls)" -eq 2 ]
+  ! grep '^sysctl ' "${MOCK_CALLS_FILE}" | grep -qE -- ' (-p|--system)( |$)'
+}
+
+@test "kernel-keys: operator messages never say keyring" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _install_ubuntu_kernel_keys
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"kernel-keys"* ]]
+  [[ "$output" != *[Kk]eyring* ]]
+}
+
+@test "install_ubuntu_packages: a failing kernel_keys step is named, rc 2, and runs right after inotify" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  _install_ubuntu_base_packages() { :; }
+  _install_ubuntu_kernel_keys() { printf 'ran kernel_keys\n' >> "${MOCK_CALLS_FILE}"; return 1; }
+  local _s
+  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+    eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
+  done
+  run --separate-stderr install_ubuntu_packages
+  [ "$status" -eq 2 ]
+  [[ "$stderr" == *"failed: kernel_keys"* ]]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
+  [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "ran kernel_keys" ]
 }
