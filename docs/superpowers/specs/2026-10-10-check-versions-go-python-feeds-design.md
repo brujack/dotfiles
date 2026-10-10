@@ -68,41 +68,58 @@ tools the verdict compares the pin.
 Two new functions in `lib/workflows.sh`, beside `_fetch_github_latest`:
 
 - **`_fetch_go_latest`.** Calls `curl -sf --max-time 10 'https://go.dev/dl/?mode=json'`.
-  `python3` prints the first entry with `stable: true` whose `files` include both
-  `<version>.linux-amd64.tar.gz` and `<version>.linux-arm64.tar.gz`, minus the leading
-  `go`. Requiring both files means `--update` can only write a filename that is published
-  for every Linux architecture `_LINUX_ARCH` produces.
+  Among entries with `stable: true` whose `files` include both
+  `<version>.linux-amd64.tar.gz` and `<version>.linux-arm64.tar.gz`, `python3` prints the
+  **highest** version by numeric tuple, minus the leading `go`. Taking the maximum rather
+  than the first entry removes any dependence on the feed's order: go.dev does not promise
+  newest-first, and a 1.26.x security patch listed ahead of 1.27.x would otherwise read as
+  latest and make `--update` downgrade. Requiring both files means `--update` can only
+  write a filename published for every Linux architecture `_LINUX_ARCH` produces.
 - **`_fetch_python_latest [series]`.** Calls curl on the python.org releases URL above.
-  `python3` keeps names matching `^Python \d+\.\d+\.\d+$` and prints the highest by
-  numeric tuple. With a `series` argument (`3.14`), it prints the highest within that
-  series instead.
+  The body must be a JSON **list**; a dict (the shape a paginated API returns) is a
+  failure, because the newest release might then be on a page never read. Measured
+  2026-10-10: a bare list of 275 rows back to Python 2.0.1, `limit`/`offset` ignored, no
+  `Link` header. `python3` keeps names matching `^Python \d+\.\d+\.\d+$` and prints the
+  highest by numeric tuple, or the highest within `series` (`3.14`) when one is given.
 
 Neither sends `GITHUB_TOKEN`: neither host is GitHub.
 
+The parsing runs under whichever `python3` the caller resolves, which outside the venv is
+Apple's 3.9.6 on the Studio (measured 2026-10-10). The fetchers' header comment states a
+**Python 3.9 floor**: `json`, `re` and tuple comparison only, no `match`, no 3.10+ syntax.
+Running them under the venv's interpreter instead would make `check-versions` depend on the
+venv existing, so that is rejected.
+
 Every failure prints nothing on stdout and returns non-zero: curl failing, a body that is
-not JSON or not the expected shape, no qualifying entry, or `python3` not resolvable. An
-empty result is what `_check_one_version` already turns into
-`[WARN] <tool> could not fetch latest version`, so the existing WARN path and counter are
-reused.
+not JSON or not the expected shape, no qualifying entry, or `python3` not resolvable.
 
 ### 2. Pin-based verdict for go and python3
 
-A new `_check_one_pin_version <tool> <pinned> <latest-fetcher>` prints the same four line
-shapes as `_check_one_version`, minus the `installed=` field and the `[SKIP] not installed`
-branch:
+A new `_check_one_pin_version` prints the `[OK]`/`[OUTDATED]`/`[WARN]` line shapes of
+`_check_one_version`, minus the `installed=` field and the `[SKIP] not installed` branch.
+The verdict is about the repo's pin, which exists whether or not this machine has the
+tool. An empty fetch result prints `[WARN] <tool> could not fetch latest version` and
+counts as a warning, as today.
 
-```
-  [OK]       go           pinned=1.27.2     latest=1.27.2
-  [OUTDATED] go           pinned=1.27.1     latest=1.27.2
-  [WARN]     python3      could not fetch latest version
-```
+- **go.** Pinned value: the version in `GO_DOWNLOAD_FILENAME` (`go1.27.1.linux-…` →
+  `1.27.1`), not `GO_VER`; an unparseable filename prints
+  `[WARN] go could not parse pinned version`. Compared with go's latest across all series.
+- **python3.** Pinned value: `PYTHON_VER`. Compared with the latest **within
+  `PYTHON_VER`'s major.minor series** (`_fetch_python_latest 3.14`). When the latest
+  overall is in a newer series, one extra line follows, not counted in any total and not
+  affecting the exit code:
 
-- **go's pinned value** is the version in `GO_DOWNLOAD_FILENAME` (`go1.27.1.linux-…` →
-  `1.27.1`), not `GO_VER`. A filename the pattern cannot parse prints
-  `[WARN] go could not parse pinned version`.
-- **python3's pinned value** is `PYTHON_VER`.
-- There is no `not installed` SKIP. The verdict is about the repo's pin, which exists
-  whether or not this machine has the tool.
+  ```
+    [OUTDATED] python3      pinned=3.14.6     latest=3.14.8
+    [INFO]     python3      3.15 series available (series move: requires-python, uv lock)
+  ```
+
+  **Why go and python3 differ:** `--update` can move go across a minor on its own, so go's
+  verdict tracks the latest series. A python series move needs `requires-python` edited
+  and `uv lock` re-resolved first (`pyproject.toml:14`), which `--update` deliberately does
+  not do. Judging python against a series nothing can reach would leave the line
+  `[OUTDATED]` and the command at rc 1 on every run, which is the noise this change exists
+  to remove.
 
 `_run_cv_check` routes go and python3 through it. Ruby, yq, shellcheck, vagrant and
 gitleaks keep `_check_one_version` and `releases/latest`, unchanged.
@@ -118,42 +135,51 @@ message says `5`. The rc 2 precedence over rc 1 is unchanged.
 
 The OUTDATED line still carries `latest=`, which `_run_cv_check` parses as today.
 
-- **go.** `GO_VER` becomes the major.minor of latest, and `GO_DOWNLOAD_FILENAME` becomes
-  the full latest version through the existing `_update_url_pins` regex. Latest 1.27.2
-  gives `GO_VER="1.27"` and `go1.27.2.linux-…`; latest 1.28.0 gives `"1.28"` and
-  `go1.28.0.linux-…`. The prompt names both constants.
-- **python3, latest in the pinned series.** Writes `PYTHON_VER` as today, after the
-  pyenv guard below.
-- **python3, latest in a newer series.** Writes nothing for that version. It prints one
-  line: `python3: 3.14 -> 3.15 is a series move: edit requires-python in pyproject.toml,
-run uv lock, then bump PYTHON_VER`. Then it fetches the latest patch in the pinned
-  series with `_fetch_python_latest <pinned series>`, and if that is newer than the pin
-  (3.14.6 → 3.14.8) it offers that bump through the normal prompt. Without this second
-  step a stale patch pin could never be offered while a newer series exists. If the
-  in-series fetch fails, it prints `python3: could not fetch the latest <series> patch`
-  and offers nothing.
-- **pyenv guard.** Before writing `PYTHON_VER`, `pyenv install --list` must list the new
-  version. If it does not, or `pyenv` is not resolvable, nothing is written and the line
-  names the remedy (`brew upgrade pyenv` / update pyenv). A pin pyenv cannot build breaks
-  `setup_ansible`; measured 2026-10-10, both machines list 3.14.8 and 3.15.0, so the guard
-  matters on the day a release lands before pyenv's build definitions.
+- **go: a dedicated writer.** `_update_version_pin` cannot do this. With `pinned=` now
+  the filename version, its `s|^GO_VER="1.27.1"|…|` matches nothing, `sed -i` exits 0,
+  the caller prints `Updated`, and only the filename moves. A new `_update_go_pin <latest>`
+  sets `GO_VER` to latest's major.minor and `GO_DOWNLOAD_FILENAME` to the full version
+  (latest 1.27.2 → `"1.27"` + `go1.27.2.linux-…`; 1.28.0 → `"1.28"` + `go1.28.0.linux-…`).
+  It then reads both lines back from the constants file. If either is not exactly the
+  expected value, it prints `go: pin update failed: <constant> is not <expected>` and
+  returns 1, and no `Updated` line is printed.
+- **go: local-series warning.** After a successful write, if the local `go version` is
+  outside the new `GO_VER` series, it prints
+  `go: this machine runs <installed>, outside the new <GO_VER> series; doctor will fail here until it is reinstalled`.
+  On the Studio the installed go is brew's, so a minor move can make its doctor fail until
+  brew catches up. The real fix is the installer sync in Out of scope.
+- **python3.** The verdict is already in-series (section 2), so `latest=` is always in
+  `PYTHON_VER`'s series and a cross-series write cannot be reached. It writes `PYTHON_VER`
+  after the pyenv guard, then prints
+  `python3: next, run brew upgrade pyenv on every machine, then ./setup_env.sh -t recreate-venv`.
+- **pyenv guard.** Before writing `PYTHON_VER`, the new version must appear in
+  `pyenv install --list` as an exact line, matched as `^[[:space:]]*<version>$` with the
+  dots literal. The list also prints free-threaded builds (`3.14.8t`), which must not
+  satisfy it. If the version is absent or `pyenv` is not resolvable, nothing is written and
+  the line says `python3: pyenv on this machine cannot build <version>; run brew upgrade pyenv`.
+  The guard checks **this machine only**. Both machines get pyenv from Homebrew (2.8.9 on
+  each, measured 2026-10-10), but each upgrades it on its own schedule, which is why the
+  success line names every machine.
 
 Ruby and the GitHub-backed tools keep today's `--update` behaviour.
 
 ### 5. Docs
 
 - `CLAUDE.md`'s `check-versions` bullet: the rc 2 sentence says seven checks; it becomes
-  five, and the bullet names go and python3 as pin-versus-latest from first-party feeds.
-- `lib/constants.sh`'s `GO_VER`/`PYTHON_VER` "read by" comments stay accurate (no new
-  readers).
+  five. The bullet names go (pin versus latest) and python3 (pin versus latest in its
+  series, newer series as `[INFO]`) and their first-party feeds.
+- `lib/constants.sh`: the verification comment above `GO_DOWNLOAD_FILENAME` names a
+  specific version and goes stale on the first bump; reword it to say what must hold
+  (both Linux tarballs published), not which version was checked.
 
 ### Out of scope
 
 - **Syncing installed go and python3 across macOS and Linux.** One pinned go on both
   OSes (the mac installing the go.dev tarball instead of `brew "go"`), and `python3`
   outside the venv resolving to the latest Homebrew python on macOS (Apple's 3.9.6 today)
-  and something newer than apt's on Linux, per actor. Recorded as its own backlog row
-  with the measurements; it changes installers and PATH, not this check.
+  and something newer than apt's on Linux, per actor. Its own backlog row with the
+  measurements; it changes installers and PATH, not this check. It is also what removes
+  the Studio doctor failure the go local-series warning names.
 - **Verifying the go tarball.** `_install_go_from_tarball` runs a bare `wget` with no
   checksum. go.dev's feed carries `sha256` per file. Backlog row.
 - **ruby.** `releases/latest` works today. ruby/ruby also publishes maintenance releases
@@ -165,25 +191,33 @@ Ruby and the GitHub-backed tools keep today's `--update` behaviour.
 
 Tests run the real `python3` against fixture JSON delivered through `tests/mocks/curl`'s
 `MOCK_CURL_STDOUT`. `tests/mocks/pyenv` gains a mock variable for `install --list` output
-(a test knob, not a production seam). Tests set `_OVERRIDE_CONSTANTS_PATH` to a per-test copy of
-`lib/constants.sh` for every `--update` case.
+(a test knob, not a production seam). Every `--update` case sets
+`_OVERRIDE_CONSTANTS_PATH` to a per-test copy of `lib/constants.sh`.
 
-Positive controls pin an exact derived value, so a fetcher that returns nothing or the
-first entry cannot pass:
+Positive controls pin an exact derived value, so a fetcher that returns nothing, the first
+entry, or the last entry cannot pass:
 
-- go fixture: an unstable `go1.29rc1` first, a stable `go1.28.3` lacking
-  `linux-arm64` second, a stable `go1.28.2` with both files third. Result: `1.28.2`.
+- go fixture, in this order: unstable `go1.29rc1`; stable `go1.26.9`; stable `go1.28.3`
+  lacking `linux-arm64`; stable `go1.28.2` with both files; stable `go1.27.5`. Result:
+  `1.28.2` (not first, not last, not the highest stable overall).
 - python fixture, unsorted: `Python 3.15.0rc1`, `Python install manager 26.4`,
-  `Python 3.14.9`, `Python 3.15.1`, `Python 3.10.20`. Result: `3.15.1`; with series
-  `3.14`: `3.14.9`.
+  `Python 3.14.9`, `Python 3.15.1`, `Python 3.10.20`, `Python 3.14.10`. Result:
+  `3.15.1`; with series `3.14`: `3.14.10` (numeric, not string, comparison).
 
 Failure cases, each asserting the `[WARN]` line and the warned counter: curl exits 22;
-body is not JSON; JSON with no qualifying entry; `python3` not resolvable (shim `PATH`
-holding everything the check needs except `python3`).
+body is not JSON; python body is a JSON dict; no qualifying entry; `python3` not resolvable
+(shim `PATH` holding everything the check needs except `python3`).
 
-Pin verdict: go `[OK]` and `[OUTDATED]` against `GO_DOWNLOAD_FILENAME`, with a `go` stub
-on `PATH` reporting a different version to prove installed is not read; python3 the same
-against `PYTHON_VER`; an unparseable `GO_DOWNLOAD_FILENAME` gives the parse WARN.
+Pin verdict:
+
+- go `[OK]` and `[OUTDATED]` against `GO_DOWNLOAD_FILENAME`, with a `go` stub on `PATH`
+  reporting a different version, to prove installed is not read; an unparseable filename
+  gives the parse WARN.
+- python3 with pin 3.14.6, in-series latest 3.14.8, overall 3.15.1: `[OUTDATED]` plus
+  `[INFO] … 3.15 series available`, outdated counter 1.
+- python3 with pin 3.14.8 (newest in series) and overall 3.15.1: `[OK]` plus `[INFO]`,
+  outdated counter 0, function rc 0. This is the steady state the lenses flagged.
+- python3 with pin equal to the overall latest: `[OK]`, no `[INFO]` line.
 
 Token-refused: with a line-break token, go and python3 lines still print, and the summary
 reports `5 not checked`.
@@ -192,40 +226,50 @@ reports `5 not checked`.
 
 - go within the series: `GO_VER` unchanged, filename moves to the new patch.
 - go across a minor: `GO_VER` and filename both move.
-- python3 within the series, pyenv lists it: `PYTHON_VER` moves.
-- python3 within the series, pyenv does not list it: file byte-identical, remedy printed.
-- python3 across a series with no newer in-series patch: file byte-identical, series-move
-  line printed, no prompt.
-- python3 across a series with a newer in-series patch: series-move line printed, then
-  the in-series bump is offered and applied.
+- go write read-back failure (fixture constants file with `GO_VER` missing): rc 1, the
+  `pin update failed` line printed, no `Updated` line.
+- go local-series warning: `go` stub reporting 1.27.1, update to 1.28.0, warning printed;
+  stub reporting 1.28.0, no warning.
+- python3, pyenv lists the version: `PYTHON_VER` moves, the next-step line printed.
+- python3, pyenv lists only `3.14.8t`: file byte-identical **and** the `cannot build` line
+  printed **and** the pyenv mock recorded an `install --list` call, so inert code cannot
+  pass.
+- python3, pyenv not resolvable: file byte-identical and the `cannot build` line printed.
 
-Mutation controls (run once, recorded in the PR body): replace `_fetch_go_latest`'s
-stable filter with "first entry" and confirm the go positive control goes red; drop the
-pyenv guard and confirm its case goes red.
+Mutation controls (run once, recorded in the PR body): replace the go max with "first
+qualifying entry", drop the arm64 requirement, unanchor the pyenv match, and route go back
+through `_update_version_pin`. Each must turn at least one test red.
 
 ## Requirements
 
-- **R1.** `[PR1]` `run_check_versions` gets go's latest version from `https://go.dev/dl/?mode=json`: the first entry with `stable: true` that lists both `<version>.linux-amd64.tar.gz` and `<version>.linux-arm64.tar.gz`, printed without the `go` prefix.
-- **R2.** `[PR1]` `run_check_versions` gets python3's latest version from `https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false`, keeping only names matching `^Python \d+\.\d+\.\d+$` and choosing the highest by numeric comparison.
-- **R3.** `[PR1]` Neither feed request carries `GITHUB_TOKEN` or any `Authorization` header.
-- **R4.** `[PR1]` Each feed curl call passes `--max-time 10`.
-- **R5.** `[PR1]` Any feed failure (curl non-zero, unparseable body, no qualifying entry, `python3` unresolvable) produces `[WARN] <tool> could not fetch latest version` and increments the warned counter.
-- **R6.** `[PR1]` The go line compares the version embedded in `GO_DOWNLOAD_FILENAME` with latest, never the installed `go`.
-- **R7.** `[PR1]` The python3 line compares `PYTHON_VER` with latest, never the installed `python3`.
-- **R8.** `[PR1]` The go and python3 lines have no `not installed` SKIP branch.
-- **R9.** `[PR1]` With a `GITHUB_TOKEN` containing a line break, go and python3 are still checked, exactly the five GitHub-backed checks are counted as not checked, and the message names 5.
-- **R10.** `[PR1]` `--update` on an OUTDATED go sets `GO_VER` to the major.minor of latest and `GO_DOWNLOAD_FILENAME` to the full latest version.
-- **R11.** `[PR1]` `--update` on a python3 whose latest is in a newer major.minor series than `PYTHON_VER` does not write that version, and prints a line naming `requires-python`, `uv lock` and `PYTHON_VER`.
-- **R12.** `[PR1]` In the R11 case, if the latest release within `PYTHON_VER`'s series is newer than `PYTHON_VER`, `--update` offers that version through the normal prompt.
-- **R13.** `[PR1]` `--update` writes `PYTHON_VER` only when `pyenv install --list` lists the new version; otherwise it writes nothing and prints a remedy naming pyenv.
-- **R14.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet says five checks for the token-refused case and names go and python3 as pin-versus-latest from first-party feeds.
-- **R15.** `[PR1]` Each fetcher has a test pinning an exact non-first, non-empty derived value from a fixture that also contains entries the filter must reject.
-- **V1.** On `claude` and the Studio, `./setup_env.sh -t check-versions` prints `[OK]` or `[OUTDATED]` (not `[WARN]`) for both go and python3.
-- **V2.** Mutation: replacing the go stable filter with "first entry", and removing the pyenv guard, each turn at least one test red.
+- **R1.** `[PR1]` `run_check_versions` gets go's latest version from `https://go.dev/dl/?mode=json`: the highest version by numeric comparison among entries with `stable: true` that list both `<version>.linux-amd64.tar.gz` and `<version>.linux-arm64.tar.gz`, printed without the `go` prefix.
+- **R2.** `[PR1]` `run_check_versions` gets python3 versions from `https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false`, keeping only names matching `^Python \d+\.\d+\.\d+$` and comparing numerically.
+- **R3.** `[PR1]` A python.org body that is not a JSON list is a fetch failure.
+- **R4.** `[PR1]` Neither feed request carries `GITHUB_TOKEN` or any `Authorization` header.
+- **R5.** `[PR1]` Each feed curl call passes `--max-time 10`.
+- **R6.** `[PR1]` Any feed failure (curl non-zero, unparseable body, wrong shape, no qualifying entry, `python3` unresolvable) produces `[WARN] <tool> could not fetch latest version` and increments the warned counter.
+- **R7.** `[PR1]` The go line compares the version embedded in `GO_DOWNLOAD_FILENAME` with go's latest across all series, never the installed `go`.
+- **R8.** `[PR1]` The python3 line compares `PYTHON_VER` with the latest release in `PYTHON_VER`'s major.minor series, never the installed `python3`.
+- **R9.** `[PR1]` When python3's latest overall is in a newer series than `PYTHON_VER`, an `[INFO]` line names that series; it increments no counter and does not change the exit code.
+- **R10.** `[PR1]` The go and python3 lines have no `not installed` SKIP branch.
+- **R11.** `[PR1]` With a `GITHUB_TOKEN` containing a line break, go and python3 are still checked, exactly the five GitHub-backed checks are counted as not checked, and the message names 5.
+- **R12.** `[PR1]` `--update` on an OUTDATED go sets `GO_VER` to the major.minor of latest and `GO_DOWNLOAD_FILENAME` to the full latest version, through a go-specific writer that does not call `_update_version_pin`.
+- **R13.** `[PR1]` After writing, the go writer reads both constants back; if either differs from the expected value it prints a `pin update failed` line naming the constant, returns 1, and prints no `Updated` line.
+- **R14.** `[PR1]` After a successful go write, `--update` prints a warning when this machine's `go version` is outside the new `GO_VER` series, and none when it is inside.
+- **R15.** `[PR1]` `--update` writes `PYTHON_VER` only when `pyenv install --list` has a line matching `^[[:space:]]*<version>$` with literal dots; otherwise, including when `pyenv` is unresolvable, it writes nothing and prints a line naming `brew upgrade pyenv`.
+- **R16.** `[PR1]` After writing `PYTHON_VER`, `--update` prints a next-step line naming `brew upgrade pyenv` on every machine and `./setup_env.sh -t recreate-venv`.
+- **R17.** `[PR1]` The fetchers' header comment states a Python 3.9 floor for their parsing code.
+- **R18.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet says five checks for the token-refused case and names go (pin versus latest) and python3 (pin versus latest in its series, newer series as `[INFO]`) and their feeds.
+- **R19.** `[PR1]` Each fetcher has a test pinning an exact derived value that is neither the first nor the last qualifying entry of a fixture that also contains entries the filter must reject.
+- **R20.** `[PR1]` A test covers python3 pinned at the newest patch of its series while a newer series exists, asserting `[OK]`, the `[INFO]` line, an outdated count of 0 and rc 0.
+- **V1.** On `claude` and the Studio, `./setup_env.sh -t check-versions` prints `[OK]` or `[OUTDATED]` (not `[WARN]`) for both go and python3, and exits 0 when every pin is current.
+- **V2.** Both fetchers return the expected value when run under the Studio's `/usr/bin/python3` (3.9.6) via `env -i`.
+- **V3.** Mutation: go max replaced with first qualifying entry, arm64 requirement dropped, pyenv match unanchored, go routed through `_update_version_pin` — each turns at least one test red.
 - **N1.** No change to the line format, comparison or `--update` behaviour of ruby, yq, shellcheck, vagrant, gitleaks, homebrew-install or the cargo checks.
 - **N2.** No change to how go or python3 is installed on any OS, and no `Brewfile`, `pyproject.toml` or `uv.lock` change.
 - **N3.** `--update` never writes `PYTHON_VER` to a version in a different major.minor series from its current value.
 - **N4.** No new environment-variable seam.
+- **N5.** The `[INFO]` line never increments the outdated, warned, skipped or OK counters.
 
 ## Multi-Lens Review
 
@@ -235,19 +279,19 @@ Reviewed at commit: `bd9b9def` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: The python3 verdict (R2, latest across all series) replaces a permanent WARN with a permanent `[OUTDATED] python3 pinned=3.14.x latest=3.15.0` and a permanent rc 1, because the series move is deliberately outside `--update` (R11). Reads-it test: the line changes no decision and has no durable consumer, so it is decoration that costs rc 1. Fix already in the spec, in the wrong layer: make the in-series latest the verdict and report a newer series on a non-failing line. Simpler path: make go and python3 report-only (like homebrew-install) and drop R10-R13 — pin bumps are rare (4 commits since 2026-05). V1 cannot catch the always-OUTDATED state.
 Assumption: the python.org v2 endpoint returns every release unpaginated. Checked by orchestrator 2026-10-10: bare list, 275 rows back to 2.0.1, `limit`/`offset` ignored, no `Link` header — holds today; a dict-shaped body would be the paginated tell.
-Disposition:
+Disposition: Addressed (operator, 2026-10-10) — python3 verdict is now the latest in `PYTHON_VER`'s series with a non-counted `[INFO]` line for a newer series (R8, R9, N5); the go/python asymmetry is stated in Design §2. Report-only alternative rejected: the operator wants `--update` to pull latest, and a go series move is the case it automates. python.org shape guard added (R3).
 
 ### Ergonomics
 
 Finding: Same as Goal-Fit, found independently: python3 OUTDATED on every run while 3.15 exists, `check-versions` exits 1 daily, training the operator to skip the report and the next real go patch with it. Fix: judge python3 within its series; print a newer series as a non-counted `[INFO]` line. Secondary: after `--update` bumps `PYTHON_VER`, doctor reports drift until the venv is rebuilt; print the next step (`-t recreate-venv`). Missing test: pin at newest in-series patch while a newer series exists.
 Assumption: the python.org `/api/v2/downloads/release/` endpoint is a stable public interface; it is pydotorg's site API with no documented compatibility promise.
-Disposition:
+Disposition: Addressed (operator, 2026-10-10) — same verdict change; post-bump next-step line naming `-t recreate-venv` (R16); steady-state test added (R20).
 
 ### Risk
 
 Finding: (1) The go write cannot use today's `_update_version_pin`: with `pinned=` now the filename version, `s|^GO_VER="1.27.1"|…|` matches nothing, `sed -i` exits 0, the helper prints "Updated", and the filename moves alone — `GO_VER="1.27"` beside a 1.28.0 tarball, so the installer warns and doctor fails. Passing GO_VER's values instead writes `go1.28.linux-…`, a 404. Specify a go-specific two-value writer that reads both lines back and fails loudly. (2) The pyenv guard's match is unspecified; `pyenv install --list` also prints `3.14.8t`, so an unanchored grep passes on only the free-threaded build. Require an anchored literal match plus a `t`-only fixture. (3) The Studio's doctor FAILs whenever `GO_VER` and brew's go are in different series; state it or backlog it. Tests: "file byte-identical" cases are satisfied by inert code (tdd.md E5) and need a positive companion.
 Assumption: go.dev's feed is ordered newest-version-first; nothing guarantees it. A 1.26.x patch published after 1.27.x would be picked as latest, or make `--update` downgrade. Taking the maximum stable version removes the dependency.
-Disposition:
+Disposition: Addressed (operator, 2026-10-10) — go-specific writer with read-back and loud failure (R12, R13); go latest is the maximum stable version, not the first entry (R1); anchored literal pyenv match and a `3.14.8t`-only fixture (R15); byte-identical tests gain a positive companion; Studio doctor consequence gets a local-series warning (R14) plus the sync backlog row. Peer review (operator's architect session) added: guard is local-only, stated, with a every-machine next step (R16); Python 3.9 parser floor (R17, V2).
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
