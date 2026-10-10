@@ -52,9 +52,9 @@ acceptance:
     exit_code: 0
   - cmd: '! git grep -nE "_inotify_(read_live|conf_value|conf_has_nontext|conf_has_other_keys|conf_write)\b|INOTIFY_INT_MAX" -- lib tests setup_env.sh'
     exit_code: 0
-  - cmd: 'git diff 87aff846 -- tests | grep -E "^[-+][^-+]" | grep -vE "_sysctl_|SYSCTL_INT_MAX" | wc -l'
+  - cmd: 'd=$(git diff 87aff846 -- tests); r=$(printf "%s\n" "$d" | grep -cE "^-[^-]"); a=$(printf "%s\n" "$d" | grep -cE "^\+[^+]"); ro=$(printf "%s\n" "$d" | grep -E "^-[^-]" | grep -vcE "_inotify_(read_live|conf_value|conf_has_nontext|conf_has_other_keys|conf_write)|INOTIFY_INT_MAX"); an=$(printf "%s\n" "$d" | grep -E "^\+[^+]" | grep -vcE "_sysctl_|SYSCTL_INT_MAX"); printf "%s %s %s\n" "$ro" "$an" "$([ "$r" = "$a" ] && echo eq || echo ne)"'
     exit_code: 0
-    stdout_match: '^0$'
+    stdout_match: '^0 0 eq$'
   - cmd: make lint
     exit_code: 0
 max_retries: 3
@@ -69,7 +69,7 @@ depends_on: []
 - `lib/helpers.sh`: move the body of `_doctor_check_inotify_limits` into `_doctor_sysctl_floor <label> <key> <floor> <conf> <proc>` (label is the doctor item name, e.g. `inotify`). `_doctor_check_inotify_limits` keeps its seam resolution, gate and `printf "\ninotify instances:\n"` header, then calls `_doctor_sysctl_floor inotify fs.inotify.max_user_instances "${INOTIFY_MAX_USER_INSTANCES}" "${_conf}" "${_proc}"`. Inside, every literal `fs.inotify.max_user_instances` becomes `${key}`, every `INOTIFY_MAX_USER_INSTANCES` becomes `${floor}`, and the PASS text `inotify max_user_instances ${_live}` must still print exactly that for inotify: build it as `"${label} ${key##*.} ${_live}"`.
 - `lib/linux_ubuntu.sh`: `_inotify_conf_write` -> `_sysctl_conf_write <label> <key> <value> <conf> <seam_name>`: non-empty `<seam_name>` -> plain `tee <conf>` and message `<label>: write failed (<conf>; <seam_name> set, ran without sudo)`; empty -> `sudo tee <conf>` and `<label>: write failed (<conf>)`. Move the body of `_install_ubuntu_inotify` into `_sysctl_floor_step <label> <key> <floor> <conf> <proc> <seam_name>`, without the `HAS_DOCKER` and systemd gates. `_install_ubuntu_inotify` keeps the seam resolution and both gates, then calls `_sysctl_floor_step inotify fs.inotify.max_user_instances "${INOTIFY_MAX_USER_INSTANCES}" "${_conf}" "${_proc}" "${_SYSCTL_CONF:+_SYSCTL_CONF}"`.
 - Each new generic function gets a header comment naming its positional arguments in order.
-- Tests: change only calls to the renamed helpers and `INOTIFY_INT_MAX`. Change no assertion, no test name, no message string. The gate counts every other changed line in `tests/` and requires 0.
+- Tests: change only lines naming the renamed helpers or `INOTIFY_INT_MAX` (calls, and the test titles and comments that embed those names, which the old-name grep gate forces). Change no assertion and no message string. The gate requires every removed line to carry an old name, every added line a new one, and equal counts. (Corrected during Phase 2: the first form counted removed lines and could never reach 0.)
 
 **Interfaces — Produces:** `_sysctl_read_live`, `_sysctl_conf_value`, `_sysctl_conf_has_nontext`, `_sysctl_conf_has_other_keys`, `_sysctl_conf_write`, `_sysctl_floor_step`, `_doctor_sysctl_floor`, `SYSCTL_INT_MAX`, with the signatures above.
 
