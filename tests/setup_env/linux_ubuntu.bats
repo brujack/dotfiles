@@ -5293,14 +5293,18 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$output" == *"kernel-keys maxbytes: applied"* ]]
 }
 
-@test "kernel-keys: swap - only maxbytes below floor leaves maxkeys unapplied and in its own conf" {
+@test "kernel-keys: confs below their floors are each rewritten to their own floor and key" {
   _kk_env
-  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  printf 'kernel.keys.maxkeys = 500\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 9000\n' > "${_KEYS_MAXBYTES_CONF}"
+  [ -x "${_SYSCTL_BIN}" ]
   run _install_ubuntu_kernel_keys
   [ "$status" -eq 0 ]
-  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
   [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 2000" ]
-  ! grep -q 'kernel.keys.maxkeys=' "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+  [[ "$output" == *"kernel-keys maxkeys: persisted 2000 to ${_KEYS_MAXKEYS_CONF} (was 500)"* ]]
+  [[ "$output" == *"kernel-keys maxbytes: persisted 500000 to ${_KEYS_MAXBYTES_CONF} (was 9000)"* ]]
+  [ "$(_kk_sysctl_calls)" -eq 0 ]
 }
 
 @test "kernel-keys: live above the floors writes the live values and applies nothing" {
@@ -5311,6 +5315,7 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 9000" ]
   [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 900000" ]
+  [ -x "${_SYSCTL_BIN}" ]
   [ "$(_kk_sysctl_calls)" -eq 0 ]
 }
 
@@ -5322,6 +5327,7 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 5000" ]
   [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 700000" ]
+  [ -x "${_SYSCTL_BIN}" ]
   [ "$(_kk_sysctl_calls)" -eq 0 ]
   [[ "$output" == *"kernel-keys maxkeys: already 2000 or higher"* ]]
   [[ "$output" == *"kernel-keys maxbytes: already 500000 or higher"* ]]
@@ -5335,6 +5341,25 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"kernel-keys maxkeys: ${_KEYS_MAXKEYS_CONF} holds other keys; fix by hand"* ]]
   [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxbytes = 700000" ]
   [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxbytes = 500000" ]
+}
+
+@test "kernel-keys: a maxbytes conf holding maxkeys is refused while maxkeys is still written" {
+  _kk_env
+  printf 'kernel.keys.maxkeys = 5000\n' > "${_KEYS_MAXBYTES_CONF}"
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxbytes: ${_KEYS_MAXBYTES_CONF} holds other keys; fix by hand"* ]]
+  [ "$(cat "${_KEYS_MAXBYTES_CONF}")" = "kernel.keys.maxkeys = 5000" ]
+  [ "$(cat "${_KEYS_MAXKEYS_CONF}")" = "kernel.keys.maxkeys = 2000" ]
+}
+
+@test "kernel-keys: a failing conf write names the seam variable of the key that failed" {
+  _kk_env
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxkeys: write failed (${_KEYS_MAXKEYS_CONF}; _KEYS_MAXKEYS_CONF set, ran without sudo)"* ]]
+  [[ "$stderr" == *"kernel-keys maxbytes: write failed (${_KEYS_MAXBYTES_CONF}; _KEYS_MAXBYTES_CONF set, ran without sudo)"* ]]
 }
 
 @test "kernel-keys: a near-miss key in a conf is not the key and is refused as another key" {
@@ -5354,6 +5379,7 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$output" = "kernel-keys: skipped (HAS_DOCKER unset)" ]
   [ ! -e "${_KEYS_MAXKEYS_CONF}" ]
   [ ! -e "${_KEYS_MAXBYTES_CONF}" ]
+  [ -x "${_SYSCTL_BIN}" ]
   [ "$(_kk_sysctl_calls)" -eq 0 ]
 }
 
