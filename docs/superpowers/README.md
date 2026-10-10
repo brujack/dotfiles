@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-10 | [kernel-keyring-limits](plans/2026-10-10-kernel-keyring-limits.md) | [kernel-keyring-limits](specs/2026-10-10-kernel-keyring-limits-design.md) | In Progress |
 | 2026-10-09 | [cheat-sh-bounded-atomic-fetch](plans/2026-10-09-cheat-sh-bounded-atomic-fetch.md) | [cheat-sh-bounded-atomic-fetch](specs/2026-10-09-cheat-sh-bounded-atomic-fetch-design.md) | Done — #326 |
 | 2026-10-08 | [molecule-host-tuning](plans/2026-10-08-molecule-host-tuning.md) | [molecule-host-tuning](specs/2026-10-08-molecule-host-tuning-design.md) | Done |
 | 2026-10-08 | [inotify-followups](plans/2026-10-08-inotify-followups.md) | [inotify-followups](specs/2026-10-08-inotify-followups-design.md) | Done |
