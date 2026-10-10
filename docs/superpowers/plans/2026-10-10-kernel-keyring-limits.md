@@ -1,5 +1,7 @@
 # Kernel Keys Limits Implementation Plan
 
+> **Status: DONE** — merged in #327 (986e495c), 2026-10-10.
+
 spec: docs/superpowers/specs/2026-10-10-kernel-keyring-limits-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
