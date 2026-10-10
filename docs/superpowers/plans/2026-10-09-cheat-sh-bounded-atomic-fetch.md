@@ -1,5 +1,7 @@
 # cheat.sh Bounded Atomic Fetch Implementation Plan
 
+> **Status: DONE** — merged in #326 (25ac1308), 2026-10-10.
+
 spec: docs/superpowers/specs/2026-10-09-cheat-sh-bounded-atomic-fetch-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
