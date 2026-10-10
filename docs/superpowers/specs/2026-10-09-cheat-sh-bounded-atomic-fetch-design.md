@@ -290,3 +290,7 @@ Assumption: no uncertain assumption found.
 Disposition: Addressed — operator: "I accept 1-3, onto the plan" (2026-10-09): R8 is scoped to the `cht.sh/:cht.sh` URL.
 
 Review stopped after round 4 by operator decision: round 4's findings were test coverage and wording, with no design change.
+
+## Amendments
+
+- R20 -> Tests assert the installed mode after a successful fetch: the binary at 750 under `run_setup_user` and 754 under `run_update`, and `_cht` at 644, read with `stat -c '%a'` falling back to `stat -f '%OLp'`. — the repo's existing portable idiom (`tests/setup_env/extracted_functions.bats:314`) uses `%OLp`, which `test-macos` already exercises; `%Lp` was unverified.
