@@ -3423,3 +3423,93 @@ TABLE
     [ "$output" = "4343" ] || { printf 'slash %s: [%s]\n' "${_slash}" "$output" >&3; return 1; }
   done
 }
+
+# ── kernel keys doctor: shared-floor branches that must carry the kernel-keys label ──
+
+_kkd_env() {
+  export LINUX=1 HAS_DOCKER=1
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
+  mkdir -p "${_SYSTEMD_RUN_DIR}"
+}
+
+@test "kernel keys doctor: maxkeys live 200 with no conf fails with the full tee and sysctl -w remedy" {
+  _kkd_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 2000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}' && sudo sysctl -w kernel.keys.maxkeys=2000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: maxbytes live 20000 with no conf fails with the full tee and sysctl -w remedy" {
+  _kkd_env
+  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXBYTES_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxbytes = 500000\\n' | sudo tee '${_KEYS_MAXBYTES_CONF}' && sudo sysctl -w kernel.keys.maxbytes=500000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: conf at floor with live 200 fails live-below and prints the maxkeys sysctl -w remedy" {
+  _kkd_env
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"live value 200 below 2000; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.keys.maxkeys=2000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: conf 2000 below live 9000 warns with the kernel-keys label" {
+  _kkd_env
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  printf '9000\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} value 2000 below live 9000; a reboot may drop it; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 9000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}'"
+}
+
+@test "kernel keys doctor: unreadable maxkeys proc fails cannot read with the kernel-keys label" {
+  _kkd_env
+  rm -f "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"cannot read ${_KEYS_MAXKEYS_PROC}"* ]]
+  [[ "${output}" != *"[FAIL]"*"inotify"* ]]
+}
+
+# ── kernel keys production constants and per-key wiring ──
+
+@test "kernel keys constants: proc paths derive from their keys and conf paths are distinct per key" {
+  [ "${KEYS_MAXKEYS_PROC}" = "/proc/sys/kernel/keys/maxkeys" ]
+  [ "${KEYS_MAXBYTES_PROC}" = "/proc/sys/kernel/keys/maxbytes" ]
+  local _key_maxkeys="kernel.keys.maxkeys" _key_maxbytes="kernel.keys.maxbytes"
+  [ "${KEYS_MAXKEYS_PROC}" = "/proc/sys/${_key_maxkeys//.//}" ]
+  [ "${KEYS_MAXBYTES_PROC}" = "/proc/sys/${_key_maxbytes//.//}" ]
+  [ "${KEYS_MAXKEYS_CONF}" != "${KEYS_MAXBYTES_CONF}" ]
+  [ "${KEYS_MAXKEYS_PROC}" != "${KEYS_MAXBYTES_PROC}" ]
+  [[ "$(basename "${KEYS_MAXKEYS_CONF}")" == *maxkeys* ]]
+  [[ "$(basename "${KEYS_MAXBYTES_CONF}")" == *maxbytes* ]]
+  [[ "$(basename "${KEYS_MAXKEYS_CONF}")" != *maxbytes* ]]
+  [[ "$(basename "${KEYS_MAXBYTES_CONF}")" != *maxkeys* ]]
+}
+
+@test "kernel keys wiring: each key's step and doctor call reference only its own conf and proc defaults" {
+  local _fn _line
+  for _fn in _install_ubuntu_kernel_keys _doctor_check_kernel_keys; do
+    _line="$(declare -f "${_fn}" | grep 'kernel\.keys\.maxbytes')"
+    [ -n "${_line}" ]
+    [[ "${_line}" == *'${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}'* ]]
+    [[ "${_line}" == *'${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}'* ]]
+    [[ "${_line}" != *MAXKEYS* ]]
+    _line="$(declare -f "${_fn}" | grep 'kernel\.keys\.maxkeys')"
+    [ -n "${_line}" ]
+    [[ "${_line}" == *'${_KEYS_MAXKEYS_CONF:-${KEYS_MAXKEYS_CONF}}'* ]]
+    [[ "${_line}" == *'${_KEYS_MAXKEYS_PROC:-${KEYS_MAXKEYS_PROC}}'* ]]
+    [[ "${_line}" != *MAXBYTES* ]]
+  done
+}

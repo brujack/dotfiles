@@ -5427,3 +5427,35 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "ran kernel_keys" ]
 }
+
+# ── kernel-keys: error branches of the shared floor step must carry the kernel-keys label ──
+
+@test "kernel-keys: an unreadable maxkeys proc returns 1 naming kernel-keys maxkeys" {
+  _kk_env
+  rm -f "${_KEYS_MAXKEYS_PROC}"
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxkeys: cannot read live value ${_KEYS_MAXKEYS_PROC}"* ]]
+  [[ "$stderr" != *inotify* ]]
+}
+
+@test "kernel-keys: a failing sysctl returns 1 and says kernel-keys maxkeys apply failed" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  export MOCK_SYSCTL_STUB_EXIT=1
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxkeys: apply failed (_SYSCTL_BIN set, ran without sudo)"* ]]
+  [[ "$stderr" != *inotify* ]]
+}
+
+@test "kernel-keys: a tee that writes the wrong value reports a kernel-keys maxkeys read-back mismatch" {
+  _kk_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  printf '#!/usr/bin/env bash\nfor _a in "$@"; do _f="${_a}"; done\nprintf "kernel.keys.maxkeys = 1999\\n" > "${_f}"\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_kernel_keys
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kernel-keys maxkeys: read-back mismatch (${_KEYS_MAXKEYS_CONF})"* ]]
+  [[ "$stderr" != *inotify* ]]
+}
