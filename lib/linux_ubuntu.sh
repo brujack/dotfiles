@@ -69,12 +69,7 @@ _sysctl_conf_write() {
 }
 
 # Docker hosts running parallel molecule/CI jobs exhaust the default
-# fs.inotify.max_user_instances (128). Persist max(live, 1024) and apply the
-# persisted value when live is below 1024, never lowering a higher conf or
-# live value. Only this one key is applied (never `sysctl -p`, which would
-# apply every key in a kept conf). When _SYSCTL_BIN or _SYSCTL_CONF is set the
-# binary is run / the conf is written WITHOUT sudo (a test seam must not act as
-# root on an env-chosen binary or path). Specs:
+# fs.inotify.max_user_instances (128), so the floor is 1024. Specs:
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 # docs/superpowers/specs/2026-10-08-inotify-followups-design.md
 _install_ubuntu_inotify() {
@@ -93,9 +88,13 @@ _install_ubuntu_inotify() {
 }
 
 # Persist max(live, floor) for one sysctl key in its own conf and apply it when
-# live is below the floor. The caller owns the HAS_DOCKER and systemd gates and
-# the seam resolution; <seam_name> is "_SYSCTL_CONF" when the conf path came
-# from that seam, else empty.
+# live is below the floor, never lowering a higher conf or live value. Only this
+# one key is applied (never `sysctl -p`, which would apply every key in a kept
+# conf). The caller owns the HAS_DOCKER and systemd gates and the seam
+# resolution; <seam_name> names the caller's conf seam variable when it is set,
+# else is empty. _SYSCTL_BIN is read here, not passed in: it is one seam shared
+# by every key. A set seam is run or written WITHOUT sudo (a test seam must not
+# act as root on an env-chosen binary or path).
 # Args: <label> <key> <floor> <conf> <proc> <seam_name>
 _sysctl_floor_step() {
   local _label="${1}" _key="${2}" _floor="${3}" _conf="${4}" _proc="${5}" _seam_name="${6}"

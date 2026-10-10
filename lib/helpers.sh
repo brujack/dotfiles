@@ -1088,7 +1088,7 @@ _doctor_sysctl_floor() {
   ((_live < _floor)) && _sysctl=" && sudo sysctl -w ${_key}=${_floor}"
   _tee="printf '${_key} = ${_target}\\n' | sudo tee '${_conf}'"
   # First match wins; below-floor is checked before below-live so a conf under
-  # 1024 is reported as the failure it is, not as the softer warning.
+  # the floor is reported as the failure it is, not as the softer warning.
   if [[ -z ${_val} ]]; then
     doctor_fail "${_label}" "${_conf} missing; next boot: kernel default; fix:"
     printf '    %s\n' "${_tee}${_sysctl}"
