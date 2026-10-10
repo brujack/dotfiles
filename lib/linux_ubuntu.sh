@@ -47,19 +47,22 @@ install_ubuntu_packages() {
   return 0
 }
 
-# A set _SYSCTL_CONF is a test seam and must never be written as root
-# (mirrors _SYSCTL_BIN), so it goes through plain tee.
-_inotify_conf_write() {
-  if [[ -n ${_SYSCTL_CONF} ]]; then
-    printf 'fs.inotify.max_user_instances = %s\n' "${1}" |
-      tee "${_SYSCTL_CONF}" > /dev/null || {
-      printf 'inotify: write failed (%s; _SYSCTL_CONF set, ran without sudo)\n' "${_SYSCTL_CONF}" >&2
+# Write "<key> = <value>" to <conf>. A non-empty <seam_name> means the conf path
+# came from a test seam, which must never be written as root (mirrors
+# _SYSCTL_BIN), so it goes through plain tee.
+# Args: <label> <key> <value> <conf> <seam_name>
+_sysctl_conf_write() {
+  local _label="${1}" _key="${2}" _value="${3}" _conf="${4}" _seam_name="${5}"
+  if [[ -n ${_seam_name} ]]; then
+    printf '%s = %s\n' "${_key}" "${_value}" |
+      tee "${_conf}" > /dev/null || {
+      printf '%s: write failed (%s; %s set, ran without sudo)\n' "${_label}" "${_conf}" "${_seam_name}" >&2
       return 1
     }
   else
-    printf 'fs.inotify.max_user_instances = %s\n' "${1}" |
-      sudo tee "${INOTIFY_SYSCTL_CONF}" > /dev/null || {
-      printf 'inotify: write failed (%s)\n' "${INOTIFY_SYSCTL_CONF}" >&2
+    printf '%s = %s\n' "${_key}" "${_value}" |
+      sudo tee "${_conf}" > /dev/null || {
+      printf '%s: write failed (%s)\n' "${_label}" "${_conf}" >&2
       return 1
     }
   fi
@@ -86,73 +89,82 @@ _install_ubuntu_inotify() {
     printf 'inotify: skipped (no systemd at %s)\n' "${_rundir}"
     return 0
   fi
+  _sysctl_floor_step inotify fs.inotify.max_user_instances "${INOTIFY_MAX_USER_INSTANCES}" "${_conf}" "${_proc}" "${_SYSCTL_CONF:+_SYSCTL_CONF}"
+}
 
+# Persist max(live, floor) for one sysctl key in its own conf and apply it when
+# live is below the floor. The caller owns the HAS_DOCKER and systemd gates and
+# the seam resolution; <seam_name> is "_SYSCTL_CONF" when the conf path came
+# from that seam, else empty.
+# Args: <label> <key> <floor> <conf> <proc> <seam_name>
+_sysctl_floor_step() {
+  local _label="${1}" _key="${2}" _floor="${3}" _conf="${4}" _proc="${5}" _seam_name="${6}"
   local _val="" _wrote=0 _existed=0
   if [[ -e ${_conf} ]]; then
     _existed=1
     if [[ ! -r ${_conf} ]]; then
-      printf 'inotify: %s exists but is unreadable; fix by hand\n' "${_conf}" >&2
+      printf '%s: %s exists but is unreadable; fix by hand\n' "${_label}" "${_conf}" >&2
       return 1
     fi
-    if _inotify_conf_has_nontext "${_conf}"; then
-      printf 'inotify: %s holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand\n' "${_conf}" >&2
+    if _sysctl_conf_has_nontext "${_conf}"; then
+      printf '%s: %s holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand\n' "${_label}" "${_conf}" >&2
       return 1
     fi
     # Before the parse check: a conf of only other keys is that case, not unparseable.
-    if _inotify_conf_has_other_keys "${_conf}"; then
-      printf 'inotify: %s holds other keys; fix by hand\n' "${_conf}" >&2
+    if _sysctl_conf_has_other_keys "${_conf}" "${_key}"; then
+      printf '%s: %s holds other keys; fix by hand\n' "${_label}" "${_conf}" >&2
       return 1
     fi
-    _val="$(_inotify_conf_value "${_conf}")"
+    _val="$(_sysctl_conf_value "${_conf}" "${_key}")"
     if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
-      printf 'inotify: %s exists but is unparseable; fix by hand\n' "${_conf}" >&2
+      printf '%s: %s exists but is unparseable; fix by hand\n' "${_label}" "${_conf}" >&2
       return 1
     fi
   fi
 
   local _live
-  _live="$(_inotify_read_live "${_proc}")" || {
-    printf 'inotify: cannot read live value %s\n' "${_proc}" >&2
+  _live="$(_sysctl_read_live "${_proc}")" || {
+    printf '%s: cannot read live value %s\n' "${_label}" "${_proc}" >&2
     return 1
   }
 
-  local _target=$((_live > INOTIFY_MAX_USER_INSTANCES ? _live : INOTIFY_MAX_USER_INSTANCES))
+  local _target=$((_live > _floor ? _live : _floor))
   if [[ -z ${_val} ]] || ((_val < _target)); then
-    _inotify_conf_write "${_target}" || return 1
+    _sysctl_conf_write "${_label}" "${_key}" "${_target}" "${_conf}" "${_seam_name}" || return 1
     if [[ ! -r ${_conf} ]]; then
-      printf 'inotify: cannot read back %s\n' "${_conf}" >&2
+      printf '%s: cannot read back %s\n' "${_label}" "${_conf}" >&2
       return 1
     fi
     local _old="${_val}"
-    _val="$(_inotify_conf_value "${_conf}")"
+    _val="$(_sysctl_conf_value "${_conf}" "${_key}")"
     if [[ ${_val} != "${_target}" ]]; then
-      printf 'inotify: read-back mismatch (%s)\n' "${_conf}" >&2
+      printf '%s: read-back mismatch (%s)\n' "${_label}" "${_conf}" >&2
       return 1
     fi
     _wrote=1
     if ((_existed == 1)); then
-      printf 'inotify: persisted %s to %s (was %s)\n' "${_target}" "${_conf}" "${_old}"
+      printf '%s: persisted %s to %s (was %s)\n' "${_label}" "${_target}" "${_conf}" "${_old}"
     else
-      printf 'inotify: conf written (%s)\n' "${_target}"
+      printf '%s: conf written (%s)\n' "${_label}" "${_target}"
     fi
   fi
 
-  if ((_live >= INOTIFY_MAX_USER_INSTANCES)); then
-    ((_wrote == 1)) || printf 'inotify: already %s or higher\n' "${INOTIFY_MAX_USER_INSTANCES}"
+  if ((_live >= _floor)); then
+    ((_wrote == 1)) || printf '%s: already %s or higher\n' "${_label}" "${_floor}"
     return 0
   fi
   if [[ -n ${_SYSCTL_BIN} ]]; then
-    "${_SYSCTL_BIN}" -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
-      printf 'inotify: apply failed (_SYSCTL_BIN set, ran without sudo)\n' >&2
+    "${_SYSCTL_BIN}" -w "${_key}=${_val}" > /dev/null || {
+      printf '%s: apply failed (_SYSCTL_BIN set, ran without sudo)\n' "${_label}" >&2
       return 1
     }
   else
-    sudo sysctl -w "fs.inotify.max_user_instances=${_val}" > /dev/null || {
-      printf 'inotify: apply failed\n' >&2
+    sudo sysctl -w "${_key}=${_val}" > /dev/null || {
+      printf '%s: apply failed\n' "${_label}" >&2
       return 1
     }
   fi
-  printf 'inotify: applied\n'
+  printf '%s: applied\n' "${_label}"
 }
 
 # Install the packages named in a list file, skipping comments and blank lines.

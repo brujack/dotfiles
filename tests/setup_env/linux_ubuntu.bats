@@ -4743,7 +4743,7 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 
 @test "inotify_conf_write: seam set writes via tee and never calls sudo" {
   : > "${MOCK_CALLS_FILE}"
-  run _inotify_conf_write 4096
+  run _sysctl_conf_write inotify fs.inotify.max_user_instances 4096 "${_SYSCTL_CONF}" _SYSCTL_CONF
   [ "$status" -eq 0 ]
   [ "$(cat "${_SYSCTL_CONF}")" = "fs.inotify.max_user_instances = 4096" ]
   grep -q '^tee ' "${MOCK_CALLS_FILE}"
@@ -4760,14 +4760,14 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   export MOCK_TEE_EXIT=1
   unset _SYSCTL_CONF
   : > "${MOCK_CALLS_FILE}"
-  run _inotify_conf_write 4096
+  run _sysctl_conf_write inotify fs.inotify.max_user_instances 4096 "${INOTIFY_SYSCTL_CONF}" ""
   [ "$status" -eq 0 ]
   [ "$(cat "${MOCK_CALLS_FILE}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
 }
 
 @test "inotify_conf_write: seam set and tee failing returns 1 naming _SYSCTL_CONF" {
   export MOCK_TEE_EXIT=1
-  run --separate-stderr _inotify_conf_write 4096
+  run --separate-stderr _sysctl_conf_write inotify fs.inotify.max_user_instances 4096 "${_SYSCTL_CONF}" _SYSCTL_CONF
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"_SYSCTL_CONF"* ]]
 }

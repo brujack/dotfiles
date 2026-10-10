@@ -3160,14 +3160,14 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" != *"other keys"* ]]
 }
 
-# ── _inotify_read_live ───────────────────────────────────────────────────────
+# ── _sysctl_read_live ───────────────────────────────────────────────────────
 # Fixed-value boundary table: exact stdout on accept, empty output on reject.
 
-@test "_inotify_read_live: accepts and normalizes valid live values" {
+@test "_sysctl_read_live: accepts and normalizes valid live values" {
   local _f="${BATS_TEST_TMPDIR}/live" _in _want
   while IFS='|' read -r _in _want; do
     printf '%b' "${_in}" > "${_f}"
-    run _inotify_read_live "${_f}"
+    run _sysctl_read_live "${_f}"
     [ "${status}" -eq 0 ]
     [ "${output}" = "${_want}" ]
   done <<'TABLE'
@@ -3178,28 +3178,28 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
 TABLE
 }
 
-@test "_inotify_read_live: rejects out-of-range and malformed live values with empty output" {
+@test "_sysctl_read_live: rejects out-of-range and malformed live values with empty output" {
   local _f="${BATS_TEST_TMPDIR}/live" _in
   for _in in '' '08\n' '2147483648\n' '12345678901\n' '12345678901234567890\n' 'abc\n'; do
     printf '%b' "${_in}" > "${_f}"
-    run _inotify_read_live "${_f}"
+    run _sysctl_read_live "${_f}"
     [ "${status}" -eq 1 ]
     [ -z "${output}" ]
   done
 }
 
-@test "_inotify_read_live: a nonexistent path is rejected with empty output" {
-  run _inotify_read_live "${BATS_TEST_TMPDIR}/nope"
+@test "_sysctl_read_live: a nonexistent path is rejected with empty output" {
+  run _sysctl_read_live "${BATS_TEST_TMPDIR}/nope"
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
 }
 
-@test "_inotify_read_live: an unreadable file is rejected with empty output" {
+@test "_sysctl_read_live: an unreadable file is rejected with empty output" {
   [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
   local _f="${BATS_TEST_TMPDIR}/live"
   printf '1024\n' > "${_f}"
   chmod 000 "${_f}"
-  run _inotify_read_live "${_f}"
+  run _sysctl_read_live "${_f}"
   chmod 600 "${_f}"
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
@@ -3250,23 +3250,23 @@ TABLE
   [[ "${output}" != *"non-text"* ]]
 }
 
-@test "_inotify_conf_has_nontext fails closed when the conf cannot be read" {
+@test "_sysctl_conf_has_nontext fails closed when the conf cannot be read" {
   mkdir "${BATS_TEST_TMPDIR}/adir"
-  run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
+  run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
   [ "$status" -eq 0 ]
 }
 
 # BSD wc left-pads its count ("       1"); the parse must not depend on GNU's bare number.
-@test "_inotify_conf_has_nontext reads a left-padded BSD-style wc count" {
+@test "_sysctl_conf_has_nontext reads a left-padded BSD-style wc count" {
   local _shim="${BATS_TEST_TMPDIR}/wcshim"
   mkdir "${_shim}"
   printf '#!/usr/bin/env bash\n/usr/bin/wc "$@" | sed "s/^/       /"\n' > "${_shim}/wc"
   chmod +x "${_shim}/wc"
   printf 'fs.inotify.max_user_instances = 1024\r\n' > "${BATS_TEST_TMPDIR}/crlf.conf"
   printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
   [ "$status" -eq 0 ]
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 1 ]
 }
 
@@ -3279,12 +3279,12 @@ TABLE
   [[ "${output}" != *"other keys"* ]]
 }
 
-@test "_inotify_conf_has_nontext fails closed on a non-numeric wc count" {
+@test "_sysctl_conf_has_nontext fails closed on a non-numeric wc count" {
   local _shim="${BATS_TEST_TMPDIR}/wcshim"
   mkdir "${_shim}"
   printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "x\\n"\n' > "${_shim}/wc"
   chmod +x "${_shim}/wc"
   printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 0 ]
 }
