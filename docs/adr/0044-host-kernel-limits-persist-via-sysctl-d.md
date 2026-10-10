@@ -53,6 +53,14 @@ Nothing in dotfiles managed a kernel tunable before this. Three placements were 
 - 2026-10-09: the step and doctor refuse a conf holding non-text bytes (control or non-ASCII, e.g. CR, NUL), since systemd splits lines on CR and NUL where awk does not; CRLF confs are refused, not parsed. The `_SYSCTL_CONF` seam is written without sudo.
 - Whether 1024 covers a local matrix and busy runners at the same time is unmeasured. The
   constant `INOTIFY_MAX_USER_INSTANCES` is the one place to raise it.
+- 2026-10-10 (#327): the same mechanism now persists `kernel.keys.maxkeys >= 2000` and
+  `kernel.keys.maxbytes >= 500000`, after the rootless CI daemon exhausted `github-runner`'s
+  per-uid keyring quota (one booted systemd molecule container costs 9 keys). Each key has
+  its own conf (`90-dotfiles-keys-maxkeys.conf`, `90-dotfiles-keys-maxbytes.conf`), because
+  every guard above assumes a conf holds exactly one key. The step, doctor check and conf
+  helpers are now shared `_sysctl_*` functions taking the key; inotify calls them unchanged.
+  Already-provisioned hosts are brought up to the floor by pasting doctor's remedy lines.
+  Spec: [2026-10-10-kernel-keyring-limits-design.md](../superpowers/specs/2026-10-10-kernel-keyring-limits-design.md).
 
 ## Related
 
