@@ -226,3 +226,29 @@ pyenv guard and confirm its case goes red.
 - **N2.** No change to how go or python3 is installed on any OS, and no `Brewfile`, `pyproject.toml` or `uv.lock` change.
 - **N3.** `--update` never writes `PYTHON_VER` to a version in a different major.minor series from its current value.
 - **N4.** No new environment-variable seam.
+
+## Multi-Lens Review
+
+Reviewed at commit: `bd9b9def` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The python3 verdict (R2, latest across all series) replaces a permanent WARN with a permanent `[OUTDATED] python3 pinned=3.14.x latest=3.15.0` and a permanent rc 1, because the series move is deliberately outside `--update` (R11). Reads-it test: the line changes no decision and has no durable consumer, so it is decoration that costs rc 1. Fix already in the spec, in the wrong layer: make the in-series latest the verdict and report a newer series on a non-failing line. Simpler path: make go and python3 report-only (like homebrew-install) and drop R10-R13 — pin bumps are rare (4 commits since 2026-05). V1 cannot catch the always-OUTDATED state.
+Assumption: the python.org v2 endpoint returns every release unpaginated. Checked by orchestrator 2026-10-10: bare list, 275 rows back to 2.0.1, `limit`/`offset` ignored, no `Link` header — holds today; a dict-shaped body would be the paginated tell.
+Disposition:
+
+### Ergonomics
+
+Finding: Same as Goal-Fit, found independently: python3 OUTDATED on every run while 3.15 exists, `check-versions` exits 1 daily, training the operator to skip the report and the next real go patch with it. Fix: judge python3 within its series; print a newer series as a non-counted `[INFO]` line. Secondary: after `--update` bumps `PYTHON_VER`, doctor reports drift until the venv is rebuilt; print the next step (`-t recreate-venv`). Missing test: pin at newest in-series patch while a newer series exists.
+Assumption: the python.org `/api/v2/downloads/release/` endpoint is a stable public interface; it is pydotorg's site API with no documented compatibility promise.
+Disposition:
+
+### Risk
+
+Finding: (1) The go write cannot use today's `_update_version_pin`: with `pinned=` now the filename version, `s|^GO_VER="1.27.1"|…|` matches nothing, `sed -i` exits 0, the helper prints "Updated", and the filename moves alone — `GO_VER="1.27"` beside a 1.28.0 tarball, so the installer warns and doctor fails. Passing GO_VER's values instead writes `go1.28.linux-…`, a 404. Specify a go-specific two-value writer that reads both lines back and fails loudly. (2) The pyenv guard's match is unspecified; `pyenv install --list` also prints `3.14.8t`, so an unanchored grep passes on only the free-threaded build. Require an anchored literal match plus a `t`-only fixture. (3) The Studio's doctor FAILs whenever `GO_VER` and brew's go are in different series; state it or backlog it. Tests: "file byte-identical" cases are satisfied by inert code (tdd.md E5) and need a positive companion.
+Assumption: go.dev's feed is ordered newest-version-first; nothing guarantees it. A 1.26.x patch published after 1.27.x would be picked as latest, or make `--update` downgrade. Taking the maximum stable version removes the dependency.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
