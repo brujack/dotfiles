@@ -476,6 +476,7 @@ run_doctor() {
   _doctor_check_gnu_coreutils
   _doctor_check_conffile_dist
   _doctor_check_inotify_limits
+  _doctor_check_kernel_keys
   _doctor_check_pyenv_shims
   _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
@@ -1046,6 +1047,17 @@ _doctor_check_inotify_limits() {
 
   printf "\ninotify instances:\n"
   _doctor_sysctl_floor inotify fs.inotify.max_user_instances "${INOTIFY_MAX_USER_INSTANCES}" "${_conf}" "${_proc}"
+}
+
+# Gated like _doctor_check_inotify_limits; one conf per key, each with its own
+# seam pair (conf, proc).
+_doctor_check_kernel_keys() {
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
+  [[ -n ${LINUX} && -n ${HAS_DOCKER} && -d ${_rundir} ]] || return 0
+
+  printf "\nkernel keys:\n"
+  _doctor_sysctl_floor kernel-keys kernel.keys.maxkeys "${KEYS_MAXKEYS}" "${_KEYS_MAXKEYS_CONF:-${KEYS_MAXKEYS_CONF}}" "${_KEYS_MAXKEYS_PROC:-${KEYS_MAXKEYS_PROC}}"
+  _doctor_sysctl_floor kernel-keys kernel.keys.maxbytes "${KEYS_MAXBYTES}" "${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}" "${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}"
 }
 
 # Doctor check for one sysctl floor persisted in its own conf. The remedies

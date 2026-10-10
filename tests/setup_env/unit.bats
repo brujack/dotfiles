@@ -1025,6 +1025,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -1046,6 +1047,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
@@ -1456,6 +1458,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
@@ -2780,6 +2783,7 @@ STUB
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -2904,6 +2908,9 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   export LINUX=1 HAS_DOCKER=1
   _inotify_doctor_conf 1024
   printf '4096\n' > "${_INOTIFY_PROC}"
+  # Kernel keys confs at floor so only the inotify WARN is under observation.
+  printf 'kernel.keys.maxkeys = 2000\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 500000\n' > "${_KEYS_MAXBYTES_CONF}"
   _doctor_check_profile()        { :; }
   _doctor_check_symlinks()       { :; }
   _doctor_check_symlink_roots()  { :; }
@@ -3158,6 +3165,96 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   run _doctor_check_inotify_limits
   [[ "${output}" == *"value 512 below 1024"* ]]
   [[ "${output}" != *"other keys"* ]]
+}
+
+# ── _doctor_check_kernel_keys ────────────────────────────────────────────────
+# Seams (_KEYS_*_CONF, _KEYS_*_PROC, _SYSTEMD_RUN_DIR) come from load_mocks;
+# both live values start at their floors and both confs are absent.
+
+_keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
+
+@test "kernel keys doctor: stub count matches the inotify stub count over tests/ and is non-zero" {
+  # tests/mocks/git shadows git on PATH; count with the real one.
+  local _clean_path _n_ino _n_keys
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  _n_ino="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "_doctor_check_inotify_limits() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  _n_keys="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "_doctor_check_kernel_keys() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  [ "${_n_ino}" -gt 0 ]
+  [ "${_n_keys}" -gt 0 ]
+  [ "${_n_ino}" -eq "${_n_keys}" ]
+}
+
+@test "kernel keys doctor: default seeding fails per key naming its own conf, with a per-key remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} missing; next boot: kernel default; fix:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXBYTES_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 2000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}'"
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxbytes = 500000\\n' | sudo tee '${_KEYS_MAXBYTES_CONF}'"
+}
+
+@test "kernel keys doctor: both confs at floor pass both keys" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 500000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxkeys 2000"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxbytes 500000"* ]]
+  [[ "${output}" != *"[FAIL]"* && "${output}" != *"[WARN]"* ]]
+}
+
+@test "kernel keys doctor: maxbytes conf below floor fails naming only the maxbytes conf" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 20000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_KEYS_MAXBYTES_CONF} value 20000 below 500000"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxkeys 2000"* ]]
+  [[ "${output}" != *"${_KEYS_MAXKEYS_CONF}"* ]]
+}
+
+@test "kernel keys doctor: a conf holding the other kernel-keys key is fix by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxbytes 500000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 500000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_KEYS_MAXKEYS_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxbytes 500000"* ]]
+}
+
+@test "kernel keys doctor: gate off (HAS_DOCKER unset) prints nothing" {
+  export LINUX=1
+  unset HAS_DOCKER
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kernel keys doctor: gate off (no systemd run dir) prints nothing" {
+  export LINUX=1 HAS_DOCKER=1
+  rmdir "${_SYSTEMD_RUN_DIR}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "run_doctor: calls the kernel keys check" {
+  export LINUX=1 HAS_DOCKER=1
+  local _f
+  for _f in profile symlinks symlink_roots tools dev_tools login_shell cred_dirs hooks_path versions \
+    aws_key_expiry github_mcp gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
+    renovate_cadence ledger_drift_cadence inotify_limits; do
+    eval "_doctor_check_${_f}() { :; }"
+  done
+  run run_doctor
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"* ]]
 }
 
 # ── _sysctl_read_live ───────────────────────────────────────────────────────
