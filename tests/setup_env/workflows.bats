@@ -452,7 +452,82 @@ _cheat_seed() {
   # text or a non-zero status cannot discriminate here -- only the call log
   # can. Before the fix, chmod ran unconditionally against a target curl
   # never wrote.
-  refute_grep "chmod 750 ${HOME}/bin/cht.sh" "${MOCK_CALLS_FILE}"
+  refute_grep "chmod 750 ${HOME}/bin/.cht.sh." "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_user warns that the cht.sh binary fetch failed and continues" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  # Exact phrase: a looser `cht.sh` match also passes on a box where the real
+  # binary is on PATH, because run_setup_user then prints "cht.sh is installed".
+  [[ "$output" == *"cheat.sh binary fetch failed"* ]]
+  [ -d "${HOME}/go-work" ]
+}
+
+@test "run_setup_user warns that the cheat.sh completion fetch failed" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  curl() {
+    [[ "${*: -1}" == *"cheat.sh/:zsh" ]] && return 22
+    command curl "$@"
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cheat.sh completion fetch failed"* ]]
+}
+
+@test "run_setup_user keeps a pre-seeded binary and removes the temp when curl fails" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  export MOCK_CURL_FAIL_URL="cht.sh/:cht.sh"
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  local tmp
+  tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
+  [ -n "${tmp}" ]
+  [ ! -e "${tmp}" ]
+}
+
+@test "run_setup_user bounds both cheat.sh fetches with --max-time 10" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cht.sh/:cht.sh'
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cheat.sh/:zsh'
+}
+
+@test "run_setup_user installs the cheat.sh binary 750 and completion 644" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  chmod 600 "${HOME}/bin/cht.sh"
+  rm -f "${HOME}/.zsh.d/_cht"
+  curl() {
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#!/bin/bash\n' > "$3" ;;
+      *"cheat.sh/:zsh") printf "curl %s\n" "$*" >> "${MOCK_CALLS_FILE}"; printf '#compdef cht.sh\n' > "$3" ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [ "$(_cheat_mode "${HOME}/bin/cht.sh")" = "750" ]
+  [ "$(_cheat_mode "${HOME}/.zsh.d/_cht")" = "644" ]
 }
 
 # ── run_setup_user — platform branching ───────────────────────────────────────
@@ -1617,7 +1692,7 @@ setup_constants_copy() {
   unset GITHUB_TOKEN
   export MOCK_CURL_STDOUT='  "tag_name": "v1.0.0",'
   _fetch_github_latest "some/repo" >/dev/null
-  grep -q -- '--max-time 10' "${MOCK_CALLS_FILE}"
+  grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}"
 }
 
 @test "_fetch_github_latest refuses a token with a line break" {
