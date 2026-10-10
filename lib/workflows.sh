@@ -1177,23 +1177,16 @@ run_update() {
       (
         _rc=0
         if [[ -f ${HOME}/bin/cht.sh ]]; then
-          if curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
-             && [[ -s ${HOME}/bin/cht.sh ]]; then
-            chmod 754 "${HOME}/bin/cht.sh" \
-              || { printf "cheat.sh chmod failed\\n" >&2; _rc=1; }
-          else
-            printf "cheat.sh binary fetch failed\\n" >&2
-            _rc=1
-          fi
+          _cheat_fetch https://cht.sh/:cht.sh "${HOME}/bin/cht.sh" 754 '#!' || case $? in
+            1) printf "cheat.sh binary fetch failed\\n" >&2; _rc=1 ;;
+            *) printf "cheat.sh binary install failed\\n" >&2; _rc=1 ;;
+          esac
         fi
         if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-          if curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh \
-             && [[ -s ${HOME}/.zsh.d/_cht ]]; then
-            :
-          else
-            printf "cheat.sh completion fetch failed\\n" >&2
-            _rc=1
-          fi
+          _cheat_fetch https://cheat.sh/:zsh "${HOME}/.zsh.d/_cht" 644 '#compdef' || case $? in
+            1) printf "cheat.sh completion fetch failed\\n" >&2; _rc=1 ;;
+            *) printf "cheat.sh completion install failed\\n" >&2; _rc=1 ;;
+          esac
         fi
         exit "${_rc}"
       ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
