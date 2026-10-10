@@ -365,3 +365,35 @@ surface (the rename) rather than adding mechanism.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- finding R15 (2026-10-10, reviewer A): DIFFERS — The new run_doctor test 'run_doctor: calls the kernel keys check' (tests/setup_env/unit.bats ~3271) stubs _doctor_check_inotify_limits through an eval loop but does not stub _doctor_check_kernel_keys, and the equality test counts only the literal '^ *_doctor_check_inotify_limits() { :; }' form, so this stub is not counted; the other stubbing sites shown (plugin_node_paths.bats:267, unit.bats:1028,1050,1461,2786) do add the kernel-keys stub and the count-equality test exists.
+- R15 -> Every `run_doctor` test that stubs `_doctor_check_inotify_limits` with the literal `_doctor_check_inotify_limits() { :; }` form also stubs `_doctor_check_kernel_keys`, except a test whose subject is the kernel keys check itself; a test asserts the two literal stub counts are equal and non-zero. — the test "run_doctor: calls the kernel keys check" must run the check it asserts on, so it stubs every other sub-check (inotify via an eval loop) and deliberately leaves this one live.
+- finding R17 (2026-10-10, reviewer both): NOT-BUILT — Operator-facing strings ('kernel-keys ...' labels) and the doctor header ('kernel keys:') never say keyring, but no knowledge file appears anywhere in the diff, so the knowledge-file name half has no evidence; code comments also cite a spec named 2026-10-10-kernel-keyring-limits-design.md (not operator-facing).
+- R17 -> Every operator-facing string and the doctor header use the term "kernel keys" (`kernel-keys` in step and doctor labels), never "keyring". — the knowledge file is created by V3 after merge and its name is fixed in V3, so it is not observable in this diff; the "keyring" in the spec's own filename, cited by code comments, is not operator-facing.
+
+## Spec alignment (2026-10-10)
+
+- spec: docs/superpowers/specs/2026-10-10-kernel-keyring-limits-design.md
+- anchor: 87aff8465a27a15309ff6d22a442651f44c81296
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R15 | A | DIFFERS | The new run_doctor test 'run_doctor: calls the kernel keys check' (tests/setup_env/unit.bats ~3271) stubs _doctor_check_inotify_limits through an eval loop but does not stub _doctor_check_kernel_keys, and the equality test counts only the literal '^ *_doctor_check_inotify_limits() { :; }' form, so this stub is not counted; the other stubbing sites shown (plugin_node_paths.bats:267, unit.bats:1028,1050,1461,2786) do add the kernel-keys stub and the count-equality test exists. | - R15 -> Every `run_doctor` test that stubs `_doctor_check_inotify_limits` with the literal `_doctor_check_inotify_limits() { :; }` form also stubs `_doctor_check_kernel_keys`, except a test whose subject is the kernel keys check itself; a test asserts the two literal stub counts are equal and non-zero. — the test "run_doctor: calls the kernel keys check" must run the check it asserts on, so it stubs every other sub-check (inotify via an eval loop) and deliberately leaves this one live. |
+| R17 | both | NOT-BUILT | Operator-facing strings ('kernel-keys ...' labels) and the doctor header ('kernel keys:') never say keyring, but no knowledge file appears anywhere in the diff, so the knowledge-file name half has no evidence; code comments also cite a spec named 2026-10-10-kernel-keyring-limits-design.md (not operator-facing). | - R17 -> Every operator-facing string and the doctor header use the term "kernel keys" (`kernel-keys` in step and doctor labels), never "keyring". — the knowledge file is created by V3 after merge and its name is fixed in V3, so it is not observable in this diff; the "keyring" in the spec's own filename, cited by code comments, is not operator-facing. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
+- V4: Told the terraform_ansible session on 2026-10-10 (cross-session message after spec commit 45f96015, repeated with the probe result at efb51704): files /etc/sysctl.d/90-dotfiles-keys-maxkeys.conf and 90-dotfiles-keys-maxbytes.conf; delivery not confirmed by the bridge.

@@ -1025,6 +1025,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -1046,6 +1047,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run run_doctor
   [[ "$output" == *"1 warnings"* ]]
@@ -1456,6 +1458,7 @@ EOF
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
@@ -2780,6 +2783,7 @@ STUB
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_inotify_limits() { :; }
+  _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -2788,6 +2792,9 @@ STUB
 @test "run_doctor runs the inotify check, and its FAIL fails doctor" {
   export LINUX=1 HAS_DOCKER=1
   printf '128\n' > "${_INOTIFY_PROC}"
+  # Kernel keys confs at floor so the inotify FAIL is the only one counted.
+  printf 'kernel.keys.maxkeys = 2000\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 500000\n' > "${_KEYS_MAXBYTES_CONF}"
   _doctor_check_profile()        { :; }
   _doctor_check_symlinks()       { :; }
   _doctor_check_symlink_roots()  { :; }
@@ -2808,6 +2815,7 @@ STUB
   run run_doctor
   [ "$status" -eq 1 ]
   [[ "$output" == *"[FAIL]"*"inotify"*"${_SYSCTL_CONF} missing; next boot: kernel default"* ]]
+  [[ "$output" == *", 1 failed"* ]]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────
@@ -2904,6 +2912,9 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   export LINUX=1 HAS_DOCKER=1
   _inotify_doctor_conf 1024
   printf '4096\n' > "${_INOTIFY_PROC}"
+  # Kernel keys confs at floor so only the inotify WARN is under observation.
+  printf 'kernel.keys.maxkeys = 2000\n' > "${_KEYS_MAXKEYS_CONF}"
+  printf 'kernel.keys.maxbytes = 500000\n' > "${_KEYS_MAXBYTES_CONF}"
   _doctor_check_profile()        { :; }
   _doctor_check_symlinks()       { :; }
   _doctor_check_symlink_roots()  { :; }
@@ -3160,14 +3171,111 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   [[ "${output}" != *"other keys"* ]]
 }
 
-# ── _inotify_read_live ───────────────────────────────────────────────────────
+# ── _doctor_check_kernel_keys ────────────────────────────────────────────────
+# Seams (_KEYS_*_CONF, _KEYS_*_PROC, _SYSTEMD_RUN_DIR) come from load_mocks;
+# both live values start at their floors and both confs are absent.
+
+_keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
+
+@test "kernel keys doctor: stub count matches the inotify stub count over tests/ and is non-zero" {
+  # tests/mocks/git shadows git on PATH; count with the real one.
+  local _clean_path _n_ino _n_keys
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  _n_ino="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "^ *_doctor_check_inotify_limits() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  _n_keys="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "^ *_doctor_check_kernel_keys() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  [ "${_n_ino}" -gt 0 ]
+  [ "${_n_keys}" -gt 0 ]
+  [ "${_n_ino}" -eq "${_n_keys}" ]
+}
+
+@test "kernel keys doctor: default seeding fails per key naming its own conf, with a per-key remedy" {
+  export LINUX=1 HAS_DOCKER=1
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} missing; next boot: kernel default; fix:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXBYTES_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 2000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}'"
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxbytes = 500000\\n' | sudo tee '${_KEYS_MAXBYTES_CONF}'"
+}
+
+@test "kernel keys doctor: both confs at floor pass both keys" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 500000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxkeys 2000"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxbytes 500000"* ]]
+  [[ "${output}" != *"[FAIL]"* && "${output}" != *"[WARN]"* ]]
+}
+
+@test "kernel keys doctor: maxbytes conf below floor fails naming only the maxbytes conf" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 20000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_KEYS_MAXBYTES_CONF} value 20000 below 500000"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxkeys 2000"* ]]
+  [[ "${output}" != *"${_KEYS_MAXKEYS_CONF}"* ]]
+}
+
+@test "kernel keys doctor: a conf holding the other kernel-keys key is fix by hand" {
+  export LINUX=1 HAS_DOCKER=1
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxbytes 500000
+  _keys_doctor_conf "${_KEYS_MAXBYTES_CONF}" kernel.keys.maxbytes 500000
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"${_KEYS_MAXKEYS_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" == *"[PASS]"*"kernel-keys maxbytes 500000"* ]]
+}
+
+@test "kernel keys doctor: gate off (HAS_DOCKER unset) prints nothing" {
+  export LINUX=1
+  unset HAS_DOCKER
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kernel keys doctor: gate off (LINUX unset) prints nothing" {
+  unset LINUX; export HAS_DOCKER=1
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "kernel keys doctor: gate off (no systemd run dir) prints nothing" {
+  export LINUX=1 HAS_DOCKER=1
+  rmdir "${_SYSTEMD_RUN_DIR}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "run_doctor: calls the kernel keys check" {
+  export LINUX=1 HAS_DOCKER=1
+  local _f
+  for _f in profile symlinks symlink_roots tools dev_tools login_shell cred_dirs hooks_path versions \
+    aws_key_expiry github_mcp gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
+    renovate_cadence ledger_drift_cadence inotify_limits; do
+    eval "_doctor_check_${_f}() { :; }"
+  done
+  run run_doctor
+  [[ "${output}" == *"kernel keys:"* ]]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"* ]]
+}
+
+# ── _sysctl_read_live ───────────────────────────────────────────────────────
 # Fixed-value boundary table: exact stdout on accept, empty output on reject.
 
-@test "_inotify_read_live: accepts and normalizes valid live values" {
+@test "_sysctl_read_live: accepts and normalizes valid live values" {
   local _f="${BATS_TEST_TMPDIR}/live" _in _want
   while IFS='|' read -r _in _want; do
     printf '%b' "${_in}" > "${_f}"
-    run _inotify_read_live "${_f}"
+    run _sysctl_read_live "${_f}"
     [ "${status}" -eq 0 ]
     [ "${output}" = "${_want}" ]
   done <<'TABLE'
@@ -3178,28 +3286,28 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
 TABLE
 }
 
-@test "_inotify_read_live: rejects out-of-range and malformed live values with empty output" {
+@test "_sysctl_read_live: rejects out-of-range and malformed live values with empty output" {
   local _f="${BATS_TEST_TMPDIR}/live" _in
   for _in in '' '08\n' '2147483648\n' '12345678901\n' '12345678901234567890\n' 'abc\n'; do
     printf '%b' "${_in}" > "${_f}"
-    run _inotify_read_live "${_f}"
+    run _sysctl_read_live "${_f}"
     [ "${status}" -eq 1 ]
     [ -z "${output}" ]
   done
 }
 
-@test "_inotify_read_live: a nonexistent path is rejected with empty output" {
-  run _inotify_read_live "${BATS_TEST_TMPDIR}/nope"
+@test "_sysctl_read_live: a nonexistent path is rejected with empty output" {
+  run _sysctl_read_live "${BATS_TEST_TMPDIR}/nope"
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
 }
 
-@test "_inotify_read_live: an unreadable file is rejected with empty output" {
+@test "_sysctl_read_live: an unreadable file is rejected with empty output" {
   [ "$(id -u)" -ne 0 ] || skip "root reads mode-000 files"
   local _f="${BATS_TEST_TMPDIR}/live"
   printf '1024\n' > "${_f}"
   chmod 000 "${_f}"
-  run _inotify_read_live "${_f}"
+  run _sysctl_read_live "${_f}"
   chmod 600 "${_f}"
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
@@ -3250,23 +3358,23 @@ TABLE
   [[ "${output}" != *"non-text"* ]]
 }
 
-@test "_inotify_conf_has_nontext fails closed when the conf cannot be read" {
+@test "_sysctl_conf_has_nontext fails closed when the conf cannot be read" {
   mkdir "${BATS_TEST_TMPDIR}/adir"
-  run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
+  run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/adir"
   [ "$status" -eq 0 ]
 }
 
 # BSD wc left-pads its count ("       1"); the parse must not depend on GNU's bare number.
-@test "_inotify_conf_has_nontext reads a left-padded BSD-style wc count" {
+@test "_sysctl_conf_has_nontext reads a left-padded BSD-style wc count" {
   local _shim="${BATS_TEST_TMPDIR}/wcshim"
   mkdir "${_shim}"
   printf '#!/usr/bin/env bash\n/usr/bin/wc "$@" | sed "s/^/       /"\n' > "${_shim}/wc"
   chmod +x "${_shim}/wc"
   printf 'fs.inotify.max_user_instances = 1024\r\n' > "${BATS_TEST_TMPDIR}/crlf.conf"
   printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/crlf.conf"
   [ "$status" -eq 0 ]
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 1 ]
 }
 
@@ -3279,12 +3387,129 @@ TABLE
   [[ "${output}" != *"other keys"* ]]
 }
 
-@test "_inotify_conf_has_nontext fails closed on a non-numeric wc count" {
+@test "_sysctl_conf_has_nontext fails closed on a non-numeric wc count" {
   local _shim="${BATS_TEST_TMPDIR}/wcshim"
   mkdir "${_shim}"
   printf '#!/usr/bin/env bash\ncat > /dev/null\nprintf "x\\n"\n' > "${_shim}/wc"
   chmod +x "${_shim}/wc"
   printf 'fs.inotify.max_user_instances = 1024\n' > "${BATS_TEST_TMPDIR}/lf.conf"
-  PATH="${_shim}:${PATH}" run _inotify_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
+  PATH="${_shim}:${PATH}" run _sysctl_conf_has_nontext "${BATS_TEST_TMPDIR}/lf.conf"
   [ "$status" -eq 0 ]
+}
+
+# ── _sysctl_conf_value: exact key match (near-miss keys are not the key) ─────
+
+@test "_sysctl_conf_value: a near-miss key (one dot replaced by X) prints nothing, for every key" {
+  local _key _near _conf="${BATS_TEST_TMPDIR}/near.conf"
+  for _key in fs.inotify.max_user_instances kernel.keys.maxkeys kernel.keys.maxbytes; do
+    _near="${_key/./X}"
+    printf '%s = 4242\n' "${_near}" > "${_conf}"
+    [ -s "${_conf}" ]
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { printf 'key %s matched near-miss %s: %s\n' "${_key}" "${_near}" "$output" >&3; return 1; }
+  done
+}
+
+@test "_sysctl_conf_value: the exact dotted and slash spellings print the value, for every key" {
+  local _key _slash _conf="${BATS_TEST_TMPDIR}/exact.conf"
+  for _key in fs.inotify.max_user_instances kernel.keys.maxkeys kernel.keys.maxbytes; do
+    _slash="${_key//./\/}"
+    printf '%s = 4242\n' "${_key}" > "${_conf}"
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$output" = "4242" ] || { printf 'dotted %s: [%s]\n' "${_key}" "$output" >&3; return 1; }
+    printf '%s = 4343\n' "${_slash}" > "${_conf}"
+    run _sysctl_conf_value "${_conf}" "${_key}"
+    [ "$output" = "4343" ] || { printf 'slash %s: [%s]\n' "${_slash}" "$output" >&3; return 1; }
+  done
+}
+
+# ── kernel keys doctor: shared-floor branches that must carry the kernel-keys label ──
+
+_kkd_env() {
+  export LINUX=1 HAS_DOCKER=1
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
+  mkdir -p "${_SYSTEMD_RUN_DIR}"
+}
+
+@test "kernel keys doctor: maxkeys live 200 with no conf fails with the full tee and sysctl -w remedy" {
+  _kkd_env
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 2000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}' && sudo sysctl -w kernel.keys.maxkeys=2000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: maxbytes live 20000 with no conf fails with the full tee and sysctl -w remedy" {
+  _kkd_env
+  printf '20000\n' > "${_KEYS_MAXBYTES_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"${_KEYS_MAXBYTES_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxbytes = 500000\\n' | sudo tee '${_KEYS_MAXBYTES_CONF}' && sudo sysctl -w kernel.keys.maxbytes=500000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: conf at floor with live 200 fails live-below and prints the maxkeys sysctl -w remedy" {
+  _kkd_env
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  printf '200\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"live value 200 below 2000; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.keys.maxkeys=2000"
+  [[ "${output}" != *"fs.inotify"* ]]
+}
+
+@test "kernel keys doctor: conf 2000 below live 9000 warns with the kernel-keys label" {
+  _kkd_env
+  _keys_doctor_conf "${_KEYS_MAXKEYS_CONF}" kernel.keys.maxkeys 2000
+  printf '9000\n' > "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"kernel-keys"*"${_KEYS_MAXKEYS_CONF} value 2000 below live 9000; a reboot may drop it; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    printf 'kernel.keys.maxkeys = 9000\\n' | sudo tee '${_KEYS_MAXKEYS_CONF}'"
+}
+
+@test "kernel keys doctor: unreadable maxkeys proc fails cannot read with the kernel-keys label" {
+  _kkd_env
+  rm -f "${_KEYS_MAXKEYS_PROC}"
+  run _doctor_check_kernel_keys
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"kernel-keys"*"cannot read ${_KEYS_MAXKEYS_PROC}"* ]]
+  [[ "${output}" != *"[FAIL]"*"inotify"* ]]
+}
+
+# ── kernel keys production constants and per-key wiring ──
+
+@test "kernel keys constants: proc paths derive from their keys and conf paths are distinct per key" {
+  [ "${KEYS_MAXKEYS_PROC}" = "/proc/sys/kernel/keys/maxkeys" ]
+  [ "${KEYS_MAXBYTES_PROC}" = "/proc/sys/kernel/keys/maxbytes" ]
+  local _key_maxkeys="kernel.keys.maxkeys" _key_maxbytes="kernel.keys.maxbytes"
+  [ "${KEYS_MAXKEYS_PROC}" = "/proc/sys/${_key_maxkeys//.//}" ]
+  [ "${KEYS_MAXBYTES_PROC}" = "/proc/sys/${_key_maxbytes//.//}" ]
+  [ "${KEYS_MAXKEYS_CONF}" != "${KEYS_MAXBYTES_CONF}" ]
+  [ "${KEYS_MAXKEYS_PROC}" != "${KEYS_MAXBYTES_PROC}" ]
+  [[ "$(basename "${KEYS_MAXKEYS_CONF}")" == *maxkeys* ]]
+  [[ "$(basename "${KEYS_MAXBYTES_CONF}")" == *maxbytes* ]]
+  [[ "$(basename "${KEYS_MAXKEYS_CONF}")" != *maxbytes* ]]
+  [[ "$(basename "${KEYS_MAXBYTES_CONF}")" != *maxkeys* ]]
+}
+
+@test "kernel keys wiring: each key's step and doctor call reference only its own conf and proc defaults" {
+  local _fn _line
+  for _fn in _install_ubuntu_kernel_keys _doctor_check_kernel_keys; do
+    _line="$(declare -f "${_fn}" | grep 'kernel\.keys\.maxbytes')"
+    [ -n "${_line}" ]
+    [[ "${_line}" == *'${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}'* ]]
+    [[ "${_line}" == *'${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}'* ]]
+    [[ "${_line}" != *MAXKEYS* ]]
+    _line="$(declare -f "${_fn}" | grep 'kernel\.keys\.maxkeys')"
+    [ -n "${_line}" ]
+    [[ "${_line}" == *'${_KEYS_MAXKEYS_CONF:-${KEYS_MAXKEYS_CONF}}'* ]]
+    [[ "${_line}" == *'${_KEYS_MAXKEYS_PROC:-${KEYS_MAXKEYS_PROC}}'* ]]
+    [[ "${_line}" != *MAXBYTES* ]]
+  done
 }

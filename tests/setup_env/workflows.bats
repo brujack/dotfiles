@@ -1047,6 +1047,7 @@ _cheat_su_curl() {
 _stub_ubuntu_steps() {
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_inotify() { :; }
+  _install_ubuntu_kernel_keys() { :; }
   _install_ubuntu_workstation() { :; }
   _install_ubuntu_powershell() { :; }
   _install_ubuntu_go() { :; }
@@ -1075,7 +1076,7 @@ _stub_ubuntu_steps() {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   local _step
-  for _step in workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
+  for _step in kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
     _stub_ubuntu_steps
     eval "_install_ubuntu_${_step}() { return 1; }"
     run --separate-stderr install_ubuntu_packages

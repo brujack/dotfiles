@@ -191,11 +191,21 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
 # docker-host floor for fs.inotify.max_user_instances; see
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 readonly INOTIFY_MAX_USER_INSTANCES=1024
-# kernel INT_MAX: the largest value fs.inotify.max_user_instances accepts
-readonly INOTIFY_INT_MAX=2147483647
+# kernel INT_MAX: the largest value an int sysctl accepts
+readonly SYSCTL_INT_MAX=2147483647
 # read by lib/linux_ubuntu.sh:_install_ubuntu_inotify and lib/helpers.sh:_doctor_check_inotify_limits
 readonly INOTIFY_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-inotify.conf
 readonly INOTIFY_PROC=/proc/sys/fs/inotify/max_user_instances
+# docker-host floors for the kernel keys limits; the rootless CI daemon charges every
+# container's keys to one uid, so the default 200 keys is exhausted by concurrent runners.
+# See docs/superpowers/specs/2026-10-10-kernel-keyring-limits-design.md
+# Read by lib/linux_ubuntu.sh:_install_ubuntu_kernel_keys and lib/helpers.sh:_doctor_check_kernel_keys.
+readonly KEYS_MAXKEYS=2000
+readonly KEYS_MAXBYTES=500000
+readonly KEYS_MAXKEYS_CONF=/etc/sysctl.d/90-dotfiles-keys-maxkeys.conf
+readonly KEYS_MAXBYTES_CONF=/etc/sysctl.d/90-dotfiles-keys-maxbytes.conf
+readonly KEYS_MAXKEYS_PROC=/proc/sys/kernel/keys/maxkeys
+readonly KEYS_MAXBYTES_PROC=/proc/sys/kernel/keys/maxbytes
 readonly SYSTEMD_RUN_DIR=/run/systemd/system
 readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config

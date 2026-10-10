@@ -62,6 +62,17 @@ exit "${MOCK_SYSCTL_STUB_EXIT:-0}"
 STUB
     chmod +x "${_SYSCTL_BIN}"
   fi
+  # kernel keys step/doctor seams: procs are seeded at the floors (2000 / 500000), so
+  # nothing is applied unless a test lowers one; confs start absent, so an absent
+  # conf is still written (it persists the floor for the next boot).
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    export _KEYS_MAXKEYS_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-keys-maxkeys.conf"
+    export _KEYS_MAXBYTES_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-keys-maxbytes.conf"
+    export _KEYS_MAXKEYS_PROC="${BATS_TEST_TMPDIR}/keys_maxkeys"
+    export _KEYS_MAXBYTES_PROC="${BATS_TEST_TMPDIR}/keys_maxbytes"
+    printf '2000\n' > "${_KEYS_MAXKEYS_PROC}"
+    printf '500000\n' > "${_KEYS_MAXBYTES_PROC}"
+  fi
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
