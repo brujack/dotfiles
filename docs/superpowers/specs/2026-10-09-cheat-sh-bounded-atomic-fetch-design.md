@@ -294,3 +294,38 @@ Review stopped after round 4 by operator decision: round 4's findings were test 
 ## Amendments
 
 - R20 -> Tests assert the installed mode after a successful fetch: the binary at 750 under `run_setup_user` and 754 under `run_update`, and `_cht` at 644, read with `stat -c '%a'` falling back to `stat -f '%OLp'`. — the repo's existing portable idiom (`tests/setup_env/extracted_functions.bats:314`) uses `%OLp`, which `test-macos` already exercises; `%Lp` was unverified.
+- finding R8 (2026-10-09, reviewer A): DIFFERS — The test chmods ${HOME}/bin to 555 and asserts dest unchanged, no cht.sh/:cht.sh curl, `cheat.sh binary install failed` and FAIL, but restores the mode inline with `chmod 755` right after run_update rather than in teardown, as the requirement states.
+- R8 reviewed: the restore runs inline as the first statement after `run_update || _rc=$?`, before any assertion, so no failing assertion can skip it; `run_update` never calls `exit` (lib/workflows.sh has none outside its embedded Python), so the restore is reached on every path a teardown would cover. The four asserted outcomes match R8.
+- finding R13 (2026-10-09, reviewer A): DIFFERS — The test refutes the fixed-string prefix `chmod 750 ${HOME}/bin/` (covering both temp and destination) rather than refuting the temp name `${HOME}/bin/.cht.sh.` as the requirement states.
+- R13 -> The test `run_setup_user does not attempt chmod when the cht.sh binary fetch fails` refutes, as a fixed string, any `chmod 750 ${HOME}/bin/` call, which covers both the temp name `${HOME}/bin/.cht.sh.` and `${HOME}/bin/cht.sh`. — the prefix is strictly stronger than the temp-name pattern R13 named: it also catches a chmod of the destination, and the mock chmod's silenced status leaves the call log as the only discriminator.
+- finding R8 (2026-10-09, reviewer A): DIFFERS — The test chmods ${HOME}/bin to 555 and asserts dest unchanged, no cht.sh/:cht.sh curl, 'cheat.sh binary install failed' and FAIL, but restores the mode inline with `chmod 755` immediately after run_update rather than in teardown as the requirement states; the requirement text was not amended.
+- R8 -> A test makes the destination directory non-writable, restores its mode as the first statement after the call under test and before any assertion, and asserts the destination is unchanged, no curl call to `cht.sh/:cht.sh` was recorded, the `install failed` message appears, and the cheat.sh section is FAIL. — `run_update` never calls `exit`, so the inline restore is reached on every path a teardown would cover; the requirement now names what was built, so the finding stops recurring each run.
+
+## Spec alignment (2026-10-09)
+
+- spec: docs/superpowers/specs/2026-10-09-cheat-sh-bounded-atomic-fetch-design.md
+- anchor: 3147ea5437413c0686bc9671eb873fd60af90c5f
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R8 | A | DIFFERS | The test chmods ${HOME}/bin to 555 and asserts dest unchanged, no cht.sh/:cht.sh curl, 'cheat.sh binary install failed' and FAIL, but restores the mode inline with `chmod 755` immediately after run_update rather than in teardown as the requirement states; the requirement text was not amended. | - R8 -> A test makes the destination directory non-writable, restores its mode as the first statement after the call under test and before any assertion, and asserts the destination is unchanged, no curl call to `cht.sh/:cht.sh` was recorded, the `install failed` message appears, and the cheat.sh section is FAIL. — `run_update` never calls `exit`, so the inline restore is reached on every path a teardown would cover; the requirement now names what was built, so the finding stops recurring each run. |
+
+### Reviewed
+
+- R8 reviewed: the restore runs inline as the first statement after `run_update || _rc=$?`, before any assertion, so no failing assertion can skip it; `run_update` never calls `exit` (lib/workflows.sh has none outside its embedded Python), so the restore is reached on every path a teardown would cover. The four asserted outcomes match R8.
+
+### Verifications
+
+- V1: Mutation at 6ba31263 (scratch archive): _cheat_fetch writing straight to dest (_tmp="${_dest}") -> 16 cheat/cht tests not ok.
+- V2: Mutation: --max-time 100 in _cheat_fetch -> 3 not ok; --max-time 100 in _fetch_github_latest _curl_args -> 1 not ok (R9 test).
+- V3: Real curl 8.22.0 vs local server sending 5 of 100 body bytes then stalling: curl (28) after 10001 ms; _cheat_fetch rc=1 in 10 s; pre-seeded cht.sh still PRE-EXISTING; no temp file left.
+- V4: make test exit 0 at 04e6b6d0: 2769 ok, 0 not ok (claude). CI pending on the PR.
+- V5: Mutation: rm -f of the temp removed on the fetch-failure branch -> 5 not ok.
+- V6: Mutation: first-line check disabled (if false) -> 3 not ok.
+- V7: Mutation: run_setup_user binary rc-1 warning replaced by ':' -> not ok 17 (R12 test).
+- V8: Mutation: empty head at the run_update completion call site -> 8 not ok.
+- V9: Mutation: chmod removed from _cheat_fetch -> 4 not ok.

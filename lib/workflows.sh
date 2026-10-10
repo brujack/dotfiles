@@ -389,6 +389,30 @@ _dotfiles_run_tmpdir_setup() {
   ensure_state_ledger || true
 }
 
+# Fetch <url> into <dest> through a dot-prefixed temp file in the same
+# directory, so a failed, timed-out or wrong-content transfer never replaces a
+# working copy: curl -o truncates its target as soon as the body starts, and
+# cheat.sh answers HTTP 200 with an error page, which -f cannot refuse.
+# Returns 0 replaced, 1 fetch failed, 2 local failure (or empty <head>).
+_cheat_fetch() {
+  local _url="$1" _dest="$2" _mode="$3" _head="$4" _tmp _line=""
+  [[ -n "${_head}" ]] || return 2
+  _tmp="$(mktemp "${_dest%/*}/.${_dest##*/}.XXXXXX")" || return 2
+  if ! curl -fsS -o "${_tmp}" --max-time 10 "${_url}" || [[ ! -s "${_tmp}" ]]; then
+    rm -f "${_tmp}"
+    return 1
+  fi
+  IFS= read -r _line < "${_tmp}" || true
+  if [[ "${_line}" != "${_head}"* ]]; then
+    rm -f "${_tmp}"
+    return 1
+  fi
+  if ! chmod "${_mode}" "${_tmp}" || ! mv -f "${_tmp}" "${_dest}"; then
+    rm -f "${_tmp}"
+    return 2
+  fi
+}
+
 run_setup_user() {
   _dotfiles_run_tmpdir_setup || return 1
   if [[ -n ${MACOS} ]]; then
@@ -432,8 +456,10 @@ run_setup_user() {
       sudo -H apt update
       sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" curl -y
     fi
-    curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
-      && chmod 750 "${HOME}"/bin/cht.sh
+    _cheat_fetch https://cht.sh/:cht.sh "${HOME}/bin/cht.sh" 750 '#!' || case $? in
+      1) printf "cheat.sh binary fetch failed\\n" >&2 ;;
+      *) printf "cheat.sh binary install failed\\n" >&2 ;;
+    esac
   fi
   if [[ -x $(command -v cht.sh) ]]; then
     printf "cht.sh is installed\\n"
@@ -442,7 +468,10 @@ run_setup_user() {
   printf "Creating %s/.zsh.d\\n" "${HOME}"
   mkdir -p "${HOME}"/.zsh.d
   if [[ ! -f ${HOME}/.zsh.d/_cht ]]; then
-    curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh
+    _cheat_fetch https://cheat.sh/:zsh "${HOME}/.zsh.d/_cht" 644 '#compdef' || case $? in
+      1) printf "cheat.sh completion fetch failed\\n" >&2 ;;
+      *) printf "cheat.sh completion install failed\\n" >&2 ;;
+    esac
   fi
 
   printf "Creating %s/go-work\\n" "${HOME}"
@@ -1153,23 +1182,16 @@ run_update() {
       (
         _rc=0
         if [[ -f ${HOME}/bin/cht.sh ]]; then
-          if curl -fsS -o "${HOME}/bin/cht.sh" https://cht.sh/:cht.sh \
-             && [[ -s ${HOME}/bin/cht.sh ]]; then
-            chmod 754 "${HOME}/bin/cht.sh" \
-              || { printf "cheat.sh chmod failed\\n" >&2; _rc=1; }
-          else
-            printf "cheat.sh binary fetch failed\\n" >&2
-            _rc=1
-          fi
+          _cheat_fetch https://cht.sh/:cht.sh "${HOME}/bin/cht.sh" 754 '#!' || case $? in
+            1) printf "cheat.sh binary fetch failed\\n" >&2; _rc=1 ;;
+            *) printf "cheat.sh binary install failed\\n" >&2; _rc=1 ;;
+          esac
         fi
         if [[ -f ${HOME}/.zsh.d/_cht ]]; then
-          if curl -fsS -o "${HOME}/.zsh.d/_cht" https://cheat.sh/:zsh \
-             && [[ -s ${HOME}/.zsh.d/_cht ]]; then
-            :
-          else
-            printf "cheat.sh completion fetch failed\\n" >&2
-            _rc=1
-          fi
+          _cheat_fetch https://cheat.sh/:zsh "${HOME}/.zsh.d/_cht" 644 '#compdef' || case $? in
+            1) printf "cheat.sh completion fetch failed\\n" >&2; _rc=1 ;;
+            *) printf "cheat.sh completion install failed\\n" >&2; _rc=1 ;;
+          esac
         fi
         exit "${_rc}"
       ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
