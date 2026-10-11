@@ -14,6 +14,10 @@ setup() {
   load_setup_env
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}"
+  # Default every test to a private copy so no writer can touch the real file.
+  _CP="${BATS_TEST_TMPDIR}/constants.sh"
+  cp "${REPO_ROOT}/lib/constants.sh" "${_CP}"
+  export _OVERRIDE_CONSTANTS_PATH="${_CP}"
 }
 
 teardown() {
@@ -364,8 +368,8 @@ _seed_go() {
 _shim_path() {
   local _d="${BATS_TEST_TMPDIR}/shim" _t
   mkdir -p "${_d}"
-  for _t in sed grep rm cut dirname cat head; do
-    ln -sf "$(command -v "${_t}")" "${_d}/${_t}"
+  for _t in sed grep rm cut dirname cat head cp mv; do
+    ln -sf "$(PATH=/usr/bin:/bin command -v "${_t}")" "${_d}/${_t}"
   done
   printf '%s' "${_d}"
 }
@@ -529,4 +533,47 @@ _stub_go() {
   run run_check_versions <<< "y"
   grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
   [[ "$output" == *"Updated GO_VER → 1.27.2"* ]]
+}
+
+@test "go update refuses a two-part latest: byte-identical, message, no Updated" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  run _prompt_version_update "go" "GO_VER" "1.27" "1.28" <<< "y"
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"go: refusing pin update: latest 1.28 is not X.Y.Z"* ]]
+  [[ "$output" != *"Updated"* ]]
+  grep -Fqx 'GO_VER="1.27"' "${_CP}"
+}
+
+@test "go update is atomic when the pinned filename has no patch" {
+  _seed_constants
+  _seed_go "1.27" "1.27"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pin update failed: GO_DOWNLOAD_FILENAME is not"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${BATS_TEST_TMPDIR}/constants.sh.new*"; then false; fi
+}
+
+@test "go update is atomic when GO_DOWNLOAD_FILENAME line is missing" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  sed -i.bak '/^GO_DOWNLOAD_FILENAME=/d' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"GO_DOWNLOAD_FILENAME is not"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${BATS_TEST_TMPDIR}/constants.sh.new*"; then false; fi
+}
+
+@test "go update success leaves no temp file and the new pins in place" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 0 ]
+  grep -Fqx 'GO_VER="1.28"' "${_CP}"
+  if compgen -G "${BATS_TEST_TMPDIR}/constants.sh.new*"; then false; fi
 }

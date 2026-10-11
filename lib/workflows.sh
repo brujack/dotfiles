@@ -1556,24 +1556,36 @@ _prompt_version_update() {
 _update_go_pin() {
   local _latest="$1"
   local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
-  local _series="${_latest%.*}"
-  local _want_ver _want_file
+  local _series _want_ver _want_file _tmp
 
-  sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_constants}"
-  rm -f "${_constants}.bak"
-  _update_url_pins "go" "" "${_latest}" "${_constants}"
+  if [[ ! "${_latest}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    printf "  go: refusing pin update: latest %s is not X.Y.Z\n" "${_latest}"
+    return 1
+  fi
+  _series="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+
+  # Edit a same-directory copy and move it over the original only after both
+  # lines read back, so a partial edit can never be left in constants.sh.
+  _tmp="${_constants}.new.$$"
+  cp "${_constants}" "${_tmp}" || return 1
+  sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_tmp}"
+  rm -f "${_tmp}.bak"
+  _update_url_pins "go" "" "${_latest}" "${_tmp}"
 
   _want_ver="GO_VER=\"${_series}\""
   # shellcheck disable=SC2016 # ${_LINUX_ARCH} is literal text in constants.sh
   _want_file='GO_DOWNLOAD_FILENAME="go'"${_latest}"'.linux-${_LINUX_ARCH}.tar.gz"'
-  if ! grep -Fqx "${_want_ver}" "${_constants}"; then
+  if ! grep -Fqx "${_want_ver}" "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
     printf "  go: pin update failed: GO_VER is not %s\n" "${_series}"
     return 1
   fi
-  if ! grep -Fqx "${_want_file}" "${_constants}"; then
+  if ! grep -Fqx "${_want_file}" "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
     printf "  go: pin update failed: GO_DOWNLOAD_FILENAME is not %s\n" "${_want_file#GO_DOWNLOAD_FILENAME=}"
     return 1
   fi
+  mv "${_tmp}" "${_constants}" || { rm -f "${_tmp}"; return 1; }
 
   printf "  go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer\n"
   local _installed="" _mm=""
