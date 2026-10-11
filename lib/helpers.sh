@@ -524,6 +524,7 @@ _doctor_check_symlinks() {
   local -a _checks=(
     "~/.zshrc          ${HOME}/.zshrc"
     "~/.zprofile       ${HOME}/.zprofile"
+    "~/.zshenv         ${HOME}/.zshenv"
     "~/.vimrc          ${HOME}/.vimrc"
     "~/.tmux.conf      ${HOME}/.tmux.conf"
     "~/.ssh/config     ${HOME}/.ssh/config"
@@ -1510,6 +1511,26 @@ setup_dotfile_symlinks() {
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.config/ccstatusline" "${HOME}/.config/ccstatusline"
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zprofile" "${HOME}/.zprofile"
+
+  # A regular ~/.zshenv (installer-written lines, e.g. rustup's) is adopted as
+  # ~/.zshenv.local, which the tracked .zshenv sources. Absence is tested with
+  # -L as well as -e so a dangling symlink counts as present and mv never
+  # overwrites it or moves the file into a directory it points at.
+  if [[ -f ${HOME}/.zshenv && ! -L ${HOME}/.zshenv ]]; then
+    if [[ ! -e ${HOME}/.zshenv.local && ! -L ${HOME}/.zshenv.local ]]; then
+      if _dry_run_active; then
+        log_info "[DRY RUN] would move ${HOME}/.zshenv to ${HOME}/.zshenv.local"
+        log_info "[DRY RUN] would link ${HOME}/.zshenv to ${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv"
+      else
+        run_cmd mv "${HOME}/.zshenv" "${HOME}/.zshenv.local" || return 1
+        safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv" "${HOME}/.zshenv" || return 1
+      fi
+    else
+      log_warn "${HOME}/.zshenv and ${HOME}/.zshenv.local both exist; not linking .zshenv. Merge ${HOME}/.zshenv into ${HOME}/.zshenv.local, remove ${HOME}/.zshenv, and re-run."
+    fi
+  else
+    safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv" "${HOME}/.zshenv"
+  fi
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/bruce.zsh-theme" "${HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme"
 
   log_info "Creating ${HOME}/.tmux"
