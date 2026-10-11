@@ -1385,6 +1385,66 @@ print((fmt(in_series) if in_series else "-") + " " + fmt(overall))
 ' "${_series}"
 }
 
+# _check_one_pin_version <go|python3> <pinned> -- compares a pin with the
+# vendor's release feed, not with the installed binary: both tools are
+# installed by a package manager or pyenv whose version this repo does not
+# choose, so "installed" says nothing about whether the pin is stale. Needs
+# python3 to parse the feeds, so a missing python3 is its own WARN rather than
+# a misleading "could not fetch". Pin ahead of the feed is OK (the feed can
+# lag a release the pin already tracks).
+_check_one_pin_version() {
+  local _tool="$1" _pinned="$2"
+  local _latest _series_latest="" _overall=""
+
+  if ! command -v python3 &>/dev/null; then
+    printf "  [WARN]     %-12s python3 not found; cannot read the release feed\n" "${_tool}"
+    return 0
+  fi
+
+  if [[ "${_tool}" == "go" ]]; then
+    _pinned="${GO_DOWNLOAD_FILENAME#go}"
+    _pinned="${_pinned%%.linux-*}"
+    if [[ ! "${_pinned}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+      printf "  [WARN]     %-12s go could not parse pinned version\n" "${_tool}"
+      return 0
+    fi
+    _latest=$(_fetch_go_latest) || _latest=""
+  else
+    read -r _series_latest _overall < <(_fetch_python_latest "${_pinned%.*}") || true
+    if [[ -z "${_overall}" ]]; then
+      _latest=""
+    elif [[ "${_series_latest}" == "-" ]]; then
+      printf "  [WARN]     %-12s python3 no %s release in the feed yet (pinned=%s latest=%s)\n" \
+        "${_tool}" "${_pinned%.*}" "${_pinned}" "${_overall}"
+      return 0
+    else
+      _latest="${_series_latest}"
+    fi
+  fi
+
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-12s could not fetch latest version\n" "${_tool}"
+    return 0
+  fi
+
+  local _rc=0
+  if [[ "$(_semver_cmp "${_pinned}" "${_latest}")" == "-1" ]]; then
+    printf "  [OUTDATED] %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+    _rc=1
+  else
+    printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+  fi
+
+  if [[ "${_tool}" == "python3" ]]; then
+    local _pin_mm="${_pinned%.*}" _overall_mm="${_overall%.*}"
+    if [[ "$(_semver_cmp "${_overall_mm}" "${_pin_mm}")" == "1" ]]; then
+      printf "  [INFO]     %-12s %s series available (series move: requires-python, uv lock)\n" \
+        "${_tool}" "${_overall_mm}"
+    fi
+  fi
+  return "${_rc}"
+}
+
 _check_one_version() {
   local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
 
@@ -1546,15 +1606,14 @@ run_check_versions() {
   printf "=== Version Check ===\n\n"
 
   if [[ -n ${GITHUB_TOKEN:-} ]] && ! _github_auth_header "${GITHUB_TOKEN}" >/dev/null 2>&1; then
-    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 7 checks that send it were not run; fix the variable\n"
+    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 5 checks that send it were not run; fix the variable\n"
     _token_refused=1
   fi
 
-  _run_cv_check() {
-    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
-    local _out _latest
-    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
-    _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
+  # _tally_cv_out <tool> <pinned> <var> <out> -- prints and counts one check.
+  # The verdict tag decides the count; an [INFO] line never does.
+  _tally_cv_out() {
+    local _tool="$1" _pinned="$2" _var="$3" _out="$4" _latest
     printf '%s\n' "${_out}"
     if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
     elif [[ "${_out}" == *"[WARN]"* ]];     then _warned=$(( _warned + 1 ))
@@ -1568,8 +1627,19 @@ run_check_versions() {
     fi
   }
 
-  _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?" "GO_VER"
-  _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "PYTHON_VER"
+  _run_cv_check() {
+    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
+    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
+    _tally_cv_out "${_tool}" "${_pinned}" "${_var}" \
+      "$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)"
+  }
+
+  _run_cv_pin_check() {
+    _tally_cv_out "$1" "$2" "$3" "$(_check_one_pin_version "$1" "$2" 2>&1)"
+  }
+
+  _run_cv_pin_check "go"      "${GO_VER}"     "GO_VER"
+  _run_cv_pin_check "python3" "${PYTHON_VER}" "PYTHON_VER"
   _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"    "RUBY_VER"
   # zsh is deliberately absent. Every other tool here is one this repo installs
   # at a version it chooses, so comparing the pin against upstream is actionable.
@@ -1604,7 +1674,7 @@ run_check_versions() {
   printf "\n"
 
   # A refused token outranks "outdated" (rc 1): the caller cannot act on a
-  # version verdict that skipped seven of its inputs.
+  # version verdict that skipped five of its inputs.
   [[ ${_token_refused} -eq 1 ]] && return 2
   [[ ${_outdated} -eq 0 ]]
 }
