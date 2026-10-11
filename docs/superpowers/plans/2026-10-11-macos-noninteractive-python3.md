@@ -1,5 +1,7 @@
 # macOS Non-Interactive python3 Implementation Plan
 
+> **Status: DONE** (dotfiles#330, 2026-10-11)
+
 spec: docs/superpowers/specs/2026-10-11-macos-noninteractive-python3-design.md
 scope: PR1
 
