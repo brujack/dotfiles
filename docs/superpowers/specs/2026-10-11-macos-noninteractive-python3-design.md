@@ -104,7 +104,9 @@ fi
 "Regular file" means `[[ -f ~/.zshenv && ! -L ~/.zshenv ]]`: `-f` alone follows a symlink, so
 a second setup run would move the linked file to `.zshenv.local`, which then sources itself and
 prints `job table full or recursion limit exceeded` in every non-interactive zsh. The move runs
-through `run_cmd`, so `--dry-run` moves nothing.
+through `run_cmd`, so `--dry-run` moves nothing. When adoption would move the file, a dry run
+prints the move and the link it would make and skips `safe_link`, whose preview would
+otherwise announce a `.zshenv.bak` backup the real run never makes.
 
 - `~/.zshenv` is a regular file and `~/.zshenv.local` does not exist: move it to
   `~/.zshenv.local`, then `safe_link` the repo's `.zshenv`. The workstation keeps its cargo line,
@@ -174,8 +176,13 @@ printing a marker.
   `HOME` then runs `X` (a marker line) once. With both files pre-existing, both are byte-identical
   afterwards, `~/.zshenv` is not a symlink, and a warning names both. Running setup twice leaves
   the same state as once.
-- Adoption run twice: after the second run `~/.zshenv.local` is not a symlink and holds the
-  original content, and a non-interactive `zsh -c true` prints nothing on stderr.
+- Adoption run twice from an ABSENT `~/.zshenv` (run 1 links it; run 2 must not adopt the
+  link): afterwards `~/.zshenv.local` does not exist, and a non-interactive `zsh -c true`
+  prints nothing on stderr. This is the start that distinguishes `-f && ! -L` from plain
+  `-f`; starting from a pre-existing regular file, plain `-f` reaches the "both exist" branch
+  on run 2 and passes. Mutation check: replace the predicate with plain `-f`; this case goes red.
+- Adoption run twice from a pre-existing regular `~/.zshenv`: `~/.zshenv.local` is not a
+  symlink and holds the original content.
 - Adoption under `DRY_RUN=1` leaves an existing `~/.zshenv` in place and creates no `.zshenv.local`.
 - `.zshenv.local` is sourced in interactive shells too (a marker set there is visible to
   `zsh -i -c`), matching what a plain `~/.zshenv` did before.
@@ -227,3 +234,9 @@ Disposition: Addressed — (1) as Ergonomics; (2) Testing sets `HOME` and `ZDOTD
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (scoped Risk re-review, commit `e4ca03df`)
+
+Finding: the twice-run test as written started from a pre-existing regular `~/.zshenv`, from which a plain `-f` predicate takes the "both exist" branch on run 2 and passes; the self-adoption defect appears only from an absent start (reproduced in scratch). Dry run previews a `.zshenv.bak` backup a real run never makes (cosmetic). Checked fine: `run_cmd` honours DRY_RUN for rm/mv/ln; `HOME` in `setup()` breaks no case; no R contradicts an N.
+Assumption: the `! -L` guard has a test that can fail — confirmed by the mutation check now written into Testing.
+Disposition:
