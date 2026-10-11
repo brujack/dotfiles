@@ -90,12 +90,21 @@ fi
 - macOS only by what exists on disk: linuxbrew is `/home/linuxbrew/.linuxbrew`, not a candidate,
   and Linux has no `/opt/homebrew` or `/usr/local/opt/python@3`.
 - Reuses the `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_INTEL` seams `5_general.zsh` already reads.
-- A login non-interactive shell (`zsh -lc`) then runs `.zprofile`, which adds no `python3`
-  ahead of this directory; pyenv's `system` fallback, where reached, finds this `python3`.
+- Non-login only. A login shell (`zsh -l`, `ssh -t`) then reads `/etc/zprofile`, whose
+  `path_helper` rebuilds `PATH` from `/etc/paths` and appends the prior entries, moving this
+  directory behind `/usr/bin`: measured on the Studio, `zsh -c` resolves 3.14.8 and `zsh -lc`
+  resolves `/usr/bin/python3` 3.9.6. Login non-interactive shells are out of scope (N1 forbids
+  a `.zprofile` fix). `ssh studio '<cmd>'` is non-login (measured: `$0=zsh`, `[[ -o login ]]`
+  false, parent `sshd-session: bruce@notty`), so the ssh actor is covered.
 
 ### 2. Linking and doctor
 
 `setup_dotfile_symlinks` adopts an existing `~/.zshenv` before linking:
+
+"Regular file" means `[[ -f ~/.zshenv && ! -L ~/.zshenv ]]`: `-f` alone follows a symlink, so
+a second setup run would move the linked file to `.zshenv.local`, which then sources itself and
+prints `job table full or recursion limit exceeded` in every non-interactive zsh. The move runs
+through `run_cmd`, so `--dry-run` moves nothing.
 
 - `~/.zshenv` is a regular file and `~/.zshenv.local` does not exist: move it to
   `~/.zshenv.local`, then `safe_link` the repo's `.zshenv`. The workstation keeps its cargo line,
@@ -135,6 +144,10 @@ reports Homebrew's version, and both rendered plists carry the new `PATH`.
 ### Out of scope
 
 - cron (`/bin/sh`, own `PATH`); its only entry is the dead coverage push in the backlog.
+- Login non-interactive zsh (`zsh -lc`), reordered by `path_helper`; see Design §1.
+- Editor-spawned git hooks and other processes that never start zsh: they read no `.zshenv`.
+- A `brew upgrade` that moves `python@3` to a new series: pip packages installed into the old
+  series are no longer visible to non-interactive scripts. Accepted, documented here.
 - A bare `env -i` with no `PATH`.
 - Linux non-interactive actors (apt 3.14.4).
 - state-ledger's `from __future__ import annotations` fix: a different repo. Backlog row there.
@@ -142,8 +155,9 @@ reports Homebrew's version, and both rendered plists carry the new `PATH`.
 
 ## Testing
 
-All zsh cases set `ZDOTDIR` to a fixture directory holding only `.zshenv` (a symlink to the
-repo's file), so no real startup file is read, and pass a fixture prefix through
+All zsh cases set `HOME` and `ZDOTDIR` (in `setup()`) to a fixture directory holding only
+`.zshenv` (a symlink to the repo's file), so no real startup file and no real `.zshenv.local`
+is read, and pass a fixture prefix through
 `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_INTEL` holding `opt/python@3/libexec/bin/python3`, a stub
 printing a marker.
 
@@ -160,6 +174,9 @@ printing a marker.
   `HOME` then runs `X` (a marker line) once. With both files pre-existing, both are byte-identical
   afterwards, `~/.zshenv` is not a symlink, and a warning names both. Running setup twice leaves
   the same state as once.
+- Adoption run twice: after the second run `~/.zshenv.local` is not a symlink and holds the
+  original content, and a non-interactive `zsh -c true` prints nothing on stderr.
+- Adoption under `DRY_RUN=1` leaves an existing `~/.zshenv` in place and creates no `.zshenv.local`.
 - `.zshenv.local` is sourced in interactive shells too (a marker set there is visible to
   `zsh -i -c`), matching what a plain `~/.zshenv` did before.
 - `make lint`'s `zsh -n` covers `.zshenv` (asserted by the existing lint-scope tests' file list).
@@ -175,7 +192,7 @@ printing a marker.
 - **R7.** `[PR1]` Bats tests cover each Testing bullet, run zsh with `ZDOTDIR` pointed at a fixture, and include the positive control that a fixture `python3` resolves.
 - **R8.** `[PR1]` `CLAUDE.md` names `.zshenv` in the Repository Overview tree and the Symlink Strategy section.
 - **R9.** `[PR1]` `.zshenv` sources `${HOME}/.zshenv.local` when readable, in interactive and non-interactive shells.
-- **R10.** `[PR1]` Before linking, a regular `~/.zshenv` with no `~/.zshenv.local` is moved to `~/.zshenv.local` unchanged; when both exist, setup warns naming both and does not link `~/.zshenv`.
+- **R10.** `[PR1]` Before linking, a `~/.zshenv` that is a regular file and not a symlink, with no `~/.zshenv.local`, is moved to `~/.zshenv.local` unchanged through `run_cmd`; when both exist, setup warns naming both and does not link `~/.zshenv`.
 - **V1.** After merge and `./setup_env.sh -t setup_user` on the Studio, `ssh studio 'python3 --version'` reports Homebrew's python@3 version (3.14.x today), not 3.9.6.
 - **V2.** On the Studio, `env -i PATH=<rendered ledger-drift plist PATH> HOME=$HOME ledger --help` exits 0.
 - **V3.** After `./setup_env.sh -t setup_user` on the workstation, `ssh workstation 'python3 --version; command -v cargo'` reports apt 3.14.4 and `~/.cargo/bin/cargo`, as before.
@@ -193,19 +210,19 @@ Reviewed at commit: `8868401a` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Premises verified on the Studio (ssh cmd reads `~/.zshenv`; `ledger --help` under the plist PATH dies rc 1; prepending the libexec dir fixes it, rc 0). Two cheaper fixes each remove the live break alone: `from __future__ import annotations` in state-ledger's `ledger.py` (reaches every actor, including editor-spawned git hooks, which never start zsh and so never read `.zshenv`), and section 4's plist PATH. That leaves `.zshenv` plus adoption serving only `ssh studio cmd` and `zsh -c`, while rewiring the workstation's live `~/.zshenv` (its only non-interactive `~/.cargo/bin`) where it does nothing for python. Recommends: land the ledger.py fix now, ship section 4, re-propose `.zshenv` only with a named zsh consumer needing python >= 3.10. Tests discriminate (positive control and nested-once fail on a no-op `.zshenv`).
 Assumption: some recurring Studio actor runs through zsh, calls `python3`, and needs >= 3.10. Confirm/refute by enumerating ssh call sites and scheduled jobs against the Studio for python3 through zsh.
-Disposition:
+Disposition: Accepted, reason: operator scoped this to every non-interactive shell on purpose; keep `.zshenv`. The `ledger.py` `from __future__ import annotations` fix lands now as a separate state-ledger PR (operator, 2026-10-11).
 
 ### Ergonomics
 
 Finding: The Design §1 sentence about `zsh -lc` is false. `/etc/zprofile` runs `path_helper`, which rebuilds PATH from `/etc/paths` and appends the prior entries, moving the prepended dir behind `/usr/bin`. Measured on the Studio: `zsh -c` resolves 3.14.8, `zsh -lc` resolves `/usr/bin/python3` 3.9.6. No test covers `-lc`, and only macOS can show it. Fix: declare `zsh -l` actors out of scope and delete the sentence, or pin the limitation with a macOS-only test; a `.zprofile` fix breaks N1. Also: `opt/python@3` moves series on `brew upgrade`, silently dropping pip-installed packages for scripts that relied on them.
 Assumption: no actor that matters starts zsh as a non-interactive login shell. Measured after the lens: `ssh studio cmd` is `$0=zsh`, non-login, parent `sshd-session: bruce@notty`.
-Disposition:
+Disposition: Addressed — Design §1 sentence replaced: login non-interactive zsh declared out of scope, with the `path_helper` measurement and the ssh non-login measurement; added to Out of scope. Series-move of `python@3` accepted and documented in Out of scope.
 
 ### Risk
 
 Finding: (1) Same `path_helper` defect as Ergonomics. (2) Tests redirect only `ZDOTDIR` but `.zshenv` sources `${HOME}/.zshenv.local`; on the workstation after rollout the real cargo line runs and the "PATH unchanged" case goes red there only. Fix: set `HOME` to the fixture in `setup()`. (3) Adoption's "regular file" test must be `[[ -f ~/.zshenv && ! -L ~/.zshenv ]]`; a naive `-f` on the second setup run moves the symlink to `.zshenv.local`, and every non-interactive zsh then prints `job table full or recursion limit exceeded` (rc 0). Reproduced in scratch. Also: the adoption `mv` must go through `run_cmd` so `--dry-run` moves nothing.
 Assumption: the actors that matter are non-login. Same measurement as Ergonomics: `ssh studio cmd` is non-login.
-Disposition:
+Disposition: Addressed — (1) as Ergonomics; (2) Testing sets `HOME` and `ZDOTDIR` in `setup()`; (3) adoption predicate is `-f && ! -L`, the move goes through `run_cmd`, R10 reworded, twice-run and dry-run cases added.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
