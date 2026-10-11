@@ -48,3 +48,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0042](0042-credentials-reach-curl-on-stdin.md) | GitHub credentials reach curl on stdin, and credential-carrying seams are allowlisted | 2026-10-07 | Accepted |
 | [0043](0043-executed-installer-pins-are-report-only.md) | Pins on executed installers are report-only, checked against the installer's own history | 2026-10-08 | Accepted |
 | [0044](0044-host-kernel-limits-persist-via-sysctl-d.md) | Host kernel limits persist via sysctl.d, never lowering a higher value | 2026-10-08 | Accepted |
+| [0045](0045-tracked-zshenv-for-non-interactive-macos-python3.md) | A tracked .zshenv puts Homebrew's python3 first for non-interactive macOS zsh | 2026-10-11 | Accepted |
