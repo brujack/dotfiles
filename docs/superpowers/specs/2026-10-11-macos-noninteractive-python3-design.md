@@ -184,3 +184,29 @@ printing a marker.
 - **N3.** No new environment-variable seam.
 - **N4.** No `sudo`, no write outside `${HOME}`, and no `launchctl config`.
 - **N5.** Setup never deletes or overwrites a pre-existing regular-file `~/.zshenv` or any `~/.zshenv.local` (an existing `~/.zshenv` symlink is replaced, as `safe_link` does for every dotfile).
+
+## Multi-Lens Review
+
+Reviewed at commit: `8868401a` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Premises verified on the Studio (ssh cmd reads `~/.zshenv`; `ledger --help` under the plist PATH dies rc 1; prepending the libexec dir fixes it, rc 0). Two cheaper fixes each remove the live break alone: `from __future__ import annotations` in state-ledger's `ledger.py` (reaches every actor, including editor-spawned git hooks, which never start zsh and so never read `.zshenv`), and section 4's plist PATH. That leaves `.zshenv` plus adoption serving only `ssh studio cmd` and `zsh -c`, while rewiring the workstation's live `~/.zshenv` (its only non-interactive `~/.cargo/bin`) where it does nothing for python. Recommends: land the ledger.py fix now, ship section 4, re-propose `.zshenv` only with a named zsh consumer needing python >= 3.10. Tests discriminate (positive control and nested-once fail on a no-op `.zshenv`).
+Assumption: some recurring Studio actor runs through zsh, calls `python3`, and needs >= 3.10. Confirm/refute by enumerating ssh call sites and scheduled jobs against the Studio for python3 through zsh.
+Disposition:
+
+### Ergonomics
+
+Finding: The Design §1 sentence about `zsh -lc` is false. `/etc/zprofile` runs `path_helper`, which rebuilds PATH from `/etc/paths` and appends the prior entries, moving the prepended dir behind `/usr/bin`. Measured on the Studio: `zsh -c` resolves 3.14.8, `zsh -lc` resolves `/usr/bin/python3` 3.9.6. No test covers `-lc`, and only macOS can show it. Fix: declare `zsh -l` actors out of scope and delete the sentence, or pin the limitation with a macOS-only test; a `.zprofile` fix breaks N1. Also: `opt/python@3` moves series on `brew upgrade`, silently dropping pip-installed packages for scripts that relied on them.
+Assumption: no actor that matters starts zsh as a non-interactive login shell. Measured after the lens: `ssh studio cmd` is `$0=zsh`, non-login, parent `sshd-session: bruce@notty`.
+Disposition:
+
+### Risk
+
+Finding: (1) Same `path_helper` defect as Ergonomics. (2) Tests redirect only `ZDOTDIR` but `.zshenv` sources `${HOME}/.zshenv.local`; on the workstation after rollout the real cargo line runs and the "PATH unchanged" case goes red there only. Fix: set `HOME` to the fixture in `setup()`. (3) Adoption's "regular file" test must be `[[ -f ~/.zshenv && ! -L ~/.zshenv ]]`; a naive `-f` on the second setup run moves the symlink to `.zshenv.local`, and every non-interactive zsh then prints `job table full or recursion limit exceeded` (rc 0). Reproduced in scratch. Also: the adoption `mv` must go through `run_cmd` so `--dry-run` moves nothing.
+Assumption: the actors that matter are non-login. Same measurement as Ergonomics: `ssh studio cmd` is non-login.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
