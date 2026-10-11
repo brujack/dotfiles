@@ -156,10 +156,15 @@ returned 0. The other tools' writers keep today's behaviour (N1).
   reject every correct write. On a mismatch it prints
   `go: pin update failed: <constant> is not <expected>` and returns 1.
 - **go: next step and local-series warning.** After a successful write it prints
-  `go: next, on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer`.
-  The Linux installer's stamp compares the download URL, so it reinstalls on its own.
-  If this machine's `go version` is outside the new `GO_VER` series, it also prints
+  `go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer`.
+  The merge precondition is load-bearing: `--update` edits only this checkout, so on
+  another machine both commands see the old pin, do nothing, and report success. The Linux
+  installer's stamp compares the download URL, so once pulled it reinstalls on its own.
+  If this machine's `go` resolves and its version is outside the new `GO_VER` series, it
+  also prints
   `go: this machine runs <installed>, outside the new <GO_VER> series; doctor fails here until go is upgraded`.
+  If `go` does not resolve (a non-interactive Linux shell has no `/usr/local/go/bin` on
+  `PATH`), it prints nothing extra rather than an empty version.
   Brew has shipped every go release from 1.25.7 to 1.27.2, both minors included, within
   0–1 days of go.dev (homebrew-core `Formula/g/go.rb` commits against go.dev's release
   history, measured 2026-10-10), so on a mac the gap lasts until the next `brew upgrade`,
@@ -169,15 +174,22 @@ returned 0. The other tools' writers keep today's behaviour (N1).
   pyenv guard, writes `PYTHON_VER`, reads the line back as literal text
   (`PYTHON_VER="3.14.8"`), and returns 1 with a `pin update failed` line on a mismatch.
 - **python3: next step.** After a successful write it prints
-  `python3: next, on every machine run brew upgrade pyenv, then pyenv install 3.14.8 && ./setup_env.sh -t ansible`.
-  The `&&` matters. `-t ansible` (`setup_ansible`) does not check its own
-  `pyenv install`, and when the venv's readlink no longer matches it runs
-  `pyenv virtualenv-delete -f ansible` before building the replacement. A failed build
-  would leave no venv. `-t recreate-venv` is worse: it deletes first and never installs
-  the interpreter (`lib/developer.sh:637,640`), so with a new `PYTHON_VER` it always ends
-  with no venv. Installing the interpreter first, and only then running `-t ansible`, is
-  the order that keeps the old venv when the build fails. Both installer defects are
-  backlog rows; fixing them is an installer change (N2).
+  `python3: after this change merges and each machine pulls: run brew upgrade pyenv, then on macOS pyenv install <version> && ./setup_env.sh -t ansible; on Linux ./setup_env.sh -t ansible`.
+  - **Why after merge:** `--update` edits only this checkout. Elsewhere `-t ansible` sees
+    the old `PYTHON_VER`, finds the venv's readlink matching, does nothing and succeeds.
+  - **Why the OS split:** on Linux `setup_ansible` builds the interpreter itself, and only
+    when `~/.pyenv/versions/<version>` is absent: apt build deps first, then `pyenv install`
+    under `env -i` with `PATH=/usr/bin:/bin` and `--with-system-libmpdec=no`, to keep
+    linuxbrew out of the build. A bare `pyenv install` from an interactive shell has
+    linuxbrew on `PATH`; if it succeeds, `setup_ansible` skips its own clean build. On macOS
+    `setup_ansible` runs a plain `pyenv install -s`, so installing first changes nothing
+    about the build and the `&&` stops the venv being deleted when the build fails.
+  - **What it does not protect:** on Linux, and on either OS if the later `uv sync` fails,
+    `setup_ansible` still runs `pyenv virtualenv-delete -f ansible` before the new venv is
+    built. That is the installer defect in the backlog, not something a printed command
+    can fix. `-t recreate-venv` is never suggested: it deletes first and never installs the
+    interpreter (`lib/developer.sh:637,640`), so with a new `PYTHON_VER` it always ends
+    with no venv.
 - **pyenv guard.** Before writing `PYTHON_VER`, the new version must appear in
   `pyenv install --list` as an exact line, matched as `^[[:space:]]*<version>$` with the
   dots literal. The list also prints free-threaded builds (`3.14.8t`), which must not
@@ -266,12 +278,16 @@ reports `5 not checked`.
   `go1.27.1.linux-${_LINUX_ARCH}.tar.gz`: write succeeds, `Updated` printed, next-step
   line printed. Guards against comparing the expanded value.
 - go local-series warning: `go` stub reporting 1.27.1, update to 1.28.0, warning printed;
-  stub reporting 1.28.0, no warning.
+  stub reporting 1.28.0, no warning; no `go` resolvable, no warning and no empty version.
+- go next-step line contains `after this change merges and each machine pulls`,
+  `brew upgrade go` and `-t developer`.
 - python3 write read-back failure (fixture with no `PYTHON_VER=` line): rc 1,
   `pin update failed` printed, no `Updated` line.
 - python3, pyenv lists the version: `PYTHON_VER` moves, `Updated` printed, and the
-  next-step line printed containing `pyenv install 3.14.8 && ./setup_env.sh -t ansible`
-  and not `recreate-venv`.
+  next-step line contains `after this change merges and each machine pulls`, the macOS
+  form `pyenv install 3.14.8 && ./setup_env.sh -t ansible`, the Linux form
+  `on Linux ./setup_env.sh -t ansible` with no `pyenv install` in that clause, and not
+  `recreate-venv`.
 - python3, pyenv lists only `3.14.8t`: file byte-identical **and** the `cannot build` line
   printed **and** no `Updated` line **and** the pyenv mock recorded an `install --list`
   call, so inert code cannot pass.
@@ -298,9 +314,9 @@ print `Updated` regardless of the writer's status. Each must turn at least one t
 - **R11.** `[PR1]` With a `GITHUB_TOKEN` containing a line break, go and python3 are still checked, exactly the five GitHub-backed checks are counted as not checked, and the message names 5.
 - **R12.** `[PR1]` `--update` on an OUTDATED go sets `GO_VER` to the major.minor of latest and `GO_DOWNLOAD_FILENAME` to the full latest version, through a go-specific writer that does not call `_update_version_pin`.
 - **R13.** `[PR1]` After writing, the go writer reads both constants back and compares them with the literal unexpanded source text (`GO_DOWNLOAD_FILENAME="go<ver>.linux-${_LINUX_ARCH}.tar.gz"`); if either differs it prints a `pin update failed` line naming the constant and returns 1.
-- **R14.** `[PR1]` After a successful go write, `--update` prints a next-step line naming `brew upgrade go` for macOS and `./setup_env.sh -t developer` for Linux, plus a warning when this machine's `go version` is outside the new `GO_VER` series and none when it is inside.
+- **R14.** `[PR1]` After a successful go write, `--update` prints a next-step line that begins `after this change merges and each machine pulls` and names `brew upgrade go` for macOS and `./setup_env.sh -t developer` for Linux, plus a warning when this machine's `go` resolves to a version outside the new `GO_VER` series; no warning when it is inside or `go` does not resolve.
 - **R15.** `[PR1]` `--update` writes `PYTHON_VER` only when `pyenv install --list` has a line matching `^[[:space:]]*<version>$` with literal dots; otherwise, including when `pyenv` is unresolvable, it writes nothing, prints a line naming `brew upgrade pyenv`, and the writer returns 1.
-- **R16.** `[PR1]` After writing `PYTHON_VER`, `--update` prints a next-step line naming `brew upgrade pyenv` on every machine and `pyenv install <version> && ./setup_env.sh -t ansible`; it never names `recreate-venv`.
+- **R16.** `[PR1]` After writing `PYTHON_VER`, `--update` prints a next-step line that begins `after this change merges and each machine pulls`, names `brew upgrade pyenv`, gives macOS `pyenv install <version> && ./setup_env.sh -t ansible` and Linux `./setup_env.sh -t ansible` with no `pyenv install`, and never names `recreate-venv`.
 - **R17.** `[PR1]` The fetchers' header comment states a Python 3.9 floor for their parsing code.
 - **R18.** `[PR1]` `CLAUDE.md`'s `check-versions` bullet says five checks for the token-refused case and names go (pin versus latest) and python3 (pin versus latest in its series, newer series as `[INFO]`) and their feeds.
 - **R19.** `[PR1]` Each fetcher has a test pinning an exact derived value that is neither the first nor the last qualifying entry of a fixture that also contains entries the filter must reject.
@@ -349,3 +365,12 @@ Reviewed at commit: `92268a84` (all three lenses re-run: the round-1 revision ch
 - **Goal-Fit.** Finding: §4 (`--update`) is out of proportion to its value — no `check-versions --update` in shell history, four hand bumps in PRs since 2026-06, and a constants edit lands as a PR regardless; report-only (the `homebrew-install` precedent) keeps most of the value. Assumption: pins will be bumped through `--update` rather than by hand. Disposition: Accepted, reason: operator chose to keep the writers (option B over report-only, 2026-10-10).
 - **Ergonomics.** Finding: blocker — R16's `-t recreate-venv` deletes the venv then runs `pyenv virtualenv` on an uninstalled interpreter (`lib/developer.sh:637,640`), ending with no venv; the pyenv guard proves buildable, not installed. Assumption: the documented next step finishes non-interactively on `claude`. Disposition: Addressed — next step is `pyenv install <ver> && ./setup_env.sh -t ansible` (R16); orchestrator measured `setup_ansible`'s unchecked install and the missing linuxbrew `pyenv update`, both backlogged.
 - **Risk.** Finding: python3 refusals could still print `Updated` (`_prompt_version_update` ignores the writer's status); python write never read back; go read-back must compare the unexpanded `${_LINUX_ARCH}` text; missing `python3` misreported as a feed failure; existing `7 …` assertions become 5. Assumption: brew's go tracks go.dev closely — orchestrator measured 0–1 day lag across 12 releases (1.25.7–1.27.2). Disposition: Addressed — R6, R13, R21, R22, test list updated.
+
+### Round 3 (scoped: §4, Testing, Requirements)
+
+Reviewed at commit: `2e4addcf` (Risk and Ergonomics only; Goal-Fit's question was settled by the operator in round 2)
+
+- **Ergonomics.** Finding: (1) the Linux half of the python next step skips `setup_ansible`'s hardened build (apt deps, `env -i`, `PATH=/usr/bin:/bin`, bundled libmpdec), so a bare `pyenv install` with linuxbrew on `PATH` can produce the interpreter the code was written to avoid; (2) "on every machine" runs before the other machine has the pin — `--update` edits only this checkout, so the commands no-op there and report success. Assumption: a bare interactive `pyenv install` on `claude` builds an equivalent interpreter. Disposition: (proposed, awaiting operator) Addressed — OS-split next step, merge precondition on both lines, tests assert both (R14, R16).
+- **Risk.** Finding: the same Linux build bypass, found independently; minor: the local-series warning prints an empty version when `go` does not resolve. `-t developer` reaching `_install_ubuntu_go` confirmed; no R/N contradiction. Assumption: as Ergonomics, refutable only with a mutating build in a throwaway `PYENV_ROOT`. Disposition: (proposed, awaiting operator) Addressed — Linux runs `-t ansible` alone, so the assumption no longer carries weight; unresolvable-`go` case pinned (R14).
+
+Stopped after round 3: every finding was wording in a printed line, fixed without adding mechanism, and the Linux-build assumption both lenses named is removed by the fix rather than left to measure.
