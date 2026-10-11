@@ -32,8 +32,8 @@ jobs:
 
       - name: Install uv (pinned)
         env:
-          UV_VER: "0.12.5"
-          UV_SHA256: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
+          UV_VER: "0.13.0"
+          UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
         run: |
           curl -fsSL -o /tmp/uv.tar.gz \
             "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
@@ -108,8 +108,8 @@ jobs:
 
       - name: Install uv (pinned)
         env:
-          UV_VER: "0.12.5"
-          UV_SHA256: "5bb0e5fe008a773c3dbcb97ff79cd89e1241464fe9d2f986d52ad8f1b037bd62"
+          UV_VER: "0.13.0"
+          UV_SHA256: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
         run: |
           curl -fsSL -o /tmp/uv.tar.gz \
             "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-aarch64-apple-darwin.tar.gz"
@@ -219,8 +219,8 @@ jobs:
 
       - name: Install uv (pinned)
         env:
-          UV_VER: "0.12.5"
-          UV_SHA256: "68a509da24b06b4223a1c0175fb5eb5bc79342b76cbeff0cfe51ac3f5b17b6b2"
+          UV_VER: "0.13.0"
+          UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
         run: |
           curl -fsSL -o /tmp/uv.tar.gz \
             "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
