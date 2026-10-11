@@ -90,3 +90,23 @@ _zsh() {
   [ "$status" -eq 0 ]
   [[ "$output" != *"${FX_BIN}"* ]]
 }
+
+@test "PATH with no python3 at all still gets the python@3 directory" {
+  local _nopy="${BATS_TEST_TMPDIR}/nopy"
+  mkdir -p "${_nopy}"
+  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${_nopy}" \
+    _OVERRIDE_HOMEBREW_PREFIX_ARM="${FX_PREFIX}" \
+    _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
+    "$(command -v zsh)" -c 'print -r -- $PATH'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${FX_BIN}:${_nopy}" ]
+}
+
+@test "ARM prefix wins when both ARM and INTEL python@3 directories exist" {
+  local _intel="${BATS_TEST_TMPDIR}/intel"
+  mkdir -p "${_intel}/opt/python@3/libexec/bin"
+  INTEL="${_intel}" run _zsh -c 'print -r -- $PATH'
+  [ "$status" -eq 0 ]
+  [[ "$output" == "${FX_BIN}:"* ]]
+  [[ "$output" != *"${_intel}"* ]]
+}

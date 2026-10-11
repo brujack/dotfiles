@@ -250,6 +250,18 @@ _make_fake_dotfiles() {
   [[ -L "${FAKE_HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme" ]]
 }
 
+@test "setup_dotfile_symlinks warns and keeps .zshenv.local when the link fails after adoption" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  MOCK_LN_EXIT=1 run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  cmp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/a"
+  [[ "$output" == *"holds your original ~/.zshenv but the .zshenv link failed"* ]]
+}
+
 @test "setup_dotfile_symlinks links .config/ccstatusline and .zshrc.d" {
   _make_fake_dotfiles
   export MACOS=1
