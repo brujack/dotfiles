@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-11 | — | [macos-noninteractive-python3](specs/2026-10-11-macos-noninteractive-python3-design.md) | In Progress |
 | 2026-10-10 | [check-versions-go-python-feeds](plans/2026-10-10-check-versions-go-python-feeds.md) | [check-versions-go-python-feeds](specs/2026-10-10-check-versions-go-python-feeds-design.md) | Done — #329 |
 | 2026-10-10 | [kernel-keyring-limits](plans/2026-10-10-kernel-keyring-limits.md) | [kernel-keyring-limits](specs/2026-10-10-kernel-keyring-limits-design.md) | Done — #327 |
 | 2026-10-09 | [cheat-sh-bounded-atomic-fetch](plans/2026-10-09-cheat-sh-bounded-atomic-fetch.md) | [cheat-sh-bounded-atomic-fetch](specs/2026-10-09-cheat-sh-bounded-atomic-fetch-design.md) | Done — #326 |

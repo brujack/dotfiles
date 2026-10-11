@@ -1,0 +1,186 @@
+# Non-interactive shells on macOS resolve Homebrew's python3, not Apple's 3.9
+
+- **Status:** Draft
+- **Backlog row:** go and python3 differ across macOS and Linux, and python3 outside the venv is ancient (P2, python half)
+
+## Problem
+
+On macOS, every actor that does not start an interactive shell resolves `python3` to Apple's
+`/usr/bin/python3`, which is 3.9.6. Interactive shells are out of scope: pyenv governs them.
+
+Measured 2026-10-11 with `PYENV_VERSION` unset:
+
+| actor                                       | claude                             | workstation | Studio    |
+| ------------------------------------------- | ---------------------------------- | ----------- | --------- |
+| interactive zsh                             | 3.15.0 (linuxbrew, pyenv `system`) | 3.15.0      | 3.9.6     |
+| `env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin` | 3.14.4 (apt)                       | 3.14.4      | **3.9.6** |
+| `ssh host '<cmd>'`                          | 3.14.4                             | 3.14.4      | **3.9.6** |
+
+Linux non-interactive actors get apt's 3.14.4, which is current enough; this spec is macOS only.
+
+### A live break behind it
+
+`~/.local/bin/ledger` is `state-ledger/scripts/ledger.py`, `#!/usr/bin/env python3`. Since
+state-ledger `054ecb7` (2026-08-04) it carries `filename: str | None = None` at line 217, a
+runtime-evaluated annotation with no `from __future__ import annotations`. Under 3.9 it dies:
+
+```
+$ env -i PATH=<the LaunchAgent PATH> HOME=$HOME ledger --help   # on the Studio
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'   rc=1
+```
+
+The weekly `ledger-drift` LaunchAgent runs `ledger`. Its last heartbeat is 2026-10-05; its next
+run hits this. `renovate_held_check.py`, the other agent's detector, runs on 3.9 today (rc 0).
+
+### The actors and where their PATH comes from (Studio, measured 2026-10-11)
+
+- `ssh studio '<cmd>'`: the account's login shell is `/bin/zsh`, run non-interactive and
+  non-login, `PATH=/usr/bin:/bin:/usr/sbin:/sbin`. The only startup file it reads is
+  `~/.zshenv`, which does not exist. Bash and Python children inherit its `PATH`.
+- `zsh -c` from editors and scripts: same file, same default.
+- LaunchAgents: no shell. `PATH` comes only from the plist; `launchctl getenv PATH` is empty.
+  Both cadence plists set `__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:…`,
+  and `/opt/homebrew/bin` holds `python3.13` and `python3.14` but no `python3`.
+- cron: `/bin/sh` with cron's own `PATH`. The only crontab entry is the coverage push already
+  recorded as a dead entry in the backlog.
+
+An existing `~/.zshenv` (measured 2026-10-11): none on the Studio or `claude`; on the
+workstation a 21-byte regular file holding rustup's installer line `. "$HOME/.cargo/env"`, the
+only thing putting `~/.cargo/bin` on that machine's non-interactive `PATH` (interactive shells
+get it from `6_path.zsh`). `safe_link` would move it to `~/.zshenv.bak` and stop it running.
+This repo's own rustup install passes `--no-modify-path`, so the line came from an earlier
+manual install; a future installer that appends to `~/.zshenv` would, through a symlink, write
+into the tracked repo file.
+
+`/opt/homebrew/opt/python@3` points at `python@3.14` 3.14.8 and its `libexec/bin` holds an
+unversioned `python3`. That directory follows Homebrew's current default series.
+
+### Prior art
+
+`2026-08-20-linuxbrew-login-path-design.md` (retired) found that `ssh host cmd` reads only
+`.zshenv`, that this repo neither tracks nor links one, and that an unguarded `PATH` append
+duplicates across nested shells without `typeset -U path`. This design answers both: it adds a
+tracked, linked `.zshenv`, and dedups. It also found a `.zprofile` change demoted linuxbrew via
+the oh-my-zsh `brew` plugin; this design does not touch interactive shells, where that plugin runs.
+
+## Design
+
+### 1. `.zshenv` (new, repo root)
+
+```zsh
+# Non-interactive shells (ssh host cmd, zsh -c from editors and scripts) read only this
+# file, and on macOS their default PATH resolves python3 to Apple's 3.9.6. Put Homebrew's
+# current python3 first. Interactive shells are left to pyenv.
+if [[ ! -o interactive ]]; then
+  for _py_prefix in "${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}" "${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}"; do
+    if [[ -d "${_py_prefix}/opt/python@3/libexec/bin" ]]; then
+      typeset -U path
+      path=("${_py_prefix}/opt/python@3/libexec/bin" $path)
+      break
+    fi
+  done
+  unset _py_prefix
+fi
+
+# Machine-local additions (installer-written lines such as rustup's) live here, never in
+# this tracked file.
+[[ -r "${HOME}/.zshenv.local" ]] && source "${HOME}/.zshenv.local"
+```
+
+- macOS only by what exists on disk: linuxbrew is `/home/linuxbrew/.linuxbrew`, not a candidate,
+  and Linux has no `/opt/homebrew` or `/usr/local/opt/python@3`.
+- Reuses the `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_INTEL` seams `5_general.zsh` already reads.
+- A login non-interactive shell (`zsh -lc`) then runs `.zprofile`, which adds no `python3`
+  ahead of this directory; pyenv's `system` fallback, where reached, finds this `python3`.
+
+### 2. Linking and doctor
+
+`setup_dotfile_symlinks` adopts an existing `~/.zshenv` before linking:
+
+- `~/.zshenv` is a regular file and `~/.zshenv.local` does not exist: move it to
+  `~/.zshenv.local`, then `safe_link` the repo's `.zshenv`. The workstation keeps its cargo line,
+  now sourced from `.zshenv.local`.
+- `~/.zshenv` is a regular file and `~/.zshenv.local` already exists: warn naming both files and
+  skip the `.zshenv` link, leaving both untouched. Nothing is merged or overwritten.
+- Otherwise (absent, or already a symlink): `safe_link` as for `.zprofile`.
+
+`run_doctor`'s symlink list adds `~/.zshenv`.
+
+### 3. Lint scope
+
+`.zshenv` joins `Makefile`'s `ZSH_FILES` pathspec and `ci.yml`'s `lint-macos` pathspec in the
+same change (CLAUDE.md requires both call sites move together).
+
+### 4. LaunchAgent template
+
+`LaunchAgents/cadence.plist.template`'s `PATH` becomes:
+
+```
+__HOME__/.local/bin:/opt/homebrew/opt/python@3/libexec/bin:/opt/homebrew/bin:/usr/local/opt/python@3/libexec/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+```
+
+A missing directory on `PATH` is skipped. Installed agents are re-rendered by
+`./setup_env.sh -t setup_user`, which does not overwrite a real heartbeat.
+
+### 5. Docs
+
+`CLAUDE.md`: the Repository Overview tree and the Symlink Strategy paragraph name `.zshenv`; one
+sentence says non-interactive macOS shells get Homebrew's `python3` through it.
+
+### Rollout (operator, after merge)
+
+On the Studio: `git pull`, then `./setup_env.sh -t setup_user`. Then `ssh studio 'python3 --version'`
+reports Homebrew's version, and both rendered plists carry the new `PATH`.
+
+### Out of scope
+
+- cron (`/bin/sh`, own `PATH`); its only entry is the dead coverage push in the backlog.
+- A bare `env -i` with no `PATH`.
+- Linux non-interactive actors (apt 3.14.4).
+- state-ledger's `from __future__ import annotations` fix: a different repo. Backlog row there.
+- Installing a Homebrew python: `python@3.14` is already present on every mac as a dependency.
+
+## Testing
+
+All zsh cases set `ZDOTDIR` to a fixture directory holding only `.zshenv` (a symlink to the
+repo's file), so no real startup file is read, and pass a fixture prefix through
+`_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_INTEL` holding `opt/python@3/libexec/bin/python3`, a stub
+printing a marker.
+
+- `zsh -c 'python3'` prints the marker (positive control: the prepend happened and resolves).
+- `zsh -i -c 'print -r -- $PATH'` does not contain the fixture directory.
+- With the fixture's `libexec/bin` absent, `zsh -c 'print -r -- $PATH'` equals the input `PATH`.
+- `zsh -c 'zsh -c "print -r -- \$PATH"'` contains the fixture directory exactly once.
+- The rendered plist's `PATH` lists `/opt/homebrew/opt/python@3/libexec/bin` before `/usr/bin`;
+  `env -i PATH=<rendered PATH with a fixture prefix substituted> /bin/sh -c 'command -v python3'`
+  resolves the fixture `python3`.
+- `setup_dotfile_symlinks` creates `~/.zshenv`; `run_doctor`'s symlink check reports it.
+- Adoption: a pre-existing regular `~/.zshenv` with content `X` ends as `~/.zshenv.local` with
+  content `X` (byte-identical) and `~/.zshenv` a symlink; a non-interactive `zsh -c` with that
+  `HOME` then runs `X` (a marker line) once. With both files pre-existing, both are byte-identical
+  afterwards, `~/.zshenv` is not a symlink, and a warning names both. Running setup twice leaves
+  the same state as once.
+- `.zshenv.local` is sourced in interactive shells too (a marker set there is visible to
+  `zsh -i -c`), matching what a plain `~/.zshenv` did before.
+- `make lint`'s `zsh -n` covers `.zshenv` (asserted by the existing lint-scope tests' file list).
+
+## Requirements
+
+- **R1.** `[PR1]` A tracked `.zshenv` at the repo root prepends `<prefix>/opt/python@3/libexec/bin` to `path` only in non-interactive shells, for the first of `${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}` and `${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}` whose `opt/python@3/libexec/bin` is a directory.
+- **R2.** `[PR1]` `.zshenv` declares `typeset -U path` before prepending, so nested non-interactive shells carry the directory once.
+- **R3.** `[PR1]` `.zshenv` leaves `PATH` unchanged in interactive shells and when neither candidate directory exists.
+- **R4.** `[PR1]` `setup_dotfile_symlinks` links `${HOME}/.zshenv` to the repo's `.zshenv`, and `run_doctor`'s symlink list includes `~/.zshenv`.
+- **R5.** `[PR1]` `.zshenv` is in `Makefile`'s `ZSH_FILES` and in `ci.yml`'s `lint-macos` zsh pathspec.
+- **R6.** `[PR1]` `LaunchAgents/cadence.plist.template`'s `PATH` is `__HOME__/.local/bin:/opt/homebrew/opt/python@3/libexec/bin:/opt/homebrew/bin:/usr/local/opt/python@3/libexec/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
+- **R7.** `[PR1]` Bats tests cover each Testing bullet, run zsh with `ZDOTDIR` pointed at a fixture, and include the positive control that a fixture `python3` resolves.
+- **R8.** `[PR1]` `CLAUDE.md` names `.zshenv` in the Repository Overview tree and the Symlink Strategy section.
+- **R9.** `[PR1]` `.zshenv` sources `${HOME}/.zshenv.local` when readable, in interactive and non-interactive shells.
+- **R10.** `[PR1]` Before linking, a regular `~/.zshenv` with no `~/.zshenv.local` is moved to `~/.zshenv.local` unchanged; when both exist, setup warns naming both and does not link `~/.zshenv`.
+- **V1.** After merge and `./setup_env.sh -t setup_user` on the Studio, `ssh studio 'python3 --version'` reports Homebrew's python@3 version (3.14.x today), not 3.9.6.
+- **V2.** On the Studio, `env -i PATH=<rendered ledger-drift plist PATH> HOME=$HOME ledger --help` exits 0.
+- **V3.** After `./setup_env.sh -t setup_user` on the workstation, `ssh workstation 'python3 --version; command -v cargo'` reports apt 3.14.4 and `~/.cargo/bin/cargo`, as before.
+- **N1.** No change to interactive shell startup (`.zshrc`, `.zshrc.d/`, `.zprofile`).
+- **N2.** No `PATH` change on Linux: `.zshenv` adds no `/home/linuxbrew` path, and a machine whose old `~/.zshenv` is adopted runs the same lines it ran before.
+- **N3.** No new environment-variable seam.
+- **N4.** No `sudo`, no write outside `${HOME}`, and no `launchctl config`.
+- **N5.** Setup never deletes or overwrites a pre-existing regular-file `~/.zshenv` or any `~/.zshenv.local` (an existing `~/.zshenv` symlink is replaced, as `safe_link` does for every dotfile).
