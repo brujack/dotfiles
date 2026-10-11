@@ -44,10 +44,13 @@
        boundary here -- the agent runs as the operator, anything able to write
        ~/.local/bin can already edit this plist, and /opt/homebrew/bin is equally
        operator-writable and already ahead of the system directories. -->
+  <!-- python@3's libexec/bin ahead of /usr/bin: it is the only Homebrew
+       directory naming `python3` unversioned, and Apple's /usr/bin/python3
+       (3.9) would otherwise win for this profile-less process. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__HOME__/.local/bin:/opt/homebrew/opt/python@3/libexec/bin:/opt/homebrew/bin:/usr/local/opt/python@3/libexec/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
 
   <key>RunAtLoad</key><false/>
