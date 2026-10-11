@@ -411,9 +411,23 @@ _stub_go() {
   PATH="${_shim}" run _update_go_pin "1.27.2"
   [ "$status" -eq 1 ]
   [[ "$output" == *'go: pin update failed: GO_VER is not 1.27'* ]]
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
   PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.27.2" <<< "y"
   [[ "$output" == *"pin update failed"* ]]
   [[ "$output" != *"Updated"* ]]
+}
+
+@test "go mv failure: rc 1, original unchanged, no temp file left" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  export MOCK_MV_FAIL_ARGS=".new."
+  run _update_go_pin "1.27.2"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: pin update failed: could not replace"* ]]
+  grep -q "mv .*\.new\." "${MOCK_CALLS_FILE}"
+  cmp "${BATS_TEST_TMPDIR}/before" "${_CP}"
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
 }
 
 @test "go local-series warning: installed go outside the new series warns" {
