@@ -429,3 +429,34 @@ fetches had undefined partial failure and could read different snapshots (R23, o
 request); R4/R5 had no tests (R25); V3 listed four of six mutation controls; the R19
 series value was the fixture's last entry; V2's bare `env -i` would find no `curl` or
 `python3`; the round 1/2 sections cite superseded R numbers. All applied in the text. A second architect pass (2026-10-10) found R25's stdin assertion valid only when the fetchers are called directly, Testing listing six mutation controls to V3's seven, and a hand pin into an unreleased series reading as a fetch failure: scoped, added, and given its own `[WARN]` (R26).
+
+## Amendments
+
+- finding R14 (2026-10-11, reviewer both): DIFFERS — The next-step line at lib/workflows.sh:249 begins ' go: after this change merges and each machine pulls', not 'after this change merges and each machine pulls'. It has a 'go: ' prefix. Its content (brew upgrade go / ./setup_env.sh -t developer, the outside-series warning, silence when inside or unresolved) otherwise matches.
+- R14 -> After a successful go write, `--update` prints a next-step line that begins `go: after this change merges and each machine pulls` and names `brew upgrade go` for macOS and `./setup_env.sh -t developer` for Linux, plus a warning when this machine's `go` resolves to a version outside the new `GO_VER` series; no warning when it is inside or `go` does not resolve. — every line these writers print carries the tool prefix, matching §4's own example lines; the requirement's 'begins' omitted it
+- finding R16 (2026-10-11, reviewer both): DIFFERS — The line at lib/workflows.sh:283 begins ' python3: after this change merges and each machine pulls', not 'after this change merges and each machine pulls'. Its content (brew upgrade pyenv; macOS pyenv install <v> && ./setup_env.sh -t ansible; Linux ./setup_env.sh -t ansible; no recreate-venv) otherwise matches.
+- R16 -> After writing `PYTHON_VER`, `--update` prints a next-step line that begins `python3: after this change merges and each machine pulls`, names `brew upgrade pyenv`, gives macOS `pyenv install <version> && ./setup_env.sh -t ansible` and Linux `./setup_env.sh -t ansible` with no `pyenv install`, and never names `recreate-venv`. — same tool prefix as every other line these writers print; the requirement's 'begins' omitted it
+
+## Spec alignment (2026-10-11)
+
+- spec: docs/superpowers/specs/2026-10-10-check-versions-go-python-feeds-design.md
+- anchor: 864be0d3ef14bf73e6f2202cb2743bd60d147e40
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R14 | both | DIFFERS | The next-step line at lib/workflows.sh:249 begins ' go: after this change merges and each machine pulls', not 'after this change merges and each machine pulls'. It has a 'go: ' prefix. Its content (brew upgrade go / ./setup_env.sh -t developer, the outside-series warning, silence when inside or unresolved) otherwise matches. | - R14 -> After a successful go write, `--update` prints a next-step line that begins `go: after this change merges and each machine pulls` and names `brew upgrade go` for macOS and `./setup_env.sh -t developer` for Linux, plus a warning when this machine's `go` resolves to a version outside the new `GO_VER` series; no warning when it is inside or `go` does not resolve. — every line these writers print carries the tool prefix, matching §4's own example lines; the requirement's 'begins' omitted it |
+| R16 | both | DIFFERS | The line at lib/workflows.sh:283 begins ' python3: after this change merges and each machine pulls', not 'after this change merges and each machine pulls'. Its content (brew upgrade pyenv; macOS pyenv install <v> && ./setup_env.sh -t ansible; Linux ./setup_env.sh -t ansible; no recreate-venv) otherwise matches. | - R16 -> After writing `PYTHON_VER`, `--update` prints a next-step line that begins `python3: after this change merges and each machine pulls`, names `brew upgrade pyenv`, gives macOS `pyenv install <version> && ./setup_env.sh -t ansible` and Linux `./setup_env.sh -t ansible` with no `pyenv install`, and never names `recreate-venv`. — same tool prefix as every other line these writers print; the requirement's 'begins' omitted it |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-10-11: ./setup_env.sh -t check-versions from the branch on claude and (git archive temp copy) on the Studio: go [OUTDATED] pinned=1.27.1 latest=1.27.2, python3 [OK] pinned=3.14.8 latest=3.14.8 + [INFO] 3.15 series, 0 warnings on both.
+- V2: 2026-10-11: both fetchers piped to the Studio under env -i PATH=/usr/bin:/bin (/usr/bin/python3 3.9.6, /bin/bash 3.2): go 1.27.2 rc 0; python 3.14 -> '3.14.8 3.15.0' rc 0.
+- V3: 2026-10-11, scratch copies, each mutation asserted applied: go max->first-qualifying 2 red; arm64 dropped 1; pyenv match unanchored 1; go via _update_version_pin 4; read-back vs expanded filename 7; compare ==-1 -> !=0 3; Updated regardless of writer rc go 2 / python 3.
