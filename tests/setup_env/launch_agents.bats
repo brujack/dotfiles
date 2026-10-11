@@ -311,14 +311,20 @@ EOF
   local _libexec="/opt/homebrew/opt/python@3/libexec/bin"
   local -a _entries
   IFS=':' read -r -a _entries <<< "${_path}"
-  local _i _libexec_pos=-1 _usr_pos=-1
+  local _i _usr_pos=-1 _libexec_pos _lx
   for _i in "${!_entries[@]}"; do
-    [[ "${_entries[_i]}" == "${_libexec}" ]] && _libexec_pos=${_i}
     [[ "${_entries[_i]}" == "/usr/bin" ]] && _usr_pos=${_i}
   done
-  [ "${_libexec_pos}" -ge 0 ]
   [ "${_usr_pos}" -ge 0 ]
-  [ "${_libexec_pos}" -lt "${_usr_pos}" ]
+  # Both prefixes: the Intel one is otherwise unpinned by anything.
+  for _lx in "${_libexec}" "/usr/local/opt/python@3/libexec/bin"; do
+    _libexec_pos=-1
+    for _i in "${!_entries[@]}"; do
+      [[ "${_entries[_i]}" == "${_lx}" ]] && _libexec_pos=${_i}
+    done
+    [ "${_libexec_pos}" -ge 0 ]
+    [ "${_libexec_pos}" -lt "${_usr_pos}" ]
+  done
 
   local _fix="${BATS_TEST_TMPDIR}/pathfix"
   mkdir -p "${_fix}/libexec" "${_fix}/usrbin"
