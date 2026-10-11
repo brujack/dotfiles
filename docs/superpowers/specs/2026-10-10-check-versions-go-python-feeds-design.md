@@ -343,7 +343,7 @@ print `Updated` regardless of the writer's status, and change the pin comparison
 - **R3.** `[PR1]` A python.org body that is not a JSON list is a fetch failure.
 - **R4.** `[PR1]` Neither feed request carries `GITHUB_TOKEN` or any `Authorization` header.
 - **R5.** `[PR1]` Each feed curl call passes `--max-time 10`.
-- **R6.** `[PR1]` Any feed failure (curl non-zero, unparseable body, wrong shape, no qualifying entry) produces `[WARN] <tool> could not fetch latest version` and increments the warned counter; an unresolvable `python3` instead produces `[WARN] <tool> python3 not found; cannot read the release feed` and increments the warned counter.
+- **R6.** `[PR1]` Any feed failure (curl non-zero, unparseable body, wrong shape, no qualifying entry in the body at all — a python body with releases but none in the pinned series is R26, not a failure) produces `[WARN] <tool> could not fetch latest version` and increments the warned counter; an unresolvable `python3` instead produces `[WARN] <tool> python3 not found; cannot read the release feed` and increments the warned counter.
 - **R7.** `[PR1]` The go line compares the version embedded in `GO_DOWNLOAD_FILENAME` with go's latest across all series, never the installed `go`.
 - **R8.** `[PR1]` The python3 line compares `PYTHON_VER` with the latest release in `PYTHON_VER`'s major.minor series, never the installed `python3`.
 - **R9.** `[PR1]` When python3's latest overall is in a newer series than `PYTHON_VER`, an `[INFO]` line names that series; it increments no counter and does not change the exit code.
