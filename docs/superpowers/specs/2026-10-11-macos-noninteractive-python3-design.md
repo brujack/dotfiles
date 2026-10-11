@@ -241,3 +241,7 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 Finding: the twice-run test as written started from a pre-existing regular `~/.zshenv`, from which a plain `-f` predicate takes the "both exist" branch on run 2 and passes; the self-adoption defect appears only from an absent start (reproduced in scratch). Dry run previews a `.zshenv.bak` backup a real run never makes (cosmetic). Checked fine: `run_cmd` honours DRY_RUN for rm/mv/ln; `HOME` in `setup()` breaks no case; no R contradicts an N.
 Assumption: the `! -L` guard has a test that can fail — confirmed by the mutation check now written into Testing.
 Disposition: Addressed — twice-run case now starts from an absent `~/.zshenv` with a plain-`-f` mutation check; dry run prints the adoption move and skips `safe_link`. Finding was in the test apparatus, so review stops here (operator, 2026-10-11).
+
+## Amendments
+
+- R1 -> A tracked `.zshenv` at the repo root prepends `<prefix>/opt/python@3/libexec/bin` to `path` only in non-interactive shells whose inherited `PATH` resolves `python3` to `/usr/bin/python3` or to nothing, for the first of `${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}` and `${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}` whose `opt/python@3/libexec/bin` is a directory. — a child zsh of an interactive pyenv or venv shell must keep that python3 (Task 1 code-quality review).

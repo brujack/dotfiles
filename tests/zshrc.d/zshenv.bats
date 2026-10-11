@@ -72,3 +72,21 @@ _zsh() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"mark=1" ]]
 }
+
+@test "inherited PATH that already resolves python3 elsewhere is kept" {
+  mkdir -p "${BATS_TEST_TMPDIR}/shims"
+  printf '#!/bin/sh\necho INHERITED_PY3\n' > "${BATS_TEST_TMPDIR}/shims/python3"
+  chmod +x "${BATS_TEST_TMPDIR}/shims/python3"
+  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:/usr/bin:/bin" \
+    _OVERRIDE_HOMEBREW_PREFIX_ARM="${FX_PREFIX}" \
+    _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
+    zsh -c 'python3'
+  [ "$status" -eq 0 ]
+  [ "$output" = "INHERITED_PY3" ]
+  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:/usr/bin:/bin" \
+    _OVERRIDE_HOMEBREW_PREFIX_ARM="${FX_PREFIX}" \
+    _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
+    zsh -c 'print -r -- $PATH'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"${FX_BIN}"* ]]
+}
