@@ -134,7 +134,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [lib/workflows.sh, tests/setup_env/check_versions_feeds.bats, tests/mocks/pyenv]
+files_touched: [lib/workflows.sh, tests/setup_env/check_versions_feeds.bats, tests/mocks/pyenv, tests/setup_env/workflows.bats]
 depends_on: [2]
 ```
 
@@ -144,6 +144,7 @@ depends_on: [2]
 - `_update_go_pin <latest>`: sets `GO_VER="<major.minor>"`, then the `GO_DOWNLOAD_FILENAME` version via `_update_url_pins go`. Read back with `grep -Fqx` against the literal lines `GO_VER="1.28"` and `GO_DOWNLOAD_FILENAME="go1.28.0.linux-${_LINUX_ARCH}.tar.gz"` (single-quoted in source so `${_LINUX_ARCH}` stays literal). Mismatch: `go: pin update failed: <CONSTANT> is not <expected>`, return 1. Success prints `go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer`; if `command -v go` resolves and its version's major.minor differs from the new `GO_VER`, print `go: this machine runs <installed>, outside the new <GO_VER> series; doctor fails here until go is upgraded`.
 - `_update_python_pin <old> <new>`: guard first. No `pyenv`, or `pyenv install --list | grep -Eq "^[[:space:]]*${new//./\\.}\$"` fails: `python3: pyenv on this machine cannot build <new>; run brew upgrade pyenv`, return 1, file untouched. Otherwise sed `PYTHON_VER`, read back `grep -Fqx "PYTHON_VER=\"<new>\""`, mismatch → `pin update failed`, return 1. Success prints `python3: after this change merges and each machine pulls: run brew upgrade pyenv, then on macOS pyenv install <new> && ./setup_env.sh -t ansible; on Linux ./setup_env.sh -t ansible`.
 - `tests/mocks/pyenv`: `install --list` prints `MOCK_PYENV_INSTALL_LIST` (newline-separated) and exits 0.
+- `tests/setup_env/workflows.bats`: the three `_prompt_version_update … y/n/empty reply` tests call it with `go` to exercise the generic `_update_version_pin` path. Go now routes to `_update_go_pin`, so switch those three to `yq` (`YQ_VER`, seeded the same way) so they keep testing the generic branch; go's own behaviour is covered by the new tests below.
 
 **Tests** (constants copy via the `setup_constants_copy` pattern and `_OVERRIDE_CONSTANTS_PATH`; reply via `<<< "y"`):
 
