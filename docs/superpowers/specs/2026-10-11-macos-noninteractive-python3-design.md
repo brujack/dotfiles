@@ -1,6 +1,7 @@
 # Non-interactive shells on macOS resolve Homebrew's python3, not Apple's 3.9
 
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-10-11
 - **Backlog row:** go and python3 differ across macOS and Linux, and python3 outside the venv is ancient (P2, python half)
 
 ## Problem
@@ -239,4 +240,4 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 
 Finding: the twice-run test as written started from a pre-existing regular `~/.zshenv`, from which a plain `-f` predicate takes the "both exist" branch on run 2 and passes; the self-adoption defect appears only from an absent start (reproduced in scratch). Dry run previews a `.zshenv.bak` backup a real run never makes (cosmetic). Checked fine: `run_cmd` honours DRY_RUN for rm/mv/ln; `HOME` in `setup()` breaks no case; no R contradicts an N.
 Assumption: the `! -L` guard has a test that can fail — confirmed by the mutation check now written into Testing.
-Disposition:
+Disposition: Addressed — twice-run case now starts from an absent `~/.zshenv` with a plain-`-f` mutation check; dry run prints the adoption move and skips `safe_link`. Finding was in the test apparatus, so review stops here (operator, 2026-10-11).
