@@ -171,7 +171,7 @@ _stub_all_but_pins() {
 @test "go pin equal to feed latest is OK and ignores the installed go" {
   local _bin="${BATS_TEST_TMPDIR}/gobin"
   mkdir -p "${_bin}"
-  printf '#!/usr/bin/env bash\nprintf "go version go9.9.9 linux/amd64\\n"\n' > "${_bin}/go"
+  printf '#!/bin/bash\nprintf "go version go9.9.9 linux/amd64\\n"\n' > "${_bin}/go"
   chmod +x "${_bin}/go"
   export PATH="${_bin}:${PATH}"
   export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
@@ -341,4 +341,192 @@ _stub_all_but_pins() {
   [[ "$output" == *"5 not checked"* ]]
   [[ "$output" == *"pinned=1.27.1"* ]]
   [[ "$output" == *"pinned=3.14.8"* ]]
+}
+
+# ── --update writers (_update_go_pin, _update_python_pin) ───────────────────
+
+# Per-test writable copy of lib/constants.sh; the real file is never touched.
+_seed_constants() {
+  _CP="${BATS_TEST_TMPDIR}/constants.sh"
+  cp "${REPO_ROOT}/lib/constants.sh" "${_CP}"
+  export _OVERRIDE_CONSTANTS_PATH="${_CP}"
+}
+
+# Pins go at GO_VER=<series>, filename go<full>; fails if the seed did not take.
+_seed_go() {
+  sed -i.bak -e "s|^GO_VER=.*|GO_VER=\"$1\"|" \
+    -e "s|^GO_DOWNLOAD_FILENAME=.*|GO_DOWNLOAD_FILENAME=\"go$2.linux-\${_LINUX_ARCH}.tar.gz\"|" "${_CP}"
+  rm -f "${_CP}.bak"
+  grep -Fqx "GO_VER=\"$1\"" "${_CP}"
+}
+
+# A PATH holding only the named tools (no go, no pyenv unless asked for).
+_shim_path() {
+  local _d="${BATS_TEST_TMPDIR}/shim" _t
+  mkdir -p "${_d}"
+  for _t in sed grep rm cut dirname cat head; do
+    ln -sf "$(command -v "${_t}")" "${_d}/${_t}"
+  done
+  printf '%s' "${_d}"
+}
+
+_stub_go() {
+  local _d="$1" _v="$2"
+  printf '#!/bin/bash\nprintf "go version go%s linux/amd64\\n"\n' "${_v}" > "${_d}/go"
+  chmod +x "${_d}/go"
+}
+
+@test "go update within the series moves the filename and keeps GO_VER" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  _shim="$(_shim_path)"
+  PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.27.2" <<< "y"
+  [ "$status" -eq 0 ]
+  grep -Fqx 'GO_VER="1.27"' "${_CP}"
+  grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
+  [[ "$output" == *"Updated GO_VER → 1.27.2"* ]]
+  [[ "$output" == *"go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer"* ]]
+}
+
+@test "go update across a minor moves GO_VER and the filename" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  _shim="$(_shim_path)"
+  PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.28.0" <<< "y"
+  [ "$status" -eq 0 ]
+  grep -Fqx 'GO_VER="1.28"' "${_CP}"
+  grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.28.0.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
+  [[ "$output" == *"Updated GO_VER → 1.28.0"* ]]
+}
+
+@test "go read-back failure: rc 1, names the constant, no Updated" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  sed -i.bak '/^GO_VER=/d' "${_CP}"; rm -f "${_CP}.bak"
+  _shim="$(_shim_path)"
+  PATH="${_shim}" run _update_go_pin "1.27.2"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'go: pin update failed: GO_VER is not 1.27'* ]]
+  PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.27.2" <<< "y"
+  [[ "$output" == *"pin update failed"* ]]
+  [[ "$output" != *"Updated"* ]]
+}
+
+@test "go local-series warning: installed go outside the new series warns" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  _shim="$(_shim_path)"
+  _stub_go "${_shim}" "1.27.1"
+  PATH="${_shim}" run _update_go_pin "1.28.0"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: this machine runs 1.27.1, outside the new 1.28 series; doctor fails here until go is upgraded"* ]]
+}
+
+@test "go local-series warning: installed go inside the new series is silent" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  _shim="$(_shim_path)"
+  _stub_go "${_shim}" "1.28.0"
+  PATH="${_shim}" run _update_go_pin "1.28.0"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: after this change merges"* ]]   # positive: the writer ran
+  [[ "$output" != *"this machine runs"* ]]
+}
+
+@test "go local-series warning: no go on PATH is silent and prints no empty version" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  _shim="$(_shim_path)"
+  [ ! -e "${_shim}/go" ]
+  PATH="${_shim}" run _update_go_pin "1.28.0"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"go: after this change merges"* ]]
+  [[ "$output" != *"this machine runs"* ]]
+}
+
+@test "python update writes PYTHON_VER and prints exact next steps" {
+  _seed_constants
+  sed -i.bak 's|^PYTHON_VER=.*|PYTHON_VER="3.14.6"|' "${_CP}"; rm -f "${_CP}.bak"
+  export MOCK_PYENV_INSTALL_LIST=$'  3.14.8\n  3.14.8t'
+  run _prompt_version_update "python3" "PYTHON_VER" "3.14.6" "3.14.8" <<< "y"
+  [ "$status" -eq 0 ]
+  grep -Fqx 'PYTHON_VER="3.14.8"' "${_CP}"
+  [[ "$output" == *"Updated PYTHON_VER → 3.14.8"* ]]
+  [[ "$output" == *"python3: after this change merges and each machine pulls: run brew upgrade pyenv, then on macOS pyenv install 3.14.8 && ./setup_env.sh -t ansible; on Linux ./setup_env.sh -t ansible"* ]]
+  [[ "$output" != *"recreate-venv"* ]]
+}
+
+@test "python guard: only 3.14.8t listed refuses, file byte-identical, pyenv asked" {
+  _seed_constants
+  sed -i.bak 's|^PYTHON_VER=.*|PYTHON_VER="3.14.6"|' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  export MOCK_PYENV_INSTALL_LIST=$'  3.14.8t\n  3.14.7'
+  run _prompt_version_update "python3" "PYTHON_VER" "3.14.6" "3.14.8" <<< "y"
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"python3: pyenv on this machine cannot build 3.14.8; run brew upgrade pyenv"* ]]
+  [[ "$output" != *"Updated"* ]]
+  grep -Fq "pyenv install --list" "${MOCK_CALLS_FILE}"
+}
+
+@test "python guard: dots are literal (3.14x8 in the list does not satisfy 3.14.8)" {
+  _seed_constants
+  sed -i.bak 's|^PYTHON_VER=.*|PYTHON_VER="3.14.6"|' "${_CP}"; rm -f "${_CP}.bak"
+  export MOCK_PYENV_INSTALL_LIST=$'  3.14x8'
+  run _update_python_pin "3.14.6" "3.14.8"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot build 3.14.8"* ]]
+}
+
+@test "python guard: no pyenv refuses, file byte-identical, no Updated" {
+  _seed_constants
+  sed -i.bak 's|^PYTHON_VER=.*|PYTHON_VER="3.14.6"|' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  _shim="$(_shim_path)"
+  [ ! -e "${_shim}/pyenv" ]
+  PATH="${_shim}" run _prompt_version_update "python3" "PYTHON_VER" "3.14.6" "3.14.8" <<< "y"
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"python3: pyenv on this machine cannot build 3.14.8; run brew upgrade pyenv"* ]]
+  [[ "$output" != *"Updated"* ]]
+}
+
+@test "python read-back failure: rc 1, pin update failed, no Updated" {
+  _seed_constants
+  sed -i.bak '/^PYTHON_VER=/d' "${_CP}"; rm -f "${_CP}.bak"
+  export MOCK_PYENV_INSTALL_LIST=$'  3.14.8'
+  run _update_python_pin "3.14.6" "3.14.8"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"python3: pin update failed: PYTHON_VER is not 3.14.8"* ]]
+  run _prompt_version_update "python3" "PYTHON_VER" "3.14.6" "3.14.8" <<< "y"
+  [[ "$output" != *"Updated"* ]]
+}
+
+@test "pin ahead of the feed with UPDATE_VERSIONS=1: both OK, no prompt, constants byte-identical" {
+  _stub_all_but_pins
+  _seed_constants
+  _seed_go "1.28" "1.28.0"
+  sed -i.bak 's|^PYTHON_VER=.*|PYTHON_VER="3.14.9"|' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  export GO_DOWNLOAD_FILENAME="go1.28.0.linux-amd64.tar.gz" GO_VER="1.28" PYTHON_VER="3.14.9"
+  export UPDATE_VERSIONS=1
+  _fetch_go_latest() { printf '1.27.2'; }
+  _fetch_python_latest() { printf '3.14.8 3.15.1'; }
+  run run_check_versions <<< "y"
+  [[ "$output" == *"[OK]       go"* ]]
+  [[ "$output" == *"[OK]       python3"* ]]
+  [[ "$output" != *"Update go"* ]]
+  [[ "$output" != *"Update python3"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+}
+
+@test "outdated go under UPDATE_VERSIONS=1 passes the full latest to the writer" {
+  _stub_all_but_pins
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz" GO_VER="1.27" PYTHON_VER="3.14.8"
+  export UPDATE_VERSIONS=1
+  _fetch_go_latest() { printf '1.27.2'; }
+  _fetch_python_latest() { printf '3.14.8 3.14.8'; }
+  run run_check_versions <<< "y"
+  grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
+  [[ "$output" == *"Updated GO_VER → 1.27.2"* ]]
 }

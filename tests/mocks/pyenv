@@ -5,6 +5,11 @@ if [[ "$1" == "init" ]] || [[ "$1" == "virtualenv-init" ]]; then
   printf ""
   exit 0
 fi
+# 'pyenv install --list' prints MOCK_PYENV_INSTALL_LIST (newline-separated).
+if [[ "$1" == "install" ]] && [[ "$2" == "--list" ]]; then
+  [[ -n "${MOCK_PYENV_INSTALL_LIST:-}" ]] && printf "%s\n" "${MOCK_PYENV_INSTALL_LIST}"
+  exit 0
+fi
 # For 'pyenv which python', output MOCK_PYENV_WHICH_STDOUT or real python3 path
 if [[ "$1" == "which" ]]; then
   if [[ -n "${MOCK_PYENV_WHICH_STDOUT:-}" ]]; then

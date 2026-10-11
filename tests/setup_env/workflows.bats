@@ -1746,26 +1746,26 @@ setup_constants_copy() {
 @test "_prompt_version_update calls _update_version_pin on y reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
-  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"   # precondition, not decoration
-  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "y"
-  grep -q 'GO_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"   # precondition, not decoration
+  _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< "y"
+  grep -q 'YQ_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
 }
 
 @test "_prompt_version_update skips update on n reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
-  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< "n"
-  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< "n"
+  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
 
 @test "_prompt_version_update skips update on empty reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^GO_VER=.*|GO_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
-  _prompt_version_update "go" "GO_VER" "1.26" "1.27" <<< ""
-  grep -q 'GO_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< ""
+  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
 }
 
 # ── _fetch_github_latest ─────────────────────────────────────────────────────
