@@ -1307,6 +1307,79 @@ _fetch_github_latest() {
     | sed 's/^v//'
 }
 
+# Vendor release feeds for the go and python3 checks. Both parsers run under
+# the system python3, which may be as old as 3.9: only json, re and tuple
+# comparison are used (no `match`, no 3.10+ syntax). The body goes to python
+# on stdin, not argv. Neither request carries GITHUB_TOKEN or any header.
+# Prints the highest stable go release that publishes both Linux tarballs,
+# without the "go" prefix; empty output and rc 1 when none qualifies.
+_fetch_go_latest() {
+  local _body
+  _body=$(curl -sf --max-time 10 'https://go.dev/dl/?mode=json') || return 1
+  printf '%s' "${_body}" | python3 -c '
+import json, re, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, list):
+    sys.exit(1)
+best = None
+for entry in data:
+    if not isinstance(entry, dict) or entry.get("stable") is not True:
+        continue
+    version = entry.get("version", "")
+    m = re.match(r"^go(\d+)\.(\d+)(?:\.(\d+))?$", version)
+    if not m:
+        continue
+    names = [f.get("filename") for f in entry.get("files", []) if isinstance(f, dict)]
+    if (version + ".linux-amd64.tar.gz") not in names or (version + ".linux-arm64.tar.gz") not in names:
+        continue
+    key = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+    if best is None or key > best[0]:
+        best = (key, version[2:])
+if best is None:
+    sys.exit(1)
+print(best[1])
+'
+}
+
+# Prints "<highest in SERIES> <highest overall>", or "- <highest overall>"
+# when SERIES has no release yet. Empty output and rc 1 when no
+# "Python X.Y.Z" name is in the feed.
+_fetch_python_latest() {
+  local _series="$1" _body
+  _body=$(curl -sf --max-time 10 \
+    'https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false') || return 1
+  printf '%s' "${_body}" | python3 -c '
+import json, re, sys
+series = sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, list):
+    sys.exit(1)
+overall = None
+in_series = None
+for entry in data:
+    if not isinstance(entry, dict):
+        continue
+    m = re.match(r"^Python (\d+)\.(\d+)\.(\d+)$", str(entry.get("name", "")))
+    if not m:
+        continue
+    key = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    if overall is None or key > overall:
+        overall = key
+    if "%d.%d" % key[:2] == series and (in_series is None or key > in_series):
+        in_series = key
+if overall is None:
+    sys.exit(1)
+fmt = lambda k: "%d.%d.%d" % k
+print((fmt(in_series) if in_series else "-") + " " + fmt(overall))
+' "${_series}"
+}
+
 _check_one_version() {
   local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
 
