@@ -145,7 +145,7 @@ readonly _KNOWN_SHELL_ZSH_OVERLAP="config/profiles.sh"
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | sort -u)"
   if [ "${resolved}" != "${expected}" ]; then
     printf 'ZSH_FILES resolved:\n%s\n--- expected:\n%s\n' "${resolved}" "${expected}" >&2
   fi
@@ -282,7 +282,7 @@ _extract_ci_zsh_pathspec() {
     make --no-print-directory -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | sort -u)"
   if [[ "${resolved}" != "${expected}" ]]; then
     printf 'resolved:\n%s\nexpected:\n%s\n' "${resolved}" "${expected}" >&2
   fi

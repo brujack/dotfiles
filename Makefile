@@ -62,7 +62,7 @@ BATS_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_I
 # .zprofile/1_init.zsh on every login and interactive shell, so zsh -n must
 # parse it too.
 ZSH_FILES := $(shell env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh')
+                 git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh')
 
 # Detection asks what the binary IS, not that a binary of that name exists.
 # moreutils ships an incompatible `parallel` under the same name (dpkg
