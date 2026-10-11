@@ -75,12 +75,15 @@ Two new functions in `lib/workflows.sh`, beside `_fetch_github_latest`:
   newest-first, and a 1.26.x security patch listed ahead of 1.27.x would otherwise read as
   latest and make `--update` downgrade. Requiring both files means `--update` can only
   write a filename published for every Linux architecture `_LINUX_ARCH` produces.
-- **`_fetch_python_latest [series]`.** Calls curl on the python.org releases URL above.
+- **`_fetch_python_latest <series>`.** One curl of the python.org releases URL above.
   The body must be a JSON **list**; a dict (the shape a paginated API returns) is a
   failure, because the newest release might then be on a page never read. Measured
   2026-10-10: a bare list of 275 rows back to Python 2.0.1, `limit`/`offset` ignored, no
   `Link` header. `python3` keeps names matching `^Python \d+\.\d+\.\d+$` and prints the
-  highest by numeric tuple, or the highest within `series` (`3.14`) when one is given.
+  highest within `series` (`3.14`) and the highest overall, space-separated, from the
+  same body (`3.14.8 3.15.0`). One request means one failure mode and one snapshot: the
+  in-series and overall answers cannot come from different responses, and there is no
+  state where one succeeded and the other failed. No release in `series` is a failure.
 
 Neither sends `GITHUB_TOKEN`: neither host is GitHub.
 
@@ -104,11 +107,16 @@ The verdict is about the repo's pin, which exists whether or not this machine ha
 tool. An empty fetch result prints `[WARN] <tool> could not fetch latest version` and
 counts as a warning, as today.
 
+**A pin newer than the feed is `[OK]`, never `[OUTDATED]`.** Comparison is numeric
+(`pinned >= latest` is OK). A hand bump to a release the feed has not listed yet, or a
+cached older body, must not read as outdated, and `--update` must never offer it as a
+downgrade.
+
 - **go.** Pinned value: the version in `GO_DOWNLOAD_FILENAME` (`go1.27.1.linux-…` →
   `1.27.1`), not `GO_VER`; an unparseable filename prints
   `[WARN] go could not parse pinned version`. Compared with go's latest across all series.
 - **python3.** Pinned value: `PYTHON_VER`. Compared with the latest **within
-  `PYTHON_VER`'s major.minor series** (`_fetch_python_latest 3.14`). When the latest
+  `PYTHON_VER`'s major.minor series**, the first value `_fetch_python_latest 3.14` prints. When the latest
   overall is in a newer series, one extra line follows, not counted in any total and not
   affecting the exit code:
 
@@ -239,11 +247,23 @@ entry, or the last entry cannot pass:
   lacking `linux-arm64`; stable `go1.28.2` with both files; stable `go1.27.5`. Result:
   `1.28.2` (not first, not last, not the highest stable overall).
 - python fixture, unsorted: `Python 3.15.0rc1`, `Python install manager 26.4`,
-  `Python 3.14.9`, `Python 3.15.1`, `Python 3.10.20`, `Python 3.14.10`. Result:
-  `3.15.1`; with series `3.14`: `3.14.10` (numeric, not string, comparison).
+  `Python 3.14.9`, `Python 3.15.1`, `Python 3.14.10`, `Python 3.10.20`. With series
+  `3.14` the output is `3.14.10 3.15.1`: neither value is the first or last qualifying
+  entry, and `3.14.10` over `3.14.9` proves numeric, not string, comparison.
+
+Feed requests: every feed curl recorded in `MOCK_CALLS_FILE` carries `--max-time 10` and
+no `Authorization`, and `MOCK_CURL_STDIN_FILE` stays empty (the GitHub calls pass the
+token on stdin), with `GITHUB_TOKEN` set. One python check makes exactly one python.org
+request.
+
+Pin ahead of the feed: go pin 1.28.0 with feed latest 1.27.2, and python pin 3.14.9 with
+in-series latest 3.14.8, each print `[OK]`; under `--update` neither prompts and the
+constants file is byte-identical, with the `[OK]` line asserted present so an inert
+`--update` cannot pass.
 
 Failure cases, each asserting the `[WARN]` line and the warned counter: curl exits 22;
-body is not JSON; python body is a JSON dict; no qualifying entry. `python3` not
+body is not JSON; python body is a JSON dict; no qualifying entry; no release in the
+pinned python series. `python3` not
 resolvable (shim `PATH` holding everything the check needs except `python3`) asserts the
 `python3 not found` text and the absence of `could not fetch`.
 
@@ -323,16 +343,24 @@ print `Updated` regardless of the writer's status. Each must turn at least one t
 - **R20.** `[PR1]` A test covers python3 pinned at the newest patch of its series while a newer series exists, asserting `[OK]`, the `[INFO]` line, an outdated count of 0 and rc 0.
 - **R21.** `[PR1]` The python3 writer reads `PYTHON_VER` back as literal text after writing; on a mismatch it prints a `pin update failed` line and returns 1.
 - **R22.** `[PR1]` For go and python3, `--update` prints `Updated <var> → <new>` only when the writer returned 0.
+- **R23.** `[PR1]` `_fetch_python_latest <series>` makes one request and prints the in-series latest and the overall latest, space-separated, from that one body; no release in the series is a fetch failure.
+- **R24.** `[PR1]` The go and python3 verdicts compare numerically and report `[OK]` when the pin is equal to or newer than the feed's latest.
+- **R25.** `[PR1]` Tests assert that every feed curl passes `--max-time 10`, sends no `Authorization` on argv or stdin, and that one python check makes exactly one python.org request.
 - **V1.** On `claude` and the Studio, `./setup_env.sh -t check-versions` prints `[OK]` or `[OUTDATED]` (not `[WARN]`) for both go and python3, and exits 0 when every pin is current.
-- **V2.** Both fetchers return the expected value when run under the Studio's `/usr/bin/python3` (3.9.6) via `env -i`.
-- **V3.** Mutation: go max replaced with first qualifying entry, arm64 requirement dropped, pyenv match unanchored, go routed through `_update_version_pin` — each turns at least one test red.
+- **V2.** Both fetchers return the expected value when run on the Studio under `env -i PATH=/usr/bin:/bin`, which resolves Apple's `/usr/bin/python3` (3.9.6) and `/usr/bin/curl`.
+- **V3.** Mutation: go max replaced with first qualifying entry, arm64 requirement dropped, pyenv match unanchored, go routed through `_update_version_pin`, go read-back compared against the expanded filename, `Updated` printed regardless of the writer's status, and the comparison changed from `>=` to `!=` — each turns at least one test red.
 - **N1.** No change to the line format, comparison or `--update` behaviour of ruby, yq, shellcheck, vagrant, gitleaks, homebrew-install or the cargo checks.
 - **N2.** No change to how go or python3 is installed on any OS, and no `Brewfile`, `pyproject.toml` or `uv.lock` change.
 - **N3.** `--update` never writes `PYTHON_VER` to a version in a different major.minor series from its current value.
 - **N4.** No new environment-variable seam.
 - **N5.** The `[INFO]` line never increments the outdated, warned, skipped or OK counters.
+- **N6.** `--update` never writes a go or python3 version lower than the current pin.
 
 ## Multi-Lens Review
+
+Rounds 1 and 2 cite requirement numbers and commands from the revision they reviewed (for
+example round 1's R2, R11, R10-R13, and `-t recreate-venv` in R16). They are kept as
+written; the current requirements are in `## Requirements` above.
 
 Reviewed at commit: `bd9b9def` (Step 7 self-review commit, before Step 8 dispatch)
 
@@ -372,5 +400,12 @@ Reviewed at commit: `2e4addcf` (Risk and Ergonomics only; Goal-Fit's question wa
 
 - **Ergonomics.** Finding: (1) the Linux half of the python next step skips `setup_ansible`'s hardened build (apt deps, `env -i`, `PATH=/usr/bin:/bin`, bundled libmpdec), so a bare `pyenv install` with linuxbrew on `PATH` can produce the interpreter the code was written to avoid; (2) "on every machine" runs before the other machine has the pin — `--update` edits only this checkout, so the commands no-op there and report success. Assumption: a bare interactive `pyenv install` on `claude` builds an equivalent interpreter. Disposition: (proposed, awaiting operator) Addressed — OS-split next step, merge precondition on both lines, tests assert both (R14, R16).
 - **Risk.** Finding: the same Linux build bypass, found independently; minor: the local-series warning prints an empty version when `go` does not resolve. `-t developer` reaching `_install_ubuntu_go` confirmed; no R/N contradiction. Assumption: as Ergonomics, refutable only with a mutating build in a throwaway `PYENV_ROOT`. Disposition: (proposed, awaiting operator) Addressed — Linux runs `-t ansible` alone, so the assumption no longer carries weight; unresolvable-`go` case pinned (R14).
+
+Operator's architect review, after round 3 (operator-relayed, 2026-10-10): pin newer than
+the feed would read `[OUTDATED]` and `--update` would downgrade it (R24, N6); two python
+fetches had undefined partial failure and could read different snapshots (R23, one
+request); R4/R5 had no tests (R25); V3 listed four of six mutation controls; the R19
+series value was the fixture's last entry; V2's bare `env -i` would find no `curl` or
+`python3`; the round 1/2 sections cite superseded R numbers. All applied in the text.
 
 Stopped after round 3: every finding was wording in a printed line, fixed without adding mechanism, and the Linux-build assumption both lenses named is removed by the fix rather than left to measure.
