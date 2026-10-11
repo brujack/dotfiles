@@ -38,9 +38,9 @@ GO_VER="1.27"
 _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 # Carries the full patch while GO_VER carries only major.minor, so the two move
 # together or the Linux installer fetches one version while doctor demands
-# another. Verified published before pinning: go1.27.1.linux-amd64.tar.gz and
-# .linux-arm64.tar.gz both resolve 200 application/x-gzip, and golang/go tags
-# 1.27 at 1.27.0 and 1.27.1.
+# another. Both the .linux-amd64 and .linux-arm64 tarballs must be published
+# for the pinned release; _fetch_go_latest checks that before --update writes
+# the pin.
 GO_DOWNLOAD_FILENAME="go1.27.1.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
