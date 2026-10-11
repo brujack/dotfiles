@@ -1532,9 +1532,85 @@ _prompt_version_update() {
   printf "  Update %s from %s to %s? [y/N] " "${_tool}" "${_pinned}" "${_latest}"
   read -r _reply
   if [[ "${_reply}" =~ ^[Yy]$ ]]; then
-    _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
-    printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+    case "${_tool}" in
+      go)
+        _update_go_pin "${_latest}" || return 1
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+      python3)
+        _update_python_pin "${_pinned}" "${_latest}" || return 1
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+      *)
+        _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+    esac
   fi
+}
+
+# _update_go_pin <latest> -- GO_VER carries major.minor, GO_DOWNLOAD_FILENAME
+# the full release; both move together. Reads the constants file back because
+# a sed that matches nothing exits 0 and would otherwise report a pin it never
+# wrote. rc 0 written and verified, 1 failed.
+_update_go_pin() {
+  local _latest="$1"
+  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+  local _series="${_latest%.*}"
+  local _want_ver _want_file
+
+  sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_constants}"
+  rm -f "${_constants}.bak"
+  _update_url_pins "go" "" "${_latest}" "${_constants}"
+
+  _want_ver="GO_VER=\"${_series}\""
+  # shellcheck disable=SC2016 # ${_LINUX_ARCH} is literal text in constants.sh
+  _want_file='GO_DOWNLOAD_FILENAME="go'"${_latest}"'.linux-${_LINUX_ARCH}.tar.gz"'
+  if ! grep -Fqx "${_want_ver}" "${_constants}"; then
+    printf "  go: pin update failed: GO_VER is not %s\n" "${_series}"
+    return 1
+  fi
+  if ! grep -Fqx "${_want_file}" "${_constants}"; then
+    printf "  go: pin update failed: GO_DOWNLOAD_FILENAME is not %s\n" "${_want_file#GO_DOWNLOAD_FILENAME=}"
+    return 1
+  fi
+
+  printf "  go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer\n"
+  local _installed="" _mm=""
+  if command -v go &>/dev/null; then
+    [[ "$(go version 2>/dev/null)" =~ go([0-9]+\.[0-9]+(\.[0-9]+)?) ]] && _installed="${BASH_REMATCH[1]}"
+    _mm=$(printf '%s' "${_installed}" | cut -d. -f1,2)
+  fi
+  if [[ -n "${_installed}" && "${_mm}" != "${_series}" ]]; then
+    printf "  go: this machine runs %s, outside the new %s series; doctor fails here until go is upgraded\n" \
+      "${_installed}" "${_series}"
+  fi
+  return 0
+}
+
+# _update_python_pin <old> <new> -- refuses unless this machine's pyenv can
+# build exactly <new> (a stale pyenv, or a feed release pyenv does not list
+# yet, would leave the pin unbuildable). rc 0 written and verified, 1 refused
+# or failed; the file is untouched on refusal.
+_update_python_pin() {
+  local _old="$1" _new="$2"
+  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+
+  if ! command -v pyenv &>/dev/null \
+    || ! pyenv install --list 2>/dev/null | grep -Eq "^[[:space:]]*${_new//./\\.}\$"; then
+    printf "  python3: pyenv on this machine cannot build %s; run brew upgrade pyenv\n" "${_new}"
+    return 1
+  fi
+
+  sed -i.bak "s|^PYTHON_VER=\"${_old}\"|PYTHON_VER=\"${_new}\"|" "${_constants}"
+  rm -f "${_constants}.bak"
+  if ! grep -Fqx "PYTHON_VER=\"${_new}\"" "${_constants}"; then
+    printf "  python3: pin update failed: PYTHON_VER is not %s\n" "${_new}"
+    return 1
+  fi
+
+  printf "  python3: after this change merges and each machine pulls: run brew upgrade pyenv, then on macOS pyenv install %s && ./setup_env.sh -t ansible; on Linux ./setup_env.sh -t ansible\n" "${_new}"
+  return 0
 }
 
 _check_cv_homebrew_install() {
