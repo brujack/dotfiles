@@ -4,7 +4,7 @@
 # drift silently, so bump both together. A GO_VER duplicate sat here too until
 # 2026-09-12 and was dead: nothing in any zsh file expanded it, and every real
 # ${GO_VER} consumer is bash reading constants.sh.
-RUBY_VER="4.0.5"
+RUBY_VER="4.0.7"
 GITREPOS="${HOME}/git-repos"
 
 # Homebrew prefix, not hostname, answers "is this an ARM mac": the blocks

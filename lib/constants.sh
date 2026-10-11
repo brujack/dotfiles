@@ -97,11 +97,11 @@ NOMAD_VER="2.0.3"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 PACKER_VER="1.15.4"
 # read by lib/developer.sh:setup_ansible, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
-PYTHON_VER="3.14.6"
+PYTHON_VER="3.14.8"
 # read by lib/developer.sh:install_ruby_tools
 RUBY_INSTALL_VER="0.10.2"
 # read by lib/developer.sh:install_ruby, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions, .config/.zshrc.d/5_general.zsh
-RUBY_VER="4.0.5"
+RUBY_VER="4.0.7"
 # read by lib/workflows.sh:run_check_versions and
 # lib/linux_ubuntu.sh:_install_ubuntu_shellcheck, which also builds the anchored
 # skip-check version regex from this same value (^version: <ver>$). Asserted
