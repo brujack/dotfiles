@@ -237,4 +237,4 @@ OH_MY_ZSH_VER="master"
 # Homebrew install script commit SHA — content-addressable; avoids HEAD which can change
 # check: ./setup_env.sh -t check-versions (report-only — update manually after reviewing the diff URL)
 # read by lib/macos.sh:install_homebrew, lib/workflows.sh:_check_cv_homebrew_install, scripts/bootstrap_linux.sh, scripts/bootstrap_mac.sh
-HOMEBREW_INSTALL_SHA="5e78e698e405a17b63b5fe41ff747f9fccf39472"
+HOMEBREW_INSTALL_SHA="09c62fc577ec170172b0a184060f141a2c622dc1"
