@@ -1,3 +1,5 @@
+> **Status: DONE** — merged as #329 (0a560158)
+
 # check-versions go/python3 feeds Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-10-check-versions-go-python-feeds-design.md
