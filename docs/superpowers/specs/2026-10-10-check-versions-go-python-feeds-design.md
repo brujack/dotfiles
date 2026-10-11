@@ -1,6 +1,7 @@
 # check-versions: go and python3 from vendor feeds
 
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-10-10
 - **Backlog row:** `-t check-versions` go and python3 WARN on every run (P2 — bugs and security)
 
 ## Problem
@@ -416,8 +417,8 @@ Reviewed at commit: `92268a84` (all three lenses re-run: the round-1 revision ch
 
 Reviewed at commit: `2e4addcf` (Risk and Ergonomics only; Goal-Fit's question was settled by the operator in round 2)
 
-- **Ergonomics.** Finding: (1) the Linux half of the python next step skips `setup_ansible`'s hardened build (apt deps, `env -i`, `PATH=/usr/bin:/bin`, bundled libmpdec), so a bare `pyenv install` with linuxbrew on `PATH` can produce the interpreter the code was written to avoid; (2) "on every machine" runs before the other machine has the pin — `--update` edits only this checkout, so the commands no-op there and report success. Assumption: a bare interactive `pyenv install` on `claude` builds an equivalent interpreter. Disposition: (proposed, awaiting operator) Addressed — OS-split next step, merge precondition on both lines, tests assert both (R14, R16).
-- **Risk.** Finding: the same Linux build bypass, found independently; minor: the local-series warning prints an empty version when `go` does not resolve. `-t developer` reaching `_install_ubuntu_go` confirmed; no R/N contradiction. Assumption: as Ergonomics, refutable only with a mutating build in a throwaway `PYENV_ROOT`. Disposition: (proposed, awaiting operator) Addressed — Linux runs `-t ansible` alone, so the assumption no longer carries weight; unresolvable-`go` case pinned (R14).
+- **Ergonomics.** Finding: (1) the Linux half of the python next step skips `setup_ansible`'s hardened build (apt deps, `env -i`, `PATH=/usr/bin:/bin`, bundled libmpdec), so a bare `pyenv install` with linuxbrew on `PATH` can produce the interpreter the code was written to avoid; (2) "on every machine" runs before the other machine has the pin — `--update` edits only this checkout, so the commands no-op there and report success. Assumption: a bare interactive `pyenv install` on `claude` builds an equivalent interpreter. Disposition: Addressed (operator, 2026-10-10) — OS-split next step, merge precondition on both lines, tests assert both (R14, R16).
+- **Risk.** Finding: the same Linux build bypass, found independently; minor: the local-series warning prints an empty version when `go` does not resolve. `-t developer` reaching `_install_ubuntu_go` confirmed; no R/N contradiction. Assumption: as Ergonomics, refutable only with a mutating build in a throwaway `PYENV_ROOT`. Disposition: Addressed (operator, 2026-10-10) — Linux runs `-t ansible` alone, so the assumption no longer carries weight; unresolvable-`go` case pinned (R14).
 
 Stopped after round 3: every finding was wording in a printed line, fixed without adding mechanism, and the Linux-build assumption both lenses named is removed by the fix rather than left to measure.
 
