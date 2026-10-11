@@ -1328,11 +1328,16 @@ best = None
 for entry in data:
     if not isinstance(entry, dict) or entry.get("stable") is not True:
         continue
-    version = entry.get("version", "")
-    m = re.match(r"^go(\d+)\.(\d+)(?:\.(\d+))?$", version)
+    version = entry.get("version")
+    if not isinstance(version, str):
+        continue
+    files = entry.get("files")
+    if not isinstance(files, list):
+        continue
+    m = re.match(r"^go([0-9]+)\.([0-9]+)(?:\.([0-9]+))?$", version)
     if not m:
         continue
-    names = [f.get("filename") for f in entry.get("files", []) if isinstance(f, dict)]
+    names = [f.get("filename") for f in files if isinstance(f, dict)]
     if (version + ".linux-amd64.tar.gz") not in names or (version + ".linux-arm64.tar.gz") not in names:
         continue
     key = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
@@ -1365,7 +1370,7 @@ in_series = None
 for entry in data:
     if not isinstance(entry, dict):
         continue
-    m = re.match(r"^Python (\d+)\.(\d+)\.(\d+)$", str(entry.get("name", "")))
+    m = re.match(r"^Python ([0-9]+)\.([0-9]+)\.([0-9]+)$", str(entry.get("name", "")))
     if not m:
         continue
     key = (int(m.group(1)), int(m.group(2)), int(m.group(3)))

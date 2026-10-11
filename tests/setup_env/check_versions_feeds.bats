@@ -72,6 +72,27 @@ JSON
   [ -z "$output" ]
 }
 
+@test "_fetch_go_latest skips malformed entries and keeps valid ones" {
+  MOCK_CURL_STDOUT='[{"version":5,"stable":true,"files":[]},{"version":"go1.30.1","stable":true,"files":null},{"version":"go1.28.2","stable":true,"files":[{"filename":"go1.28.2.linux-amd64.tar.gz"},{"filename":"go1.28.2.linux-arm64.tar.gz"}]}]' \
+    run _fetch_go_latest
+  [ "$status" -eq 0 ]
+  [ "$output" = "1.28.2" ]
+}
+
+@test "_fetch_go_latest ignores non-ASCII digit versions" {
+  MOCK_CURL_STDOUT='[{"version":"go١.٢.٣","stable":true,"files":[{"filename":"go١.٢.٣.linux-amd64.tar.gz"},{"filename":"go١.٢.٣.linux-arm64.tar.gz"}]},{"version":"go1.28.2","stable":true,"files":[{"filename":"go1.28.2.linux-amd64.tar.gz"},{"filename":"go1.28.2.linux-arm64.tar.gz"}]}]' \
+    run _fetch_go_latest
+  [ "$status" -eq 0 ]
+  [ "$output" = "1.28.2" ]
+}
+
+@test "_fetch_go_latest compares numerically: 1.10 beats 1.9.1" {
+  MOCK_CURL_STDOUT='[{"version":"go1.9.1","stable":true,"files":[{"filename":"go1.9.1.linux-amd64.tar.gz"},{"filename":"go1.9.1.linux-arm64.tar.gz"}]},{"version":"go1.10","stable":true,"files":[{"filename":"go1.10.linux-amd64.tar.gz"},{"filename":"go1.10.linux-arm64.tar.gz"}]}]' \
+    run _fetch_go_latest
+  [ "$status" -eq 0 ]
+  [ "$output" = "1.10" ]
+}
+
 # ── _fetch_python_latest ────────────────────────────────────────────────────
 
 @test "_fetch_python_latest prints in-series and overall highest" {
@@ -118,9 +139,9 @@ JSON
   export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
   MOCK_CURL_STDOUT="$(_go_fixture)" run _fetch_go_latest
   [ "$status" -eq 0 ]
-  grep -q -- '--max-time 10' "${MOCK_CALLS_FILE}"
+  grep -qE -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}"
   [ "$(command grep -c 'Authorization' "${MOCK_CALLS_FILE}")" -eq 0 ]
-  [ "$(command grep -c -- ' -H' "${MOCK_CALLS_FILE}")" -eq 0 ]
+  [ "$(command grep -cE -- ' (-H|--header)' "${MOCK_CALLS_FILE}")" -eq 0 ]
   [ ! -s "${MOCK_CURL_STDIN_FILE}" ]
   [ "$(command grep -c 'go.dev' "${MOCK_CALLS_FILE}")" -eq 1 ]
 }
@@ -130,9 +151,9 @@ JSON
   export MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
   MOCK_CURL_STDOUT="$(_python_fixture)" run _fetch_python_latest 3.14
   [ "$status" -eq 0 ]
-  grep -q -- '--max-time 10' "${MOCK_CALLS_FILE}"
+  grep -qE -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}"
   [ "$(command grep -c 'Authorization' "${MOCK_CALLS_FILE}")" -eq 0 ]
-  [ "$(command grep -c -- ' -H' "${MOCK_CALLS_FILE}")" -eq 0 ]
+  [ "$(command grep -cE -- ' (-H|--header)' "${MOCK_CALLS_FILE}")" -eq 0 ]
   [ ! -s "${MOCK_CURL_STDIN_FILE}" ]
   [ "$(command grep -c 'python.org' "${MOCK_CALLS_FILE}")" -eq 1 ]
 }
