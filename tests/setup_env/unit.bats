@@ -1553,7 +1553,7 @@ EOF
   mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
   # Create a real file for each expected link target, then symlink it
   local _links=(
-    ".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".gitconfig"
+    ".zshrc" ".zprofile" ".zshenv" ".vimrc" ".tmux.conf" ".gitconfig"
   )
   local _f
   for _f in "${_links[@]}"; do
@@ -1580,6 +1580,31 @@ EOF
   # Do not create any symlinks
   _doctor_check_symlinks
   [ "${_DOCTOR_FAILED}" -eq 1 ]
+}
+
+@test "_doctor_check_symlinks fails naming ~/.zshenv when only it is missing" {
+  _DOCTOR_PASS=0
+  _DOCTOR_FAIL=0
+  _DOCTOR_FAILED=0
+  export HOME="${TMPDIR_TEST}"
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.config"
+  local _links=(".zshrc" ".zprofile" ".vimrc" ".tmux.conf" ".gitconfig") _f
+  for _f in "${_links[@]}"; do
+    touch "${TMPDIR_TEST}/src_${_f}"
+    ln -s "${TMPDIR_TEST}/src_${_f}" "${TMPDIR_TEST}/${_f}"
+  done
+  touch "${TMPDIR_TEST}/src_ssh_config"
+  ln -s "${TMPDIR_TEST}/src_ssh_config" "${TMPDIR_TEST}/.ssh/config"
+  touch "${TMPDIR_TEST}/src_starship"
+  ln -s "${TMPDIR_TEST}/src_starship" "${TMPDIR_TEST}/.config/starship.toml"
+  mkdir -p "${TMPDIR_TEST}/src_zshrc_d"
+  ln -s "${TMPDIR_TEST}/src_zshrc_d" "${TMPDIR_TEST}/.config/.zshrc.d"
+  run _doctor_check_symlinks
+  [[ "$output" == *"~/.zshenv"* ]]
+  [[ "$output" == *"FAIL"* ]]
+  [[ "$output" != *"FAIL"*"~/.zshrc "* ]]
 }
 
 @test "_doctor_check_symlinks fails when symlink is broken" {

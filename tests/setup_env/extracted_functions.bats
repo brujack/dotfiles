@@ -47,6 +47,7 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/starship.toml"
   touch "${FAKE_DOTFILES_SRC}/.zshrc"
   touch "${FAKE_DOTFILES_SRC}/.zprofile"
+  touch "${FAKE_DOTFILES_SRC}/.zshenv"
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
   touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
   # .cursor/ and .claude/ items sourced from AI_CONFIG_DIR (ai-config repo)
@@ -142,6 +143,123 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.zshrc" ]]
+}
+
+@test "setup_dotfile_symlinks links .zshenv when ~/.zshenv is absent" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.zshenv" ]]
+  [[ "$(readlink "${FAKE_HOME}/.zshenv")" == "${FAKE_DOTFILES_SRC}/.zshenv" ]]
+  [[ ! -e "${FAKE_HOME}/.zshenv.local" && ! -L "${FAKE_HOME}/.zshenv.local" ]]
+}
+
+@test "setup_dotfile_symlinks run twice from absent never creates .zshenv.local" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -e "${FAKE_HOME}/.zshenv.local" && ! -L "${FAKE_HOME}/.zshenv.local" ]]
+  [[ -L "${FAKE_HOME}/.zshenv" ]]
+}
+
+@test "setup_dotfile_symlinks adopts a regular ~/.zshenv as .zshenv.local, idempotently" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'X\n' > "${FAKE_HOME}/.zshenv"
+  printf 'X\n' > "${BATS_TEST_TMPDIR}/expected"
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ -L "${FAKE_HOME}/.zshenv" ]]
+  [[ ! -L "${FAKE_HOME}/.zshenv.local" ]]
+  cmp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/expected"
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.zshenv.local" ]]
+  cmp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/expected"
+  [[ -L "${FAKE_HOME}/.zshenv" ]]
+}
+
+@test "setup_dotfile_symlinks leaves both files alone when .zshenv.local already exists" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  printf 'B\n' > "${FAKE_HOME}/.zshenv.local"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  cp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/b"
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.zshenv" ]]
+  cmp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  cmp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/b"
+  [[ "$output" == *"${FAKE_HOME}/.zshenv and ${FAKE_HOME}/.zshenv.local both exist"* ]]
+}
+
+@test "setup_dotfile_symlinks dry run leaves a regular ~/.zshenv untouched with no backup" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  DRY_RUN=1 run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.zshenv" ]]
+  cmp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  [[ ! -e "${FAKE_HOME}/.zshenv.local" && ! -L "${FAKE_HOME}/.zshenv.local" ]]
+  [[ ! -e "${FAKE_HOME}/.zshenv.bak" ]]
+  [[ "$output" != *".zshenv.bak"* ]]
+  [[ "$output" == *"would move"* ]]
+  [[ "$output" == *"would link"* ]]
+}
+
+@test "setup_dotfile_symlinks treats a dangling .zshenv.local symlink as present" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  ln -s "${BATS_TEST_TMPDIR}/nowhere" "${FAKE_HOME}/.zshenv.local"
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.zshenv" ]]
+  cmp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  [[ "$(readlink "${FAKE_HOME}/.zshenv.local")" == "${BATS_TEST_TMPDIR}/nowhere" ]]
+  [[ "$output" == *"${FAKE_HOME}/.zshenv and ${FAKE_HOME}/.zshenv.local both exist"* ]]
+}
+
+@test "setup_dotfile_symlinks warns and continues when the .zshenv adoption mv fails" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  mkdir -p "${FAKE_HOME}/.oh-my-zsh"
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  MOCK_MV_FAIL_ARGS=".zshenv.local" run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -L "${FAKE_HOME}/.zshenv" ]]
+  cmp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  [[ ! -e "${FAKE_HOME}/.zshenv.local" && ! -L "${FAKE_HOME}/.zshenv.local" ]]
+  [[ "$output" == *"${FAKE_HOME}/.zshenv left in place"* ]]
+  [[ -L "${FAKE_HOME}/.oh-my-zsh/custom/themes/bruce.zsh-theme" ]]
+}
+
+@test "setup_dotfile_symlinks warns and keeps .zshenv.local when the link fails after adoption" {
+  _make_fake_dotfiles
+  export MACOS=1
+  unset LINUX
+  printf 'A\n' > "${FAKE_HOME}/.zshenv"
+  cp "${FAKE_HOME}/.zshenv" "${BATS_TEST_TMPDIR}/a"
+  MOCK_LN_EXIT=1 run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  cmp "${FAKE_HOME}/.zshenv.local" "${BATS_TEST_TMPDIR}/a"
+  [[ "$output" == *"holds your original ~/.zshenv but the .zshenv link failed"* ]]
 }
 
 @test "setup_dotfile_symlinks links .config/ccstatusline and .zshrc.d" {

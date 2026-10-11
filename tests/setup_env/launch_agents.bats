@@ -289,3 +289,60 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" = "${HOME}/.local/bin/ledger" ]
 }
+
+# python@3's libexec/bin is the only Homebrew directory that names `python3`
+# unversioned, and /usr/bin/python3 (Apple's 3.9) is ahead of /opt/homebrew/bin
+# for any process that sources no profile. Order is the property, so the test
+# measures both the rendered entry order and real resolution. The rendered PATH
+# holds absolute prefixes that are absent (or hold a real python3) on the test
+# machine, so each is swapped entry-for-entry with a fixture directory; entries
+# are compared whole because "/usr/bin" is a substring of other entries.
+@test "python@3 libexec resolves ahead of /usr/bin under the plist's PATH" {
+  export PROFILE="mac_workstation" HOSTNAME_SHORT="studio"
+  run install_ledger_drift_agent
+  [ "$status" -eq 0 ]
+
+  local _path
+  _path=$(command grep -A1 '<key>PATH</key>' \
+            "${_RHN_AGENT_DIR}/com.brucejackson.ledger-drift.plist" \
+          | sed -n 's|.*<string>\(.*\)</string>.*|\1|p')
+  [ -n "${_path}" ]
+
+  local _libexec="/opt/homebrew/opt/python@3/libexec/bin"
+  local -a _entries
+  IFS=':' read -r -a _entries <<< "${_path}"
+  local _i _usr_pos=-1 _libexec_pos _lx
+  for _i in "${!_entries[@]}"; do
+    [[ "${_entries[_i]}" == "/usr/bin" ]] && _usr_pos=${_i}
+  done
+  [ "${_usr_pos}" -ge 0 ]
+  # Both prefixes: the Intel one is otherwise unpinned by anything.
+  for _lx in "${_libexec}" "/usr/local/opt/python@3/libexec/bin"; do
+    _libexec_pos=-1
+    for _i in "${!_entries[@]}"; do
+      [[ "${_entries[_i]}" == "${_lx}" ]] && _libexec_pos=${_i}
+    done
+    [ "${_libexec_pos}" -ge 0 ]
+    [ "${_libexec_pos}" -lt "${_usr_pos}" ]
+  done
+
+  local _fix="${BATS_TEST_TMPDIR}/pathfix"
+  mkdir -p "${_fix}/libexec" "${_fix}/usrbin"
+  printf '#!/bin/sh\nexit 0\n' > "${_fix}/libexec/python3"
+  printf '#!/bin/sh\nexit 0\n' > "${_fix}/usrbin/python3"
+  chmod +x "${_fix}/libexec/python3" "${_fix}/usrbin/python3"
+
+  local _probe="" _e
+  for _e in "${_entries[@]}"; do
+    case "${_e}" in
+      "${_libexec}") _e="${_fix}/libexec" ;;
+      /usr/bin) _e="${_fix}/usrbin" ;;
+    esac
+    _probe="${_probe:+${_probe}:}${_e}"
+  done
+
+  # /bin/sh -c, not bare `env -i ... command -v`: see the ~/.local/bin test.
+  run env -i PATH="${_probe}" /bin/sh -c 'command -v python3'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_fix}/libexec/python3" ]
+}
