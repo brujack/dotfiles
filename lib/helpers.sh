@@ -1522,8 +1522,14 @@ setup_dotfile_symlinks() {
         log_info "[DRY RUN] would move ${HOME}/.zshenv to ${HOME}/.zshenv.local"
         log_info "[DRY RUN] would link ${HOME}/.zshenv to ${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv"
       else
-        run_cmd mv "${HOME}/.zshenv" "${HOME}/.zshenv.local" || return 1
-        safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv" "${HOME}/.zshenv" || return 1
+        # Warn and continue, like every neighbouring safe_link: a failure here
+        # must not skip the remaining links or abort run_setup_user.
+        if run_cmd mv "${HOME}/.zshenv" "${HOME}/.zshenv.local"; then
+          safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.zshenv" "${HOME}/.zshenv" ||
+            log_warn "${HOME}/.zshenv.local holds your original ~/.zshenv but the .zshenv link failed; re-run setup to create it."
+        else
+          log_warn "Could not move ${HOME}/.zshenv to ${HOME}/.zshenv.local; ${HOME}/.zshenv left in place and the .zshenv link skipped. Move it to ${HOME}/.zshenv.local by hand and re-run."
+        fi
       fi
     else
       log_warn "${HOME}/.zshenv and ${HOME}/.zshenv.local both exist; not linking .zshenv. Merge ${HOME}/.zshenv into ${HOME}/.zshenv.local, remove ${HOME}/.zshenv, and re-run."
