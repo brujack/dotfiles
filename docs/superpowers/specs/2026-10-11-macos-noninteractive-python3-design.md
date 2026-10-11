@@ -245,3 +245,25 @@ Disposition: Addressed — twice-run case now starts from an absent `~/.zshenv` 
 ## Amendments
 
 - R1 -> A tracked `.zshenv` at the repo root prepends `<prefix>/opt/python@3/libexec/bin` to `path` only in non-interactive shells whose inherited `PATH` resolves `python3` to `/usr/bin/python3` or to nothing, for the first of `${_OVERRIDE_HOMEBREW_PREFIX_ARM:-/opt/homebrew}` and `${_OVERRIDE_HOMEBREW_PREFIX_INTEL:-/usr/local}` whose `opt/python@3/libexec/bin` is a directory. — a child zsh of an interactive pyenv or venv shell must keep that python3 (Task 1 code-quality review).
+
+## Spec alignment (2026-10-11)
+
+- spec: docs/superpowers/specs/2026-10-11-macos-noninteractive-python3-design.md
+- anchor: 03e705df8f1a41b9b695a4af17576c0a47b5abe1
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
