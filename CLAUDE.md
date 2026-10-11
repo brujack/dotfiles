@@ -42,7 +42,7 @@ dotfiles/
 ├── .warp/             # settings.toml (Warp-owned, symlinked live), themes/, launch_configurations/
 ├── .vscode/           # settings.json
 ├── .ssh/              # config, teleport.cfg only — never private keys
-├── .zshrc, .zprofile, .vimrc, .tmux.conf, .gitconfig_*, starship.toml, bruce.omp.json,
+├── .zshrc, .zprofile, .zshenv, .vimrc, .tmux.conf, .gitconfig_*, starship.toml, bruce.omp.json,
 │                      #   bruce.zsh-theme, profile.ps1, Vagrantfile, etch.yaml, cliff.toml
 ├── pyproject.toml, uv.lock, requirements-*.txt   # the five CI renderings; see Testing
 └── ubuntu_*_packages.txt, Brewfile.gui, Brewfile.devtools
@@ -98,7 +98,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
-- **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`)
+- **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`). `.zshenv` is linked the same way: non-interactive zsh on macOS reads it and puts Homebrew's `python@3` `python3` ahead of Apple's 3.9, unless the inherited `PATH` already resolves `python3` elsewhere (pyenv, a venv). An existing regular `~/.zshenv` is adopted as `~/.zshenv.local`, which `.zshenv` sources; if both exist, setup warns and leaves both. Login non-interactive zsh (`zsh -lc`) is not covered, because macOS `/etc/zprofile`'s `path_helper` reorders `PATH`.
 - **`.claude/`** — each item symlinked individually into `~/.claude/` from the ai-config repo, except `rules/`, which is never linked, and `projects/`, which the loop skips and then links explicitly (see below).
   Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference).
 
@@ -597,7 +597,7 @@ two-second grep appears to refute the rule.
   - Keep heartbeat fields closed-form via `printf`; never add a free-text field or shell out to `python3 -c json.dumps` — free text breaks the `sed`/`json.loads` readers, and a python3 dependency would take down both sides of the one liveness channel. → `dotfiles-test-seams.md` § `Cadence heartbeat contract`
 
 - `PATH` (`LaunchAgents/cadence.plist.template`, `lib/launch_agents.sh`)
-  - Every detector dependency must be listed in the plist's `PATH` (`__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) — launchd sources no profile, so an absent tool (e.g. `ledger`, in the first entry) makes the agent silently unable to run.
+  - Every detector dependency must be listed in the plist's `PATH` (`__HOME__/.local/bin:/opt/homebrew/opt/python@3/libexec/bin:/opt/homebrew/bin:/usr/local/opt/python@3/libexec/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`) — launchd sources no profile, so an absent tool (e.g. `ledger`, in the first entry) makes the agent silently unable to run.
   - Resolve a new detector's dependencies under that exact `PATH` (`env -i PATH=<the plist PATH> bash -c 'command -v <tool>'`), never under an interactive shell, which answers for a different actor.
   - A template edit does not reach an installed agent — the live `~/Library/LaunchAgents/*.plist` is a rendered copy from install time. Re-run `setup_env.sh -t setup_user`, then verify the **live** file (`grep -A1 '<key>PATH</key>' <plist>`), not the template. → `dotfiles-test-seams.md` § `Cadence agent PATH and plist rendering`
 
