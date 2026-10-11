@@ -1405,16 +1405,20 @@ _check_one_pin_version() {
     _pinned="${GO_DOWNLOAD_FILENAME#go}"
     _pinned="${_pinned%%.linux-*}"
     if [[ ! "${_pinned}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-      printf "  [WARN]     %-12s go could not parse pinned version\n" "${_tool}"
+      printf "  [WARN]     %-12s could not parse pinned version\n" "${_tool}"
       return 0
     fi
     _latest=$(_fetch_go_latest) || _latest=""
   else
+    if [[ ! "${_pinned}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      printf "  [WARN]     %-12s could not parse pinned version\n" "${_tool}"
+      return 0
+    fi
     read -r _series_latest _overall < <(_fetch_python_latest "${_pinned%.*}") || true
     if [[ -z "${_overall}" ]]; then
       _latest=""
     elif [[ "${_series_latest}" == "-" ]]; then
-      printf "  [WARN]     %-12s python3 no %s release in the feed yet (pinned=%s latest=%s)\n" \
+      printf "  [WARN]     %-12s no %s release in the feed yet (pinned=%s latest=%s)\n" \
         "${_tool}" "${_pinned%.*}" "${_pinned}" "${_overall}"
       return 0
     else

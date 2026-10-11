@@ -217,7 +217,7 @@ _stub_all_but_pins() {
   run _check_one_pin_version "go" "1.27"
   [ "$status" -eq 0 ]
   [[ "$output" == *"[WARN]"* ]]
-  [[ "$output" == *"go could not parse pinned version"* ]]
+  [[ "$output" == *"[WARN]     go           could not parse pinned version"* ]]
 }
 
 @test "go empty fetch warns could not fetch latest version" {
@@ -270,8 +270,16 @@ _stub_all_but_pins() {
   run _check_one_pin_version "python3" "3.16.0"
   [ "$status" -eq 0 ]
   [[ "$output" == *"[WARN]"* ]]
-  [[ "$output" == *"python3 no 3.16 release in the feed yet (pinned=3.16.0 latest=3.15.1)"* ]]
+  [[ "$output" == *"[WARN]     python3      no 3.16 release in the feed yet (pinned=3.16.0 latest=3.15.1)"* ]]
   [[ "$output" != *"could not fetch"* ]]
+}
+
+@test "python3 two-part pin warns could not parse pinned version, not a feed cause" {
+  _fetch_python_latest() { printf '3.14.8 3.15.1'; }
+  run _check_one_pin_version "python3" "3.14"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]     python3      could not parse pinned version"* ]]
+  [[ "$output" != *"no 3 release"* ]]
 }
 
 @test "python3 empty fetch warns could not fetch latest version" {
@@ -305,7 +313,8 @@ _stub_all_but_pins() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[INFO]"* ]]
   [[ "$output" == *"0 outdated"* ]]
-  [[ "$output" == *"7 OK"* ]] || [[ "$output" == *"OK"* ]]
+  [[ "$output" == *"8 OK"* ]]
+  [[ "$output" == *"[OK]       python3      pinned=3.14.8"* ]]
 }
 
 @test "INFO line is not counted: OUTDATED python3 with INFO counts 1 outdated" {
