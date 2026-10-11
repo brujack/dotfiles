@@ -1307,6 +1307,148 @@ _fetch_github_latest() {
     | sed 's/^v//'
 }
 
+# Vendor release feeds for the go and python3 checks. Both parsers run under
+# the system python3, which may be as old as 3.9: only json, re and tuple
+# comparison are used (no `match`, no 3.10+ syntax). The body goes to python
+# on stdin, not argv. Neither request carries GITHUB_TOKEN or any header.
+# Prints the highest stable go release that publishes both Linux tarballs,
+# without the "go" prefix; empty output and rc 1 when none qualifies.
+_fetch_go_latest() {
+  local _body
+  _body=$(curl -sf --max-time 10 'https://go.dev/dl/?mode=json') || return 1
+  printf '%s' "${_body}" | python3 -c '
+import json, re, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, list):
+    sys.exit(1)
+best = None
+for entry in data:
+    if not isinstance(entry, dict) or entry.get("stable") is not True:
+        continue
+    version = entry.get("version")
+    if not isinstance(version, str):
+        continue
+    files = entry.get("files")
+    if not isinstance(files, list):
+        continue
+    m = re.match(r"^go([0-9]+)\.([0-9]+)(?:\.([0-9]+))?$", version)
+    if not m:
+        continue
+    names = [f.get("filename") for f in files if isinstance(f, dict)]
+    if (version + ".linux-amd64.tar.gz") not in names or (version + ".linux-arm64.tar.gz") not in names:
+        continue
+    key = (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+    if best is None or key > best[0]:
+        best = (key, version[2:])
+if best is None:
+    sys.exit(1)
+print(best[1])
+'
+}
+
+# Prints "<highest in SERIES> <highest overall>", or "- <highest overall>"
+# when SERIES has no release yet. Empty output and rc 1 when no
+# "Python X.Y.Z" name is in the feed.
+_fetch_python_latest() {
+  local _series="$1" _body
+  _body=$(curl -sf --max-time 10 \
+    'https://www.python.org/api/v2/downloads/release/?is_published=true&pre_release=false') || return 1
+  printf '%s' "${_body}" | python3 -c '
+import json, re, sys
+series = sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, list):
+    sys.exit(1)
+overall = None
+in_series = None
+for entry in data:
+    if not isinstance(entry, dict):
+        continue
+    m = re.match(r"^Python ([0-9]+)\.([0-9]+)\.([0-9]+)$", str(entry.get("name", "")))
+    if not m:
+        continue
+    key = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    if overall is None or key > overall:
+        overall = key
+    if "%d.%d" % key[:2] == series and (in_series is None or key > in_series):
+        in_series = key
+if overall is None:
+    sys.exit(1)
+fmt = lambda k: "%d.%d.%d" % k
+print((fmt(in_series) if in_series else "-") + " " + fmt(overall))
+' "${_series}"
+}
+
+# _check_one_pin_version <go|python3> <pinned> -- compares a pin with the
+# vendor's release feed, not with the installed binary: both tools are
+# installed by a package manager or pyenv whose version this repo does not
+# choose, so "installed" says nothing about whether the pin is stale. Needs
+# python3 to parse the feeds, so a missing python3 is its own WARN rather than
+# a misleading "could not fetch". Pin ahead of the feed is OK (the feed can
+# lag a release the pin already tracks).
+_check_one_pin_version() {
+  local _tool="$1" _pinned="$2"
+  local _latest _series_latest="" _overall=""
+
+  if ! command -v python3 &>/dev/null; then
+    printf "  [WARN]     %-12s python3 not found; cannot read the release feed\n" "${_tool}"
+    return 0
+  fi
+
+  if [[ "${_tool}" == "go" ]]; then
+    _pinned="${GO_DOWNLOAD_FILENAME#go}"
+    _pinned="${_pinned%%.linux-*}"
+    if [[ ! "${_pinned}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+      printf "  [WARN]     %-12s could not parse pinned version\n" "${_tool}"
+      return 0
+    fi
+    _latest=$(_fetch_go_latest) || _latest=""
+  else
+    if [[ ! "${_pinned}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      printf "  [WARN]     %-12s could not parse pinned version\n" "${_tool}"
+      return 0
+    fi
+    read -r _series_latest _overall < <(_fetch_python_latest "${_pinned%.*}") || true
+    if [[ -z "${_overall}" ]]; then
+      _latest=""
+    elif [[ "${_series_latest}" == "-" ]]; then
+      printf "  [WARN]     %-12s no %s release in the feed yet (pinned=%s latest=%s)\n" \
+        "${_tool}" "${_pinned%.*}" "${_pinned}" "${_overall}"
+      return 0
+    else
+      _latest="${_series_latest}"
+    fi
+  fi
+
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-12s could not fetch latest version\n" "${_tool}"
+    return 0
+  fi
+
+  local _rc=0
+  if [[ "$(_semver_cmp "${_pinned}" "${_latest}")" == "-1" ]]; then
+    printf "  [OUTDATED] %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+    _rc=1
+  else
+    printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+  fi
+
+  if [[ "${_tool}" == "python3" ]]; then
+    local _pin_mm="${_pinned%.*}" _overall_mm="${_overall%.*}"
+    if [[ "$(_semver_cmp "${_overall_mm}" "${_pin_mm}")" == "1" ]]; then
+      printf "  [INFO]     %-12s %s series available (series move: requires-python, uv lock)\n" \
+        "${_tool}" "${_overall_mm}"
+    fi
+  fi
+  return "${_rc}"
+}
+
 _check_one_version() {
   local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5"
 
@@ -1390,9 +1532,101 @@ _prompt_version_update() {
   printf "  Update %s from %s to %s? [y/N] " "${_tool}" "${_pinned}" "${_latest}"
   read -r _reply
   if [[ "${_reply}" =~ ^[Yy]$ ]]; then
-    _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
-    printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+    case "${_tool}" in
+      go)
+        _update_go_pin "${_latest}" || return 1
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+      python3)
+        _update_python_pin "${_pinned}" "${_latest}" || return 1
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+      *)
+        _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
+        printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+    esac
   fi
+}
+
+# _update_go_pin <latest> -- GO_VER carries major.minor, GO_DOWNLOAD_FILENAME
+# the full release; both move together. Reads the constants file back because
+# a sed that matches nothing exits 0 and would otherwise report a pin it never
+# wrote. rc 0 written and verified, 1 failed.
+_update_go_pin() {
+  local _latest="$1"
+  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+  local _series _want_ver _want_file _tmp
+
+  if [[ ! "${_latest}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    printf "  go: refusing pin update: latest %s is not X.Y.Z\n" "${_latest}"
+    return 1
+  fi
+  _series="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+
+  # Edit a same-directory copy and move it over the original only after both
+  # lines read back, so a partial edit can never be left in constants.sh.
+  _tmp="${_constants}.new.$$"
+  cp "${_constants}" "${_tmp}" || return 1
+  sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_tmp}"
+  rm -f "${_tmp}.bak"
+  _update_url_pins "go" "" "${_latest}" "${_tmp}"
+
+  _want_ver="GO_VER=\"${_series}\""
+  # shellcheck disable=SC2016 # ${_LINUX_ARCH} is literal text in constants.sh
+  _want_file='GO_DOWNLOAD_FILENAME="go'"${_latest}"'.linux-${_LINUX_ARCH}.tar.gz"'
+  if ! grep -Fqx "${_want_ver}" "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  go: pin update failed: GO_VER is not %s\n" "${_series}"
+    return 1
+  fi
+  if ! grep -Fqx "${_want_file}" "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  go: pin update failed: GO_DOWNLOAD_FILENAME is not %s\n" "${_want_file#GO_DOWNLOAD_FILENAME=}"
+    return 1
+  fi
+  if ! mv "${_tmp}" "${_constants}"; then
+    rm -f "${_tmp}"
+    printf "  go: pin update failed: could not replace %s; it is unchanged\n" "${_constants}"
+    return 1
+  fi
+
+  printf "  go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer\n"
+  local _installed="" _mm=""
+  if command -v go &>/dev/null; then
+    [[ "$(go version 2>/dev/null)" =~ go([0-9]+\.[0-9]+(\.[0-9]+)?) ]] && _installed="${BASH_REMATCH[1]}"
+    _mm=$(printf '%s' "${_installed}" | cut -d. -f1,2)
+  fi
+  if [[ -n "${_installed}" && "${_mm}" != "${_series}" ]]; then
+    printf "  go: this machine runs %s, outside the new %s series; doctor fails here until go is upgraded\n" \
+      "${_installed}" "${_series}"
+  fi
+  return 0
+}
+
+# _update_python_pin <old> <new> -- refuses unless this machine's pyenv can
+# build exactly <new> (a stale pyenv, or a feed release pyenv does not list
+# yet, would leave the pin unbuildable). rc 0 written and verified, 1 refused
+# or failed; the file is untouched on refusal.
+_update_python_pin() {
+  local _old="$1" _new="$2"
+  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+
+  if ! command -v pyenv &>/dev/null \
+    || ! pyenv install --list 2>/dev/null | grep -Eq "^[[:space:]]*${_new//./\\.}\$"; then
+    printf "  python3: pyenv on this machine cannot build %s; run brew upgrade pyenv\n" "${_new}"
+    return 1
+  fi
+
+  sed -i.bak "s|^PYTHON_VER=\"${_old}\"|PYTHON_VER=\"${_new}\"|" "${_constants}"
+  rm -f "${_constants}.bak"
+  if ! grep -Fqx "PYTHON_VER=\"${_new}\"" "${_constants}"; then
+    printf "  python3: pin update failed: PYTHON_VER is not %s\n" "${_new}"
+    return 1
+  fi
+
+  printf "  python3: after this change merges and each machine pulls: run brew upgrade pyenv, then on macOS pyenv install %s && ./setup_env.sh -t ansible; on Linux ./setup_env.sh -t ansible\n" "${_new}"
+  return 0
 }
 
 _check_cv_homebrew_install() {
@@ -1468,15 +1702,14 @@ run_check_versions() {
   printf "=== Version Check ===\n\n"
 
   if [[ -n ${GITHUB_TOKEN:-} ]] && ! _github_auth_header "${GITHUB_TOKEN}" >/dev/null 2>&1; then
-    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 7 checks that send it were not run; fix the variable\n"
+    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 5 checks that send it were not run; fix the variable\n"
     _token_refused=1
   fi
 
-  _run_cv_check() {
-    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
-    local _out _latest
-    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
-    _out=$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)
+  # _tally_cv_out <tool> <pinned> <var> <out> -- prints and counts one check.
+  # The verdict tag decides the count; an [INFO] line never does.
+  _tally_cv_out() {
+    local _tool="$1" _pinned="$2" _var="$3" _out="$4" _latest
     printf '%s\n' "${_out}"
     if [[ "${_out}" == *"[SKIP]"* ]];       then _skipped=$(( _skipped + 1 ))
     elif [[ "${_out}" == *"[WARN]"* ]];     then _warned=$(( _warned + 1 ))
@@ -1490,8 +1723,19 @@ run_check_versions() {
     fi
   }
 
-  _run_cv_check "go"         "${GO_VER}"         "golang/go"           "go version"           "[0-9]+\.[0-9]+(\.[0-9]+)?" "GO_VER"
-  _run_cv_check "python3"    "${PYTHON_VER}"      "python/cpython"      "python3 --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "PYTHON_VER"
+  _run_cv_check() {
+    local _tool="$1" _pinned="$2" _repo="$3" _cmd="$4" _regex="$5" _var="$6"
+    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
+    _tally_cv_out "${_tool}" "${_pinned}" "${_var}" \
+      "$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)"
+  }
+
+  _run_cv_pin_check() {
+    _tally_cv_out "$1" "$2" "$3" "$(_check_one_pin_version "$1" "$2" 2>&1)"
+  }
+
+  _run_cv_pin_check "go"      "${GO_VER}"     "GO_VER"
+  _run_cv_pin_check "python3" "${PYTHON_VER}" "PYTHON_VER"
   _run_cv_check "ruby"       "${RUBY_VER}"        "ruby/ruby"           "ruby --version"       "[0-9]+\.[0-9]+\.[0-9]+"    "RUBY_VER"
   # zsh is deliberately absent. Every other tool here is one this repo installs
   # at a version it chooses, so comparing the pin against upstream is actionable.
@@ -1526,7 +1770,7 @@ run_check_versions() {
   printf "\n"
 
   # A refused token outranks "outdated" (rc 1): the caller cannot act on a
-  # version verdict that skipped seven of its inputs.
+  # version verdict that skipped five of its inputs.
   [[ ${_token_refused} -eq 1 ]] && return 2
   [[ ${_outdated} -eq 0 ]]
 }
