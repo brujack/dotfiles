@@ -1585,7 +1585,11 @@ _update_go_pin() {
     printf "  go: pin update failed: GO_DOWNLOAD_FILENAME is not %s\n" "${_want_file#GO_DOWNLOAD_FILENAME=}"
     return 1
   fi
-  mv "${_tmp}" "${_constants}" || { rm -f "${_tmp}"; return 1; }
+  if ! mv "${_tmp}" "${_constants}"; then
+    rm -f "${_tmp}"
+    printf "  go: pin update failed: could not replace %s; it is unchanged\n" "${_constants}"
+    return 1
+  fi
 
   printf "  go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer\n"
   local _installed="" _mm=""
