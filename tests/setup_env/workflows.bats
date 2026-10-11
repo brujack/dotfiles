@@ -3598,6 +3598,7 @@ _cheat_mode() {
 _stub_cv_callees() {
   : > "${BATS_TEST_TMPDIR}/rec"
   _check_one_version() { printf '_check_one_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
+  _check_one_pin_version() { printf '_check_one_pin_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
   _check_cv_oh_my_zsh() { printf '_check_cv_oh_my_zsh\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] omz\n'; }
   _check_cv_homebrew_install() { printf '_check_cv_homebrew_install\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] brew\n'; }
   _check_one_cargo_version() { printf '_check_one_cargo_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
@@ -3611,19 +3612,22 @@ _stub_cv_callees() {
   run run_check_versions
   [ "$status" -eq 2 ]
   [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
+  [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
   [ "$(grep -c '^_check_cv_homebrew_install$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
   [ "$(grep -c '^_check_one_cargo_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
-  [[ "$output" == *"7 not checked"* ]]
+  [[ "$output" == *"5 not checked"* ]]
+  [[ "$output" == *"the 5 checks that send it were not run"* ]]
   [ "$(printf '%s\n' "$output" | grep -c 'GITHUB_TOKEN')" -eq 1 ]
 }
 
-@test "run_check_versions runs all seven GitHub checks with a valid token" {
+@test "run_check_versions runs five GitHub checks and two feed checks with a valid token" {
   _stub_cv_callees
   export GITHUB_TOKEN="ok-tok"
   run run_check_versions
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 7 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 5 ]
+  [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [[ "$output" != *"not checked"* ]]
 }
 
@@ -3632,11 +3636,13 @@ _stub_cv_callees() {
 @test "run_check_versions counts skipped tools in summary" {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"7 skipped"* ]]
+  [[ "$output" == *"5 skipped"* ]]
 }
 
 @test "run_check_versions counts warned tools in summary" {
-  # 7 tools via _run_cv_check emit [WARN] + 1 more function (_check_cv_homebrew_install)
+  # 5 GitHub tools via _check_one_version (stubbed here) plus go and python3 via
+  # the real _check_one_pin_version, which also WARNs (the curl mock returns no
+  # feed body) = 7 via _run_cv_check, + 1 more function (_check_cv_homebrew_install)
   # also emits [WARN] when curl fails in test env, plus the 8 CARGO_TOOLS pins
   # via the real (unstubbed) _check_one_cargo_version, whose curl call also fails
   # in test env = 16 total. Was 17 until _check_cv_oh_my_zsh was deleted on
@@ -3650,12 +3656,14 @@ _stub_cv_callees() {
 
 @test "run_check_versions counts OK tools in summary" {
   _check_one_version() { printf "  [OK]       %-12s\n" "$1"; }
+  _check_one_pin_version() { printf "  [OK]       %-12s\n" "$1"; }
   run run_check_versions
   [[ "$output" == *"7 OK"* ]]
 }
 
 @test "run_check_versions counts outdated tools and returns non-zero" {
   _check_one_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
+  _check_one_pin_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   run run_check_versions
   [[ "$output" == *"7 outdated"* ]]
   [ "$status" -ne 0 ]
