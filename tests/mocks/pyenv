@@ -38,4 +38,40 @@ if [[ "$1" == "rehash" ]] && [[ -n "${MOCK_PYENV_REHASH_LINKS:-}" ]]; then
     done
   fi
 fi
+# 'pyenv commands' lists subcommands; tests opt in with MOCK_PYENV_COMMANDS.
+if [[ "$1" == "commands" ]]; then
+  [[ -n "${MOCK_PYENV_COMMANDS:-}" ]] && printf "%s\n" "${MOCK_PYENV_COMMANDS}"
+  exit 0
+fi
+# 'pyenv install <ver>' models the real effect (an interpreter under
+# ${HOME}/.pyenv/versions/<ver>/bin/python) so callers that test -x on it can
+# be exercised. It keys on HOME only, never PYENV_ROOT, and refuses to create
+# anything outside a bats HOME so a failing test cannot write real state.
+if [[ "$1" == "install" ]]; then
+  _mock_ver="${!#}"
+  _mock_skip=0
+  for _mock_arg in "$@"; do
+    [[ "${_mock_arg}" == "-s" ]] && _mock_skip=1
+  done
+  _mock_dir="${HOME}/.pyenv/versions/${_mock_ver}"
+  if [[ -f "${HOME}/.mock-pyenv-install-exit" ]]; then
+    exit "$(cat "${HOME}/.mock-pyenv-install-exit")"
+  fi
+  if [[ -n "${MOCK_PYENV_EXIT:-}" ]]; then
+    exit "${MOCK_PYENV_EXIT}"
+  fi
+  if [[ "${_mock_skip}" -eq 1 ]] && [[ -e "${_mock_dir}" ]]; then
+    exit 0
+  fi
+  if [[ "${HOME}" == */bats-run-* ]]; then
+    if [[ ! -e "${_mock_dir}/bin/python" ]]; then
+      mkdir -p "${_mock_dir}/bin" || exit 1
+      printf '#!/bin/sh\nexit 0\n' > "${_mock_dir}/bin/python" || exit 1
+      chmod +x "${_mock_dir}/bin/python" || exit 1
+    fi
+    exit 0
+  fi
+  printf "mock pyenv: declined to create interpreter, HOME=%s is not a bats test dir\n" "${HOME}" >&2
+  exit 0
+fi
 exit "${MOCK_PYENV_EXIT:-0}"
