@@ -655,9 +655,8 @@ _nvidia_gpu_present() {
   lspci -nn 2> /dev/null | grep -qi '\[10de:'
 }
 
-# Driver comes from Ubuntu's own repo (nvidia-driver-615-open, 615.71.09-0ubuntu0.26.04.2
-# on resolute), so
-# it needs no third-party source. The container toolkit does, and that repo's GPG
+# Driver comes from Ubuntu's own repo (nvidia-driver-615-open,
+# 615.71.09-0ubuntu0.26.04.2 on resolute), so it needs no third-party source. The container toolkit does, and that repo's GPG
 # key is NOT checksum-pinned the way rustup-init is -- NVIDIA publishes no digest
 # for it. The mitigation is `signed-by=`, which scopes the key to this one repo so
 # it cannot vouch for anything else. Weaker than the rustup path, and recorded as a
@@ -675,9 +674,15 @@ _install_ubuntu_nvidia() {
   # transitional that only depends on -open (615 ships no proprietary module).
   # Installing the transitional leaves it as the manual package, so purging it at
   # a series bump hands the real driver to autoremove. Hit by hand 2026-10-11.
-  if ! dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" 2> /dev/null | grep -q '^ii'; then
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "nvidia-driver-${NVIDIA_DRIVER_VER}-open" || return 1
+  local _driver="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  if ! dpkg -l "${_driver}" 2> /dev/null | grep -q '^ii'; then
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "${_driver}" || return 1
     log_warn "NVIDIA driver installed — reboot required before the nvidia module replaces nouveau"
+  elif apt-mark showauto "${_driver}" 2> /dev/null | grep -qx "${_driver}"; then
+    # Installed but auto-marked: it arrived as a dependency, of the transitional
+    # this function used to install or of an upgrade that moved the series, so
+    # purging whatever pulled it in would hand the driver to autoremove.
+    sudo -H apt-mark manual "${_driver}" || return 1
   fi
 
   local _keyring="${_OVERRIDE_NVIDIA_KEYRING:-${NVIDIA_CONTAINER_KEYRING}}"
