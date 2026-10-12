@@ -373,6 +373,7 @@ Add a new row to the group that matches its priority and type.
 | `_sysctl_conf_write`'s root write relies on caller convention | From #327 security-review: `sudo tee` writes `<conf>` whenever `<seam_name>` is empty; all three callers derive both from one variable, but nothing in the function enforces that a non-constant path carries a seam name |
 | slash-spelled key derivation needs bash 5.2+ | From #327 review: `_sysctl_conf_value`/`_sysctl_conf_has_other_keys` build the slash spelling as `"${2//./\/}"`; bash 5.2+ yields `a/b/c`, but a shell that keeps the backslash (zsh does) would hand mawk `a\/b\/c` and miss slash-spelled confs. Every Linux host is 5.2+ today |
 | `BATS_VER` pinned but unused by install code | `lib/constants.sh` pins it, yet no `lib/` function reads it (bats installs from brew/apt); only `tests/helpers/common.bash` and `tests/mocks/tar` reference it. Delete or wire. |
+| ratna (x86_64 mac) cannot be re-bootstrapped from this repo | `HOMEBREW_INSTALL_SHA` 09c62fc5 (2026-10-11) is past Homebrew/install e078684c, which aborts on Intel macOS. ratna's existing brew keeps working; a fresh `install_homebrew` there fails. Accepted by the operator 2026-10-11. Retire ratna from `config/profiles.sh` or accept the gap when it is next rebuilt. |
 
 ### P3 — docs
 
