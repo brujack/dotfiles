@@ -1,3 +1,5 @@
+> **Status: DONE** — merged in #332 (6bfc1d74).
+
 # Ansible Venv Interpreter Guard Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-11-ansible-venv-interpreter-guard-design.md
