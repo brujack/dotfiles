@@ -74,7 +74,11 @@ leftover directory, and it is the one condition the callers actually depend on.
 **Behaviour change, stated.** `run_developer_or_ansible` calls `setup_ansible || return 1`
 (`lib/workflows.sh:622`). After a failed build, `-t developer` and `-t ansible` now stop
 before `clone_personal_repos` with the venv intact. Today they delete the venv, return 0
-from the unchecked path, and continue. The stop is the intended direction.
+from the unchecked path, and continue. The stop is the intended direction. It also reaches
+two cases that today continue silently: a mac without `HAS_DEVTOOLS` (`mac_mini`), whose
+install still runs although the venv step is skipped, and any box with no pyenv, where the
+install commands fail and the interpreter test now reports it. `-t setup` alone never
+calls `setup_ansible` (`setup_env.sh:98`) and is unchanged.
 
 `lib/workflows.sh:1036` says `pyenv update` "runs only inside setup_ansible"; it is
 reworded to name `_ensure_pyenv_python`, reached from `setup_ansible` and
@@ -82,44 +86,60 @@ reworded to name `_ensure_pyenv_python`, reached from `setup_ansible` and
 
 ### Test mock
 
-`tests/mocks/pyenv` gains two behaviours, both needed because about 40 existing tests reach
-`setup_ansible` or `recreate_python_venv` directly or through `run_developer_or_ansible`,
+`tests/mocks/pyenv` gains two behaviours. About 40 existing tests reach `setup_ansible` or
+`recreate_python_venv` directly or through `run_developer_or_ansible`,
 `run_setup_or_developer` and `run_recreate_venv`, and the mock's `install` today creates
-nothing:
+nothing, so without them every one of those tests would fail the new interpreter test.
 
-- `pyenv install <args> <ver>` creates
-  `${PYENV_ROOT:-${HOME}/.pyenv}/versions/<ver>/bin/python` (executable) and exits 0 by
-  default, as a successful real install does (`tdd.md` pitfall E, mock fidelity).
-  `MOCK_PYENV_INSTALL_EXIT=<n>` makes it exit `<n>` and create nothing.
-- `pyenv commands` prints `MOCK_PYENV_COMMANDS` (newline-separated), empty by default.
+**The Linux build runs the mock under `env -i`.** That strips everything except `HOME`,
+`USER`, `SHELL`, `TERM`, `PYTHON_VER`, `PYENV_ROOT`, `PYENV_VIRTUALENV_DISABLE_PROMPT`,
+`PYTHON_CONFIGURE_OPTS` and `PATH` (`lib/developer.sh:552-561`). `BATS_TEST_TMPDIR`,
+`MOCK_PYENV_*` and `MOCK_CALLS_FILE` are all gone there. Measured:
+`env -i bash -c 'echo [$BATS_TEST_TMPDIR]'` prints `[]`. So every input the mock's install
+step reads must be derived from `HOME` or the argument list:
 
-**The create must be inert outside a test directory (`tdd.md` E2).** Not every suite that
-reaches these functions redirects `HOME`: `workflows.bats` exports it in 2 places against
-20 runs of the affected entry points. In a suite where `HOME` is real, an unconditional
-create would write an empty file over `~/.pyenv/versions/3.14.8/bin/python`, destroying the
-operator's interpreter. So the mock creates only when the target path lies under
-`${BATS_TEST_TMPDIR}`, and never overwrites an existing file; otherwise it exits with the
-status it would have returned and touches nothing.
-
-The mock is reached both through `PATH` and at `${HOME}/.pyenv/bin/pyenv` (the `env -i`
-branch strips `PATH`), so the create must key on the version argument and `HOME`, not on
-any inherited variable the `env -i` strips.
+- **Create.** `pyenv install <args> <ver>` creates `${HOME}/.pyenv/versions/<ver>/bin/python`
+  (executable) and exits 0, as a successful real install does (`tdd.md` pitfall E). It keys
+  on `HOME` only, never `PYENV_ROOT`: developer shells export
+  `PYENV_ROOT=/home/bruce/.pyenv`, which `developer.bats` does not unset, so a
+  `PYENV_ROOT`-keyed target would aim local runs at the real interpreter while CI, which has
+  no `PYENV_ROOT`, stayed green.
+- **Inert outside bats (`tdd.md` E2).** The create happens only when `HOME` matches
+  `*/bats-run-*`, the shape of every bats test directory (measured on bats 1.13.0:
+  `BATS_TEST_TMPDIR=/tmp/bats-run-Wtu3GU/test/1`). A real `HOME` never matches, and an empty
+  `HOME` does not match, so in both cases the mock creates nothing and exits with the status
+  it would otherwise return. It also never overwrites an existing file. Every suite
+  affected redirects `HOME` under `BATS_TEST_TMPDIR`, most in `setup()` (for example
+  `workflows.bats:44`, `developer.bats:10`); the guard is defence in depth, not a fix for a
+  known unredirected suite.
+- **Failure injection.** If `${HOME}/.mock-pyenv-install-exit` exists, `install` exits with
+  the number it contains and creates nothing. A file, not an environment variable, because
+  the environment does not survive `env -i`.
+- **`pyenv commands`** prints `MOCK_PYENV_COMMANDS` (newline-separated), empty by default.
+  This call runs in the caller's shell, outside `env -i`, so a variable is fine here.
 
 ## Testing
 
 All in `tests/setup_env/developer.bats`. Each guard is mutation-checked: delete it, confirm
-the test goes red, restore.
+the test goes red, restore. On the Linux branch the mock's call log is lost under `env -i`
+(it falls back to `/tmp/mock_calls`), so Linux cases assert on the filesystem and on calls
+made from the caller's shell (`virtualenv-delete`, `virtualenv`, `update`), never on the
+`install` call itself. Every rc-1 case pairs with an assertion that only the intended path
+satisfies, and every absence assertion pairs with a positive one.
 
-| case                                                           | asserts                                                                 |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| install fails, venv points at old version (`setup_ansible`)    | rc 1; no `virtualenv-delete` call; `versions/ansible` symlink unchanged |
-| install fails (`recreate_python_venv`)                         | rc 1; no `virtualenv-delete` call; venv unchanged                       |
-| interpreter missing, install succeeds (`recreate_python_venv`) | `install` called before `virtualenv-delete`; rc 0                       |
-| interpreter already executable                                 | no `install` call                                                       |
-| version dir exists, no `bin/python`                            | rc 1; error names the interpreter path                                  |
-| `pyenv commands` lists `update`                                | `pyenv update` called                                                   |
-| `pyenv commands` omits `update`                                | `pyenv update` not called                                               |
-| neither `LINUX` nor `MACOS`                                    | rc 1; no `virtualenv-delete` call                                       |
+| case | platform | asserts |
+| --- | --- | --- |
+| install fails, venv points at old version (`setup_ansible`) | Linux | rc 1; no `virtualenv-delete`; `versions/ansible` symlink unchanged; error names `bin/python` path |
+| same | macOS | same, plus `install` was called |
+| install fails (`recreate_python_venv`) | macOS | rc 1; no `virtualenv-delete`; venv unchanged; error names path |
+| interpreter missing, install succeeds (`recreate_python_venv`) | macOS | rc 0; `install` before `virtualenv-delete` in the log |
+| interpreter missing, install succeeds (`setup_ansible`) | Linux | rc 0; `versions/<ver>/bin/python` now exists; `virtualenv` called |
+| interpreter already executable | macOS | rc 0; `virtualenv` called; no `install` |
+| version dir exists, no `bin/python` | macOS | rc 1; error names the path and says to remove the directory |
+| `pyenv commands` lists `update` | Linux | `pyenv update` called; rc 0 |
+| `pyenv commands` omits `update` | Linux | `pyenv update` not called; rc 0; `bin/python` created |
+| neither `LINUX` nor `MACOS` | none | rc 1; no `virtualenv-delete`; error names platform detection |
+| mock guard: `HOME` outside `*/bats-run-*` | n/a | mock `install` creates no file under that `HOME` |
 
 The existing `calls pyenv update on Linux when Python version absent` test sets
 `MOCK_PYENV_COMMANDS=update` to keep testing what its name says.
@@ -152,18 +172,19 @@ The existing `calls pyenv update on Linux when Python version absent` test sets
   `pyenv virtualenv-delete` and returns 1 without deleting when it fails.
 - **R7.** `setup_ansible` returns 1 when `pyenv virtualenv "${PYTHON_VER}" ansible` fails.
 - **R8.** `tests/mocks/pyenv`'s `install` creates an executable
-  `versions/<ver>/bin/python` on success, honours `MOCK_PYENV_INSTALL_EXIT`, and `commands`
-  prints `MOCK_PYENV_COMMANDS`. The create happens only for a path under
-  `${BATS_TEST_TMPDIR}` and never overwrites an existing file.
+  `${HOME}/.pyenv/versions/<ver>/bin/python` and exits 0, only when `HOME` matches
+  `*/bats-run-*`, never overwriting an existing file; it exits with the number in
+  `${HOME}/.mock-pyenv-install-exit` and creates nothing when that file exists; `commands`
+  prints `MOCK_PYENV_COMMANDS`.
 - **R9.** `lib/workflows.sh`'s comment about where `pyenv update` runs names
   `_ensure_pyenv_python`.
 - **V1.** `make test` exits 0.
 - **V2.** Each of the guards behind R2, R3, R5 and R6, deleted in turn, turns at least one
   test red.
-- **V3.** On `claude`, in a scratch clone with `lib/constants.sh`'s `PYTHON_VER` edited to
-  `9.9.9` (a plain assignment, so an environment override is ignored), `./setup_env.sh -t
-  recreate-venv` exits non-zero and `readlink ~/.pyenv/versions/ansible` is byte-identical
-  before and after.
+- **V3.** On `studio` (macOS branch, no sudo), in a scratch clone with `lib/constants.sh`'s
+  `PYTHON_VER` edited to `9.9.9` (a plain assignment, so an environment override is
+  ignored), `./setup_env.sh -t recreate-venv` exits non-zero and
+  `readlink ~/.pyenv/versions/ansible` is byte-identical before and after.
 - **N1.** No change to the Linux `env -i` build command, its environment, or the
   build-dependency package list.
 - **N2.** No build-then-swap or pre-delete snapshot of the venv.
@@ -185,7 +206,7 @@ V3 on `claude` runs a real `sudo apt-get install`; name it or run V3 on macOS.
 Assumption: the mock reached through `env -i` can tell a test directory from the real
 `$HOME` using only what survives `env -i`. Settled by checking whether every suite reaching
 the Linux branch redirects `HOME` under `BATS_TEST_TMPDIR`.
-Disposition:
+Disposition: Addressed — mock guard keyed on `HOME` matching `*/bats-run-*`; failure injection by file; Linux cases assert on disk; V3 moved to `studio`. R3 point: Accepted, reason: a silent no-op is the defect class.
 
 ### Ergonomics
 
@@ -199,7 +220,7 @@ error are well placed and actionable.
 Assumption: the mock can tell a sandbox from a real `HOME` using only what survives
 `env -i`; refuted if the `install_functions.bats` Linux tests go red or a probe with real
 `HOME` and no `BATS_TEST_TMPDIR` creates a file.
-Disposition:
+Disposition: Addressed — guard keyed on `HOME`, empty input stated; positive controls added to every absence case.
 
 ### Risk
 
@@ -218,7 +239,7 @@ Assumption: `bin/python` marks a working install on every host, including workst
 git-era python-build. Checked 2026-10-11: `ls -l ~/.pyenv/versions/*/bin/python` on
 `claude`, `workstation` and `studio` shows a `python -> python3.N` link in every installed
 version (3.12.7 through 3.14.8). Confirmed.
-Disposition:
+Disposition: Addressed — mock keys on `HOME` only, never `PYENV_ROOT`; platform column added; guard reason corrected; behaviour changes stated; positive controls added.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
