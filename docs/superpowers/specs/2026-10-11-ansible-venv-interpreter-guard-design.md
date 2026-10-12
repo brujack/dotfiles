@@ -244,3 +244,56 @@ Disposition: Addressed — mock keys on `HOME` only, never `PYENV_ROOT`; platfor
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `36dd6755` (revision after round 1; all three lenses re-run, told the
+round-1 section is history).
+
+#### Goal-Fit
+
+Finding: the mock does not model `install -s`, which skips any version whose directory
+exists. As R8 reads, it heals a leftover `versions/<ver>` by creating `bin/python`, so the
+"version dir exists, no `bin/python`" case cannot fail as described, and
+`workflows.bats:1391` (a bare `mkdir versions/${PYTHON_VER}`) passes only because the mock
+fills it in. Fix: the mock creates nothing when `-s` is passed and `versions/<ver>`
+exists; that test creates its own executable `bin/python`. Lesser: V3 runs against
+`studio`'s real `ansible` venv, so a regressed guard would destroy it; use `--venv-name` on
+a throwaway venv. Goal holds; verdict count good.
+Assumption: CI's bats 1.10.0 names its run directory `bats-run-XXXXXX`. Checked 2026-10-11:
+`v1.10.0/libexec/bats-core/bats:321` is
+`BATS_RUN_TMPDIR=$(mktemp -d "${BATS_TMPDIR}/bats-run-XXXXXX")`, same as 1.11.0 and 1.13.0.
+Confirmed.
+Disposition:
+
+#### Ergonomics
+
+Finding: (1) R7's new `|| return 1` breaks `developer.bats:926`, which sets a blanket
+`MOCK_PYENV_EXIT=3` and expects rc 3 from `rehash`; the spec does not say how
+`MOCK_PYENV_EXIT` interacts with `install` in the caller-shell path. (2) Same `install -s`
+gap as Goal-Fit. (3) When the `HOME` guard declines, it is silent, so a future test with
+`HOME=$(mktemp -d)` gets the leftover-directory error pointing at the wrong cause; print
+one stderr line. Operator error actionable.
+Assumption: a failed macOS build leaves `versions/<ver>` without `bin/python`, so the
+"remove the directory" advice applies. Resolved without a probe on the real tree: the
+advice is printed only when `versions/<ver>` exists, so it is correct whether pyenv cleans
+up after a failed build or not.
+Disposition:
+
+#### Risk
+
+Finding: the guard holds (bats 1.10.0 and 1.13.0 share the shape; only an exported
+`BATS_RUN_TMPDIR` or `--tempdir`, which the Makefile does not use, escapes it; the
+injection file cannot leak because every affected `HOME` is per-test). But the revision
+breaks or reroutes tests the spec does not name: (1) `developer.bats:926`, as Ergonomics;
+(2) `developer.bats:961` shadows `pyenv` with a shell function, so on the Linux branch
+`command -v pyenv` returns the bare word and `ln -sf` makes a self-referential link, the
+`env -i` build finds no pyenv and the function returns 1 where the test expects 3;
+(3) `developer.bats:853/877/909` and `workflows.bats:1386` create `versions/${PYTHON_VER}`
+without `bin/python`, so under `-x` they silently take the install path (`tdd.md` E4);
+(4) the "mock guard" row is absence-only and its `HOME` must live outside
+`BATS_TEST_TMPDIR`, which the spec does not place or clean up.
+Assumption: every test reaching `_ensure_pyenv_python` resolves `pyenv` to the mock as a
+file; items (1) and (2) already break it. Settled only by running the suites against the
+new mock, which is Phase 2's first red test.
+Disposition:
