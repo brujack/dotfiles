@@ -688,6 +688,9 @@ component add rust-analyzer" ]
 @test "setup_ansible: calls pyenv update on Linux when Python version absent" {
   export LINUX=1; unset MACOS
   export HAS_DEVTOOLS=1
+  # `pyenv update` is a plugin command; _ensure_pyenv_python runs it only when
+  # `pyenv commands` lists it.
+  export MOCK_PYENV_COMMANDS=update
   run setup_ansible
   grep -q "pyenv update" "${MOCK_CALLS_FILE}"
 }
@@ -863,6 +866,8 @@ component add rust-analyzer" ]
   # venv-creation block. So the headline fix of #282 could not reach an
   # already-provisioned machine at all.
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  # setup_ansible now requires an executable interpreter, not just the directory.
+  _epp_fixture_python
   ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
     "${HOME}/.pyenv/versions/ansible"
   install_pyenv_rehash_hook() { printf 'hook-install\n' >> "${MOCK_CALLS_FILE}"; }
@@ -886,6 +891,8 @@ component add rust-analyzer" ]
   # that resolves pyenv also removes the rest of the toolchain the function
   # needs, which is how a scrub turns into a 127 on the CI runner.
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  # setup_ansible now requires an executable interpreter, not just the directory.
+  _epp_fixture_python
   ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
     "${HOME}/.pyenv/versions/ansible"
   # refute_grep returns true on a MISSING file, so both refutes below would be
@@ -916,6 +923,8 @@ component add rust-analyzer" ]
   # one. 7 is distinct from the hook spy's rc so a pass cannot be explained by
   # the wrong failure leaking through.
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible"
+  # setup_ansible now requires an executable interpreter, not just the directory.
+  _epp_fixture_python
   ln -sfn "${HOME}/.pyenv/versions/${PYTHON_VER}/envs/ansible" \
     "${HOME}/.pyenv/versions/ansible"
   export MOCK_PYENV_EXIT=7
@@ -926,13 +935,21 @@ component add rust-analyzer" ]
 @test "setup_ansible: pyenv rehash still runs and its rc propagates when the hook install fails" {
   export LINUX=1; unset MACOS
   export HAS_DEVTOOLS=1
-  # setup_ansible's earlier pyenv virtualenv-delete/virtualenv/activate calls
-  # are bare statements (unchecked), so a blanket MOCK_PYENV_EXIT only ever
-  # reaches the function's rc via the LAST pyenv call -- pyenv rehash, which
-  # is also the function's own last statement. Pick a value distinct from the
-  # spy's rc (1) so a pass can't be explained by the hook's rc leaking through
-  # the warn-and-continue wrapper instead.
+  # setup_ansible's `pyenv virtualenv` call is now checked, so a blanket
+  # MOCK_PYENV_EXIT would abort the function before it reaches pyenv rehash.
+  # Shadow `pyenv` so only rehash fails, with a value distinct from the spy's
+  # rc (1) so a pass can't be explained by the hook's rc leaking through the
+  # warn-and-continue wrapper instead. The interpreter fixture keeps
+  # _ensure_pyenv_python from installing anything.
+  _epp_fixture_python
   export MOCK_PYENV_EXIT=3
+  pyenv() {
+    printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    case "$1" in
+      rehash) return "${MOCK_PYENV_EXIT}" ;;
+      *) return 0 ;;
+    esac
+  }
   install_pyenv_rehash_hook() { return 1; }
   run setup_ansible
   [ "${status}" -eq 3 ]
@@ -969,6 +986,7 @@ component add rust-analyzer" ]
   # but rehash succeeds (matching the real mock's logging format), and only
   # rehash carries MOCK_PYENV_EXIT, distinct from the spy's rc (1) so a pass
   # can't be explained by the hook's rc leaking through instead.
+  _epp_fixture_python
   export MOCK_PYENV_EXIT=3
   pyenv() {
     printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE}"
@@ -1732,4 +1750,101 @@ _epp_fixture_python() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"neither LINUX nor MACOS"* ]]
   ! command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
+}
+
+# --- interpreter guard ahead of every virtualenv-delete --------------------
+# A failed or skipped install must stop the run BEFORE `pyenv virtualenv-delete`
+# removes a working venv. The failure file is read by the pyenv mock even under
+# the Linux branch's `env -i`.
+
+_guard_old_venv() {
+  # versions/ansible -> an old version's env, i.e. not where the code points it.
+  mkdir -p "${HOME}/.pyenv/versions/3.0.0/envs/ansible"
+  ln -sfn "${HOME}/.pyenv/versions/3.0.0/envs/ansible" "${HOME}/.pyenv/versions/ansible"
+}
+
+@test "setup_ansible: Linux, interpreter install fails, rc 1 and the existing venv is not deleted" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1 HAS_DEVTOOLS=1
+  _guard_old_venv
+  printf '1' > "${HOME}/.mock-pyenv-install-exit"
+  run setup_ansible
+  [ "$status" -eq 1 ]
+  [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
+  # positive control: the log exists and the guarded install was attempted
+  [ -s "${MOCK_CALLS_FILE}" ]
+  ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible: macOS, interpreter install fails, rc 1 and the existing venv is not deleted" {
+  _epp_setup
+  unset LINUX UBUNTU
+  export MACOS=1 HAS_DEVTOOLS=1
+  _guard_old_venv
+  printf '1' > "${HOME}/.mock-pyenv-install-exit"
+  run setup_ansible
+  [ "$status" -eq 1 ]
+  [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
+  command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
+  ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv: macOS, interpreter install fails, rc 1 and the existing venv is not deleted" {
+  _epp_setup
+  unset LINUX UBUNTU
+  export MACOS=1
+  _guard_old_venv
+  printf '1' > "${HOME}/.mock-pyenv-install-exit"
+  run recreate_python_venv ansible
+  [ "$status" -eq 1 ]
+  [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
+  command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
+  ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"
+}
+
+@test "recreate_python_venv: macOS, missing interpreter is installed before the venv is deleted" {
+  _epp_setup
+  unset LINUX UBUNTU
+  export MACOS=1
+  export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
+  run recreate_python_venv ansible
+  [ "$status" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  local _install_line _delete_line
+  _install_line="$(command grep -n '^pyenv install' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _delete_line="$(command grep -n '^pyenv virtualenv-delete' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_install_line}" ]
+  [ -n "${_delete_line}" ]
+  [ "${_install_line}" -lt "${_delete_line}" ]
+}
+
+@test "setup_ansible: Linux, missing interpreter is installed and the venv is built on it" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1 HAS_DEVTOOLS=1
+  run setup_ansible
+  [ "$status" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  command grep -qx "pyenv virtualenv ${PYTHON_VER} ansible" "${MOCK_CALLS_FILE}"
+}
+
+@test "setup_ansible: a failing pyenv virtualenv returns 1" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1 HAS_DEVTOOLS=1
+  _epp_fixture_python
+  # Fail only `virtualenv`; every other subcommand succeeds, so the rc can only
+  # come from the checked virtualenv call.
+  pyenv() {
+    printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+    case "$1" in
+      virtualenv) return 4 ;;
+      *) return 0 ;;
+    esac
+  }
+  run setup_ansible
+  [ "$status" -eq 1 ]
+  command grep -qx "pyenv virtualenv ${PYTHON_VER} ansible" "${MOCK_CALLS_FILE}"
+  ! command grep -q "pyenv activate" "${MOCK_CALLS_FILE}"
 }

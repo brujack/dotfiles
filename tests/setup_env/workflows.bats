@@ -1388,7 +1388,9 @@ nvidia" ]
   export LINUX=1
   export UBUNTU=1
   export HAS_DEVTOOLS=1
-  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/bin"
+  printf '#!/bin/sh\nexit 0\n' > "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+  chmod +x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
   setup_ansible
   grep -q "uv sync" "${MOCK_CALLS_FILE}"
   if grep -q "mlx" "${MOCK_CALLS_FILE}"; then
