@@ -1715,6 +1715,8 @@ _epp_fixture_python() {
   [ "$status" -eq 0 ]
   command grep -qx "pyenv update" "${MOCK_CALLS_FILE}"
   [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  # A pre-existing regular-file pyenv must be left alone, not replaced by a link.
+  [ ! -L "${HOME}/.pyenv/bin/pyenv" ]
 }
 
 @test "_ensure_pyenv_python: Linux without the update plugin skips pyenv update and still installs" {
@@ -1857,4 +1859,58 @@ _guard_old_venv() {
   [ "$status" -eq 1 ]
   command grep -qx "pyenv virtualenv ${PYTHON_VER} ansible" "${MOCK_CALLS_FILE}"
   ! command grep -q "pyenv activate" "${MOCK_CALLS_FILE}"
+}
+
+@test "_ensure_pyenv_python: macOS, bin/python exists but is not executable, is neither trusted nor repaired" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/bin"
+  : > "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+  chmod 0644 "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [[ "$output" == *"remove ${HOME}/.pyenv/versions/${PYTHON_VER}; pyenv install -s skips"* ]]
+  # The install was attempted: the early -x check did not short-circuit on a mere existing file.
+  command grep -q "pyenv install -s ${PYTHON_VER}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_ensure_pyenv_python: Linux, no pyenv anywhere, creates no link and fails with the not-executable error" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  local _shim="${BATS_TEST_TMPDIR}/nopyenv-shim" _t
+  mkdir -p "${_shim}"
+  for _t in mkdir ln rm env bash grep; do
+    # Real system binaries, not command -v: tests/mocks is on PATH and its ln/mkdir swallow errors.
+    if [[ -x "/usr/bin/${_t}" ]]; then ln -s "/usr/bin/${_t}" "${_shim}/${_t}"; else ln -s "/bin/${_t}" "${_shim}/${_t}"; fi
+  done
+  local _saved_path="${PATH}"
+  PATH="${_shim}"
+  # Drop bash's command hash so ln/mkdir resolve through the shim, not the tests/mocks copies.
+  hash -r
+  [ -z "$(type -P pyenv)" ]
+  run _ensure_pyenv_python
+  PATH="${_saved_path}"
+  hash -r
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [ ! -e "${HOME}/.pyenv/bin/pyenv" ]
+  [ ! -L "${HOME}/.pyenv/bin/pyenv" ]
+  # Without the empty-path guard, ln is attempted with an empty target and complains.
+  [[ "$output" != *"failed to create symbolic link"* ]]
+}
+
+@test "_ensure_pyenv_python: Linux, an update-prefixed command is not the update plugin" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  export MOCK_PYENV_COMMANDS=update-foo
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${REPO_ROOT}/tests/mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  [ "$(command grep -cx "pyenv update" "${MOCK_CALLS_FILE}")" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
 }
