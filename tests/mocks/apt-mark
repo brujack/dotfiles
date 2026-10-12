@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+printf "apt-mark %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# MOCK_APT_MARK_AUTO: space-separated packages `showauto` reports as
+# auto-installed; only names also passed as arguments are printed, as apt-mark does.
+if [[ "$1" == "showauto" ]]; then
+  for _p in ${MOCK_APT_MARK_AUTO:-}; do
+    for _a in "${@:2}"; do
+      [[ "${_a}" == "${_p}" ]] && printf '%s\n' "${_p}"
+    done
+  done
+  exit 0
+fi
+# MOCK_APT_MARK_EXIT applies to the marking verbs only, so a failed `manual`
+# can be driven without breaking the `showauto` query that precedes it.
+exit "${MOCK_APT_MARK_EXIT:-0}"

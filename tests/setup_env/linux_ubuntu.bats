@@ -1914,8 +1914,123 @@ exit 0'
   export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
   run _install_ubuntu_nvidia
   [ "$status" -eq 0 ]
-  grep -q "nvidia-driver-${NVIDIA_DRIVER_VER}" "${MOCK_CALLS_FILE}"
   grep -q "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+}
+
+# dpkg -l stub for the driver guard. Like real dpkg it always prints a header, then
+# an `ii` row for each package in SHIM_DPKG_INSTALLED and an `rc` row (removed,
+# config files left) for each in SHIM_DPKG_RC, so the guard's `^ii` filter is
+# what separates them.
+_nvidia_dpkg_shim() {
+  cat > "${SHIM_DIR}/dpkg" << 'SHIM'
+#!/usr/bin/env bash
+printf "dpkg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+if [[ "$1" == "-l" ]]; then
+  printf 'Desired=Unknown/Install/Remove/Purge/Hold\n||/ Name  Version  Architecture  Description\n'
+  for _p in ${SHIM_DPKG_INSTALLED:-}; do
+    [[ "$2" == "${_p}" ]] && printf 'ii  %s  1  amd64  stub\n' "${_p}"
+  done
+  for _p in ${SHIM_DPKG_RC:-}; do
+    [[ "$2" == "${_p}" ]] && printf 'rc  %s  1  amd64  stub\n' "${_p}"
+  done
+fi
+exit 0
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/dpkg"
+}
+
+@test "_install_ubuntu_nvidia: installs the -open package, never the transitional bare name" {
+  # On noble and resolute the bare nvidia-driver-615 is an oldlibs transitional
+  # package that only depends on -open. Installing it leaves the transitional as
+  # the manual package, so purging it at the next series bump hands the real
+  # driver to autoremove. Measured on Launchpad 2026-10-12.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+  refute_grep "nvidia-driver-${NVIDIA_DRIVER_VER}( |$)" "${MOCK_CALLS_FILE}" -E
+}
+
+@test "_install_ubuntu_nvidia: the transitional package alone does not satisfy the driver guard" {
+  # A box carrying only the transitional name at ii (its -open removed) has no
+  # driver. Guarding on the bare name would skip the install there.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: an installed -open package skips the driver install" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "dpkg -l nvidia-driver-${NVIDIA_DRIVER_VER}-open" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
+  refute_grep "apt-mark manual" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"reboot required"* ]]
+}
+
+@test "_install_ubuntu_nvidia: an auto-marked -open is marked manual, not reinstalled" {
+  # Boxes provisioned by the old code got -open as a dependency of the
+  # transitional, and an upgrade that moves the series does the same to the next
+  # -open. Either way it is auto-marked, so purging what pulled it in hands the
+  # driver to autoremove.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export MOCK_APT_MARK_AUTO="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "apt-mark manual nvidia-driver-${NVIDIA_DRIVER_VER}-open$" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
+}
+
+@test "_install_ubuntu_nvidia: a failed apt-mark manual returns 1 before the toolkit" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export MOCK_APT_MARK_AUTO="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export MOCK_APT_MARK_EXIT=1
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  grep -q "apt-mark manual" "${MOCK_CALLS_FILE}"
+  refute_grep "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: an -open left at rc (config files only) is reinstalled" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_RC="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: a failed driver install returns 1 with no toolkit and no reboot notice" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export SHIM_APT_FAIL_PKGS="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 1 ]
+  refute_grep "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"reboot required"* ]]
 }
 
 @test "_install_ubuntu_nvidia: warns that a reboot is required rather than implying the driver is live" {
