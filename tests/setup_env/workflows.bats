@@ -2590,10 +2590,9 @@ assert_all_npm_globals_pinned() {
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   mkdir -p "${HOME}/bin"
   touch "${HOME}/bin/cht.sh"
-  # MOCK_CURL_STDOUT must be set: the fetch now gates chmod behind [[ -s ]],
-  # so an unset stdout leaves the mock's default empty touch, which (as of
-  # this branch) correctly FAILs the section instead of reporting OK over a
-  # zeroed file -- exactly the production defect this task exists to fix.
+  # MOCK_CURL_STDOUT must be set: the fetch gates chmod behind [[ -s ]], so
+  # an unset stdout leaves the mock's default empty touch, which is refused
+  # as a failed fetch rather than reported OK over a zeroed file.
   export MOCK_CURL_STDOUT=$'#!/bin/bash\ncheat.sh binary body'
   # Bare call so _DOTFILES_RUN_TMPDIR survives. Capture run_update's own
   # return rather than calling it bare: bats runs test bodies under errexit,
@@ -2641,7 +2640,7 @@ assert_all_npm_globals_pinned() {
   refute_grep "https://cht.sh/:cht.sh" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_update cheat.sh FAILs and leaves a pre-seeded binary unchanged on HTTP error" {
+@test "run_update cheat.sh WARNs and leaves a pre-seeded binary unchanged on HTTP error" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
@@ -2659,15 +2658,13 @@ assert_all_npm_globals_pinned() {
     command curl "$@"
   }
   export -f curl
-  # Capture rather than discard: this fixture stages a genuine section FAIL,
-  # so run_update must return non-zero. A bare call would hit the same
-  # errexit hazard the curl-override comment above describes -- the
-  # non-zero return itself, not just an unguarded command deeper in the
-  # chain, is what triggers it.
+  # Capture rather than discard: a fetch failure WARNs, so run_update must
+  # return 0; a regression back to FAIL would return non-zero, and a bare
+  # call would then abort under errexit instead of failing an assertion.
   local _rc=0
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   # Proves the fetch failure path never touches the target -- the shell code
   # no longer uses `>` at all (only -o), so there is nothing left to truncate
   # before curl runs; this confirms the file the error handler left behind is
@@ -2701,11 +2698,11 @@ assert_all_npm_globals_pinned() {
     esac
   }
   export -f curl
-  # Capture rather than discard -- same reason as the sibling FAIL test above.
+  # Capture rather than discard -- same reason as the sibling WARN test above.
   local _rc=0
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   # And the binary half genuinely succeeded rather than being skipped.
   [ -s "${HOME}/bin/cht.sh" ]
@@ -2717,7 +2714,7 @@ assert_all_npm_globals_pinned() {
   refute_grep "Updating cheat.sh" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
 }
 
-@test "run_update cheat.sh FAILs when curl exits 0 but writes nothing" {
+@test "run_update cheat.sh WARNs when curl exits 0 but writes nothing" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
@@ -2734,8 +2731,8 @@ assert_all_npm_globals_pinned() {
   export -f curl
   local _rc=0
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
 }
 
@@ -2759,8 +2756,8 @@ assert_all_npm_globals_pinned() {
   export -f curl
   local _rc=0
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   # The binary marker must appear ALONE here -- the completion half actually
   # succeeded, so its failure marker must be absent.
@@ -2781,6 +2778,50 @@ _cheat_mode() {
   stat -c '%a' "$1" 2>/dev/null || stat -f '%OLp' "$1"
 }
 
+@test "run_update cheat.sh WARNs, not FAILs, when upstream is down and both copies are kept" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  # cheat.sh answering HTTP 500 for every URL (2026-10-11 outage): both
+  # fetches fail, both installed copies survive, nothing local went wrong.
+  export MOCK_CURL_FAIL_URL="cheat.sh"
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
+  grep -q "installed copy kept" "${_DOTFILES_RUN_TMPDIR}/result_cheat.sh"
+  grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+  [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
+}
+
+@test "run_update cheat.sh still FAILs when a fetch fails after an install already failed" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin" "${HOME}/.zsh.d"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  printf "PRE-EXISTING" > "${HOME}/.zsh.d/_cht"
+  # Binary install fails locally (rc 2 from _cheat_fetch), then the
+  # completion fetch fails upstream: the later WARN-class failure must not
+  # downgrade the earlier local one.
+  curl() {
+    case "${*: -1}" in
+      *"cht.sh/:cht.sh") printf '#!/bin/bash\n' > "$3"; return 0 ;;
+      *"cheat.sh/:zsh") return 22 ;;
+      *) command curl "$@" ;;
+    esac
+  }
+  export -f curl
+  export MOCK_MV_FAIL_ARGS=".cht.sh."
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
 @test "run_update cheat.sh binary fetch failure leaves dest intact and no temp file" {
   _cheat_update_env
   mkdir -p "${HOME}/bin"
@@ -2788,8 +2829,8 @@ _cheat_mode() {
   export MOCK_CURL_FAIL_URL="cht.sh/:cht.sh"
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
@@ -2804,8 +2845,8 @@ _cheat_mode() {
   export MOCK_CURL_FAIL_URL="cheat.sh/:zsh"
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
   [ -n "${tmp}" ]
@@ -2881,8 +2922,8 @@ _cheat_mode() {
   export MOCK_CURL_STDOUT='Unknown topic.'
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
@@ -2897,8 +2938,8 @@ _cheat_mode() {
   export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"
@@ -2913,8 +2954,8 @@ _cheat_mode() {
   export MOCK_CURL_STDOUT=$'# Unknown topic\nx'
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cht.sh/:cht.sh')"
@@ -2929,8 +2970,8 @@ _cheat_mode() {
   export MOCK_CURL_STDOUT=$'# x\n'
   local _rc=0 tmp
   run_update || _rc=$?
-  [ "${_rc}" -ne 0 ]
-  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  [ "${_rc}" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/.zsh.d/_cht")" = "PRE-EXISTING" ]
   tmp="$(_cheat_tmp_from_calls 'https://cheat.sh/:zsh')"

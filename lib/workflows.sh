@@ -1180,23 +1180,32 @@ run_update() {
       _update_record_start "cheat.sh"
       [[ -f ${HOME}/bin/cht.sh ]]  && printf "Updating cheat.sh\\n"
       [[ -f ${HOME}/.zsh.d/_cht ]] && printf "Updating cheat.sh tab completion\\n"
+      # A fetch failure (_cheat_fetch rc 1) is cheat.sh being down or serving
+      # an error page; the installed copy is kept, so it WARNs. An install
+      # failure (rc 2) is local and FAILs. Subshell exits 1 on any local
+      # failure, else 2 on any fetch failure, else 0.
       (
         _rc=0
         if [[ -f ${HOME}/bin/cht.sh ]]; then
           _cheat_fetch https://cht.sh/:cht.sh "${HOME}/bin/cht.sh" 754 '#!' || case $? in
-            1) printf "cheat.sh binary fetch failed\\n" >&2; _rc=1 ;;
+            1) printf "cheat.sh binary fetch failed\\n" >&2; [[ ${_rc} -eq 1 ]] || _rc=2 ;;
             *) printf "cheat.sh binary install failed\\n" >&2; _rc=1 ;;
           esac
         fi
         if [[ -f ${HOME}/.zsh.d/_cht ]]; then
           _cheat_fetch https://cheat.sh/:zsh "${HOME}/.zsh.d/_cht" 644 '#compdef' || case $? in
-            1) printf "cheat.sh completion fetch failed\\n" >&2; _rc=1 ;;
+            1) printf "cheat.sh completion fetch failed\\n" >&2; [[ ${_rc} -eq 1 ]] || _rc=2 ;;
             *) printf "cheat.sh completion install failed\\n" >&2; _rc=1 ;;
           esac
         fi
         exit "${_rc}"
       ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_cheat.sh"
-      _update_record_end "cheat.sh" "${PIPESTATUS[0]}"
+      local _cheat_rc="${PIPESTATUS[0]}"
+      _update_record_end "cheat.sh" "$(( _cheat_rc == 2 ? 0 : _cheat_rc ))"
+      if [[ ${_cheat_rc} -eq 2 ]]; then
+        _update_warn "cheat.sh" "fetch failed, installed copy kept — see detail"
+        _update_write_detail_from_err "cheat.sh" "warning output"
+      fi
     else
       _update_skip "cheat.sh" "not installed"
     fi
