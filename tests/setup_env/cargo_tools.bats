@@ -47,14 +47,14 @@ teardown() {
 # trigger an install call of their own.
 _cargo_list_fixture() {
   local -A _pins=(
-    [cargo-audit]="0.22.1"
-    [cargo-deny]="0.19.4"
-    [cargo-insta]="1.47.2"
+    [cargo-audit]="0.22.2"
+    [cargo-deny]="0.20.2"
+    [cargo-insta]="1.49.0"
     [cargo-machete]="0.9.2"
-    [cargo-mutants]="27.0.0"
-    [cargo-semver-checks]="0.47.0"
-    [cargo-tarpaulin]="0.35.2"
-    [cargo-zigbuild]="0.22.3"
+    [cargo-mutants]="27.1.0"
+    [cargo-semver-checks]="0.51.0"
+    [cargo-tarpaulin]="0.37.5"
+    [cargo-zigbuild]="0.23.4"
   )
   local _override _crate _version
   for _override in "$@"; do
@@ -199,7 +199,7 @@ cargo-denylist v9.9.9:
 @test "_cargo_tool_state: ok when at the pin and --help exits 0" {
   local _list
   _list="$(_cargo_list_fixture)"
-  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.1" "${_list}"
+  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.2" "${_list}"
   [ "$status" -eq 0 ]
   [ "$output" == "ok" ]
 }
@@ -235,7 +235,7 @@ cargo-denylist v9.9.9:
   local _list
   _list="$(_cargo_list_fixture)"
   export MOCK_CARGO_HELP_EXIT_audit=7
-  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.1" "${_list}"
+  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.2" "${_list}"
   [ "$status" -eq 0 ]
   [ "$output" == "broken" ]
 }
@@ -349,8 +349,8 @@ cargo-denylist v9.9.9:
   MOCK_CARGO_LIST="$(_cargo_list_fixture)"
   run install_cargo_tools
   [ "$status" -eq 0 ]
-  [[ "$output" == *"cargo tools: cargo-audit 0.22.1 ok"* ]]
-  [[ "$output" == *"cargo tools: cargo-tarpaulin 0.35.2 ok"* ]]
+  [[ "$output" == *"cargo tools: cargo-audit 0.22.2 ok"* ]]
+  [[ "$output" == *"cargo tools: cargo-tarpaulin 0.37.5 ok"* ]]
   refute_grep "install --locked" "${MOCK_CALLS_FILE}"
 }
 
@@ -371,7 +371,7 @@ cargo-denylist v9.9.9:
   MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT")"
   run install_cargo_tools
   [ "$status" -eq 0 ]
-  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+  grep -qF "cargo install --locked cargo-audit@0.22.2" "${MOCK_CALLS_FILE}"
   refute_grep "install --locked --force cargo-audit" "${MOCK_CALLS_FILE}"
 }
 
@@ -381,7 +381,7 @@ cargo-denylist v9.9.9:
   MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=0.20.0")"
   run install_cargo_tools
   [ "$status" -eq 0 ]
-  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+  grep -qF "cargo install --locked cargo-audit@0.22.2" "${MOCK_CALLS_FILE}"
   refute_grep "install --locked --force cargo-audit" "${MOCK_CALLS_FILE}"
 }
 
@@ -402,7 +402,7 @@ cargo-denylist v9.9.9:
   export MOCK_CARGO_HELP_EXIT_audit=7
   run install_cargo_tools
   [ "$status" -eq 0 ]
-  grep -qF "cargo install --locked --force cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+  grep -qF "cargo install --locked --force cargo-audit@0.22.2" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_cargo_tools: returns 2 and names the failed crate on stderr, not stdout, when an install fails" {
@@ -425,12 +425,12 @@ cargo-denylist v9.9.9:
 
 @test "install_cargo_tools: cargo below CARGO_MIN_VER installs nothing and returns 2 with one line naming the remedy" {
   export HAS_RUST=1
-  export MOCK_CARGO_VERSION="cargo 1.84.1 (66221abde 2024-11-19)"
+  export MOCK_CARGO_VERSION="cargo 1.92.1 (mock)"
   export MOCK_CARGO_LIST
   MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT" "cargo-deny=0.1.0")"
   run --separate-stderr install_cargo_tools
   [ "$status" -eq 2 ]
-  [[ "$stderr" == *"1.84.1"* ]]
+  [[ "$stderr" == *"1.92.1"* ]]
   [[ "$stderr" == *"${CARGO_MIN_VER}"* ]]
   [[ "$stderr" == *"rustup update"* ]]
   [ "$(printf '%s\n' "$stderr" | wc -l)" -eq 1 ]
@@ -444,7 +444,7 @@ cargo-denylist v9.9.9:
   MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT")"
   run install_cargo_tools
   [ "$status" -eq 0 ]
-  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+  grep -qF "cargo install --locked cargo-audit@0.22.2" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_cargo_tools: an unreadable cargo version proceeds to install and says so" {
@@ -455,7 +455,7 @@ cargo-denylist v9.9.9:
   run --separate-stderr install_cargo_tools
   [ "$status" -eq 0 ]
   [[ "$stderr" == *"could not read cargo version"* ]]
-  grep -qF "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}"
+  grep -qF "cargo install --locked cargo-audit@0.22.2" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_cargo_tools: LIBGIT2_NO_PKG_CONFIG=1 only on tarpaulin's install, empty on another crate's" {
@@ -466,8 +466,8 @@ cargo-denylist v9.9.9:
   [ "$status" -eq 0 ]
 
   local _tarpaulin_env _audit_env
-  _tarpaulin_env="$(grep -A1 -F "cargo install --locked cargo-tarpaulin@0.35.2" "${MOCK_CALLS_FILE}" | tail -1)"
-  _audit_env="$(grep -A1 -F "cargo install --locked cargo-audit@0.22.1" "${MOCK_CALLS_FILE}" | tail -1)"
+  _tarpaulin_env="$(grep -A1 -F "cargo install --locked cargo-tarpaulin@0.37.5" "${MOCK_CALLS_FILE}" | tail -1)"
+  _audit_env="$(grep -A1 -F "cargo install --locked cargo-audit@0.22.2" "${MOCK_CALLS_FILE}" | tail -1)"
 
   [ "${_tarpaulin_env}" == "cargo-env LIBGIT2_NO_PKG_CONFIG=1" ]
   [ "${_audit_env}" == "cargo-env LIBGIT2_NO_PKG_CONFIG=" ]

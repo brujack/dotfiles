@@ -13,23 +13,23 @@
 
 # software versions to install
 # read by tests/helpers/common.bash:load_setup_env (exported for mocks) and tests/setup_env/unit.bats
-BATS_VER="1.13.0"
+BATS_VER="1.14.0"
 # read by lib/workflows.sh:run_check_versions (_run_cv_check)
 GITLEAKS_VER="8.30.1"
-CF_TERRAFORMING_VER="0.27.0"
+CF_TERRAFORMING_VER="0.29.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-CONSUL_VER="2.0.0"
-DOCKER_COMPOSE_VER="v5.1.4"
+CONSUL_VER="2.0.4"
+DOCKER_COMPOSE_VER="v5.6.0"
 # npm global packages — pinned by exact version at both lib/workflows.sh call sites.
 # Unlike the GitHub-release pins above, these are NOT covered by
 # `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching
 # its npm version. See docs/superpowers/plans/2026-07-29-npm-global-pinning.md.
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
-EXA_MCP_SERVER_VER="3.2.1"
+EXA_MCP_SERVER_VER="3.4.2"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
-FIRECRAWL_CLI_VER="1.19.27"
+FIRECRAWL_CLI_VER="1.26.3"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
-JSCPD_VER="5.0.14"
+JSCPD_VER="5.4.1"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSON2YAML_VER="1.1.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
@@ -41,7 +41,7 @@ _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 # another. Both the .linux-amd64 and .linux-arm64 tarballs must be published
 # for the pinned release; _fetch_go_latest checks that before --update writes
 # the pin.
-GO_DOWNLOAD_FILENAME="go1.27.1.linux-${_LINUX_ARCH}.tar.gz"
+GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
 # read by lib/linux_ubuntu.sh:_install_rustup_rs
@@ -63,26 +63,26 @@ RUSTUP_INIT_SHA256_AARCH64="15f6e4ce9f583b929c996c91562bad6d4454f3281de858b02cdf
 # is keg-only, so none of these is on PATH unless an rc file puts it there.
 # read by lib/developer.sh:_resolve_rustup, _rustup_is_brew_build
 RUSTUP_BREW_KEGS="/opt/homebrew/opt/rustup/bin /usr/local/opt/rustup/bin /home/linuxbrew/.linuxbrew/opt/rustup/bin"
-# Oldest cargo that can build every CARGO_TOOLS pin: seven of the eight declare
-# edition 2024 (cargo 1.85); cargo-tarpaulin also ships a v4 Cargo.lock (1.78).
+# Oldest cargo that can build every CARGO_TOOLS pin: cargo-semver-checks 0.51.0
+# declares rust-version 1.93, the highest of the eight (crates.io, 2026-10-11).
 # Raise it when a pin bump needs a newer cargo.
 # read by lib/developer.sh:install_cargo_tools
-CARGO_MIN_VER="1.85.0"
+CARGO_MIN_VER="1.93.0"
 # read by lib/developer.sh:install_cargo_tools, lib/workflows.sh:run_check_versions
 CARGO_TOOLS=(
-  "cargo-audit@0.22.1"          # consumer: etch-cli Makefile; math scripts/sbom-sign.sh
-  "cargo-deny@0.19.4"           # consumer: etch-cli Makefile
-  "cargo-insta@1.47.2"          # consumer: etch-cli Makefile
+  "cargo-audit@0.22.2"          # consumer: etch-cli Makefile; math scripts/sbom-sign.sh
+  "cargo-deny@0.20.2"           # consumer: etch-cli Makefile
+  "cargo-insta@1.49.0"          # consumer: etch-cli Makefile
   "cargo-machete@0.9.2"         # consumer: etch-cli Makefile
-  "cargo-mutants@27.0.0"        # consumer: math *-rs/Makefile; etch-cli Makefile; mutation-pr skill
-  "cargo-semver-checks@0.47.0"  # consumer: etch-cli Makefile
-  "cargo-tarpaulin@0.35.2"      # consumer: per-crate coverage gate; DoD coverage evidence
-  "cargo-zigbuild@0.22.3"       # consumer: etch-cli Makefile
+  "cargo-mutants@27.1.0"        # consumer: math *-rs/Makefile; etch-cli Makefile; mutation-pr skill
+  "cargo-semver-checks@0.51.0"  # consumer: etch-cli Makefile
+  "cargo-tarpaulin@0.37.5"      # consumer: per-crate coverage gate; DoD coverage evidence
+  "cargo-zigbuild@0.23.4"       # consumer: etch-cli Makefile
 )
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
-# Ubuntu's own repo ships this metapackage (610.57.04-0ubuntu0.26.04.3 on resolute),
+# Ubuntu's own repo ships this metapackage (615.71.09-0ubuntu0.26.04.2 on resolute),
 # so the driver needs no third-party source — only the container toolkit does.
-NVIDIA_DRIVER_VER="610"
+NVIDIA_DRIVER_VER="615"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
 # NVIDIA serves no per-release list: ubuntu26.04 and ubuntu24.04 both 404, while
 # stable/deb is distro-agnostic and returns 200. Measured 2026-09-12.
@@ -91,11 +91,11 @@ NVIDIA_CONTAINER_GPGKEY_URL="https://nvidia.github.io/libnvidia-container/gpgkey
 NVIDIA_CONTAINER_LIST_URL="https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
 NVIDIA_CONTAINER_KEYRING="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
-KIND_VER="0.32.0"
+KIND_VER="0.33.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-NOMAD_VER="2.0.3"
+NOMAD_VER="2.0.7"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-PACKER_VER="1.15.4"
+PACKER_VER="1.16.1"
 # read by lib/developer.sh:setup_ansible, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 PYTHON_VER="3.14.8"
 # read by lib/developer.sh:install_ruby_tools
@@ -115,9 +115,9 @@ SHELLCHECK_SHA256_AMD64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97
 SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)
-TFLINT_VER="0.61.0"
-TFLINT_SHA256_AMD64="ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2"
-TFLINT_SHA256_ARM64="999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf"
+TFLINT_VER="0.64.0"
+TFLINT_SHA256_AMD64="cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
+TFLINT_SHA256_ARM64="560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tfsec, which also builds the
 # anchored skip-check version regex from this same value (^v<ver>$)
 TFSEC_VER="1.28.14"
@@ -128,14 +128,14 @@ TFSEC_SHA256_ARM64="7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece30
 # on `[[ ! -f "${_root}/version" ]]`, so on an already-provisioned box a bump here is a
 # silent no-op -- deliberately, per the design ("if it exists, the operator chose a version,
 # so leave it").
-TERRAFORM_VER="1.15.6"
+TERRAFORM_VER="1.16.5"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp, lib/workflows.sh:run_check_versions
 VAGRANT_VER="2.4.9"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-VAULT_VER="2.0.2"
+VAULT_VER="2.1.2"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_gui_tools
-VIRTUALBOX_VER="virtualbox-7.1"
-YQ_VER="4.53.3"
+VIRTUALBOX_VER="virtualbox-7.2"
+YQ_VER="4.54.1"
 # read by lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 # Prefix-matched by lib/helpers.sh:_doctor_check_one_version, so this must be a
 # prefix of every zsh the fleet ships: apt gives 5.9 on 24.04 and 26.04, brew
@@ -147,7 +147,7 @@ YQ_VER="4.53.3"
 # version, not us. tests/setup_env/unit.bats pins both directions.
 ZSH_VER="5.9"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
-KUBERNETES_VER="v1.36"
+KUBERNETES_VER="v1.37"
 # read by lib/developer.sh:_aws_verify_zip and tests/setup_env/developer.bats
 AWSCLI_GPG_FPR="FB5DB77FD5C118B80511ADA8A6310ACC4672475C"
 # Microsoft (Release signing) <gpgsecurity@microsoft.com>, vendored as
@@ -237,4 +237,4 @@ OH_MY_ZSH_VER="master"
 # Homebrew install script commit SHA — content-addressable; avoids HEAD which can change
 # check: ./setup_env.sh -t check-versions (report-only — update manually after reviewing the diff URL)
 # read by lib/macos.sh:install_homebrew, lib/workflows.sh:_check_cv_homebrew_install, scripts/bootstrap_linux.sh, scripts/bootstrap_mac.sh
-HOMEBREW_INSTALL_SHA="5e78e698e405a17b63b5fe41ff747f9fccf39472"
+HOMEBREW_INSTALL_SHA="09c62fc577ec170172b0a184060f141a2c622dc1"

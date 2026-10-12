@@ -516,7 +516,7 @@ EOF
   _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
   run _install_ubuntu_tflint
   [ "$status" -eq 0 ]
-  grep -qF 'tflint 0.61.0 https://github.com/terraform-linters/tflint/releases/download/v0.61.0/tflint_linux_amd64.zip ca4e4e8cb7cc3436f2b6979e9c4fd4e2623a66fcca1ad1fe12f8669967636ae2 zip ^TFLint version 0\.61\.0$' "${MOCK_CALLS_FILE}"
+  grep -qF 'tflint 0.64.0 https://github.com/terraform-linters/tflint/releases/download/v0.64.0/tflint_linux_amd64.zip cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537 zip ^TFLint version 0\.64\.0$' "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_tflint: passes the pinned arm64 sha and URL" {
@@ -525,7 +525,7 @@ EOF
   _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
   run _install_ubuntu_tflint
   [ "$status" -eq 0 ]
-  grep -qF "tflint_linux_arm64.zip 999c25cfdb5208fe1133dec6b219e666a39fc2a7a0786a781dc9924ea5945ebf" "${MOCK_CALLS_FILE}"
+  grep -qF "tflint_linux_arm64.zip 560da89aacf59389d4eb029730dd5b109b7288096c32f2726a0d9e783a5ea8eb" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_tfsec: passes the pinned amd64 raw URL, sha, kind and version regex" {

@@ -2354,9 +2354,9 @@ assert_all_npm_globals_pinned() {
   # Explicit status assertion rather than a bare call: a bare call trips errexit and
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
-  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
-  grep -q "npm install -g firecrawl-cli@1.19.27" "${MOCK_CALLS_FILE}"
-  grep -q "npm install -g exa-mcp-server@3.2.1" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g firecrawl-cli@1.26.3" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g exa-mcp-server@3.4.2" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_developer_or_ansible leaves no unpinned npm global install" {
@@ -3390,13 +3390,13 @@ _cheat_mode() {
   # Explicit status assertion rather than a bare call: a bare call trips errexit and
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
-  grep -q "npm install -g jscpd@5.0.14" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
   # The update chain installs all three packages in ONE invocation, so only the
   # first package literally follows "npm install -g " — the other two sit
   # further along the same line. Anchor at line start instead so dropping -g
   # (which would still leave the version pins intact) is still caught.
-  grep -qE '^npm install -g .*firecrawl-cli@1\.19\.27' "${MOCK_CALLS_FILE}"
-  grep -qE '^npm install -g .*exa-mcp-server@3\.2\.1' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*firecrawl-cli@1\.26\.3' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*exa-mcp-server@3\.4\.2' "${MOCK_CALLS_FILE}"
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 

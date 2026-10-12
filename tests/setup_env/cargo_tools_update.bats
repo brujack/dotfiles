@@ -104,17 +104,17 @@ teardown() {
   export HAS_RUST=1
   export MOCK_CARGO_LIST
   MOCK_CARGO_LIST="$(cat <<'LIST'
-cargo-insta v1.47.2:
+cargo-insta v1.49.0:
     cargo-insta
 cargo-machete v0.9.2:
     cargo-machete
-cargo-mutants v27.0.0:
+cargo-mutants v27.1.0:
     cargo-mutants
-cargo-semver-checks v0.47.0:
+cargo-semver-checks v0.51.0:
     cargo-semver-checks
-cargo-tarpaulin v0.35.2:
+cargo-tarpaulin v0.37.5:
     cargo-tarpaulin
-cargo-zigbuild v0.22.3:
+cargo-zigbuild v0.23.4:
     cargo-zigbuild
 LIST
 )"
