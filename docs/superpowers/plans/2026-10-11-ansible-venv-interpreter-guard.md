@@ -177,6 +177,8 @@ depends_on: [3]
 ```
 
 - `CLAUDE.md` Test Seams: one bullet group for `tests/mocks/pyenv`: creates `${HOME}/.pyenv/versions/<ver>/bin/python` only when `HOME` matches `*/bats-run-*`, because `env -i` strips `BATS_TEST_TMPDIR`; inject failure with `${HOME}/.mock-pyenv-install-exit`, not an env var; honours `install -s`; keys on `HOME`, never `PYENV_ROOT`.
+- `CLAUDE.md` Entry Points, `recreate-venv` bullet: one clause saying the run first installs a missing `PYTHON_VER` interpreter and, if that fails, exits non-zero before deleting the venv.
+- `CLAUDE.md` Mock Pattern, the `env -i strips PATH (pyenv mock placement)` bullet: the `env -i` build now lives in `_ensure_pyenv_python`, reached from `setup_ansible` and `recreate_python_venv`, not `setup_ansible()` alone.
 - `docs/superpowers/README.md` Backlog: `workstation's git-era ~/.pyenv/plugins/python-build shadows linuxbrew's` row: plugin dirs dated 2024-12 to 2026-10 sit ahead of brew's python-build on `PATH`; `pyenv update` works only because of them (measured 2026-10-11).
 - `docs/superpowers/README.md` Backlog, two more rows from the Task 2 code review: `_ensure_pyenv_python`'s `rm -rf "/tmp/python-build.*"` is quoted, so it deletes nothing (moved verbatim from `setup_ansible`; N1 kept it); and the interpreter guard hardcodes `${HOME}/.pyenv` while macOS `pyenv install` writes to `${PYENV_ROOT}` (fails closed if they differ; fleet-wide they are equal).
 - The plan-index row for this plan is added at plan commit time, not here.
