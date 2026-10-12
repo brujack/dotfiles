@@ -1771,9 +1771,13 @@ _guard_old_venv() {
   printf '1' > "${HOME}/.mock-pyenv-install-exit"
   run setup_ansible
   [ "$status" -eq 1 ]
+  # Guards the fixture only: the mock never removes the symlink. The
+  # no-virtualenv-delete check below is what discriminates.
   [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
-  # positive control: the log exists and the guarded install was attempted
-  [ -s "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"bin/python is not executable"* ]]
+  # Positive control: the install ran. Under env -i the pyenv mock logs to
+  # ${HOME}/.mock_calls, not MOCK_CALLS_FILE.
+  command grep -q "pyenv install" "${HOME}/.mock_calls"
   ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"
 }
 
@@ -1785,6 +1789,9 @@ _guard_old_venv() {
   printf '1' > "${HOME}/.mock-pyenv-install-exit"
   run setup_ansible
   [ "$status" -eq 1 ]
+  [[ "$output" == *"bin/python is not executable"* ]]
+  # Guards the fixture only: the mock never removes the symlink. The
+  # no-virtualenv-delete check below is what discriminates.
   [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
   command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
   ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"
@@ -1798,6 +1805,9 @@ _guard_old_venv() {
   printf '1' > "${HOME}/.mock-pyenv-install-exit"
   run recreate_python_venv ansible
   [ "$status" -eq 1 ]
+  [[ "$output" == *"bin/python is not executable"* ]]
+  # Guards the fixture only: the mock never removes the symlink. The
+  # no-virtualenv-delete check below is what discriminates.
   [ "$(readlink "${HOME}/.pyenv/versions/ansible")" = "${HOME}/.pyenv/versions/3.0.0/envs/ansible" ]
   command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
   ! command grep -q "virtualenv-delete" "${MOCK_CALLS_FILE}"

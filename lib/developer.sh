@@ -431,7 +431,7 @@ install_ruby() {
         # Passing --with-openssl-dir makes the openssl gem's extconf skip
         # pkg-config entirely (it consults pkg-config only when no dir is
         # given), mirroring the "keep Homebrew out of the build" approach used
-        # for pyenv in setup_ansible().
+        # for pyenv in _ensure_pyenv_python().
         # Attempt the install directly: ruby-build fails fast if the definition
         # is genuinely missing, so a fragile pre-flight --list grep (which is
         # curated and false-negatives on point releases) is not needed.

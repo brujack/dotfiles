@@ -96,7 +96,7 @@ KIND_VER="0.33.0"
 NOMAD_VER="2.0.7"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 PACKER_VER="1.16.1"
-# read by lib/developer.sh:setup_ansible, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
+# read by lib/developer.sh:_ensure_pyenv_python, lib/developer.sh:setup_ansible, lib/developer.sh:recreate_python_venv, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 PYTHON_VER="3.14.8"
 # read by lib/developer.sh:install_ruby_tools
 RUBY_INSTALL_VER="0.10.2"
