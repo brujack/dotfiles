@@ -1033,9 +1033,10 @@ run_update() {
   # install_pyenv_rehash_hook's fix for the uutils sort -u collation defect
   # (see pyenv.d/rehash/), and that happens inside -t update -- so this
   # section runs whenever brew or pip might have run, not only at
-  # setup_user time. (pyenv update itself runs only inside setup_ansible,
-  # lib/developer.sh, reached by -t developer/-t ansible -- not by -t
-  # update. The brew half alone is why this section belongs here.)
+  # setup_user time. (pyenv update itself runs only inside
+  # _ensure_pyenv_python, lib/developer.sh, reached from setup_ansible and
+  # recreate_python_venv -- not by -t update. The brew half alone is why this
+  # section belongs here.)
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_BREW:-} ]] || [[ -n ${UPDATE_PIP:-} ]]; then
     local _pyenv_shims_bin
     _pyenv_shims_bin="$(_pyenv_ansible_venv_bin)"

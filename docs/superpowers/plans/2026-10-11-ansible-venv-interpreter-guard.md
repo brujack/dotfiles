@@ -76,7 +76,7 @@ id: 2
 description: Add _ensure_pyenv_python to lib/developer.sh (install-if-missing, gated pyenv update, post-install -x test) with direct tests; not yet wired to callers
 model: sonnet
 tdd: required
-requirements: [R1, R2, R3, R4]
+requirements: [R1, R2, R3, R4, R10]
 acceptance:
   - cmd: bats tests/setup_env/developer.bats
     exit_code: 0
@@ -85,7 +85,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [lib/developer.sh, tests/setup_env/developer.bats]
+files_touched: [lib/developer.sh, tests/setup_env/developer.bats, tests/mocks/pyenv, tests/setup_env/mocks_pyenv.bats]
 depends_on: [1]
 ```
 
@@ -177,7 +177,10 @@ depends_on: [3]
 ```
 
 - `CLAUDE.md` Test Seams: one bullet group for `tests/mocks/pyenv`: creates `${HOME}/.pyenv/versions/<ver>/bin/python` only when `HOME` matches `*/bats-run-*`, because `env -i` strips `BATS_TEST_TMPDIR`; inject failure with `${HOME}/.mock-pyenv-install-exit`, not an env var; honours `install -s`; keys on `HOME`, never `PYENV_ROOT`.
+- `CLAUDE.md` Entry Points, `recreate-venv` bullet: one clause saying the run first installs a missing `PYTHON_VER` interpreter and, if that fails, exits non-zero before deleting the venv.
+- `CLAUDE.md` Mock Pattern, the `env -i strips PATH (pyenv mock placement)` bullet: the `env -i` build now lives in `_ensure_pyenv_python`, reached from `setup_ansible` and `recreate_python_venv`, not `setup_ansible()` alone.
 - `docs/superpowers/README.md` Backlog: `workstation's git-era ~/.pyenv/plugins/python-build shadows linuxbrew's` row: plugin dirs dated 2024-12 to 2026-10 sit ahead of brew's python-build on `PATH`; `pyenv update` works only because of them (measured 2026-10-11).
+- `docs/superpowers/README.md` Backlog, two more rows from the Task 2 code review: `_ensure_pyenv_python`'s `rm -rf "/tmp/python-build.*"` is quoted, so it deletes nothing (moved verbatim from `setup_ansible`; N1 kept it); and the interpreter guard hardcodes `${HOME}/.pyenv` while macOS `pyenv install` writes to `${PYENV_ROOT}` (fails closed if they differ; fleet-wide they are equal).
 - The plan-index row for this plan is added at plan commit time, not here.
 
 ## Non-goal check
@@ -192,3 +195,7 @@ One fresh reviewer, inputs `plan.md` and the spec's N list. CLEAR 3, CONFLICT 0,
   at `:552`. No resolution needed.
 - **N2 CLEAR.** No build-then-swap or snapshot; only a pre-delete interpreter check.
 - **N3 CLEAR.** No `--dry-run` change.
+
+## Re-plan log
+
+- **Task 2, after code review (2026-10-11).** pyenv 2.8.9 `pyenv-install:212` skips `install -s` only when `${PREFIX}/bin` exists, so the spec's "skips an existing version directory" premise was wrong. Amended R2 and R8 and added R10 (`type -P pyenv` for the symlink) in the spec's `## Amendments`; Task 2's `files_touched` widened to the mock and its tests for the fix round. Two further review findings (quoted `/tmp/python-build.*` glob, `${HOME}/.pyenv` vs `${PYENV_ROOT}`) go to the backlog in Task 4.
