@@ -168,3 +168,30 @@ between a driver bump plus reboot and the next `-t update`.
 - **N2.** No flatpak app is installed or removed; the Steam install path in `_install_ubuntu_gui_tools` is unchanged.
 - **N3.** No GL extension other than `GL.nvidia-*` / `GL32.nvidia-*` is uninstalled by name.
 - **N4.** `_doctor_check_flatpak_gl` never calls `doctor_fail` and never runs a mutating flatpak command.
+
+## Multi-Lens Review
+
+Reviewed at commit: `7d0df709` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; driver churn is higher than the spec says (workstation's dpkg log: 610 installed 2026-09-15, upgraded 2026-10-02, 615 installed 2026-10-08; Flathub already lists `GL.nvidia-615-78-08`), and every point release is a new ref name, so stale pairs accrue per point release, not per series. Load-bearing gap: the update section reports OK when `GL.nvidia-<loaded>` is absent and no other version is installed (§2 step 2, "a family with no refs at all is left alone, silently") — exactly `claude`'s original defect, and also what an empty or misparsed `flatpak list` produces. R4, R6, R7, R8-OK and V1 all pass on an empty list; only doctor would notice. Fix: warn (rc 2) whenever the loaded version is known, an app is installed, and `GL.nvidia-<loaded>` is absent after step 1. Doctor (§3) passes the reads-it test only marginally once that lands. Shared derivation means doctor cannot catch a helper defect.
+Assumption: `sudo flatpak update` keeps pulling `GL.nvidia-<loaded>` for every point release at the moment the update runs. Confirm after the next point release (615.78.08) plus reboot: `-t update`, then `flatpak list --system --runtime --columns=application | grep "nvidia-$(tr . - </sys/module/nvidia/version)"` shows GL and GL32.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) §3/R10: in the Flathub-lag state doctor prescribes `-t update`, which cannot fix it; doctor and update then point at each other on every run. (2) §2 does not state `--dry-run` behaviour; step 2 and 3 delete ~900 MB+ and an operator may not expect that under `--dry-run`. (3) No run-time/download-size note for a runtime bump in an unattended run. (4) Three separate `sudo` calls; a long step 1 can outlive the sudo timestamp and hang step 2 on a prompt (same exposure as apt-then-snap today; say so). (5) The `_update_warn` reason text is unspecified. (6) V1 cannot falsify the prune: both hosts hold only the 615 pair, so a prune that does nothing reports OK. Premise verified: `flatpak --gl-drivers` -> `nvidia-615-71-09 / default / host`; Platform 26.08 metadata `[Extension org.freedesktop.Platform.GL]` has `download-if = active-gl-driver`, `autodelete = false`.
+Assumption: `flatpak update` exits 0 when the active driver's GL extension is missing from Flathub; if non-zero, step 1 FAILs and the R5 WARN path is unreachable.
+Assumption measured by the orchestrator, 2026-10-12 on `claude`: `sudo -n env FLATPAK_GL_DRIVERS=nvidia-999-99-99 flatpak update -y --noninteractive --system` returned **rc 0** with no error, confirming it. The probe was not read-only: it **uninstalled** `GL.default` (26.08, 26.08-extra), `GL.nvidia-615-71-09` and their GL32 counterparts, because they no longer matched the overridden driver list. A plain `flatpak update` restored all six within minutes. This shows `flatpak update` itself removes GL extensions for drivers not in its active list, which qualifies Fact 2: why the 580 pair survived the 2026-10-11 update is not established (likely it hung off the 25.08 Platform, which that update did not reconsider).
+Disposition:
+
+### Risk
+
+Finding: Deletions fail toward keeping refs for every newly admitted input (table in the lens report: malformed version, unloaded module, apt-without-reboot, multiple installations all lose nothing; booting an older kernel costs one ~900 MB re-download). The risk is that the prune never meets real `flatpak list` output (tdd.md pitfall F): fixtures must be captured from real bytes (tab-separated, no header off-tty), plus one read-only host-gated R2 test parsing real output. (2) Doctor's warning can never clear in the R5 state (same as Ergonomics 1). (3) Families are keyed by application id, not arch; a stale ref under a second arch would be pruned with no same-arch replacement (latent: all refs measured `x86_64`). (4) `sudo flatpak uninstall --system --unused` as root may remove a system runtime that a future `--user` app depends on (latent: 0 `--user` refs on both boxes). Premise verified: `strings $(command -v flatpak)` contains `/sys/module/nvidia/version` and `FLATPAK_GL_DRIVERS`, so flatpak and `_nvidia_loaded_version` read the same source.
+Assumption: plain `flatpak uninstall --system --unused` (no `--force-remove`) succeeds, deferring deletion, when a runtime it removes is still in use by a running Steam; if it refuses, R7 FAILs every `-t update` run while Steam is open. Settle by reading `flatpak_dir_undeploy` in the 1.16.6 source, or by running step 3 on a box with Steam running and a stale runtime present.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
