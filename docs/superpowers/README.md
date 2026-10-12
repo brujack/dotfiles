@@ -372,7 +372,7 @@ Add a new row to the group that matches its priority and type.
 | doctor labels both kernel keys `kernel-keys` | From #327 reviews: the step labels each key (`kernel-keys maxkeys`/`maxbytes`), but doctor FAIL/WARN lines say only `kernel-keys`, so only the conf path names the key; use one label scheme in both |
 | `_sysctl_conf_write`'s root write relies on caller convention | From #327 security-review: `sudo tee` writes `<conf>` whenever `<seam_name>` is empty; all three callers derive both from one variable, but nothing in the function enforces that a non-constant path carries a seam name |
 | slash-spelled key derivation needs bash 5.2+ | From #327 review: `_sysctl_conf_value`/`_sysctl_conf_has_other_keys` build the slash spelling as `"${2//./\/}"`; bash 5.2+ yields `a/b/c`, but a shell that keeps the backslash (zsh does) would hand mawk `a\/b\/c` and miss slash-spelled confs. Every Linux host is 5.2+ today |
-| `CONSUL_VER` and `BATS_VER` pinned but unused by install code | `lib/constants.sh` pins both, yet no `lib/` function reads either (consul comes from the HashiCorp apt loop, bats from brew/apt); bumped in the 2026-10-11 pin sweep anyway. Delete or wire. |
+| `BATS_VER` pinned but unused by install code | `lib/constants.sh` pins it, yet no `lib/` function reads it (bats installs from brew/apt); only `tests/helpers/common.bash` and `tests/mocks/tar` reference it. Delete or wire. |
 
 ### P3 — docs
 
