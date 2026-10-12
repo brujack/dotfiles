@@ -1599,3 +1599,111 @@ _dev_probe_gpg_status() {
   # would be worse than none. What this guards is re-adding the dead target.
   ! command grep -q 'terraspace_env' "${REPO_ROOT}/lib/developer.sh"
 }
+
+# --- _ensure_pyenv_python -------------------------------------------------
+# The pyenv mock creates ${HOME}/.pyenv/versions/<ver>/bin/python only when
+# HOME matches */bats-run-*; failure is injected through a file under HOME
+# because an env var does not survive the Linux branch's `env -i`.
+
+_epp_setup() {
+  export PYTHON_VER="3.99.1"
+  unset PYENV_ROOT _OVERRIDE_PYENV_ROOT MOCK_PYENV_EXIT MOCK_PYENV_COMMANDS
+  mkdir -p "${HOME}/.pyenv/versions"
+}
+
+_epp_fixture_python() {
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/bin"
+  printf '#!/bin/sh\nexit 0\n' > "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+  chmod +x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+}
+
+@test "_ensure_pyenv_python: executable interpreter already present, nothing installed" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  _epp_fixture_python
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  ! command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
+}
+
+@test "_ensure_pyenv_python: macOS, missing interpreter, install succeeds" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  [ ! -e "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  command grep -q "pyenv install -s ${PYTHON_VER}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_ensure_pyenv_python: macOS, install fails, names the interpreter path and offers no remove hint" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  printf '1' > "${HOME}/.mock-pyenv-install-exit"
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [[ "$output" != *"remove "* ]]
+}
+
+@test "_ensure_pyenv_python: macOS, bare version directory, install skipped, names path and remove hint" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [[ "$output" == *"remove ${HOME}/.pyenv/versions/${PYTHON_VER}"* ]]
+}
+
+@test "_ensure_pyenv_python: Linux with the update plugin runs pyenv update and installs" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  export MOCK_PYENV_COMMANDS=update
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${REPO_ROOT}/tests/mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  command grep -qx "pyenv update" "${MOCK_CALLS_FILE}"
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+}
+
+@test "_ensure_pyenv_python: Linux without the update plugin skips pyenv update and still installs" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${REPO_ROOT}/tests/mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  command grep -qx "pyenv commands" "${MOCK_CALLS_FILE}"
+  [ "$(command grep -cx "pyenv update" "${MOCK_CALLS_FILE}")" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+}
+
+@test "_ensure_pyenv_python: Linux install failure returns 1 with the not-executable error" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  mkdir -p "${HOME}/.pyenv/bin"
+  cp "${REPO_ROOT}/tests/mocks/pyenv" "${HOME}/.pyenv/bin/pyenv"
+  printf '1' > "${HOME}/.mock-pyenv-install-exit"
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [ ! -e "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+}
+
+@test "_ensure_pyenv_python: neither LINUX nor MACOS set returns 1 naming the cause" {
+  _epp_setup
+  unset LINUX MACOS
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"neither LINUX nor MACOS"* ]]
+  ! command grep -q "pyenv install" "${MOCK_CALLS_FILE}"
+}

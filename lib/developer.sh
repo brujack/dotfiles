@@ -520,6 +520,77 @@ install_github_cli_linux() {
   fi
 }
 
+# Ensure the pinned PYTHON_VER interpreter exists and is executable under
+# ~/.pyenv/versions. Returns 0 when it does, 1 otherwise. The test is on
+# bin/python, not the version directory: an empty or half-built directory
+# satisfies a -d check while holding no interpreter, and a virtualenv built
+# on it would be created against nothing.
+_ensure_pyenv_python() {
+  local _py="${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python"
+  [[ -x "${_py}" ]] && return 0
+
+  if [[ -n "${LINUX:-}" ]]; then
+    # Belt-and-suspenders: install Python build deps before compiling.
+    # ubuntu_common_packages.txt has these, but they may be absent when
+    # running -t ansible without -t developer, or if nala failed on a new
+    # Ubuntu release (e.g. 26.04 resolute where zlib1g-dev caused BUILD FAILED).
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y \
+      zlib1g-dev libssl-dev libbz2-dev libffi-dev \
+      libreadline-dev libsqlite3-dev liblzma-dev tk-dev \
+      uuid-dev libdb-dev libgdbm-dev libgdbm-compat-dev libnss3-dev \
+      2>/dev/null || true
+
+    # Keep pyenv's build definitions current. `update` is a pyenv-update
+    # plugin command, absent from a brew-installed pyenv, so gate on it.
+    if pyenv commands 2>/dev/null | grep -qx update; then
+      pyenv update
+    fi
+
+    # zsh-safe cleanup (avoids: zsh: no matches found)
+    rm -rf "/tmp/python-build.*" 2>/dev/null || true
+
+    # brew install pyenv puts the binary in the brew prefix, not ~/.pyenv/bin/pyenv.
+    # The env -i subprocess below resolves pyenv only via $PYENV_ROOT/bin, so create
+    # a symlink when the expected path is absent (e.g. fresh machine, brew install).
+    if command -v pyenv &>/dev/null && [[ ! -x "${HOME}/.pyenv/bin/pyenv" ]]; then
+      mkdir -p "${HOME}/.pyenv/bin"
+      ln -sf "$(command -v pyenv)" "${HOME}/.pyenv/bin/pyenv"
+    fi
+
+    # Force bundled libmpdec + keep Homebrew out of the build environment
+    # shellcheck disable=SC2016 # vars expand inside bash -lc at runtime, not here
+    env -i \
+      HOME="$HOME" USER="$USER" SHELL="${SHELL:-/bin/bash}" TERM="$TERM" \
+      PYTHON_VER="${PYTHON_VER}" \
+      PYENV_ROOT="$HOME/.pyenv" \
+      PYENV_VIRTUALENV_DISABLE_PROMPT=1 \
+      PYTHON_CONFIGURE_OPTS="--with-system-libmpdec=no" \
+      PATH="/usr/bin:/bin:/usr/sbin:/sbin" \
+      bash -lc '
+        set -euo pipefail
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init -)"
+        pyenv install -s -v "${PYTHON_VER}"
+      '
+
+  elif [[ -n "${MACOS:-}" ]]; then
+    # macOS: normal pyenv install, use system/brew deps as you already have them
+    pyenv install -s "${PYTHON_VER}"
+  else
+    log_error "neither LINUX nor MACOS set — cannot install Python ${PYTHON_VER}"
+    return 1
+  fi
+
+  if [[ ! -x "${_py}" ]]; then
+    log_error "Python ${PYTHON_VER} not installed: ${_py} is not executable"
+    if [[ -d "${HOME}/.pyenv/versions/${PYTHON_VER}" ]]; then
+      log_error "remove ${HOME}/.pyenv/versions/${PYTHON_VER}; pyenv install -s skips an existing version directory"
+    fi
+    return 1
+  fi
+  return 0
+}
+
 setup_ansible() {
   printf "ANSIBLE setup\\n"
   if ! [[ -d ${HOME}/.pyenv/versions/${PYTHON_VER} ]]; then
