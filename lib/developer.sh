@@ -552,9 +552,13 @@ _ensure_pyenv_python() {
     # brew install pyenv puts the binary in the brew prefix, not ~/.pyenv/bin/pyenv.
     # The env -i subprocess below resolves pyenv only via $PYENV_ROOT/bin, so create
     # a symlink when the expected path is absent (e.g. fresh machine, brew install).
-    if command -v pyenv &>/dev/null && [[ ! -x "${HOME}/.pyenv/bin/pyenv" ]]; then
+    # type -P prints the absolute file path even when pyenv is a shell
+    # function, where command -v prints the bare word and the link dangles.
+    local _pyenv_bin
+    _pyenv_bin="$(type -P pyenv)"
+    if [[ -n "${_pyenv_bin}" ]] && [[ ! -x "${HOME}/.pyenv/bin/pyenv" ]]; then
       mkdir -p "${HOME}/.pyenv/bin"
-      ln -sf "$(command -v pyenv)" "${HOME}/.pyenv/bin/pyenv"
+      ln -sf "${_pyenv_bin}" "${HOME}/.pyenv/bin/pyenv"
     fi
 
     # Force bundled libmpdec + keep Homebrew out of the build environment
@@ -583,8 +587,8 @@ _ensure_pyenv_python() {
 
   if [[ ! -x "${_py}" ]]; then
     log_error "Python ${PYTHON_VER} not installed: ${_py} is not executable"
-    if [[ -d "${HOME}/.pyenv/versions/${PYTHON_VER}" ]]; then
-      log_error "remove ${HOME}/.pyenv/versions/${PYTHON_VER}; pyenv install -s skips an existing version directory"
+    if [[ -d "${HOME}/.pyenv/versions/${PYTHON_VER}/bin" ]]; then
+      log_error "remove ${HOME}/.pyenv/versions/${PYTHON_VER}; pyenv install -s skips a version whose bin/ directory exists"
     fi
     return 1
   fi

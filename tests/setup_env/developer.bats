@@ -1649,15 +1649,41 @@ _epp_fixture_python() {
   [[ "$output" != *"remove "* ]]
 }
 
-@test "_ensure_pyenv_python: macOS, bare version directory, install skipped, names path and remove hint" {
+@test "_ensure_pyenv_python: macOS, bin/ exists with no python, install skipped, names path and remove hint" {
+  _epp_setup
+  unset LINUX
+  export MACOS=1
+  mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}/bin"
+  run _ensure_pyenv_python
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
+  [[ "$output" == *"remove ${HOME}/.pyenv/versions/${PYTHON_VER}; pyenv install -s skips a version whose bin/ directory exists"* ]]
+}
+
+@test "_ensure_pyenv_python: macOS, bare version directory without bin/ is installed into" {
   _epp_setup
   unset LINUX
   export MACOS=1
   mkdir -p "${HOME}/.pyenv/versions/${PYTHON_VER}"
   run _ensure_pyenv_python
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python is not executable"* ]]
-  [[ "$output" == *"remove ${HOME}/.pyenv/versions/${PYTHON_VER}"* ]]
+  [ "$status" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  [[ "$output" != *"remove "* ]]
+}
+
+@test "_ensure_pyenv_python: Linux symlinks the absolute pyenv path when command -v prints a bare word" {
+  _epp_setup
+  unset MACOS UBUNTU
+  export LINUX=1
+  pyenv() { command pyenv "$@"; }
+  [ "$(command -v pyenv)" = "pyenv" ]
+  [ ! -e "${HOME}/.pyenv/bin/pyenv" ]
+  run _ensure_pyenv_python
+  [ "$status" -eq 0 ]
+  [ -L "${HOME}/.pyenv/bin/pyenv" ]
+  [ "$(readlink "${HOME}/.pyenv/bin/pyenv")" = "${REPO_ROOT}/tests/mocks/pyenv" ]
+  [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
+  unset -f pyenv
 }
 
 @test "_ensure_pyenv_python: Linux with the update plugin runs pyenv update and installs" {

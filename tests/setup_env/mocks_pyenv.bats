@@ -25,11 +25,18 @@ teardown() {
   [ -x "${HOME}/.pyenv/versions/3.99.1/bin/python" ]
 }
 
-@test "pyenv mock: install -s with an existing bare version dir creates nothing" {
-  mkdir -p "${HOME}/.pyenv/versions/3.99.1"
+@test "pyenv mock: install -s skips a version whose bin/ exists, creating nothing" {
+  mkdir -p "${HOME}/.pyenv/versions/3.99.1/bin"
   run "${MOCK}" install -s -v 3.99.1
   [ "$status" -eq 0 ]
   [ ! -e "${HOME}/.pyenv/versions/3.99.1/bin/python" ]
+}
+
+@test "pyenv mock: install -s into a bare version dir with no bin/ creates the interpreter" {
+  mkdir -p "${HOME}/.pyenv/versions/3.99.1"
+  run "${MOCK}" install -s -v 3.99.1
+  [ "$status" -eq 0 ]
+  [ -x "${HOME}/.pyenv/versions/3.99.1/bin/python" ]
 }
 
 @test "pyenv mock: install -s without an existing dir still creates the interpreter" {

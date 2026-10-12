@@ -74,7 +74,7 @@ if [[ "$1" == "install" ]]; then
   if [[ -n "${MOCK_PYENV_EXIT:-}" ]]; then
     exit "${MOCK_PYENV_EXIT}"
   fi
-  if [[ "${_mock_skip}" -eq 1 ]] && [[ -e "${_mock_dir}" ]]; then
+  if [[ "${_mock_skip}" -eq 1 ]] && [[ -d "${_mock_dir}/bin" ]]; then
     exit 0
   fi
   if [[ "${HOME}" == */bats-run-* ]]; then
