@@ -394,11 +394,19 @@ _dotfiles_run_tmpdir_setup() {
 # working copy: curl -o truncates its target as soon as the body starts, and
 # cheat.sh answers HTTP 200 with an error page, which -f cannot refuse.
 # Returns 0 replaced, 1 fetch failed, 2 local failure (or empty <head>).
+# curl 126/127 means curl itself could not run, which is local, not a fetch
+# failure; run_update WARNs on 1 and FAILs on 2.
 _cheat_fetch() {
-  local _url="$1" _dest="$2" _mode="$3" _head="$4" _tmp _line=""
+  local _url="$1" _dest="$2" _mode="$3" _head="$4" _tmp _line="" _curl_rc
   [[ -n "${_head}" ]] || return 2
   _tmp="$(mktemp "${_dest%/*}/.${_dest##*/}.XXXXXX")" || return 2
-  if ! curl -fsS -o "${_tmp}" --max-time 10 "${_url}" || [[ ! -s "${_tmp}" ]]; then
+  curl -fsS -o "${_tmp}" --max-time 10 "${_url}"
+  _curl_rc=$?
+  if [[ ${_curl_rc} -eq 126 || ${_curl_rc} -eq 127 ]]; then
+    rm -f "${_tmp}"
+    return 2
+  fi
+  if [[ ${_curl_rc} -ne 0 ]] || [[ ! -s "${_tmp}" ]]; then
     rm -f "${_tmp}"
     return 1
   fi

@@ -334,6 +334,22 @@ _cheat_seed() {
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
 }
 
+@test "_cheat_fetch: a missing curl (127/126) returns 2, not 1, dest untouched, temp removed" {
+  _cheat_seed
+  local _code tmp
+  for _code in 127 126; do
+    # 127/126 means curl itself could not run: a local fault, never an
+    # upstream one, so it must not be reported as "fetch failed".
+    eval "curl() { printf 'curl %s\\n' \"\$*\" >> \"\${MOCK_CALLS_FILE}\"; return ${_code}; }"
+    run _cheat_fetch https://example.test/x "${HOME}/bin/cht.sh" 750 '#!'
+    [ "$status" -eq 2 ]
+    [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
+    tmp="$(_cheat_tmp_from_calls 'https://example.test/x')"
+    [ -n "${tmp}" ]
+    [ ! -e "${tmp}" ]
+  done
+}
+
 @test "_cheat_fetch: mv failure returns 2, dest untouched, temp removed" {
   _cheat_seed
   export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
@@ -2791,6 +2807,7 @@ _cheat_mode() {
   [ "${_rc}" -eq 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "WARN" ]
   grep -q "installed copy kept" "${_DOTFILES_RUN_TMPDIR}/result_cheat.sh"
+  grep -q '^\[cheat.sh warning output\]' "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   grep -q "cheat.sh binary fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
@@ -2820,6 +2837,23 @@ _cheat_mode() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
   grep -q "cheat.sh binary install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
   grep -q "cheat.sh completion fetch failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+}
+
+@test "run_update cheat.sh FAILs, not WARNs, when curl itself is missing" {
+  _cheat_update_env
+  mkdir -p "${HOME}/bin"
+  printf "PRE-EXISTING" > "${HOME}/bin/cht.sh"
+  curl() {
+    [[ "${*: -1}" == *"cht.sh/:cht.sh" ]] && return 127
+    command curl "$@"
+  }
+  export -f curl
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_cheat.sh")" = "FAIL" ]
+  grep -q "cheat.sh binary install failed" "${_DOTFILES_RUN_TMPDIR}/detail_cheat.sh"
+  [ "$(cat "${HOME}/bin/cht.sh")" = "PRE-EXISTING" ]
 }
 
 @test "run_update cheat.sh binary fetch failure leaves dest intact and no temp file" {
