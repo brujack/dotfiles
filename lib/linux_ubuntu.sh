@@ -655,7 +655,8 @@ _nvidia_gpu_present() {
   lspci -nn 2> /dev/null | grep -qi '\[10de:'
 }
 
-# Driver comes from Ubuntu's own repo (615.71.09-0ubuntu0.26.04.2 on resolute), so
+# Driver comes from Ubuntu's own repo (nvidia-driver-615-open, 615.71.09-0ubuntu0.26.04.2
+# on resolute), so
 # it needs no third-party source. The container toolkit does, and that repo's GPG
 # key is NOT checksum-pinned the way rustup-init is -- NVIDIA publishes no digest
 # for it. The mitigation is `signed-by=`, which scopes the key to this one repo so
@@ -670,8 +671,12 @@ _install_ubuntu_nvidia() {
   fi
   printf "Installing NVIDIA driver and container toolkit\\n"
 
-  if ! dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}" 2> /dev/null | grep -q '^ii'; then
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "nvidia-driver-${NVIDIA_DRIVER_VER}" || return 1
+  # -open, never the bare name: on noble and resolute the bare name is an oldlibs
+  # transitional that only depends on -open (615 ships no proprietary module).
+  # Installing the transitional leaves it as the manual package, so purging it at
+  # a series bump hands the real driver to autoremove. Hit by hand 2026-10-11.
+  if ! dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" 2> /dev/null | grep -q '^ii'; then
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "nvidia-driver-${NVIDIA_DRIVER_VER}-open" || return 1
     log_warn "NVIDIA driver installed — reboot required before the nvidia module replaces nouveau"
   fi
 

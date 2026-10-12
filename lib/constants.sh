@@ -80,7 +80,7 @@ CARGO_TOOLS=(
   "cargo-zigbuild@0.23.4"       # consumer: etch-cli Makefile
 )
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
-# Ubuntu's own repo ships this metapackage (615.71.09-0ubuntu0.26.04.2 on resolute),
+# Ubuntu's own repo ships nvidia-driver-<ver>-open (615.71.09-0ubuntu0.26.04.2 on resolute),
 # so the driver needs no third-party source — only the container toolkit does.
 NVIDIA_DRIVER_VER="615"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia

@@ -1918,6 +1918,62 @@ exit 0'
   grep -q "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
 }
 
+# dpkg -l stub for the driver guard: prints an `ii` row for each package named in
+# SHIM_DPKG_INSTALLED and nothing otherwise, which is all the guard reads.
+_nvidia_dpkg_shim() {
+  cat > "${SHIM_DIR}/dpkg" << 'SHIM'
+#!/usr/bin/env bash
+printf "dpkg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
+if [[ "$1" == "-l" ]]; then
+  for _p in ${SHIM_DPKG_INSTALLED:-}; do
+    [[ "$2" == "${_p}" ]] && printf 'ii  %s  1  amd64  stub\n' "${_p}"
+  done
+fi
+exit 0
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/dpkg"
+}
+
+@test "_install_ubuntu_nvidia: installs the -open package, never the transitional bare name" {
+  # On noble and resolute the bare nvidia-driver-615 is an oldlibs transitional
+  # package that only depends on -open. Installing it leaves the transitional as
+  # the manual package, so purging it at the next series bump hands the real
+  # driver to autoremove. Measured on Launchpad 2026-10-12.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+  refute_grep "nvidia-driver-${NVIDIA_DRIVER_VER}( |$)" "${MOCK_CALLS_FILE}" -E
+}
+
+@test "_install_ubuntu_nvidia: the transitional package alone does not satisfy the driver guard" {
+  # A box carrying only the transitional name at ii (its -open removed) has no
+  # driver. Guarding on the bare name would skip the install there.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: an installed -open package skips the driver install" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "dpkg -l nvidia-driver-${NVIDIA_DRIVER_VER}-open" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
+  [[ "$output" != *"reboot required"* ]]
+}
+
 @test "_install_ubuntu_nvidia: warns that a reboot is required rather than implying the driver is live" {
   # Installing does not bind: nouveau holds the card until reboot. Silence here would
   # read as "GPU ready" on a box still running nouveau.
