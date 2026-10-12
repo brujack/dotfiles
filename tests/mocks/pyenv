@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Under env -i MOCK_CALLS_FILE is unset; inside a bats HOME log there, not to
+# the shared /tmp file.
+if [[ -z "${MOCK_CALLS_FILE:-}" ]] && [[ "${HOME:-}" == */bats-run-* ]]; then
+  MOCK_CALLS_FILE="${HOME}/.mock_calls"
+fi
 printf "pyenv %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 # For 'pyenv init -' and 'pyenv virtualenv-init -', output nothing (no-op eval)
 if [[ "$1" == "init" ]] || [[ "$1" == "virtualenv-init" ]]; then
@@ -49,13 +54,22 @@ fi
 # anything outside a bats HOME so a failing test cannot write real state.
 if [[ "$1" == "install" ]]; then
   _mock_ver="${!#}"
+  if [[ "${_mock_ver}" == -* ]] || [[ "${_mock_ver}" == */* ]]; then
+    printf "mock pyenv: invalid version '%s'\n" "${_mock_ver}" >&2
+    exit 1
+  fi
   _mock_skip=0
   for _mock_arg in "$@"; do
     [[ "${_mock_arg}" == "-s" ]] && _mock_skip=1
   done
   _mock_dir="${HOME}/.pyenv/versions/${_mock_ver}"
   if [[ -f "${HOME}/.mock-pyenv-install-exit" ]]; then
-    exit "$(cat "${HOME}/.mock-pyenv-install-exit")"
+    _mock_code="$(cat "${HOME}/.mock-pyenv-install-exit")"
+    if [[ ! "${_mock_code}" =~ ^[0-9]+$ ]] || [[ "${_mock_code}" -gt 255 ]]; then
+      printf "mock pyenv: invalid failure file content '%s'\n" "${_mock_code}" >&2
+      exit 1
+    fi
+    exit "${_mock_code}"
   fi
   if [[ -n "${MOCK_PYENV_EXIT:-}" ]]; then
     exit "${MOCK_PYENV_EXIT}"

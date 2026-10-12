@@ -88,3 +88,38 @@ teardown() {
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "pyenv mock: env -i without MOCK_CALLS_FILE logs under the bats HOME" {
+  run env -i HOME="${HOME}" PATH=/usr/bin:/bin "${MOCK}" install -s -v 3.99.1
+  [ "$status" -eq 0 ]
+  grep -q 'pyenv install -s -v 3.99.1' "${HOME}/.mock_calls"
+}
+
+@test "pyenv mock: empty failure file is rejected with rc 1" {
+  : > "${HOME}/.mock-pyenv-install-exit"
+  run "${MOCK}" install -v 3.99.1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mock pyenv: invalid failure file content ''"* ]]
+  [ ! -e "${HOME}/.pyenv/versions/3.99.1/bin/python" ]
+}
+
+@test "pyenv mock: out-of-range failure file is rejected with rc 1" {
+  printf '300' > "${HOME}/.mock-pyenv-install-exit"
+  run "${MOCK}" install -v 3.99.1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mock pyenv: invalid failure file content '300'"* ]]
+}
+
+@test "pyenv mock: version containing a slash is rejected, nothing created" {
+  run "${MOCK}" install ../../x
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mock pyenv: invalid version '../../x'"* ]]
+  [ ! -e "${HOME}/.pyenv/versions" ]
+  [ ! -e "${BATS_TEST_TMPDIR}/x" ]
+}
+
+@test "pyenv mock: version starting with a dash is rejected" {
+  run "${MOCK}" install -v
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"mock pyenv: invalid version '-v'"* ]]
+}
