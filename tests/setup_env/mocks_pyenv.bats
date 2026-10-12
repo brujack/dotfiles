@@ -123,3 +123,14 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"mock pyenv: invalid version '-v'"* ]]
 }
+
+@test "pyenv mock: failure file with a leading zero is read as base 10" {
+  printf '08' > "${HOME}/.mock-pyenv-install-exit"
+  run --separate-stderr "${MOCK}" install -v 3.99.1
+  [ "$status" -eq 8 ]
+  [ -z "$stderr" ]
+  printf '099' > "${HOME}/.mock-pyenv-install-exit"
+  run --separate-stderr "${MOCK}" install -v 3.99.1
+  [ "$status" -eq 99 ]
+  [ -z "$stderr" ]
+}

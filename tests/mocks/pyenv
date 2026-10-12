@@ -65,11 +65,11 @@ if [[ "$1" == "install" ]]; then
   _mock_dir="${HOME}/.pyenv/versions/${_mock_ver}"
   if [[ -f "${HOME}/.mock-pyenv-install-exit" ]]; then
     _mock_code="$(cat "${HOME}/.mock-pyenv-install-exit")"
-    if [[ ! "${_mock_code}" =~ ^[0-9]+$ ]] || [[ "${_mock_code}" -gt 255 ]]; then
+    if [[ ! "${_mock_code}" =~ ^[0-9]+$ ]] || [[ ${#_mock_code} -gt 3 ]] || (( 10#${_mock_code} > 255 )); then
       printf "mock pyenv: invalid failure file content '%s'\n" "${_mock_code}" >&2
       exit 1
     fi
-    exit "${_mock_code}"
+    exit $((10#${_mock_code}))
   fi
   if [[ -n "${MOCK_PYENV_EXIT:-}" ]]; then
     exit "${MOCK_PYENV_EXIT}"
