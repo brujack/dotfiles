@@ -168,3 +168,58 @@ The existing `calls pyenv update on Linux when Python version absent` test sets
   build-dependency package list.
 - **N2.** No build-then-swap or pre-delete snapshot of the venv.
 - **N3.** No change to `--dry-run` gating of either function.
+
+## Multi-Lens Review
+
+Reviewed at commit: `d12e625b` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: R8's mock guard contradicts the spec's own `env -i` rule. The Linux build runs the
+mock under `env -i`, which strips `BATS_TEST_TMPDIR`, `MOCK_PYENV_INSTALL_EXIT` and
+`MOCK_CALLS_FILE`. So on Linux the mock never creates `bin/python`, every Linux test that
+reaches the install returns 1, the "install succeeds" case cannot be expressed, and the
+three rc-1 cases pass vacuously. Goal otherwise holds: every mechanism feeds the
+`|| return 1` in `run_developer_or_ansible`. R3's neither-platform branch has thin value.
+V3 on `claude` runs a real `sudo apt-get install`; name it or run V3 on macOS.
+Assumption: the mock reached through `env -i` can tell a test directory from the real
+`$HOME` using only what survives `env -i`. Settled by checking whether every suite reaching
+the Linux branch redirects `HOME` under `BATS_TEST_TMPDIR`.
+Disposition:
+
+### Ergonomics
+
+Finding: same contradiction as Goal-Fit, plus a worse reading: a naive prefix test on an
+empty `BATS_TEST_TMPDIR` matches every path, so a suite with real `HOME` and a bumped
+`PYTHON_VER` would write a non-executable stub into the operator's real tree, recreating
+the leftover-directory trap. Fix by keying on something `env -i` keeps, and state the
+empty-input behaviour. Lesser: the "already executable" case is absence-only and passes if
+`_ensure_pyenv_python` never runs; add a positive control. The operator-facing stop and its
+error are well placed and actionable.
+Assumption: the mock can tell a sandbox from a real `HOME` using only what survives
+`env -i`; refuted if the `install_functions.bats` Linux tests go red or a probe with real
+`HOME` and no `BATS_TEST_TMPDIR` creates a file.
+Disposition:
+
+### Risk
+
+Finding: (1) same `env -i` contradiction, measured: `env -i bash -c 'echo
+[$BATS_TEST_TMPDIR]'` prints `[]`; the case table does not say which platform each case
+uses. (2) The mock targets `${PYENV_ROOT:-${HOME}/.pyenv}` while the guard reads
+`${HOME}/.pyenv`; developer shells export `PYENV_ROOT=/home/bruce/.pyenv`, so locally the
+macOS-branch tests would aim at the real interpreter and go red while CI stays green; key
+on `HOME` only. (3) The stated reason for the guard is wrong: `workflows.bats:44` is inside
+`setup()`, so `HOME` is redirected for every test there. (4) Unstated behaviour changes:
+`-t developer` on a non-`HAS_DEVTOOLS` mac, or on a box with no pyenv, now aborts before
+`clone_personal_repos` when the install fails. (5) Verdict count: absence-only and rc-1
+cases pass a no-op or an always-1 function; only "missing, install succeeds -> rc 0"
+fails a no-op.
+Assumption: `bin/python` marks a working install on every host, including workstation's
+git-era python-build. Checked 2026-10-11: `ls -l ~/.pyenv/versions/*/bin/python` on
+`claude`, `workstation` and `studio` shows a `python -> python3.N` link in every installed
+version (3.12.7 through 3.14.8). Confirmed.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
