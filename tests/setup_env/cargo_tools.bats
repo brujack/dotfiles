@@ -235,7 +235,7 @@ cargo-denylist v9.9.9:
   local _list
   _list="$(_cargo_list_fixture)"
   export MOCK_CARGO_HELP_EXIT_audit=7
-  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.1" "${_list}"
+  run _cargo_tool_state "${_CARGO_BIN}" "cargo-audit" "0.22.2" "${_list}"
   [ "$status" -eq 0 ]
   [ "$output" == "broken" ]
 }
@@ -425,12 +425,12 @@ cargo-denylist v9.9.9:
 
 @test "install_cargo_tools: cargo below CARGO_MIN_VER installs nothing and returns 2 with one line naming the remedy" {
   export HAS_RUST=1
-  export MOCK_CARGO_VERSION="cargo 1.84.1 (66221abde 2024-11-19)"
+  export MOCK_CARGO_VERSION="cargo 1.92.1 (mock)"
   export MOCK_CARGO_LIST
   MOCK_CARGO_LIST="$(_cargo_list_fixture "cargo-audit=ABSENT" "cargo-deny=0.1.0")"
   run --separate-stderr install_cargo_tools
   [ "$status" -eq 2 ]
-  [[ "$stderr" == *"1.84.1"* ]]
+  [[ "$stderr" == *"1.92.1"* ]]
   [[ "$stderr" == *"${CARGO_MIN_VER}"* ]]
   [[ "$stderr" == *"rustup update"* ]]
   [ "$(printf '%s\n' "$stderr" | wc -l)" -eq 1 ]

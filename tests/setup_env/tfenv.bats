@@ -14,7 +14,7 @@
 # binaries on PATH.
 #
 # TERRAFORM_VER and _TFENV_REPO_URL are deliberately set to values that
-# differ from lib/constants.sh's real defaults (1.15.6 and the real tfutils
+# differ from lib/constants.sh's real defaults (its pinned version and the real tfutils
 # URL). A test that asserts on the real default cannot tell "the seam was
 # read" from "the value was hardcoded and happened to match" -- fixed
 # 2026-09-17 after review found both seams unpinned this way.
