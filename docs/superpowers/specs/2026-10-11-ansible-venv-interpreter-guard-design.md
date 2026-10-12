@@ -215,6 +215,12 @@ The full `make test` run is the check that this list is complete.
 - **N2.** No build-then-swap or pre-delete snapshot of the venv.
 - **N3.** No change to `--dry-run` gating of either function.
 
+## Amendments
+
+- R2 -> `_ensure_pyenv_python` returns 1 when, after its install step, that interpreter is not executable; its error output names the interpreter path, and says to remove `versions/${PYTHON_VER}` only when `versions/${PYTHON_VER}/bin` exists. — pyenv 2.8.9 `pyenv-install:212` skips `install -s` only when `${PREFIX}/bin` exists; a bare version directory is installed into, so the hint and its trigger must key on `bin/`.
+- R8 -> `tests/mocks/pyenv`'s `install` exits 1 with a message for a version starting with `-` or containing `/`; exits with the base-10 number in `${HOME}/.mock-pyenv-install-exit` (validated as 0-255, else exit 1 with a message) and creates nothing when that file exists; otherwise honours `MOCK_PYENV_EXIT`; otherwise creates nothing and exits 0 when `-s` is passed and `${HOME}/.pyenv/versions/<ver>/bin` exists; otherwise creates an executable `${HOME}/.pyenv/versions/<ver>/bin/python` and exits 0, only when `HOME` matches `*/bats-run-*`, never overwriting an existing file, and prints one stderr line when it declines for `HOME`. When `MOCK_CALLS_FILE` is unset and `HOME` matches `*/bats-run-*` it logs to `${HOME}/.mock_calls`. `commands` prints `MOCK_PYENV_COMMANDS`. — same pyenv skip condition (mock fidelity, `tdd.md` E); plus the input validation and local call log added in Task 1 review.
+- adds R10: `_ensure_pyenv_python` resolves the binary it symlinks to `${HOME}/.pyenv/bin/pyenv` with `type -P pyenv`, and creates no link when that prints nothing. — `recreate_python_venv` runs `eval "$(pyenv init -)"` first, which defines a `pyenv` shell function, so `command -v pyenv` prints the bare word and `ln -sf` writes a dangling relative link (Task 2 code review).
+
 ## Multi-Lens Review
 
 Reviewed at commit: `d12e625b` (Step 7 self-review commit, before Step 8 dispatch)
