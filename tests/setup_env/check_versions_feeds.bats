@@ -634,7 +634,8 @@ _go_sha_fixture() {
  {"version":"go1.28.1","stable":true,"files":[{"filename":"go1.28.1.linux-amd64.tar.gz","sha256":"${_sha_a}"}]},
  {"version":"go1.28.0","stable":true,"files":[{"filename":"go1.28.0.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.0.linux-arm64.tar.gz"}]},
  {"version":"go1.28.4","stable":true,"files":[{"filename":["x"],"sha256":"${_sha_a}"},{"filename":"go1.28.4.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.4.linux-arm64.tar.gz","sha256":"${_sha_b}"}]},
- {"version":"go1.27.9","stable":true,"files":[{"filename":"go1.27.9.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.27.9.linux-arm64.tar.gz","sha256":"${_sha_b:1}"}]}
+ {"version":"go1.27.9","stable":true,"files":[{"filename":"go1.27.9.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.27.9.linux-arm64.tar.gz","sha256":"${_sha_b:1}"}]},
+ {"version":"go1.28.5","stable":false,"files":[{"filename":"go1.28.5.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.5.linux-arm64.tar.gz","sha256":"${_sha_b}"}]}
 ]
 JSON
 }
@@ -661,6 +662,23 @@ JSON
   MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.27.9"
   [ "$status" -eq 1 ]
   [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty for an unstable release with otherwise valid files" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.28.5"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 rejects a malformed version before any fetch" {
+  local _v
+  for _v in "" "1.28rc1"; do
+    : > "${MOCK_CALLS_FILE}"
+    MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "${_v}"
+    [ "$status" -eq 1 ]
+    [ -z "$output" ]
+    refute_grep "^curl " "${MOCK_CALLS_FILE}"
+  done
 }
 
 @test "_fetch_go_sha256 fails empty for an unknown version" {

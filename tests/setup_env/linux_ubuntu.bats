@@ -2288,6 +2288,36 @@ _wrong_sha() { printf 'a%.0s' {1..64}; }
   [[ "$output" == *"go: sha256 mismatch: GO_SHA256_AMD64 expects"* ]]
 }
 
+@test "_install_go_from_tarball: arm64 pin is selected by arch, not by position" {
+  _make_go_tarball
+  local _real="${_GO_SHA256}" _wrong
+  _wrong="$(_wrong_sha)"
+  unset _GO_SHA256
+  _LINUX_ARCH=arm64
+  GO_SHA256_ARM64="${_real}"
+  GO_SHA256_AMD64="${_wrong}"
+  run _install_go_from_tarball
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+  rm -rf "${_GO_INSTALL_ROOT}/go" "$(_go_stamp)"
+  GO_SHA256_ARM64="${_wrong}"
+  GO_SHA256_AMD64="${_real}"
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: sha256 mismatch: GO_SHA256_ARM64 expects"* ]]
+}
+
+@test "_install_go_from_tarball: empty GO_SHA256_ARM64 pin is refused before any download" {
+  _make_go_tarball
+  unset _GO_SHA256
+  _LINUX_ARCH=arm64
+  GO_SHA256_ARM64=""
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: GO_SHA256_ARM64 is not a 64-hex sha256; refusing to download"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ] || refute_grep "^wget " "${MOCK_CALLS_FILE}"
+}
+
 @test "_go_verify: unreadable file reports the read failure, not a mismatch" {
   run _go_verify "${BATS_TEST_TMPDIR}/nonexistent" "$(_wrong_sha)" X
   [ "$status" -eq 1 ]
