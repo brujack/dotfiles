@@ -1871,6 +1871,15 @@ exit 0'
   refute_grep "SHOULD NOT RUN" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_rustup_rs: malformed pinned sha256 is refused before any download" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  export _RUSTUP_INIT_SHA256="abc"
+  run _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rustup-init: pinned sha256 is not 64 hex chars"* ]]
+  refute_grep "curl" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_rustup_rs: unknown machine type is a hard error, not an unverified download" {
   rm -f "${HOME}/.cargo/bin/rustup"
   export MOCK_UNAME_M="s390x"
