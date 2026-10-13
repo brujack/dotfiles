@@ -92,8 +92,9 @@ update_snap_packages() {
   log_info "Updated snap packages"
 }
 
-# A seam, like _snap_available: a test that strips PATH to hide flatpak would
-# expose the real /usr/bin/flatpak on claude and workstation (tdd.md E2).
+# A function so tests can redefine it rather than edit PATH: removing
+# tests/mocks from PATH would expose the real /usr/bin/flatpak on claude and
+# workstation (tdd.md E2).
 _flatpak_available() {
   command -v flatpak > /dev/null 2>&1
 }
@@ -108,12 +109,14 @@ _nvidia_loaded_version() {
   printf '%s\n' "${_v//./-}"
 }
 
+# System installation only, by design (spec N1).
 _flatpak_nvidia_gl_refs() {
   local _list
   _list="$(flatpak list --system --runtime --columns=application,arch,branch)" || return 1
   awk -F'\t' '$1 ~ /^org\.freedesktop\.Platform\.GL(32)?\.nvidia-/ { print $1 "/" $2 "/" $3 }' <<<"${_list}"
 }
 
+# System installation only, by design (spec N1).
 # 0 apps installed, 1 none, 2 the list failed.
 _flatpak_has_apps() {
   local _list

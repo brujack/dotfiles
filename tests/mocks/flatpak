@@ -10,7 +10,7 @@ if [[ "${1:-}" == "list" ]]; then
   case "$*" in
     *--runtime*)
       if [[ -n "${MOCK_FLATPAK_LIST_RUNTIME:-}" ]]; then
-        cat "${MOCK_FLATPAK_LIST_RUNTIME}"
+        cat "${MOCK_FLATPAK_LIST_RUNTIME}" || exit 99
       fi
       ;;
     *--app*)

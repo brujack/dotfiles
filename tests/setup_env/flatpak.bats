@@ -65,6 +65,13 @@ setup() {
   [ "${lines[1]}" = "org.freedesktop.Platform.GL32.nvidia-615-71-09/x86_64/1.4" ]
   [[ "$output" != *VAAPI* ]]
   [[ "$output" != *default* ]]
+  grep -qx 'flatpak list --system --runtime --columns=application,arch,branch' "${MOCK_CALLS_FILE}"
+}
+
+@test "_flatpak_nvidia_gl_refs: a missing runtime list file fails the mock (exit 99)" {
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/does-not-exist"
+  run _flatpak_nvidia_gl_refs
+  [ "$status" -eq 1 ]
 }
 
 @test "_flatpak_nvidia_gl_refs: empty list gives empty output, rc 0" {
@@ -85,6 +92,7 @@ setup() {
   export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
   run _flatpak_has_apps
   [ "$status" -eq 0 ]
+  grep -qx 'flatpak list --system --app --columns=application' "${MOCK_CALLS_FILE}"
 }
 
 @test "_flatpak_has_apps: no apps returns 1" {
@@ -106,11 +114,30 @@ setup() {
   [ "$status" -eq 2 ]
 }
 
-@test "_flatpak_available: true with the mock on PATH, false when the seam hides it" {
+@test "_flatpak_available: true with the mock on PATH, false with PATH set to an empty dir" {
   run _flatpak_available
   [ "$status" -eq 0 ]
   _scratch="${BATS_TEST_TMPDIR}/empty-path"
   mkdir -p "${_scratch}"
   PATH="${_scratch}" run _flatpak_available
   [ "$status" -ne 0 ]
+}
+
+@test "_flatpak_nvidia_gl_refs: real read-only flatpak list yields only nvidia GL refs" {
+  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
+  PATH="${_clean_path}" command -v flatpak > /dev/null 2>&1 || skip "flatpak not installed"
+  unset _NVIDIA_MODULE_VERSION_FILE
+  PATH="${_clean_path}" run _flatpak_nvidia_gl_refs
+  [ "$status" -eq 0 ]
+  [[ "$output" != *VAAPI* ]]
+  local _line
+  while IFS= read -r _line; do
+    [[ -z "${_line}" ]] && continue
+    [[ "${_line}" =~ ^org\.freedesktop\.Platform\.GL(32)?\.nvidia-[0-9-]+/[^/]+/[^/]+$ ]]
+  done <<<"${output}"
+  if [[ -r /sys/module/nvidia/version ]]; then
+    local _v
+    _v="$(tr . - < /sys/module/nvidia/version | tr -d '\n')"
+    [[ "${output}" == *"GL.nvidia-${_v}/"* ]]
+  fi
 }
