@@ -124,6 +124,29 @@ _flatpak_has_apps() {
   [[ -n "${_list//[[:space:]]/}" ]]
 }
 
+# Spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md
+# Removes nothing by name: a plain `flatpak update` already auto-prunes GL
+# extensions for inactive drivers (autoprune-unless = active-gl-driver).
+update_flatpak_packages() {
+  local _loaded _refs _apps_rc
+  sudo flatpak update -y --noninteractive --system || { log_error "flatpak update failed"; return 1; }
+  sudo flatpak uninstall -y --noninteractive --system --unused || { log_error "flatpak uninstall --unused failed"; return 1; }
+  if ! _loaded="$(_nvidia_loaded_version)"; then
+    log_info "Updated flatpak runtimes"
+    return 0
+  fi
+  _refs="$(_flatpak_nvidia_gl_refs)" || { log_error "flatpak: cannot list runtimes"; return 1; }
+  _flatpak_has_apps
+  _apps_rc=$?
+  [[ ${_apps_rc} -ne 2 ]] || { log_error "flatpak: cannot list apps"; return 1; }
+  if [[ ${_apps_rc} -eq 0 ]] && ! grep -q "^org\.freedesktop\.Platform\.GL\.nvidia-${_loaded}/" <<<"${_refs}"; then
+    printf 'flatpak: no GL.nvidia-%s installed for loaded driver %s; flatpak apps get no NVIDIA GL. Flathub may not publish it yet: re-run -t update later.\n' \
+      "${_loaded}" "${_loaded//-/.}"
+    return 2
+  fi
+  log_info "Updated flatpak runtimes"
+}
+
 # Wrapper retained so existing callers/tests that invoke the combined
 # operation keep working. Runs both halves unconditionally — snap should
 # still refresh even when apt fails — and reports failure if either did.

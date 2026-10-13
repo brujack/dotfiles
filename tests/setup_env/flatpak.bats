@@ -141,3 +141,201 @@ setup() {
     [[ "${output}" == *"GL.nvidia-${_v}/"* ]]
   fi
 }
+
+# ── update_flatpak_packages ──────────────────────────────────────────────────
+
+_gl_missing_fixture() {
+  grep -v 'GL\.nvidia-615-71-09' "${FIXTURE}" > "${BATS_TEST_TMPDIR}/runtime-missing.tsv"
+  printf '%s' "${BATS_TEST_TMPDIR}/runtime-missing.tsv"
+}
+
+_with_driver() {
+  printf '615.71.09\n' > "${_NVIDIA_MODULE_VERSION_FILE}"
+}
+
+@test "update_flatpak_packages: update failure returns 1 and never uninstalls" {
+  export MOCK_FLATPAK_FAIL_SUBCMD=update
+  run update_flatpak_packages
+  [ "$status" -eq 1 ]
+  ! grep -q '^flatpak uninstall' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_flatpak_packages: uninstall --unused failure returns 1, update ran first, no list after" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  export MOCK_FLATPAK_FAIL_ARGS=--unused
+  run update_flatpak_packages
+  [ "$status" -eq 1 ]
+  local _u _x
+  _u="$(grep -n '^flatpak update' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  _x="$(grep -n '^flatpak uninstall' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_u}" ] && [ -n "${_x}" ] && [ "${_u}" -lt "${_x}" ]
+  ! grep -q '^flatpak list' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_flatpak_packages: the only uninstall is uninstall --unused" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^flatpak uninstall' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  grep -qx 'flatpak uninstall -y --noninteractive --system --unused' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_flatpak_packages: no driver version file returns 0, no flatpak: line, no list call" {
+  rm -f "${_NVIDIA_MODULE_VERSION_FILE}"
+  run update_flatpak_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"flatpak: no GL"* ]]
+  ! grep -q '^flatpak list' "${MOCK_CALLS_FILE}"
+}
+
+@test "update_flatpak_packages: full fixture with apps returns 0" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"flatpak: no GL"* ]]
+}
+
+@test "update_flatpak_packages: GL.nvidia missing returns 2 and names the driver" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME
+  MOCK_FLATPAK_LIST_RUNTIME="$(_gl_missing_fixture)"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"flatpak: no GL.nvidia-615-71-09 installed for loaded driver 615.71.09"* ]]
+}
+
+@test "update_flatpak_packages: empty runtime list with apps returns 2" {
+  _with_driver
+  unset MOCK_FLATPAK_LIST_RUNTIME
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 2 ]
+}
+
+@test "update_flatpak_packages: GL32 only returns 2" {
+  _with_driver
+  grep 'GL32\.nvidia-615-71-09' "${FIXTURE}" > "${BATS_TEST_TMPDIR}/gl32.tsv"
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/gl32.tsv"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 2 ]
+}
+
+@test "update_flatpak_packages: GL missing but no apps returns 0, no line" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME
+  MOCK_FLATPAK_LIST_RUNTIME="$(_gl_missing_fixture)"
+  export MOCK_FLATPAK_LIST_APP=
+  run update_flatpak_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"flatpak: no GL"* ]]
+}
+
+@test "update_flatpak_packages: runtime list failure returns 1" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
+  export MOCK_FLATPAK_FAIL_SUBCMD=list
+  run update_flatpak_packages
+  [ "$status" -eq 1 ]
+}
+
+@test "update_flatpak_packages: app list failure returns 1" {
+  _with_driver
+  export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
+  export MOCK_FLATPAK_FAIL_ARGS=--app
+  run update_flatpak_packages
+  [ "$status" -eq 1 ]
+}
+
+# ── run_update flatpak section ───────────────────────────────────────────────
+
+_setup_run_update() {
+  unset MACOS HAS_AWS PYENV_ROOT
+  export LINUX=1 UBUNTU=1 NOBLE=1 UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export _OVERRIDE_PYENV_ROOT="${BATS_TEST_TMPDIR}/pyenv"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  export TMPDIR="${BATS_TEST_TMPDIR}"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+}
+
+@test "run_update flatpak section: OK when update_flatpak_packages succeeds" {
+  _setup_run_update
+  update_flatpak_packages() { printf 'Updated flatpak runtimes\n'; return 0; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "OK" ]
+}
+
+@test "run_update flatpak section: rc 2 is WARN with reason and detail, not FAIL" {
+  _setup_run_update
+  update_flatpak_packages() {
+    printf 'flatpak: no GL.nvidia-615-71-09 installed for loaded driver 615.71.09\n'
+    return 2
+  }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_flatpak")" == *"no NVIDIA GL extension for the loaded driver"* ]]
+  grep -q 'flatpak: no GL.nvidia-' "${_DOTFILES_RUN_TMPDIR}/detail_flatpak"
+  ! grep -q FAIL "${_DOTFILES_RUN_TMPDIR}/status_flatpak"
+}
+
+@test "run_update flatpak section: rc 2 does not make run_update fail" {
+  _setup_run_update
+  update_flatpak_packages() { return 2; }
+  run run_update
+  [ "$status" -eq 0 ]
+}
+
+@test "run_update flatpak section: rc 1 is FAIL" {
+  _setup_run_update
+  update_flatpak_packages() { return 1; }
+  local _rc=0
+  run_update || _rc=$?
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "FAIL" ]
+  [ "${_rc}" -ne 0 ]
+}
+
+@test "run_update flatpak section: SKIP when flatpak is not installed" {
+  _setup_run_update
+  _flatpak_available() { return 1; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "SKIP" ]
+  grep -q "flatpak not installed on this host" "${_DOTFILES_RUN_TMPDIR}/result_flatpak"
+  ! grep -q '^flatpak update' "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update flatpak section: SKIP not applicable off Linux" {
+  _setup_run_update
+  unset LINUX UBUNTU NOBLE
+  export MACOS=1
+  run_update
+  grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_flatpak"
+}
+
+@test "run_update flatpak section: SKIP flag not set" {
+  _setup_run_update
+  unset UPDATE_PKGS
+  export UPDATE_CLAUDE=1
+  run_update
+  grep -q "flag not set" "${_DOTFILES_RUN_TMPDIR}/result_flatpak"
+}
+
+@test "_UPDATE_SECTION_ORDER: flatpak directly follows snap" {
+  local _i _snap=-1 _fp=-1
+  for _i in "${!_UPDATE_SECTION_ORDER[@]}"; do
+    [[ "${_UPDATE_SECTION_ORDER[${_i}]}" == snap ]] && _snap="${_i}"
+    [[ "${_UPDATE_SECTION_ORDER[${_i}]}" == flatpak ]] && _fp="${_i}"
+  done
+  [ "${_snap}" -ge 0 ]
+  [ "${_fp}" -eq $(( _snap + 1 )) ]
+}
