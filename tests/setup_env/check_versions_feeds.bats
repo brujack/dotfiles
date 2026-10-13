@@ -380,32 +380,50 @@ _stub_go() {
   chmod +x "${_d}/go"
 }
 
+# Argument-checking stand-in for _fetch_go_sha256: answers only for the one
+# version the test targets, so a writer that passes the wrong value (the
+# series, say) gets rc 1 instead of a hash and the test goes red.
+_stub_go_sha256() {
+  _STUB_GO_VER="$1"
+  _fetch_go_sha256() {
+    [[ "$1" == "${_STUB_GO_VER}" ]] || return 1
+    printf '%s %s\n' "$(printf 'a%.0s' {1..64})" "$(printf 'b%.0s' {1..64})"
+  }
+}
+
 @test "go update within the series moves the filename and keeps GO_VER" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.27.2"
   _shim="$(_shim_path)"
   PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.27.2" <<< "y"
   [ "$status" -eq 0 ]
   grep -Fqx 'GO_VER="1.27"' "${_CP}"
   grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
   [[ "$output" == *"Updated GO_VER → 1.27.2"* ]]
+  grep -Fqx 'GO_SHA256_AMD64="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "${_CP}"
+  grep -Fqx 'GO_SHA256_ARM64="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "${_CP}"
   [[ "$output" == *"go: after this change merges and each machine pulls: on macOS run brew upgrade go; on Linux run ./setup_env.sh -t developer"* ]]
 }
 
 @test "go update across a minor moves GO_VER and the filename" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   _shim="$(_shim_path)"
   PATH="${_shim}" run _prompt_version_update "go" "GO_VER" "1.27" "1.28.0" <<< "y"
   [ "$status" -eq 0 ]
   grep -Fqx 'GO_VER="1.28"' "${_CP}"
   grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.28.0.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
   [[ "$output" == *"Updated GO_VER → 1.28.0"* ]]
+  grep -Fqx 'GO_SHA256_AMD64="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "${_CP}"
+  grep -Fqx 'GO_SHA256_ARM64="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "${_CP}"
 }
 
 @test "go read-back failure: rc 1, names the constant, no Updated" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.27.2"
   sed -i.bak '/^GO_VER=/d' "${_CP}"; rm -f "${_CP}.bak"
   _shim="$(_shim_path)"
   PATH="${_shim}" run _update_go_pin "1.27.2"
@@ -420,6 +438,7 @@ _stub_go() {
 @test "go mv failure: rc 1, original unchanged, no temp file left" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.27.2"
   cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
   export MOCK_MV_FAIL_ARGS=".new."
   run _update_go_pin "1.27.2"
@@ -433,6 +452,7 @@ _stub_go() {
 @test "go local-series warning: installed go outside the new series warns" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   _shim="$(_shim_path)"
   _stub_go "${_shim}" "1.27.1"
   PATH="${_shim}" run _update_go_pin "1.28.0"
@@ -443,6 +463,7 @@ _stub_go() {
 @test "go local-series warning: installed go inside the new series is silent" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   _shim="$(_shim_path)"
   _stub_go "${_shim}" "1.28.0"
   PATH="${_shim}" run _update_go_pin "1.28.0"
@@ -454,6 +475,7 @@ _stub_go() {
 @test "go local-series warning: no go on PATH is silent and prints no empty version" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   _shim="$(_shim_path)"
   [ ! -e "${_shim}/go" ]
   PATH="${_shim}" run _update_go_pin "1.28.0"
@@ -540,6 +562,7 @@ _stub_go() {
   _stub_all_but_pins
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.27.2"
   export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz" GO_VER="1.27" PYTHON_VER="3.14.8"
   export UPDATE_VERSIONS=1
   _fetch_go_latest() { printf '1.27.2'; }
@@ -563,6 +586,7 @@ _stub_go() {
 @test "go update is atomic when the pinned filename has no patch" {
   _seed_constants
   _seed_go "1.27" "1.27"
+  _stub_go_sha256 "1.28.0"
   cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
   run _update_go_pin "1.28.0"
   [ "$status" -eq 1 ]
@@ -574,6 +598,7 @@ _stub_go() {
 @test "go update is atomic when GO_DOWNLOAD_FILENAME line is missing" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   sed -i.bak '/^GO_DOWNLOAD_FILENAME=/d' "${_CP}"; rm -f "${_CP}.bak"
   cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
   run _update_go_pin "1.28.0"
@@ -586,8 +611,107 @@ _stub_go() {
 @test "go update success leaves no temp file and the new pins in place" {
   _seed_constants
   _seed_go "1.27" "1.27.1"
+  _stub_go_sha256 "1.28.0"
   run _update_go_pin "1.28.0"
   [ "$status" -eq 0 ]
   grep -Fqx 'GO_VER="1.28"' "${_CP}"
+  grep -Fqx 'GO_SHA256_AMD64="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "${_CP}"
+  grep -Fqx 'GO_SHA256_ARM64="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"' "${_CP}"
   if compgen -G "${BATS_TEST_TMPDIR}/constants.sh.new*"; then false; fi
+}
+
+# ── _fetch_go_sha256 and the sha256 pins ────────────────────────────────────
+
+_sha_a="$(printf 'a%.0s' {1..64})"
+_sha_b="$(printf 'b%.0s' {1..64})"
+
+_go_sha_fixture() {
+  cat <<JSON
+[
+ {"version":"go1.28.2","stable":true,"files":[{"filename":"go1.28.2.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.2.linux-arm64.tar.gz","sha256":"${_sha_b}"}]},
+ {"version":"go1.28.1","stable":true,"files":[{"filename":"go1.28.1.linux-amd64.tar.gz","sha256":"${_sha_a}"}]},
+ {"version":"go1.28.0","stable":true,"files":[{"filename":"go1.28.0.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.0.linux-arm64.tar.gz"}]},
+ {"version":"go1.27.9","stable":true,"files":[{"filename":"go1.27.9.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.27.9.linux-arm64.tar.gz","sha256":"${_sha_b:1}"}]}
+]
+JSON
+}
+
+@test "_fetch_go_sha256 prints amd64 and arm64 hashes for a present version" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.28.2"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_sha_a} ${_sha_b}" ]
+}
+
+@test "_fetch_go_sha256 fails empty when the arm64 file is missing" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.28.1"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty when a sha256 field is missing" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.28.0"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty on a 63-char hash" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.27.9"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty for an unknown version" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "9.9.9"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty when curl fails" {
+  MOCK_CURL_EXIT=22 run _fetch_go_sha256 "1.28.2"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "_fetch_go_sha256 fails empty on a non-JSON body" {
+  MOCK_CURL_STDOUT="not json" run _fetch_go_sha256 "1.28.2"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "go update refuses when the feed has no sha256: rc 1, constants byte-identical" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  _fetch_go_sha256() { return 1; }
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no sha256 for"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
+}
+
+@test "go update read-back failure names a missing GO_SHA256_AMD64 line" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  sed -i.bak '/^GO_SHA256_AMD64=/d' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  _stub_go_sha256 "1.28.0"
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: pin update failed: GO_SHA256_AMD64 is not ${_sha_a}"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
+}
+
+@test "go update read-back failure names a missing GO_SHA256_ARM64 line" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  sed -i.bak '/^GO_SHA256_ARM64=/d' "${_CP}"; rm -f "${_CP}.bak"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  _stub_go_sha256 "1.28.0"
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: pin update failed: GO_SHA256_ARM64 is not ${_sha_b}"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
 }
