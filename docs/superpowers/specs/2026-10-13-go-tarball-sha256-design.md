@@ -66,8 +66,10 @@ esac
 _sha="${_GO_SHA256:-${_sha}}"
 ```
 
-If `_sha256_pin_ok "${_sha}"` fails, log `go: no valid pinned sha256 for ${_LINUX_ARCH}` and return 1
-before downloading. An unsupported arch, an empty pin and a mistyped pin all take this path. Today an
+The source of the value is recorded alongside it: `_GO_SHA256` when the seam is set, else
+`GO_SHA256_AMD64` or `GO_SHA256_ARM64`, else `no GO_SHA256_* pin for ${_LINUX_ARCH}`. If
+`_sha256_pin_ok "${_sha}"` fails, log `go: <source> is not a 64-hex sha256; refusing to download` and
+return 1 before downloading. An unsupported arch, an empty pin and a mistyped pin all take this path. Today an
 unsupported arch downloads a tarball that does not exist, so failing early changes the message, not
 the outcome.
 
@@ -77,6 +79,12 @@ A new stage goes into the existing `elif` chain, between `download` and `extract
 elif ! _verify_sha256 "${_tmp}/go.tgz" "${_sha}"; then
   _stage="verify"
 ```
+
+Before setting the stage, a mismatch logs one line naming the source, the expected hash and the
+actual hash of the downloaded file: `go: sha256 mismatch: <source> expects <sha>, download is
+<actual>`. The actual hash is computed only on this failure path; if computing it fails, `<actual>`
+reads `unreadable`. The operator can then tell a truncated download (re-run) from a mistyped pin
+(compare with the feed), since the tarball itself is deleted with `${_tmp}`.
 
 The stage flow already makes any failed stage remove `${_tmp}`, log `go: <stage> failed` and return 1
 without reaching the swap. So a mismatch leaves `/usr/local/go` and `go.old` exactly as they were, and
@@ -117,18 +125,46 @@ answers `y`.
 4. Reads all four lines back with `grep -Fqx` before the `mv`, as it already does for two. A failed
    read-back names the variable and leaves `constants.sh` unchanged.
 
+A refused update returns 1 from `_update_go_pin`. `_tally_cv_out` does not check
+`_prompt_version_update`'s rc, so the remaining tools are still prompted, and the run already exits 1
+because go was OUTDATED. That is intended: one refused pin must not cancel the operator's other
+updates. Do not add `|| return` at that call site.
+
+**Trust model.** `--update` takes the version and its hashes from the same go.dev fetch. The pins
+therefore protect every install after pin time against a corrupt or truncated download, a redirect to
+another host, and a re-publication under the same filename. They do not protect against go.dev serving
+bad bytes and a matching hash at the moment the pin is written. This is the same model as the tflint,
+tfsec, shellcheck and rustup pins.
+
 ## Testing
 
 All go installer tests already use a real tarball (`_make_go_tarball`) and real `tar`. They change as
 follows:
 
-- `_make_go_tarball` exports `_GO_SHA256` as the real `sha256sum` of the tarball it builds. Every
-  existing install-path test then keeps passing because the bytes really match, not because the check
-  is bypassed.
-- New: a wrong 64-hex `_GO_SHA256` returns 1, prints `go: verify failed`, leaves the seeded tree
-  (`bin/v` still reads `old`), makes no `mv` call, and writes no stamp.
-- New: a malformed pin (empty, 63 characters, non-hex) returns 1 with **no** `wget` call.
-- New: `_LINUX_ARCH=riscv64` with `_GO_SHA256` unset returns 1 with no `wget` call.
+- `_make_go_tarball` exports `_GO_SHA256` as the real `sha256sum` of the tarball it builds, so the
+  tests that use it pass because the bytes really match, not because the check is bypassed.
+- Go tests that do **not** call `_make_go_tarball` would otherwise read the committed pin and fail at
+  `verify` before the stage they test. Each such test exports `_GO_SHA256` as the real hash of its
+  own download fixture. At 07ddce67 these are the tests in `tests/setup_env/linux_ubuntu.bats` that
+  assert `go: extract failed` (junk file, `nobin.tgz`, `link.tgz`) and the tar-failure test asserting
+  `^tar ` was called. Find the full set by running the go tests after the verify stage lands, not
+  from this list. **Their assertions must not be relaxed**: each still asserts the stage it names
+  (`extract failed`, a `tar` call). A test changed to assert only a non-zero status would pass at
+  `verify` and stop testing `extract`.
+- Every `_update_go_pin` success-path and read-back test in
+  `tests/setup_env/check_versions_feeds.bats` gets the hashes it needs either by stubbing
+  `_fetch_go_sha256` as a function printing two 64-hex values, or by a fixture feed with `curl` and
+  `python3` added to `_shim_path`. The stub is preferred, since `_fetch_go_sha256` has its own feed
+  tests. Each read-back failure test must still fail at the read-back it names, asserted by message.
+- New: a wrong 64-hex `_GO_SHA256` returns 1, prints both `go: sha256 mismatch: _GO_SHA256 expects
+<pin>, download is <actual>` with the fixture's real hash as `<actual>`, and `go: verify failed`. It
+  leaves the seeded tree (`bin/v` still reads `old`), makes no `mv` call, and writes no stamp.
+- New: a malformed pin (empty, 63 characters, non-hex) returns 1 with **no** `wget` call and prints
+  `go: _GO_SHA256 is not a 64-hex sha256; refusing to download`.
+- New: `_LINUX_ARCH=riscv64` with `_GO_SHA256` unset returns 1 with no `wget` call and prints
+  `no GO_SHA256_* pin for riscv64`.
+- New: the committed `GO_SHA256_AMD64` and `GO_SHA256_ARM64` both pass `_sha256_pin_ok`. This catches a
+  malformed committed value, not a wrong one; V1 covers wrong.
 - New: with `_GO_SHA256` unset and `_LINUX_ARCH=amd64`, the pin read is `GO_SHA256_AMD64`. The test sets
   `GO_SHA256_AMD64` to the fixture's hash and `GO_SHA256_ARM64` to a wrong value, and the install
   succeeds. A second case swaps the two pins and the install fails. Either case alone passes under the
@@ -154,10 +190,11 @@ follows:
 - **R3.** `[PR1]` `lib/constants.sh` defines `GO_SHA256_AMD64="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5"`
   and `GO_SHA256_ARM64="94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8"`.
 - **R4.** `[PR1]` `_install_go_from_tarball` returns 1 without downloading when the pin selected for
-  `_LINUX_ARCH` (or `_GO_SHA256`) fails `_sha256_pin_ok`.
+  `_LINUX_ARCH` (or `_GO_SHA256`) fails `_sha256_pin_ok`, naming the source of the value in its
+  message.
 - **R5.** `[PR1]` `_install_go_from_tarball` runs `_verify_sha256` on the downloaded tarball before
-  extracting it, and on failure returns 1 with `go: verify failed`, leaving the install root unchanged
-  and writing no stamp.
+  extracting it, and on failure logs the source, expected hash and actual hash, then returns 1 with
+  `go: verify failed`, leaving the install root unchanged and writing no stamp.
 - **R6.** `[PR1]` `_fetch_go_sha256 <version>` prints `<amd64> <arm64>` from the go.dev feed and
   returns 1 with empty output when either linux tarball or either 64-hex `sha256` is missing.
 - **R7.** `[PR1]` `_update_go_pin` refuses the update before touching `constants.sh` when
@@ -189,7 +226,7 @@ the rustup/release-binary move onto the helper, goes past the backlog row and co
 later corruption, redirects and re-publication, not against a go.dev compromised at pin time. The spec
 should say that in one sentence.
 Assumption: No uncertain assumption found.
-Disposition:
+Disposition: (a) Accepted, reason: about six lines per call site, and splitting would leave rustup's missing format guard open. (b) Addressed: Trust model paragraph added to Design section 4.
 
 ### Ergonomics
 
@@ -202,7 +239,7 @@ checks the committed `GO_SHA256_*` values. Asserting both pass `_sha256_pin_ok` 
 value, not a wrong one. (5) Malformed-pin and riscv64 tests should also assert the message.
 Assumption: The Studio's `/sbin/sha256sum` accepts an uppercase-hex pin. Settled 2026-10-13 over
 `ssh studio`: uppercase pin rc 0, mismatch rc 1.
-Disposition:
+Disposition: Addressed, all five: mismatch line with source/expected/actual; refusal names its source; rc-ignoring stated in section 4; committed-pin format test added; malformed-pin and riscv64 tests assert messages.
 
 ### Risk
 
@@ -216,7 +253,7 @@ are refused at the new fetch: they set no feed, and `_shim_path` (`:368`) carrie
 `python3`. They need a fixture feed carrying the target version's hashes, or a stubbed
 `_fetch_go_sha256`. Sourcing order, destructive widening and vacuity all checked clean.
 Assumption: No uncertain assumption found.
-Disposition:
+Disposition: Addressed: Testing now requires each go test that skips `_make_go_tarball` to export its own fixture's hash without relaxing its stage assertion, and `_update_go_pin` tests to stub `_fetch_go_sha256`.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
