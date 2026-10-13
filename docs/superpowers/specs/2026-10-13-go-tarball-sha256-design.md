@@ -352,3 +352,25 @@ helper comment updated.
 Follow-up (same reviewer, at `f73c194d`): the two older callers still print "mismatch" for rc 3.
 Disposition: Addressed by a sentence in Design section 2 recording that their messages deliberately
 stay coarse until the helper-binaries follow-up, so R2 stays a pure refactor.
+
+## Spec alignment (2026-10-13)
+
+- spec: docs/superpowers/specs/2026-10-13-go-tarball-sha256-design.md
+- anchor: c6a8f0d6862ace2ca37260df4812cf162c4c4ce8
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-10-13 on claude: downloaded go1.27.2.linux-amd64.tar.gz (70590635 B) and linux-arm64 (67076180 B) via go.dev -> dl.google.com; sha256 matched GO_SHA256_AMD64 and GO_SHA256_ARM64 byte for byte.
+- V2: no evidence recorded
+- V3: test-quality-review round 1 (scratch copy, 20 mutations): 14 killed, 1 invalid (redone and killed), 5 survived: M1/M2 (arm64 pin arm deleted / reads AMD64 pin), M11 (_fetch_go_sha256 version guard), M12 (stable filter), M9 (unreadable fallback, accepted as unreachable). 9a85221b added 4 tests; verification round re-ran M1, M2, M11, M12 plus M21 (refusal names its source): all 5 killed, restores cmp-identical. Phase 2 also killed: delete go verify arm, swap arch arms, series-not-latest fetch, delete arm64 pin check.
