@@ -983,6 +983,9 @@ _make_go_tarball() {
   /bin/chmod +x "${_src}/go/bin/go"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/go.tgz" -C "${_src}" go
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz"
+  # Real hash of the fixture the wget mock serves; sha256sum is never mocked.
+  _GO_SHA256="$(sha256sum "${BATS_TEST_TMPDIR}/go.tgz" | cut -d' ' -f1)"
+  export _GO_SHA256
 }
 
 # Stub go reporting <version>; every go test sets _GO_BIN (tdd.md pitfall G).
@@ -2187,6 +2190,112 @@ SHIM
   grep -q "^tar " "${MOCK_CALLS_FILE}"
   [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
   refute_grep "^mv " "${MOCK_CALLS_FILE}"
+}
+
+# ── _install_go_from_tarball: sha256 verify stage and pin selection ──────────
+
+_wrong_sha() { printf 'a%.0s' {1..64}; }
+
+@test "_install_go_from_tarball: wrong _GO_SHA256 names pin and real hash, keeps the tree" {
+  _make_go_tarball
+  _seed_go
+  local _real="${_GO_SHA256}" _pin
+  _pin="$(_wrong_sha)"
+  export _GO_SHA256="${_pin}"
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: sha256 mismatch: _GO_SHA256 expects ${_pin}, download is ${_real}"* ]]
+  [[ "$output" == *"go: verify failed"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+  refute_grep "^mv " "${MOCK_CALLS_FILE}"
+  [ ! -e "$(_go_stamp)" ]
+}
+
+@test "_install_go_from_tarball: malformed _GO_SHA256 is refused before any download" {
+  _make_go_tarball
+  local _bad
+  for _bad in "$(printf 'a%.0s' {1..63})" "$(printf 'g%.0s' {1..64})"; do
+    export _GO_SHA256="${_bad}"
+    run _install_go_from_tarball
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"go: _GO_SHA256 is not a 64-hex sha256; refusing to download"* ]]
+    [ ! -f "${MOCK_CALLS_FILE}" ] || refute_grep "^wget " "${MOCK_CALLS_FILE}"
+  done
+}
+
+@test "_install_go_from_tarball: empty GO_SHA256_AMD64 pin is refused before any download" {
+  _make_go_tarball
+  unset _GO_SHA256
+  _LINUX_ARCH=amd64
+  GO_SHA256_AMD64=""
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: GO_SHA256_AMD64 is not a 64-hex sha256"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ] || refute_grep "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_go_from_tarball: empty _GO_SHA256 means unset and falls to the arch pin" {
+  _make_go_tarball
+  local _real="${_GO_SHA256}"
+  export _GO_SHA256=""
+  _LINUX_ARCH=amd64
+  GO_SHA256_AMD64="${_real}"
+  run _install_go_from_tarball
+  [ "$status" -eq 0 ]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "new" ]
+}
+
+@test "_install_go_from_tarball: unsupported arch has no pin and is refused before any download" {
+  _make_go_tarball
+  unset _GO_SHA256
+  _LINUX_ARCH=riscv64
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: no GO_SHA256_* pin for riscv64; refusing to download"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ] || refute_grep "^wget " "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_go_from_tarball: pin is selected by arch, not by position" {
+  _make_go_tarball
+  local _real="${_GO_SHA256}" _wrong
+  _wrong="$(_wrong_sha)"
+  unset _GO_SHA256
+  _LINUX_ARCH=amd64
+  GO_SHA256_AMD64="${_real}"
+  GO_SHA256_ARM64="${_wrong}"
+  run _install_go_from_tarball
+  [ "$status" -eq 0 ]
+  rm -rf "${_GO_INSTALL_ROOT}/go" "$(_go_stamp)"
+  GO_SHA256_AMD64="${_wrong}"
+  GO_SHA256_ARM64="${_real}"
+  run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: sha256 mismatch: GO_SHA256_AMD64 expects"* ]]
+}
+
+@test "_go_verify: unreadable file reports the read failure, not a mismatch" {
+  run _go_verify "${BATS_TEST_TMPDIR}/nonexistent" "$(_wrong_sha)" X
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: could not read the download to verify it"* ]]
+  [[ "$output" != *"mismatch"* ]]
+}
+
+@test "_go_verify: a sha256sum that cannot execute reports rc 126, not a mismatch" {
+  local _shim="${BATS_TEST_TMPDIR}/shimonly" _f="${BATS_TEST_TMPDIR}/f"
+  mkdir -p "${_shim}"
+  printf '#!/bin/sh\nexit 0\n' > "${_shim}/sha256sum"
+  /bin/chmod 644 "${_shim}/sha256sum"
+  printf 'x' > "${_f}"
+  # PATH is the shim dir only: a prepended shim loses to the real sha256sum.
+  PATH="${_shim}" run _go_verify "${_f}" "$(_wrong_sha)" X
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: sha256 check could not run (rc 126)"* ]]
+  [[ "$output" != *"mismatch"* ]]
+}
+
+@test "go pins: GO_SHA256_AMD64 and GO_SHA256_ARM64 are each a well-formed sha256 pin" {
+  _sha256_pin_ok "${GO_SHA256_AMD64}"
+  _sha256_pin_ok "${GO_SHA256_ARM64}"
 }
 
 # ── _install_ubuntu_docker ───────────────────────────────────────────────────
