@@ -135,11 +135,14 @@ setup() {
     [[ -z "${_line}" ]] && continue
     [[ "${_line}" =~ ^org\.freedesktop\.Platform\.GL(32)?\.nvidia-[0-9-]+/[^/]+/[^/]+$ ]]
   done <<<"${output}"
-  if [[ -r /sys/module/nvidia/version ]]; then
-    local _v
-    _v="$(tr . - < /sys/module/nvidia/version | tr -d '\n')"
-    [[ "${output}" == *"GL.nvidia-${_v}/"* ]]
-  fi
+  # Count against the raw list by a second mechanism (grep on the id column),
+  # not against the loaded driver: a host whose extension is missing is the
+  # state this feature reports, and must not turn the suite red.
+  local _raw _got
+  _raw="$(PATH="${_clean_path}" flatpak list --system --runtime --columns=application \
+    | grep -cE '^org\.freedesktop\.Platform\.GL(32)?\.nvidia-')" || true
+  _got="$(grep -c . <<<"${output}")" || true
+  [ "${_got}" -eq "${_raw}" ]
 }
 
 # ── update_flatpak_packages ──────────────────────────────────────────────────
