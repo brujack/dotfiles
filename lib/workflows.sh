@@ -1383,6 +1383,41 @@ print(best[1])
 '
 }
 
+# Prints "<amd64-sha> <arm64-sha>" for stable release go<version>; rc 1 and
+# empty output when the release, either linux tarball, or either 64-hex sha256
+# is missing. Feeds _update_go_pin only.
+_fetch_go_sha256() {
+  local _version="$1" _body
+  [[ "${_version}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || return 1
+  _body=$(curl -sf --max-time 10 'https://go.dev/dl/?mode=json') || return 1
+  printf '%s' "${_body}" | python3 -c '
+import json, re, sys
+want = "go" + sys.argv[1]
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+if not isinstance(data, list):
+    sys.exit(1)
+for entry in data:
+    if not isinstance(entry, dict) or entry.get("stable") is not True or entry.get("version") != want:
+        continue
+    files = entry.get("files")
+    if not isinstance(files, list):
+        sys.exit(1)
+    shas = {f.get("filename"): f.get("sha256") for f in files if isinstance(f, dict)}
+    out = []
+    for arch in ("amd64", "arm64"):
+        s = shas.get(want + ".linux-" + arch + ".tar.gz")
+        if not isinstance(s, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", s):
+            sys.exit(1)
+        out.append(s)
+    print(" ".join(out))
+    sys.exit(0)
+sys.exit(1)
+' "${_version}"
+}
+
 # Prints "<highest in SERIES> <highest overall>", or "- <highest overall>"
 # when SERIES has no release yet. Empty output and rc 1 when no
 # "Python X.Y.Z" name is in the feed.
@@ -1584,7 +1619,8 @@ _prompt_version_update() {
 }
 
 # _update_go_pin <latest> -- GO_VER carries major.minor, GO_DOWNLOAD_FILENAME
-# the full release; both move together. Reads the constants file back because
+# the full release, GO_SHA256_AMD64/ARM64 the tarball digests; all four move
+# together or not at all. Reads the constants file back because
 # a sed that matches nothing exits 0 and would otherwise report a pin it never
 # wrote. rc 0 written and verified, 1 failed.
 _update_go_pin() {
@@ -1598,6 +1634,16 @@ _update_go_pin() {
   fi
   _series="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
 
+  # Fetch before touching anything: a pin without a digest would make the
+  # installer refuse the tarball on every machine.
+  local _shas="" _amd="" _arm=""
+  _shas=$(_fetch_go_sha256 "${_latest}") || _shas=""
+  read -r _amd _arm <<< "${_shas}"
+  if ! _sha256_pin_ok "${_amd}" || ! _sha256_pin_ok "${_arm}"; then
+    printf "  go: refusing pin update: no sha256 for %s in the go.dev feed\n" "${_latest}"
+    return 1
+  fi
+
   # Edit a same-directory copy and move it over the original only after both
   # lines read back, so a partial edit can never be left in constants.sh.
   _tmp="${_constants}.new.$$"
@@ -1605,6 +1651,9 @@ _update_go_pin() {
   sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_tmp}"
   rm -f "${_tmp}.bak"
   _update_url_pins "go" "" "${_latest}" "${_tmp}"
+  sed -i.bak -e "s|^GO_SHA256_AMD64=\".*\"|GO_SHA256_AMD64=\"${_amd}\"|" \
+    -e "s|^GO_SHA256_ARM64=\".*\"|GO_SHA256_ARM64=\"${_arm}\"|" "${_tmp}"
+  rm -f "${_tmp}.bak"
 
   _want_ver="GO_VER=\"${_series}\""
   # shellcheck disable=SC2016 # ${_LINUX_ARCH} is literal text in constants.sh
@@ -1617,6 +1666,16 @@ _update_go_pin() {
   if ! grep -Fqx "${_want_file}" "${_tmp}"; then
     rm -f "${_tmp}" "${_tmp}.bak"
     printf "  go: pin update failed: GO_DOWNLOAD_FILENAME is not %s\n" "${_want_file#GO_DOWNLOAD_FILENAME=}"
+    return 1
+  fi
+  if ! grep -Fqx 'GO_SHA256_AMD64="'"${_amd}"'"' "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  go: pin update failed: GO_SHA256_AMD64 is not %s\n" "${_amd}"
+    return 1
+  fi
+  if ! grep -Fqx 'GO_SHA256_ARM64="'"${_arm}"'"' "${_tmp}"; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  go: pin update failed: GO_SHA256_ARM64 is not %s\n" "${_arm}"
     return 1
   fi
   if ! mv "${_tmp}" "${_constants}"; then
