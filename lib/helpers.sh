@@ -18,12 +18,15 @@ _sha256_pin_ok() {
 }
 
 # _verify_sha256 <file> <sha> -- rc 0 match, 1 mismatch, 2 malformed pin,
-# 3 not a readable regular file; any other rc is sha256sum's own (126/127). Logs nothing.
+# 3 not a readable regular file; any other rc is sha256sum's own (126/127).
+# Logs nothing.
 # The pin is checked first: macOS sha256sum exits 0 on a malformed checksum
 # line. The -f/-r check exists because sha256sum -c returns 1 for a file it
-# cannot read (or a directory), the same code as a mismatch (measured 2026-10-13: missing file
-# on GNU and on the Studio's /sbin/sha256sum, mode-000 as non-root on GNU).
-# Uppercase hex is accepted by both (measured 2026-10-13); do not lower-case pins.
+# cannot read (or a directory), the same code as a mismatch (measured
+# 2026-10-13: missing file on GNU and on the Studio's /sbin/sha256sum,
+# mode-000 as non-root on GNU, directory on GNU).
+# Uppercase hex is accepted by both (measured 2026-10-13); do not lower-case
+# pins.
 _verify_sha256() {
   local _file="$1" _sha="$2"
   _sha256_pin_ok "${_sha}" || return 2

@@ -67,12 +67,18 @@ setup() {
   [ "$status" -eq 3 ]
 }
 
-# The [0-9a-fA-F] range matched non-ASCII letters only where the locale's range
-# collation is non-ASCII (Linux glibc en_US.UTF-8; the Studio does not
-# reproduce it), so this discriminates on Linux and CI. Skips if the locale is
-# not installed, since the C fallback cannot exhibit the defect.
+# The [0-9a-fA-F] range matched non-ASCII letters under Linux glibc
+# en_US.UTF-8 (measured on claude, 2026-10-13); it did not reproduce on the
+# Studio. On Linux CI the test fails rather than skips if the locale is
+# missing, because a skip counts as a pass in the test-count gate.
 @test "_sha256_pin_ok: non-ASCII letter in a 64-char pin is rejected under en_US.UTF-8" {
-  locale -a | grep -qix 'en_US.utf-\?8' || skip "en_US.UTF-8 not installed"
+  if ! locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
+    if [[ -n "${CI:-}" && "$(uname -s)" == Linux ]]; then
+      printf 'en_US.UTF-8 not installed on Linux CI; this test cannot discriminate\n' >&2
+      return 1
+    fi
+    skip "en_US.UTF-8 not installed"
+  fi
   local _pin
   _pin="$(printf '%063d' 0)é"
   export LC_ALL=en_US.UTF-8
