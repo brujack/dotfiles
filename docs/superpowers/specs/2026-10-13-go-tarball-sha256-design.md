@@ -1,6 +1,7 @@
 # Go tarball sha256 verification
 
 - **Date:** 2026-10-13
+- **Approved:** 2026-10-13
 - **Backlog row:** "go tarball installed without checksum verification"
 - **Follow-up:** backlog row "helper-installed binaries have no checksum and `wget` follows any
   redirect" is a separate cycle. This spec adds the helper it will reuse and designs nothing for it.
