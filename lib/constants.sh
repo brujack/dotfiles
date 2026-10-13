@@ -40,7 +40,7 @@ _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 # together or the Linux installer fetches one version while doctor demands
 # another. Both the .linux-amd64 and .linux-arm64 tarballs must be published
 # for the pinned release; _fetch_go_latest checks that before --update writes
-# the pin, and the two GO_SHA256_* pins, which --update writes in the same edit.
+# the pin. --update writes the two GO_SHA256_* pins in the same edit.
 GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"

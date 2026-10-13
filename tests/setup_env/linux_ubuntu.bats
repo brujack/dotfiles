@@ -2222,6 +2222,8 @@ _wrong_sha() { printf 'a%.0s' {1..64}; }
   [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
   refute_grep "^mv " "${MOCK_CALLS_FILE}"
   [ ! -e "$(_go_stamp)" ]
+  [ ! -e "${_GO_INSTALL_ROOT}/go.old" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
 }
 
 @test "_install_go_from_tarball: malformed _GO_SHA256 is refused before any download" {
@@ -2243,7 +2245,7 @@ _wrong_sha() { printf 'a%.0s' {1..64}; }
   GO_SHA256_AMD64=""
   run _install_go_from_tarball
   [ "$status" -eq 1 ]
-  [[ "$output" == *"go: GO_SHA256_AMD64 is not a 64-hex sha256"* ]]
+  [[ "$output" == *"go: GO_SHA256_AMD64 is not a 64-hex sha256; refusing to download"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ] || refute_grep "^wget " "${MOCK_CALLS_FILE}"
 }
 
