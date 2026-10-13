@@ -247,6 +247,12 @@ between a driver bump plus reboot and the next `-t update`, plus the stale-ref d
 - **N3.** No code in this change uninstalls a flatpak ref by name; doctor's remove command is printed, never run.
 - **N4.** `_doctor_check_flatpak_gl` never calls `doctor_fail` and never runs a mutating flatpak command.
 
+## Amendments
+
+- R4 withdrawn — round 2 removed the by-name GL prune; flatpak's own update auto-prunes inactive-driver GL extensions (R16).
+- R5 withdrawn — the per-group keep rule went with the prune.
+- R14 withdrawn — the (family, arch) grouping went with the prune.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `7d0df709` (Step 7 self-review commit, before Step 8 dispatch)
