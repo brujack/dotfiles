@@ -252,6 +252,10 @@ between a driver bump plus reboot and the next `-t update`, plus the stale-ref d
 - R4 withdrawn — round 2 removed the by-name GL prune; flatpak's own update auto-prunes inactive-driver GL extensions (R16).
 - R5 withdrawn — the per-group keep rule went with the prune.
 - R14 withdrawn — the (family, arch) grouping went with the prune.
+- finding R10 (2026-10-12, reviewer both): DIFFERS — All branches are present (missing-GL WARN whose reason names Flathub not publishing it, one WARN per non-loaded GL/GL32 ref with its uninstall command, PASS otherwise, WARN on list failure, no doctor_fail), but the remedy lines are printed as ' sudo flatpak update -y --noninteractive --system' and ' sudo flatpak uninstall ... <ref>' with four leading spaces (lib/helpers.sh:1176 and :1185), so the line does not consist solely of the command as the requirement states.
+- R10 -> `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a reason line naming Flathub not yet publishing it, followed by a line holding only `sudo flatpak update -y --noninteractive --system` after a four-space indent; warns once per installed `GL.nvidia-*` / `GL32.nvidia-*` ref whose version is not the loaded one, printing `sudo flatpak uninstall -y --noninteractive --system <ref>` for that ref on its own four-space-indented line; passes when neither applies; warns when the runtime list or the app list fails; and never fails. — the four-space indent sets the command off under its doctor_warn line so it copies cleanly; the text after the indent is exactly the command, which is what "solely" was meant to guarantee
+- finding R12 (2026-10-12, reviewer B): NOT-BUILT — Design section 4 is not in my inputs; the only comment change visible is the reflow of the nvidia driver comment at lib/linux_ubuntu.sh:658-664 (plus a CLAUDE.md prose edit about the SHIM_DIR flatpak shim), so I cannot find three comment fixes; any others might sit in excluded tests/** paths.
+- R12 reviewed: all three §4 fixes are in the diff — the re-wrap at lib/linux_ubuntu.sh:659-664, the SHIM_DIR comment naming `_nvidia_dpkg_shim` at tests/setup_env/linux_ubuntu.bats:109, and the `_nvidia_dpkg_shim` comment reworded to drop "always prints a header" at tests/setup_env/linux_ubuntu.bats:1921-1925; reviewer B could not see the two bats edits because tests/** is excluded from its diff, and reviewer A matched all three
 
 ## Multi-Lens Review
 
@@ -335,3 +339,27 @@ Disposition: `--unused` kept — Accepted (user, 2026-10-12, "Keep unused"). DKM
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-12)
+
+- spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md
+- anchor: 318e89d19f657daee6b0e6112290026210b044cf
+- in scope: R1, R2, R3, R6, R7, R8, R9, R10, R11, R12, R13, R15, R16
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R10 | both | DIFFERS | All branches are present (missing-GL WARN whose reason names Flathub not publishing it, one WARN per non-loaded GL/GL32 ref with its uninstall command, PASS otherwise, WARN on list failure, no doctor_fail), but the remedy lines are printed as ' sudo flatpak update -y --noninteractive --system' and ' sudo flatpak uninstall ... <ref>' with four leading spaces (lib/helpers.sh:1176 and :1185), so the line does not consist solely of the command as the requirement states. | - R10 -> `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a reason line naming Flathub not yet publishing it, followed by a line holding only `sudo flatpak update -y --noninteractive --system` after a four-space indent; warns once per installed `GL.nvidia-*` / `GL32.nvidia-*` ref whose version is not the loaded one, printing `sudo flatpak uninstall -y --noninteractive --system <ref>` for that ref on its own four-space-indented line; passes when neither applies; warns when the runtime list or the app list fails; and never fails. — the four-space indent sets the command off under its doctor_warn line so it copies cleanly; the text after the indent is exactly the command, which is what "solely" was meant to guarantee |
+| R12 | B | NOT-BUILT | Design section 4 is not in my inputs; the only comment change visible is the reflow of the nvidia driver comment at lib/linux_ubuntu.sh:658-664 (plus a CLAUDE.md prose edit about the SHIM_DIR flatpak shim), so I cannot find three comment fixes; any others might sit in excluded tests/** paths. | - R12 reviewed: all three §4 fixes are in the diff — the re-wrap at lib/linux_ubuntu.sh:659-664, the SHIM_DIR comment naming `_nvidia_dpkg_shim` at tests/setup_env/linux_ubuntu.bats:109, and the `_nvidia_dpkg_shim` comment reworded to drop "always prints a header" at tests/setup_env/linux_ubuntu.bats:1921-1925; reviewer B could not see the two bats edits because tests/** is excluded from its diff, and reviewer A matched all three |
+
+### Reviewed
+
+- R12 reviewed: all three §4 fixes are in the diff — the re-wrap at lib/linux_ubuntu.sh:659-664, the SHIM_DIR comment naming `_nvidia_dpkg_shim` at tests/setup_env/linux_ubuntu.bats:109, and the `_nvidia_dpkg_shim` comment reworded to drop "always prints a header" at tests/setup_env/linux_ubuntu.bats:1921-1925; reviewer B could not see the two bats edits because tests/** is excluded from its diff, and reviewer A matched all three
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
