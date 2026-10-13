@@ -263,6 +263,7 @@ _make_plugin() {
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_renovate_cadence()     { :; }

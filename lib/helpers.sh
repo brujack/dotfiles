@@ -475,6 +475,7 @@ run_doctor() {
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
   _doctor_check_conffile_dist
+  _doctor_check_flatpak_gl
   _doctor_check_inotify_limits
   _doctor_check_kernel_keys
   _doctor_check_pyenv_shims
@@ -1155,6 +1156,39 @@ _doctor_check_conffile_dist() {
     doctor_warn "${_f}" "package copy kept beside your file; diff it against ${_live}, merge, then delete it (empty diff: just delete)"
   done < <(find "${_root}" \( -name '*.dpkg-dist' -o -name '*.ucf-dist' \) -print0 2>/dev/null)
   [[ ${_n} -gt 0 ]] || doctor_pass "no .dpkg-dist or .ucf-dist under ${_root}"
+}
+
+# Spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md. Reports
+# only; the remedies are printed for the operator, never run.
+_doctor_check_flatpak_gl() {
+  [[ -n ${LINUX} ]] || return 0
+  _flatpak_available || return 0
+  local _loaded _refs _apps_rc _ref _ver _warned=0
+  _loaded="$(_nvidia_loaded_version)" || return 0
+  _apps_rc=0
+  _flatpak_has_apps || _apps_rc=$?
+  [[ ${_apps_rc} -ne 1 ]] || return 0
+  printf "\nFlatpak NVIDIA GL:\n"
+  if [[ ${_apps_rc} -eq 2 ]] || ! _refs="$(_flatpak_nvidia_gl_refs)"; then
+    doctor_warn "flatpak" "cannot list flatpak runtimes or apps"
+    return 0
+  fi
+  # GL32 is deliberately not required (spec section 3: a host can run only 64-bit flatpaks).
+  if ! grep -q "^org\.freedesktop\.Platform\.GL\.nvidia-${_loaded}/" <<<"${_refs}"; then
+    doctor_warn "GL.nvidia-${_loaded}" "no GL.nvidia-${_loaded} for loaded driver ${_loaded//-/.}; if the command below already ran since the reboot, Flathub does not publish it yet and nothing local fixes it. Fetch it with:"
+    printf '    sudo flatpak update -y --noninteractive --system\n'
+    _warned=1
+  fi
+  while IFS= read -r _ref; do
+    [[ -n "${_ref}" ]] || continue
+    _ver="${_ref%%/*}"
+    _ver="${_ver##*.nvidia-}"
+    [[ "${_ver}" != "${_loaded}" ]] || continue
+    doctor_warn "${_ref}" "stale (driver ${_ver//-/.} not loaded); remove with:"
+    printf '    sudo flatpak uninstall -y --noninteractive --system %s\n' "${_ref}"
+    _warned=1
+  done <<<"${_refs}"
+  [[ ${_warned} -eq 1 ]] || doctor_pass "GL.nvidia-${_loaded} installed; no stale NVIDIA GL refs"
 }
 
 _doctor_check_gnu_coreutils() {

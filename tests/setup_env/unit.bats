@@ -1024,6 +1024,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
@@ -1046,6 +1047,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
@@ -1457,6 +1459,7 @@ EOF
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
@@ -2807,6 +2810,7 @@ STUB
   _doctor_check_github_mcp()    { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
@@ -2834,6 +2838,7 @@ STUB
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist()  { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_plugin_node_paths() { :; }
   _doctor_check_renovate_cadence()     { :; }
   _doctor_check_ledger_drift_cadence() { :; }
@@ -2954,6 +2959,7 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist()  { :; }
+  _doctor_check_flatpak_gl() { :; }
   _doctor_check_plugin_node_paths() { :; }
   _doctor_check_renovate_cadence()     { :; }
   _doctor_check_ledger_drift_cadence() { :; }

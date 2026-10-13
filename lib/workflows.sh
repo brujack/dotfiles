@@ -930,13 +930,29 @@ run_update() {
       else
         _update_skip "snap" "snap not installed on this host"
       fi
+
+      if _flatpak_available; then
+        _update_record_start "flatpak"
+        update_flatpak_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_flatpak"
+        local _flatpak_rc="${PIPESTATUS[0]}"
+        # rc 2 is a WARN (missing NVIDIA GL extension), not a failure.
+        _update_record_end "flatpak" "$(( _flatpak_rc == 2 ? 0 : _flatpak_rc ))"
+        if [[ ${_flatpak_rc} -eq 2 ]]; then
+          _update_warn "flatpak" "no NVIDIA GL extension for the loaded driver — see detail"
+          _update_write_detail_from_err "flatpak" "update output"
+        fi
+      else
+        _update_skip "flatpak" "flatpak not installed on this host"
+      fi
     else
       _update_skip "apt"  "not applicable"
       _update_skip "snap" "not applicable"
+      _update_skip "flatpak" "not applicable"
     fi
   else
     _update_skip "apt"  "flag not set"
     _update_skip "snap" "flag not set"
+    _update_skip "flatpak" "flag not set"
   fi
 
   # ── mas ───────────────────────────────────────────────────────────────────

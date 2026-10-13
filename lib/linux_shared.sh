@@ -92,6 +92,61 @@ update_snap_packages() {
   log_info "Updated snap packages"
 }
 
+# A function so tests can redefine it rather than edit PATH: removing
+# tests/mocks from PATH would expose the real /usr/bin/flatpak on claude and
+# workstation (tdd.md E2).
+_flatpak_available() {
+  command -v flatpak > /dev/null 2>&1
+}
+
+# flatpak names NVIDIA GL extensions after the loaded module's version with dots
+# turned into dashes, read from this same file (flatpak 1.16.6 common/flatpak-utils.c).
+_nvidia_loaded_version() {
+  local _f="${_NVIDIA_MODULE_VERSION_FILE:-/sys/module/nvidia/version}" _v=""
+  [[ -r "${_f}" ]] || return 1
+  IFS= read -r _v < "${_f}" || [[ -n "${_v}" ]] || return 1
+  [[ "${_v}" =~ ^[0-9]+(\.[0-9]+)+$ ]] || return 1
+  printf '%s\n' "${_v//./-}"
+}
+
+# System installation only, by design (spec N1).
+_flatpak_nvidia_gl_refs() {
+  local _list
+  _list="$(flatpak list --system --runtime --columns=application,arch,branch)" || return 1
+  awk -F'\t' '$1 ~ /^org\.freedesktop\.Platform\.GL(32)?\.nvidia-/ { print $1 "/" $2 "/" $3 }' <<<"${_list}"
+}
+
+# System installation only, by design (spec N1).
+# 0 apps installed, 1 none, 2 the list failed.
+_flatpak_has_apps() {
+  local _list
+  _list="$(flatpak list --system --app --columns=application)" || return 2
+  [[ -n "${_list//[[:space:]]/}" ]]
+}
+
+# Spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md
+# Removes nothing by name: a plain `flatpak update` already auto-prunes GL
+# extensions for inactive drivers (autoprune-unless = active-gl-driver).
+update_flatpak_packages() {
+  local _loaded _refs _apps_rc
+  sudo flatpak update -y --noninteractive --system || { log_error "flatpak update failed"; return 1; }
+  sudo flatpak uninstall -y --noninteractive --system --unused || { log_error "flatpak uninstall --unused failed"; return 1; }
+  if ! _loaded="$(_nvidia_loaded_version)"; then
+    log_info "Updated flatpak runtimes"
+    return 0
+  fi
+  _refs="$(_flatpak_nvidia_gl_refs)" || { log_error "flatpak: cannot list runtimes"; return 1; }
+  _apps_rc=0
+  _flatpak_has_apps || _apps_rc=$?
+  [[ ${_apps_rc} -ne 2 ]] || { log_error "flatpak: cannot list apps"; return 1; }
+  if [[ ${_apps_rc} -eq 0 ]] && ! grep -q "^org\.freedesktop\.Platform\.GL\.nvidia-${_loaded}/" <<<"${_refs}"; then
+    printf 'flatpak: no GL.nvidia-%s installed for loaded driver %s; flatpak apps get no NVIDIA GL. Flathub may not publish it yet: re-run -t update later.\n' \
+      "${_loaded}" "${_loaded//-/.}"
+    return 2
+  fi
+  log_info "Updated flatpak runtimes"
+}
+
 # Wrapper retained so existing callers/tests that invoke the combined
 # operation keep working. Runs both halves unconditionally — snap should
 # still refresh even when apt fails — and reports failure if either did.

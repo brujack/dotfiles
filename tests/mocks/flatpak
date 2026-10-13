@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+printf "flatpak %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ -n "${MOCK_FLATPAK_FAIL_SUBCMD:-}" && "${MOCK_FLATPAK_FAIL_SUBCMD}" == "${1:-}" ]]; then
+  exit 1
+fi
+if [[ -n "${MOCK_FLATPAK_FAIL_ARGS:-}" && "$*" == *"${MOCK_FLATPAK_FAIL_ARGS}"* ]]; then
+  exit 1
+fi
+if [[ "${1:-}" == "list" ]]; then
+  case "$*" in
+    *--runtime*)
+      if [[ -n "${MOCK_FLATPAK_LIST_RUNTIME:-}" ]]; then
+        cat "${MOCK_FLATPAK_LIST_RUNTIME}" || exit 99
+      fi
+      ;;
+    *--app*)
+      if [[ -n "${MOCK_FLATPAK_LIST_APP:-}" ]]; then
+        printf '%b\n' "${MOCK_FLATPAK_LIST_APP}"
+      fi
+      ;;
+  esac
+fi
+exit 0
