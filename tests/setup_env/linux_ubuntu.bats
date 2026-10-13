@@ -1919,9 +1919,9 @@ exit 0'
 }
 
 # dpkg -l stub for the driver guard. It prints a header, then an `ii` row for
-# each package in SHIM_DPKG_INSTALLED and an `rc` row (removed, config files
-# left) for each in SHIM_DPKG_RC, so the guard's `^ii` filter is what separates
-# them. It does not mimic real `dpkg -l <unknown>`, which prints
+# each package in SHIM_DPKG_INSTALLED, an `rc` row (removed, config files left)
+# for each in SHIM_DPKG_RC and an `hi` row (held, installed) for each in
+# SHIM_DPKG_HELD, so the guard's `^[ih]i ` filter is what separates them. It does not mimic real `dpkg -l <unknown>`, which prints
 # only `dpkg-query: no packages found matching <name>` (no header) and exits 1.
 _nvidia_dpkg_shim() {
   cat > "${SHIM_DIR}/dpkg" << 'SHIM'
@@ -1934,6 +1934,9 @@ if [[ "$1" == "-l" ]]; then
   done
   for _p in ${SHIM_DPKG_RC:-}; do
     [[ "$2" == "${_p}" ]] && printf 'rc  %s  1  amd64  stub\n' "${_p}"
+  done
+  for _p in ${SHIM_DPKG_HELD:-}; do
+    [[ "$2" == "${_p}" ]] && printf 'hi  %s  1  amd64  stub\n' "${_p}"
   done
 fi
 exit 0
@@ -1980,6 +1983,49 @@ SHIM
   refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
   refute_grep "apt-mark manual" "${MOCK_CALLS_FILE}"
   [[ "$output" != *"reboot required"* ]]
+}
+
+@test "_install_ubuntu_nvidia: a held -open is installed, so it is neither reinstalled nor announced" {
+  # dpkg -l reports a held, installed package as `hi`. Treated as absent, a newer
+  # candidate makes `apt install -y` refuse the held package and the step return 1,
+  # and with none the no-op install still prints the reboot notice.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_HELD="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "dpkg -l nvidia-driver-${NVIDIA_DRIVER_VER}-open" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
+  [[ "$output" != *"reboot required"* ]]
+  grep -Eq "install .*nvidia-container-toolkit( |$)" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: a held auto-marked -open is still marked manual" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_HELD="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export MOCK_APT_MARK_AUTO="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -Eq "apt-mark manual nvidia-driver-${NVIDIA_DRIVER_VER}-open$" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
+}
+
+@test "_install_ubuntu_nvidia: a held container toolkit is installed, so it is not reinstalled" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export SHIM_DPKG_HELD="nvidia-container-toolkit"
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  grep -q "dpkg -l nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
+  refute_grep "install .*nvidia-container-toolkit" "${MOCK_CALLS_FILE}" -E
 }
 
 @test "_install_ubuntu_nvidia: an auto-marked -open is marked manual, not reinstalled" {

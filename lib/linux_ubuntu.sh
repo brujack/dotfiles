@@ -676,7 +676,9 @@ _install_ubuntu_nvidia() {
   # Installing the transitional leaves it as the manual package, so purging it at
   # a series bump hands the real driver to autoremove. Hit by hand 2026-10-11.
   local _driver="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
-  if ! dpkg -l "${_driver}" 2> /dev/null | grep -q '^ii'; then
+  # `hi` is held and installed. Matching only `ii` reinstalls a held driver, which
+  # apt refuses when a newer candidate exists.
+  if ! dpkg -l "${_driver}" 2> /dev/null | grep -q '^[ih]i '; then
     sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y "${_driver}" || return 1
     log_warn "NVIDIA driver installed — reboot required before the nvidia module replaces nouveau"
   elif apt-mark showauto "${_driver}" 2> /dev/null | grep -qx "${_driver}"; then
@@ -715,7 +717,7 @@ _install_ubuntu_nvidia() {
     sudo -H apt update || return 1
   fi
 
-  if ! dpkg -l nvidia-container-toolkit 2> /dev/null | grep -q '^ii'; then
+  if ! dpkg -l nvidia-container-toolkit 2> /dev/null | grep -q '^[ih]i '; then
     sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" -y nvidia-container-toolkit || return 1
   fi
 
