@@ -1,5 +1,7 @@
 # Go Tarball sha256 Verification Implementation Plan
 
+> **Status: DONE** — merged in #337 (2026-10-13).
+
 spec: docs/superpowers/specs/2026-10-13-go-tarball-sha256-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -351,7 +353,7 @@ At base both `grep` gates exit 1. `make test` is not a gate here: no test reads 
 
 - [ ] After Task 5: `make test` (timeout 600000), confirm rc 0.
 - [ ] Phase 3 via `finishing-a-development-branch`; V1 and V3 evidence go in the PR body.
-- [ ] Set this plan's row in `docs/superpowers/README.md` to Done and add the `> **Status: DONE**` banner when the PR merges.
+- [x] Set this plan's row in `docs/superpowers/README.md` to Done and add the `> **Status: DONE**` banner when the PR merges.
 
 ## Non-goal check
 

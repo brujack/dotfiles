@@ -372,5 +372,5 @@ stay coarse until the helper-binaries follow-up, so R2 stays a pure refactor.
 ### Verifications
 
 - V1: 2026-10-13 on claude: downloaded go1.27.2.linux-amd64.tar.gz (70590635 B) and linux-arm64 (67076180 B) via go.dev -> dl.google.com; sha256 matched GO_SHA256_AMD64 and GO_SHA256_ARM64 byte for byte.
-- V2: no evidence recorded
+- V2: 2026-10-13 after merge (5f56ea9d), `_install_ubuntu_go` run for real on `claude` and `workstation`: each downloaded 70590635 B, verified, installed `go1.27.2 linux/amd64`, stamp updated to the 1.27.2 URL, no `go.old` left, rc 0. (Run via the sourced function rather than all of `-t developer`; same code path.)
 - V3: test-quality-review round 1 (scratch copy, 20 mutations): 14 killed, 1 invalid (redone and killed), 5 survived: M1/M2 (arm64 pin arm deleted / reads AMD64 pin), M11 (_fetch_go_sha256 version guard), M12 (stable filter), M9 (unreadable fallback, accepted as unreachable). 9a85221b added 4 tests; verification round re-ran M1, M2, M11, M12 plus M21 (refusal names its source): all 5 killed, restores cmp-identical. Phase 2 also killed: delete go verify arm, swap arch arms, series-not-latest fetch, delete arm64 pin check.
