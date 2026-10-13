@@ -292,3 +292,29 @@ Disposition: Addressed (user, 2026-10-12) — keep branch removed with the prune
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — round 3
+
+Reviewed at commit: `c40b0d7c` (round-2 revision; all three lenses re-run, told rounds 1-2 are history)
+
+### Goal-Fit (round 3, `c40b0d7c`)
+
+Finding: The value is §2 steps 1-2 and the section wiring. Reads-it: the step-3 missing-GL WARN fires only when Flathub has not published the extension, and its remedy ("re-run later") is what the operator does anyway; doctor missing-GL is stdout-only and closes itself at the next `-t update` (no cron or timer runs `setup_env.sh` on Linux); doctor stale-ref "never fires" by the spec's own account. Simpler path: ship steps 1-2 plus V3, add detection only if V3 shows stale pairs surviving. Note: this reverses round 1's Goal-fit, which asked for the missing-GL WARN because it is the only check that turns an empty or misparsed runtime list (and `claude`'s original no-GL state) into something other than OK.
+Assumption: on a driver point release a plain `flatpak update` auto-prunes the previous pair; if the decision reads `autoprune-unless` only from the GL ref's parent Platform, a pair whose Platform branch changed escapes, which would explain 580 and predict recurrence at the next Platform bump. Settle by V3, or by reading `find_used_refs` for which metadata supplies the related refs.
+Disposition:
+
+### Ergonomics (round 3, `c40b0d7c`)
+
+Finding: Doctor's missing-GL remedy is prose with a condition ("run ./setup_env.sh -t update; if it already ran ..."), not a pastable line, and the command it names runs every update section (apt can install another driver) to fetch one runtime. Fix: condition on its own line, then the bare command `sudo flatpak update -y --noninteractive --system` (or `./setup_env.sh -t update --pkgs-only`, `lib/helpers.sh:1399`); R10 should require the printed line. Verified: flatpak reads `/sys/module/nvidia/version` with the same dot-to-dash transform (`common/flatpak-utils.c:490`); the stale remove command is correct as typed (`ID/ARCH/BRANCH` accepted; `--noninteractive` implies `-y`); rc-2 mapping matches cargo-tools.
+Assumption: the next driver bump plus reboot plus plain `flatpak update` removes the old pair; settled by V3.
+Disposition:
+
+### Risk (round 3, `c40b0d7c`)
+
+Finding: Step 2 (`--unused`) is the only deletion not bounded by flatpak's own policy, and it buys only timing. `flatpak update` already removes unused refs that are EOL or auto-pruned (`common/flatpak-transaction.c:5050-5056`); `uninstall --unused` uses `FLATPAK_DIR_FILTER_NONE` (`app/flatpak-builtins-uninstall.c:348`) and removes any unpinned runtime root's `find_used_refs` does not see, including an operator's SDK and a runtime a `--user` app needs. Its one measured benefit, the dead 25.08 set, will be removed by step 1 once Flathub EOLs 25.08 (24.08 already reports End-of-life). Dropping step 2 and R7 removes the N1 hazard and the open Steam-running question for `--unused`. Also: a failed DKMS build leaves the module unloaded, so flatpak's active list holds only `default`/`host` and step 1 removes every `GL*.nvidia-*` ref while R6 reports OK and R9 keeps doctor silent; the cost is a re-download, worth one line. Wording: "both metadata files" declare the GL rule for one group each (Platform: GL; Steam: GL32). No R prescribes what an N forbids.
+Assumption: 580 survived because of the 25.08 metadata, not a path that still counts a stale GL ref as used; settled by V3.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
