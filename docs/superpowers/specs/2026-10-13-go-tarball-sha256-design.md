@@ -38,9 +38,19 @@ Two functions:
 
 - `_sha256_pin_ok <sha>`: rc 0 when the value is exactly 64 hex characters, else rc 1. Callers that
   must refuse a bad pin **before** downloading call it first.
-- `_verify_sha256 <file> <sha>`: rc 2 when the pin fails `_sha256_pin_ok` (checked first, so no caller
-  can skip it). rc 1 when `printf '%s  %s\n' <sha> <file> | sha256sum -c -` fails. rc 0 on a match.
-  It logs nothing; each caller keeps its own message.
+- `_verify_sha256 <file> <sha>`, checked in this order:
+  - rc 2 when the pin fails `_sha256_pin_ok` (first, so no caller can skip it).
+  - rc 3 when `[[ -r <file> ]]` fails. `sha256sum -c` returns **1** for a file it cannot open, the
+    same code as a mismatch: measured 2026-10-13 for a missing file on GNU coreutils (`claude`) and on
+    the Studio's `/sbin/sha256sum`, and for a mode-000 file read as non-root on `claude`. Without this
+    check no caller can tell "the bytes are wrong" from "the bytes were never read".
+  - rc 1 when `printf '%s  %s\n' <sha> <file> | sha256sum -c -` fails.
+  - rc 0 on a match.
+
+  Any other non-zero rc from `sha256sum` itself (126 not executable, 127 not found) is passed through
+  unchanged. It logs nothing; each caller keeps its own message. Its comment records that uppercase
+  hex pins are accepted by both GNU and the Studio's `sha256sum` (measured 2026-10-13), so nobody
+  lower-cases pins to "normalise" them.
 
 `sha256sum` is never mocked. The rule already stated for rustup and the release-binary helper still
 holds: a mock makes every mismatch case vacuous.
@@ -96,8 +106,10 @@ before returning 1:
 - rc 1 (a real mismatch): `go: sha256 mismatch: ${_src} expects ${_sha}, download is <actual>`. The
   actual hash is computed only here, by `sha256sum` on the file. It is used only when that command
   exits 0 **and** its first field is 64 hex characters; otherwise `<actual>` reads `unreadable`.
-- any other rc (`sha256sum` missing, not executable, or unable to read the file): `go: sha256 check
-  could not run (rc N)`. The word "mismatch" is never printed for this case.
+- rc 3 (the download cannot be read): `go: could not read the download to verify it`.
+- any other rc (`sha256sum` missing or not executable): `go: sha256 check could not run (rc N)`.
+
+The word "mismatch" is printed only for rc 1.
 
 The operator can then tell a truncated download (re-run) from a mistyped pin (compare with the feed)
 from a broken tool, even though the tarball itself is deleted with `${_tmp}`.
@@ -185,9 +197,13 @@ follows:
   empty-means-unset rule.
 - New: `_LINUX_ARCH=riscv64` with `_GO_SHA256` unset returns 1 with no `wget` call and prints
   `go: no GO_SHA256_* pin for riscv64; refusing to download`.
-- New: a `sha256sum` that cannot run (a `PATH` shim whose `sha256sum` is a non-executable file) makes
-  `_install_go_from_tarball` print `go: sha256 check could not run (rc 126)` and **not** print
-  `mismatch`.
+- New: `_go_verify` called directly on a nonexistent path with a valid pin prints `go: could not read
+  the download to verify it` and **not** `mismatch`.
+- New: `_go_verify` called directly with a `sha256sum` that cannot run prints `go: sha256 check could
+  not run (rc 126)` and **not** `mismatch`. `PATH` is set to a shim directory **only**, holding a
+  non-executable `sha256sum` plus symlinks to exactly the other tools the call needs. A shim merely
+  prepended to `PATH` does not work: bash skips a non-executable match and finds the real
+  `sha256sum` in `/usr/bin` (measured 2026-10-13: prepended shim rc 0, shim-only `PATH` rc 126).
 - New: `GO_SHA256_AMD64` and `GO_SHA256_ARM64`, named explicitly (no glob over variable names), both
   pass `_sha256_pin_ok`. This catches a malformed or missing committed value, not a wrong one; V1
   covers wrong.
@@ -197,7 +213,7 @@ follows:
   opposite mutation.
 - Helpers, in a new `tests/setup_env/sha256_helpers.bats`: match is 0, one changed byte is 1, malformed
   pins (empty, 63, 65, `g`-containing) are 2 **without reading the file** (the path is nonexistent and
-  the rc is still 2), and an uppercase hex pin is accepted.
+  the rc is still 2), a valid pin on a nonexistent path is 3, and an uppercase hex pin is accepted.
 - `_install_rustup_rs`: a malformed `_RUSTUP_INIT_SHA256` fails with no `curl` call.
 - `_fetch_go_sha256`: fixture feed returns both hashes; missing arm64 file, missing `sha256`, 63-char
   hash, unknown version, curl failure and non-JSON each give rc 1 with empty output.
@@ -209,8 +225,8 @@ follows:
 ## Requirements
 
 - **R1.** `[PR1]` `lib/helpers.sh` defines `_sha256_pin_ok` (rc 0 only for exactly 64 hex characters)
-  and `_verify_sha256 <file> <sha>` (rc 2 malformed pin, rc 1 mismatch, rc 0 match), and
-  `_verify_sha256` checks the pin format before reading the file.
+  and `_verify_sha256 <file> <sha>` (rc 2 malformed pin, rc 3 unreadable file, rc 1 mismatch, rc 0
+  match), and `_verify_sha256` checks the pin format before reading the file.
 - **R2.** `[PR1]` `_install_pinned_release_binary` and `_install_rustup_rs` call those helpers instead
   of an inline `sha256sum -c`, and `_install_rustup_rs` rejects a malformed pin before downloading.
 - **R3.** `[PR1]` `lib/constants.sh` defines `GO_SHA256_AMD64="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5"`
@@ -220,8 +236,8 @@ follows:
   `_LINUX_ARCH`, naming in its message the same source the value was read from.
 - **R5.** `[PR1]` `_install_go_from_tarball` runs `_verify_sha256` on the downloaded tarball before
   extracting it. On rc 1 it logs `go: sha256 mismatch:` with the source, expected hash and actual
-  hash; on any other rc it logs `go: sha256 check could not run (rc N)` and never the word
-  `mismatch`. Either way it returns 1 with `go: verify failed`, leaving the install root unchanged and
+  hash; on rc 3 it logs `go: could not read the download to verify it`; on any other rc it logs
+  `go: sha256 check could not run (rc N)`. Only rc 1 prints the word `mismatch`. Either way it returns 1 with `go: verify failed`, leaving the install root unchanged and
   writing no stamp.
 - **R6.** `[PR1]` `_fetch_go_sha256 <version>` prints `<amd64> <arm64>` from the go.dev feed and
   returns 1 with empty output when either linux tarball or either 64-hex `sha256` is missing.
@@ -233,7 +249,8 @@ follows:
 - **V1.** Download the real `go1.27.2.linux-amd64.tar.gz` on `claude` and confirm `sha256sum` equals
   `GO_SHA256_AMD64`. Download the arm64 file and confirm `GO_SHA256_ARM64` the same way.
 - **V2.** Run `./setup_env.sh -t developer` on `claude` with the go stamp removed, and confirm go
-  installs and `/usr/local/go/bin/go version` reports `go1.27.2`.
+  installs and `/usr/local/go/bin/go version` reports `go1.27.2`. This installs amd64 only: no arm64
+  Linux box is in the fleet, so V1's download check is what proves `GO_SHA256_ARM64`.
 - **V3.** Mutation controls in Testing go red and are recorded in the PR body.
 - **N1.** No change to the go stamp format or the stamp skip condition.
 - **N2.** No checksum work for kind, telepresence, the HashiCorp tools, cf-terraforming,
@@ -308,3 +325,19 @@ the stub rejects any version but the target and the test asserts the written has
 committed-pin test names both variables; unsupported-arch message reworded. Assumption accepted: a
 re-published tarball is the event the pin exists to catch, and failing closed is the right outcome.
 Review stopped here; remaining risk is in test apparatus, for Phase 2's first red tests.
+
+### Peer architectural review (operator-relayed)
+
+Reviewed at commit: `2e8aca51`
+
+Finding: (1) `sha256sum -c` returns rc 1 for a file it cannot open, the same as a mismatch, so a read
+failure would still print "mismatch"; the Design's claim that the other-rc branch covered a read
+failure was false. (2) A non-executable `sha256sum` shim only yields rc 126 when `PATH` is the shim
+directory alone; prepended, bash finds the real one. Minor: note uppercase-hex acceptance in the
+helper comment; align R1/R5 with the fix; say why V2 covers amd64 only. Both main claims re-measured
+in this session on `claude` and the Studio before acting.
+Assumption: none named.
+Disposition: Addressed 2026-10-13: `_verify_sha256` gains rc 3 for an unreadable file so every caller,
+including the helper-binaries follow-up, inherits the split; `_go_verify` prints "mismatch" only on
+rc 1; the rc-126 test uses a shim-only `PATH` and calls `_go_verify` directly; R1, R5, V2 and the
+helper comment updated.
