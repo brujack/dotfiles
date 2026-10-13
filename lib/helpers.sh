@@ -1165,16 +1165,17 @@ _doctor_check_flatpak_gl() {
   _flatpak_available || return 0
   local _loaded _refs _apps_rc _ref _ver _warned=0
   _loaded="$(_nvidia_loaded_version)" || return 0
-  _flatpak_has_apps
-  _apps_rc=$?
+  _apps_rc=0
+  _flatpak_has_apps || _apps_rc=$?
   [[ ${_apps_rc} -ne 1 ]] || return 0
   printf "\nFlatpak NVIDIA GL:\n"
   if [[ ${_apps_rc} -eq 2 ]] || ! _refs="$(_flatpak_nvidia_gl_refs)"; then
     doctor_warn "flatpak" "cannot list flatpak runtimes or apps"
     return 0
   fi
+  # GL32 is deliberately not required (spec section 3: a host can run only 64-bit flatpaks).
   if ! grep -q "^org\.freedesktop\.Platform\.GL\.nvidia-${_loaded}/" <<<"${_refs}"; then
-    doctor_warn "GL.nvidia-${_loaded}" "no GL.nvidia-${_loaded} for loaded driver ${_loaded//-/.}; if this command already ran since the reboot, Flathub does not publish it yet and nothing local fixes it. Fetch it with:"
+    doctor_warn "GL.nvidia-${_loaded}" "no GL.nvidia-${_loaded} for loaded driver ${_loaded//-/.}; if the command below already ran since the reboot, Flathub does not publish it yet and nothing local fixes it. Fetch it with:"
     printf '    sudo flatpak update -y --noninteractive --system\n'
     _warned=1
   fi

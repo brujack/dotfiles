@@ -27,13 +27,10 @@ setup() {
   OUT="${BATS_TEST_TMPDIR}/out"
 }
 
-# Run the check in the current shell so the counters are observable. The
-# `|| rc=$?` keeps bats' errexit from firing inside the function on the
-# deliberate non-zero returns of _flatpak_has_apps (production has no set -e).
+# Run the check in the current shell so the counters are observable. Bare call:
+# under bats' errexit the check must survive _flatpak_has_apps returning non-zero.
 run_check() {
-  rc=0
-  _doctor_check_flatpak_gl > "${OUT}" 2>&1 || rc=$?
-  [ "${rc}" -eq 0 ]
+  _doctor_check_flatpak_gl > "${OUT}" 2>&1
   output="$(cat "${OUT}")"
 }
 
@@ -94,7 +91,7 @@ assert_silent() {
   [[ "$output" == *"Flathub"* ]]
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAILED}" -eq 0 ]
-  grep -qx '    sudo flatpak update -y --noninteractive --system' <<<"$output"
+  [ "$(grep -A1 '\[WARN\]' <<<"$output" | tail -1)" = '    sudo flatpak update -y --noninteractive --system' ]
   assert_no_mutating_flatpak_call
 }
 
@@ -108,11 +105,34 @@ assert_silent() {
   [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 2 ]
   [ "${_DOCTOR_FAILED}" -eq 0 ]
-  grep -qx '    sudo flatpak uninstall -y --noninteractive --system org.freedesktop.Platform.GL.nvidia-580-159-03/x86_64/1.4' <<<"$output"
-  grep -qx '    sudo flatpak uninstall -y --noninteractive --system org.freedesktop.Platform.GL32.nvidia-580-159-03/x86_64/1.4' <<<"$output"
+  [ "$(grep -A1 '\[WARN\].*GL\.nvidia-580' <<<"$output" | tail -1)" = '    sudo flatpak uninstall -y --noninteractive --system org.freedesktop.Platform.GL.nvidia-580-159-03/x86_64/1.4' ]
+  [ "$(grep -A1 '\[WARN\].*GL32\.nvidia-580' <<<"$output" | tail -1)" = '    sudo flatpak uninstall -y --noninteractive --system org.freedesktop.Platform.GL32.nvidia-580-159-03/x86_64/1.4' ]
   [ "$(grep -c 'uninstall.*615' <<<"$output")" -eq 0 ]
   [ "$(grep -c '\[WARN\].*615' <<<"$output")" -eq 0 ]
   assert_no_mutating_flatpak_call
+}
+
+@test "missing loaded GL and a stale 580 ref: two WARNs, each followed by its own remedy" {
+  grep -v 'GL\.nvidia-615-71-09' "${FIXTURE}" > "${BATS_TEST_TMPDIR}/both.tsv"
+  printf '%s\t%s\t%s\n' 'org.freedesktop.Platform.GL.nvidia-580-159-03' x86_64 1.4 >> "${BATS_TEST_TMPDIR}/both.tsv"
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/both.tsv"
+  run_check
+  [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 2 ]
+  [ "${_DOCTOR_WARN}" -eq 2 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [ "$(grep -A1 '\[WARN\].*GL\.nvidia-615-71-09' <<<"$output" | tail -1)" = '    sudo flatpak update -y --noninteractive --system' ]
+  [ "$(grep -A1 '\[WARN\].*GL\.nvidia-580' <<<"$output" | tail -1)" = '    sudo flatpak uninstall -y --noninteractive --system org.freedesktop.Platform.GL.nvidia-580-159-03/x86_64/1.4' ]
+  assert_no_mutating_flatpak_call
+}
+
+@test "a GL ref whose version only has the loaded one as a prefix does not satisfy the loaded driver" {
+  grep -v 'GL\.nvidia-615-71-09' "${FIXTURE}" > "${BATS_TEST_TMPDIR}/prefix.tsv"
+  printf '%s\t%s\t%s\n' 'org.freedesktop.Platform.GL.nvidia-615-71-090' x86_64 1.4 >> "${BATS_TEST_TMPDIR}/prefix.tsv"
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/prefix.tsv"
+  run_check
+  [ "$(grep -c '\[PASS\]' <<<"$output")" -eq 0 ]
+  [ "$(grep -c '\[WARN\].*GL\.nvidia-615-71-09:' <<<"$output")" -eq 1 ]
+  [[ "$output" == *"Flathub"* ]]
 }
 
 @test "runtime list failure: one 'cannot list' WARN, no FAIL" {
