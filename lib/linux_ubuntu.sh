@@ -658,9 +658,10 @@ _nvidia_gpu_present() {
 # Driver comes from Ubuntu's own repo (nvidia-driver-615-open,
 # 615.71.09-0ubuntu0.26.04.2 on resolute), so it needs no third-party source.
 # The container toolkit does, and that repo's GPG key is NOT checksum-pinned the
-# way rustup-init is -- NVIDIA publishes no digest for it. The mitigation is `signed-by=`, which scopes the key to this one repo so
-# it cannot vouch for anything else. Weaker than the rustup path, and recorded as a
-# known limitation rather than left to look deliberate.
+# way rustup-init is -- NVIDIA publishes no digest for it. The mitigation is
+# `signed-by=`, which scopes the key to this one repo so it cannot vouch for
+# anything else. Weaker than the rustup path, and recorded as a known limitation
+# rather than left to look deliberate.
 #
 # Installing the driver does NOT bind it: nouveau holds the card until a reboot, so
 # this warns rather than pretending success. Measured on claude 2026-09-12.

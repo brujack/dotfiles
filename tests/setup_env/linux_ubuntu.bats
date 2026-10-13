@@ -1918,9 +1918,10 @@ exit 0'
   grep -q "nvidia-container-toolkit" "${MOCK_CALLS_FILE}"
 }
 
-# dpkg -l stub for the driver guard. It prints a header, then an `ii` row for each package in SHIM_DPKG_INSTALLED and an `rc` row (removed,
-# config files left) for each in SHIM_DPKG_RC, so the guard's `^ii` filter is
-# what separates them. It does not mimic real `dpkg -l <unknown>`, which prints
+# dpkg -l stub for the driver guard. It prints a header, then an `ii` row for
+# each package in SHIM_DPKG_INSTALLED and an `rc` row (removed, config files
+# left) for each in SHIM_DPKG_RC, so the guard's `^ii` filter is what separates
+# them. It does not mimic real `dpkg -l <unknown>`, which prints
 # only `dpkg-query: no packages found matching <name>` (no header) and exits 1.
 _nvidia_dpkg_shim() {
   cat > "${SHIM_DIR}/dpkg" << 'SHIM'
