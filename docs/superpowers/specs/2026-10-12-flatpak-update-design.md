@@ -41,9 +41,9 @@ neither has a `--user` installation):
    uninstalled `GL.default` and the 615 pair (a plain `flatpak update` restored them). Why
    the 580 pair survived the 2026-10-11 update is not established; the likeliest cause is
    that it hung off the 25.08 Platform, which that update did not reconsider.
-   Source note, flatpak 1.16.6, read 2026-10-12: both the live 26.08 Platform metadata and
-   Steam's metadata declare `autoprune-unless = active-gl-driver` on the GL / GL32
-   extensions. `find_used_refs` (`common/flatpak-dir.c`) does not count an auto-pruned
+   Source note, flatpak 1.16.6, read 2026-10-12: the live 26.08 Platform metadata declares
+   `autoprune-unless = active-gl-driver` on its `GL` extension group, and Steam's metadata
+   declares it on its `GL32` group. `find_used_refs` (`common/flatpak-dir.c`) does not count an auto-pruned
    related ref as used. A plain `flatpak update` with no ref arguments sets
    `include_unused_uninstall_ops` (`app/flatpak-builtins-update.c`), so
    `add_uninstall_unused_ops` (`common/flatpak-transaction.c`) removes every unused,
@@ -102,6 +102,13 @@ In order:
 installed deliberately (an SDK, say). Neither box has one: after the 2026-10-11 repair
 every remaining runtime is Steam's. A runtime to keep is protected with flatpak's own
 `flatpak pin <ref>`, which `--unused` honours; this design adds no keep-list of its own.
+
+When the nvidia module is not loaded (no reboot yet into an installed driver, or a
+failed DKMS build for a new kernel), flatpak's active driver list holds only `default`
+and `host`, so step 1 auto-prunes every `GL*.nvidia-*` ref. The section still reports OK
+(R6) and doctor stays silent (R9). Nothing is lost that the host could use: no NVIDIA GL
+extension can be mounted without the module, and the next `-t update` after the module
+loads downloads the pair again (~900 MB).
 
 Step 1 can also rebase an app whose branch is end-of-life onto its successor, since it
 runs with `-y --noninteractive`. That is flatpak's own update behaviour, not something
@@ -162,8 +169,9 @@ it prints a `Flatpak NVIDIA GL:` heading and:
 - `doctor_warn` once per installed `GL.nvidia-*` or `GL32.nvidia-*` ref whose version is
   not the loaded one, any arch, with a pastable remedy line:
   `stale <application/arch/branch> (driver <version> not loaded); remove with: sudo flatpak uninstall -y --noninteractive --system <application/arch/branch>`.
-  Removing it loses nothing for the running driver: both metadata files declare
-  `enable-if = active-gl-driver`, so flatpak never mounts an inactive driver's extension.
+  Removing it loses nothing for the running driver: the Platform metadata's `GL` group
+  and Steam's `GL32` group each declare `enable-if = active-gl-driver`, so flatpak never
+  mounts an inactive driver's extension.
   Booting back into the old driver costs one re-download at the next `-t update`. In
   normal operation this never fires, because step 1's auto-prune removes such refs; it
   exists to catch a repeat of the unexplained 2026-10-11 survival of the 580 pair.
@@ -313,7 +321,7 @@ Disposition:
 
 Finding: Step 2 (`--unused`) is the only deletion not bounded by flatpak's own policy, and it buys only timing. `flatpak update` already removes unused refs that are EOL or auto-pruned (`common/flatpak-transaction.c:5050-5056`); `uninstall --unused` uses `FLATPAK_DIR_FILTER_NONE` (`app/flatpak-builtins-uninstall.c:348`) and removes any unpinned runtime root's `find_used_refs` does not see, including an operator's SDK and a runtime a `--user` app needs. Its one measured benefit, the dead 25.08 set, will be removed by step 1 once Flathub EOLs 25.08 (24.08 already reports End-of-life). Dropping step 2 and R7 removes the N1 hazard and the open Steam-running question for `--unused`. Also: a failed DKMS build leaves the module unloaded, so flatpak's active list holds only `default`/`host` and step 1 removes every `GL*.nvidia-*` ref while R6 reports OK and R9 keeps doctor silent; the cost is a re-download, worth one line. Wording: "both metadata files" declare the GL rule for one group each (Platform: GL; Steam: GL32). No R prescribes what an N forbids.
 Assumption: 580 survived because of the 25.08 metadata, not a path that still counts a stale GL ref as used; settled by V3.
-Disposition:
+Disposition: `--unused` kept — Accepted (user, 2026-10-12, "Keep unused"). DKMS-unloaded note and the metadata-group wording fix — Addressed (user, "Fold in risks").
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
