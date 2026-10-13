@@ -175,3 +175,49 @@ follows:
   docker-compose or yq.
 - **N3.** No change to macOS go installation (`brew "go"`).
 - **N4.** No change to `_fetch_go_latest`'s output or to `_check_one_pin_version`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `07ddce67` (spec as first written and self-reviewed, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: No blocking issues. Premise re-verified (`lib/linux_ubuntu.sh:478` wget, `:480` tar, no
+`GO_SHA*`; live feed matches R3). Every added mechanism changes a decision. Two minor notes: (a) R2,
+the rustup/release-binary move onto the helper, goes past the backlog row and could ship as its own PR;
+(b) `--update` reads the version and its hash from go.dev in one fetch, so the pin protects against
+later corruption, redirects and re-publication, not against a go.dev compromised at pin time. The spec
+should say that in one sentence.
+Assumption: No uncertain assumption found.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) A mismatch logs only `go: verify failed`, and the tarball is then deleted. Log the
+variable name, the expected hash and the actual hash before the stage line. (2) The pre-download
+refusal names `_LINUX_ARCH` even when the bad value came from `_GO_SHA256`. Name the source. (3) The
+spec should state that a refused pin update leaves the rest of the check-versions prompts running
+(`_tally_cv_out` ignores `_prompt_version_update`'s rc; exit is already 1 from OUTDATED). (4) No test
+checks the committed `GO_SHA256_*` values. Asserting both pass `_sha256_pin_ok` catches a malformed
+value, not a wrong one. (5) Malformed-pin and riscv64 tests should also assert the message.
+Assumption: The Studio's `/sbin/sha256sum` accepts an uppercase-hex pin. Settled 2026-10-13 over
+`ssh studio`: uppercase pin rc 0, mismatch rc 1.
+Disposition:
+
+### Risk
+
+Finding: The Testing claim that exporting `_GO_SHA256` from `_make_go_tarball` keeps every existing
+install test passing is false. (1) Four go tests never call `_make_go_tarball` and fall back to the real
+pin, so `verify` fires before `extract`: `tests/setup_env/linux_ubuntu.bats` around `:1105`, `:1128`,
+`:1140` assert `go: extract failed`, and `:2171` asserts `tar` ran. Relaxing them to "status 1" would
+silently turn extract-stage tests into verify tests. Each must export `_GO_SHA256` as its own fixture's
+hash. (2) About nine `_update_go_pin` tests in `tests/setup_env/check_versions_feeds.bats` (`:395-595`)
+are refused at the new fetch: they set no feed, and `_shim_path` (`:368`) carries neither `curl` nor
+`python3`. They need a fixture feed carrying the target version's hashes, or a stubbed
+`_fetch_go_sha256`. Sourcing order, destructive widening and vacuity all checked clean.
+Assumption: No uncertain assumption found.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
