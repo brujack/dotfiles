@@ -589,6 +589,13 @@ _install_rustup_rs() {
   esac
   _sha="${_RUSTUP_INIT_SHA256:-${_sha}}"
 
+  # Refuse a bad pin before any download; _verify_sha256 would also return 2,
+  # but only after a network fetch.
+  if ! _sha256_pin_ok "${_sha}"; then
+    log_error "rustup-init: pinned sha256 is not 64 hex chars"
+    return 1
+  fi
+
   local _tmp
   _tmp="$(mktemp -d)" || return 1
 
@@ -598,7 +605,7 @@ _install_rustup_rs() {
     return 1
   fi
 
-  if ! printf '%s  %s\n' "${_sha}" "${_tmp}/rustup-init" | sha256sum -c - > /dev/null 2>&1; then
+  if ! _verify_sha256 "${_tmp}/rustup-init" "${_sha}"; then
     log_error "rustup-init sha256 mismatch — refusing to execute"
     rm -rf "${_tmp}"
     return 1
@@ -1601,12 +1608,9 @@ _install_pinned_release_binary() {
   local _tmp
   _tmp="$(mktemp -d "${_RELEASE_TMP_ROOT:-${TMPDIR:-/tmp}}/release-bin.XXXXXXXX")" || return 1
 
-  # A malformed or empty pin must fail closed rather than let sha256sum decide.
-  # Measured: macOS /sbin/sha256sum exits 0 on a malformed checksum line (only
-  # warning on stderr, which the redirect below discards), while GNU exits 1 --
-  # so without this, the Studio's suite is structurally unable to fail for an
-  # empty or typo'd pin.
-  if [[ ! "${_sha256}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  # A malformed or empty pin must fail closed before the download; see
+  # _verify_sha256 (lib/helpers.sh) for why sha256sum cannot be left to decide.
+  if ! _sha256_pin_ok "${_sha256}"; then
     log_error "${_name}: pinned sha256 is not 64 hex chars"
     rm -rf "${_tmp}"
     return 1
@@ -1619,7 +1623,7 @@ _install_pinned_release_binary() {
     return 1
   fi
 
-  if ! printf '%s  %s\n' "${_sha256}" "${_artifact}" | sha256sum -c - > /dev/null 2>&1; then
+  if ! _verify_sha256 "${_artifact}" "${_sha256}"; then
     log_error "${_name} sha256 mismatch — refusing to install"
     rm -rf "${_tmp}"
     return 1
