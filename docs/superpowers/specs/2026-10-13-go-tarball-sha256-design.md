@@ -65,6 +65,12 @@ change. Its existing tests are the regression guard.
 message `rustup-init: pinned sha256 is not 64 hex chars`. Its check becomes `_verify_sha256`. The
 mismatch message `rustup-init sha256 mismatch — refusing to execute` does not change.
 
+Both older callers branch only on success versus failure, so after this change an unreadable file
+(rc 3) still prints their existing "sha256 mismatch" message. That is deliberate and not a
+regression: the outcome (refuse) is correct, and keeping their messages unchanged keeps R2 a pure
+refactor. The finer messages reach these call sites in the helper-binaries follow-up, which rewrites
+them anyway. Only the go installer, new in this change, gets the full split.
+
 **`_install_go_from_tarball`.** Before the workdir is made, choose the pin and its source with one
 rule, so the value and the name the messages attribute it to cannot disagree:
 
@@ -341,3 +347,7 @@ Disposition: Addressed 2026-10-13: `_verify_sha256` gains rc 3 for an unreadable
 including the helper-binaries follow-up, inherits the split; `_go_verify` prints "mismatch" only on
 rc 1; the rc-126 test uses a shim-only `PATH` and calls `_go_verify` directly; R1, R5, V2 and the
 helper comment updated.
+
+Follow-up (same reviewer, at `f73c194d`): the two older callers still print "mismatch" for rc 3.
+Disposition: Addressed by a sentence in Design section 2 recording that their messages deliberately
+stay coarse until the helper-binaries follow-up, so R2 stays a pure refactor.
