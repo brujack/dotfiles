@@ -73,6 +73,9 @@ STUB
     printf '2000\n' > "${_KEYS_MAXKEYS_PROC}"
     printf '500000\n' > "${_KEYS_MAXBYTES_PROC}"
   fi
+  # claude and workstation have a real /sys/module/nvidia/version, so an unset
+  # seam would read the live driver version and make results machine-dependent.
+  export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-nvidia-version"
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY

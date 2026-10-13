@@ -92,6 +92,35 @@ update_snap_packages() {
   log_info "Updated snap packages"
 }
 
+# A seam, like _snap_available: a test that strips PATH to hide flatpak would
+# expose the real /usr/bin/flatpak on claude and workstation (tdd.md E2).
+_flatpak_available() {
+  command -v flatpak > /dev/null 2>&1
+}
+
+# flatpak names NVIDIA GL extensions after the loaded module's version with dots
+# turned into dashes, read from this same file (flatpak 1.16.6 common/flatpak-utils.c).
+_nvidia_loaded_version() {
+  local _f="${_NVIDIA_MODULE_VERSION_FILE:-/sys/module/nvidia/version}" _v=""
+  [[ -r "${_f}" ]] || return 1
+  IFS= read -r _v < "${_f}" || [[ -n "${_v}" ]] || return 1
+  [[ "${_v}" =~ ^[0-9]+(\.[0-9]+)+$ ]] || return 1
+  printf '%s\n' "${_v//./-}"
+}
+
+_flatpak_nvidia_gl_refs() {
+  local _list
+  _list="$(flatpak list --system --runtime --columns=application,arch,branch)" || return 1
+  awk -F'\t' '$1 ~ /^org\.freedesktop\.Platform\.GL(32)?\.nvidia-/ { print $1 "/" $2 "/" $3 }' <<<"${_list}"
+}
+
+# 0 apps installed, 1 none, 2 the list failed.
+_flatpak_has_apps() {
+  local _list
+  _list="$(flatpak list --system --app --columns=application)" || return 2
+  [[ -n "${_list//[[:space:]]/}" ]]
+}
+
 # Wrapper retained so existing callers/tests that invoke the combined
 # operation keep working. Runs both halves unconditionally — snap should
 # still refresh even when apt fails — and reports failure if either did.
