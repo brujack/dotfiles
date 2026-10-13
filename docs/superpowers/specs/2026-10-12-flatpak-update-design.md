@@ -40,8 +40,17 @@ neither has a `--user` installation):
    its active list. Running it on `claude` with `FLATPAK_GL_DRIVERS=nvidia-999-99-99`
    uninstalled `GL.default` and the 615 pair (a plain `flatpak update` restored them). Why
    the 580 pair survived the 2026-10-11 update is not established; the likeliest cause is
-   that it hung off the 25.08 Platform, which that update did not reconsider. The prune in
-   Design §2 therefore stays: nothing shows flatpak removes a stale pair reliably.
+   that it hung off the 25.08 Platform, which that update did not reconsider.
+   Source note, flatpak 1.16.6, read 2026-10-12: both the live 26.08 Platform metadata and
+   Steam's metadata declare `autoprune-unless = active-gl-driver` on the GL / GL32
+   extensions. `find_used_refs` (`common/flatpak-dir.c`) does not count an auto-pruned
+   related ref as used. A plain `flatpak update` with no ref arguments sets
+   `include_unused_uninstall_ops` (`app/flatpak-builtins-update.c`), so
+   `add_uninstall_unused_ops` (`common/flatpak-transaction.c`) removes every unused,
+   auto-pruned ref. That is the mechanism behind the probe above, and it means
+   `flatpak update` removes an inactive driver's GL pair by itself under the current
+   metadata. Why the 580 pair survived on 2026-10-11 remains unproven: the 25.08 refs
+   installed then are gone, so their metadata cannot be read.
 3. **flatpak 1.16 has no dry run for `uninstall`.** `--assumeno` is rejected with
    `error: Unknown option --assumeno`, so any listing must come from `flatpak list`.
 
@@ -65,49 +74,38 @@ neither has a `--user` installation):
 - `_flatpak_has_apps` returns 0 when `flatpak list --system --app --columns=application`
   prints at least one line, 1 when it prints none, and 2 when `flatpak list` fails.
 
-Both are shared by the update section and the doctor check, so the two cannot disagree
-about which refs are stale.
+All three are shared by the update section and the doctor check, so the two read the
+same state.
 
 ### 2. `update_flatpak_packages` and the `flatpak` update section
 
 In order:
 
-1. `sudo flatpak update -y --noninteractive --system`. Non-zero returns 1.
-2. Stale-GL prune, decided per family and arch. The two families are `GL` and `GL32`
-   (`org.freedesktop.Platform.GL.nvidia-*` and `org.freedesktop.Platform.GL32.nvidia-*`);
-   a ref's version is the text between `nvidia-` and the first `/`, and its arch is the
-   second field. A group is one (family, arch) pair. Only when `_nvidia_loaded_version`
-   succeeds:
-   - `_flatpak_nvidia_gl_refs` failing returns 1 before any uninstall.
-   - A group whose `<family>.nvidia-<loaded>` ref is installed after step 1 has every
-     other version in that group marked stale.
-   - A group with no `<loaded>` ref installed, but with other versions installed, has
-     nothing marked stale. The function prints
-     `flatpak: no <family>.nvidia-<loaded> (<arch>) installed; kept: <refs>`
-     and will return 2 after step 3. Pruning that group would leave Steam with no NVIDIA
-     GL of that width; the 64-bit and 32-bit extensions are published separately.
-   - A group with no refs at all is left alone here; the missing-GL check below covers
-     the `GL` family.
-
-   All stale refs across both families are removed with one
-   `sudo flatpak uninstall -y --noninteractive --system <refs...>`, skipped when there are
-   none. Non-zero returns 1.
-   - Loaded version unknown: no prune, no message, continue. Nothing can be called stale
-     without a reference version.
-3. `sudo flatpak uninstall -y --noninteractive --system --unused`. Non-zero returns 1.
-4. Missing-GL check, only when `_nvidia_loaded_version` succeeds. `_flatpak_has_apps`
-   rc 2 returns 1. When it returns 0 (an app is installed) and no
+1. `sudo flatpak update -y --noninteractive --system`. Non-zero returns 1. With no ref
+   arguments, flatpak itself also removes every unused runtime marked for auto-pruning.
+   That includes each `GL` / `GL32` extension for a driver other than the active one
+   (Fact 2, source note). This design removes nothing by name.
+2. `sudo flatpak uninstall -y --noninteractive --system --unused`. Non-zero returns 1.
+   This catches unused runtimes that are not auto-pruned, such as the dead 25.08 set of
+   Fact 2.
+3. Missing-GL check, only when `_nvidia_loaded_version` succeeds. It reads
+   `_flatpak_nvidia_gl_refs` and `_flatpak_has_apps`; a failed list or `_flatpak_has_apps`
+   rc 2 returns 1. When an app is installed and no
    `org.freedesktop.Platform.GL.nvidia-<loaded>` ref of any arch is installed, the
-   function (using the list read in step 2) prints
+   function prints
    `flatpak: no GL.nvidia-<loaded> installed for loaded driver <dotted version>; flatpak apps get no NVIDIA GL. Flathub may not publish it yet: re-run -t update later.`
-   and returns 2. This holds whether or not older versions were kept in step 2, and it is
-   also what an empty or misparsed runtime list produces, so a parsing defect surfaces as
-   a WARN rather than an OK. `GL32` is not required: a host can run only 64-bit flatpaks.
+   and returns 2. An empty or misparsed runtime list produces the same line, so a parsing
+   defect surfaces as a WARN rather than an OK. `GL32` is not required: a host can run
+   only 64-bit flatpaks.
 
 `--unused` removes any runtime that no installed app uses, including one an operator
 installed deliberately (an SDK, say). Neither box has one: after the 2026-10-11 repair
 every remaining runtime is Steam's. A runtime to keep is protected with flatpak's own
 `flatpak pin <ref>`, which `--unused` honours; this design adds no keep-list of its own.
+
+Step 1 can also rebase an app whose branch is end-of-life onto its successor, since it
+runs with `-y --noninteractive`. That is flatpak's own update behaviour, not something
+this code does by name (N2).
 
 Known limitation: a root `--system --unused` cannot see `--user` installations, so it can
 remove a system runtime that a `--user` app needs. Neither box has a `--user` installation
@@ -116,63 +114,67 @@ remove a system runtime that a `--user` app needs. Neither box has a `--user` in
 
 Open question, settled during `writing-plans` before any task is dispatched: does a plain
 `flatpak uninstall --system --unused` succeed (deferring deletion) when a runtime it
-removes is in use by a running Steam, or does it refuse? Settle it by reading
-`flatpak_dir_undeploy` and the uninstall transaction in the flatpak 1.16.6 source, not by
-a live probe. If it refuses, step 3's handling changes before Phase 2.
+removes is in use by a running Steam, or does it refuse? The same question applies to the
+auto-prune removals inside step 1. Settle it by reading `flatpak_dir_undeploy` and the
+uninstall transaction in the flatpak 1.16.6 source, not by a live probe. If it refuses,
+the step handling changes before Phase 2.
 
 Return: 0 clean, 1 failure, 2 warning. A failure in any step returns before later steps
-run. Warnings from steps 2 and 4 are all printed; the function returns 2 if any was.
+run. The only warning is step 3's, printed last, so it is inside the 10-line tail that
+`_update_write_detail_from_err` keeps.
 
 `run_update` gains a `flatpak` section directly after `snap`, inside the same
 `UPDATE_PKGS`/`_run_all` and `LINUX` gates. It runs when `command -v flatpak` succeeds,
 and otherwise records `_update_skip "flatpak" "flatpak not installed on this host"`. It
 mirrors `cargo-tools`' rc-2 handling: `_update_record_end "flatpak" "$(( rc == 2 ? 0 : rc ))"`,
-then on rc 2 `_update_warn "flatpak" "NVIDIA GL extension missing or stale refs kept — see detail"`
-plus `_update_write_detail_from_err`, so the detail carries the printed lines above.
-`_UPDATE_SECTION_ORDER`
-gains `flatpak` directly after `snap`. Non-Linux and flag-not-set paths record the same
-skip reasons `snap` uses.
+then on rc 2 `_update_warn "flatpak" "no NVIDIA GL extension for the loaded driver — see detail"`
+plus `_update_write_detail_from_err`. `_UPDATE_SECTION_ORDER` gains `flatpak` directly
+after `snap`. Non-Linux and flag-not-set paths record the same skip reasons `snap` uses.
 
 Ordering note: `apt` runs before `flatpak`, so a run that upgrades the driver still sees
-the previously loaded module. The prune then keeps the old GL extension, which is the one
-in use until the reboot; the next run after the reboot installs the new one and prunes
-the old.
+the previously loaded module. flatpak then keeps the old GL extension, which is the one
+in use until the reboot; the next run after the reboot installs the new one and flatpak
+auto-prunes the old.
 
 Operator notes:
 
-- `--dry-run` does not skip this section. It updates and prunes as it would otherwise,
-  like the `apt`, `snap` and `brew` sections: `--dry-run` guarantees only that nothing is
-  written to another machine.
+- `--dry-run` does not skip this section. It updates and removes runtimes as it would
+  otherwise, like the `apt`, `snap` and `brew` sections: `--dry-run` guarantees only that
+  nothing is written to another machine.
 - Download size: each NVIDIA GL extension is ~450 MB (Fact 2), so a driver point release
   costs ~900 MB for the pair, and a Platform branch bump adds its own runtime set. The
   output goes through `tee` with no progress bar.
-- The section makes up to three `sudo` calls. A long step 1 can outlive the sudo
-  timestamp, and the next call then prompts for a password. This is the same exposure the
-  run already has between `apt` and `snap`; the design adds no mitigation.
+- The section makes two `sudo` calls. A long step 1 can outlive the sudo timestamp, and
+  the next call then prompts for a password. This is the same exposure the run already
+  has between `apt` and `snap`; the design adds no mitigation.
 
 ### 3. Doctor: `_doctor_check_flatpak_gl` (`lib/helpers.sh`)
 
 Silent (`return 0`, no output) unless all hold: `LINUX` set, `command -v flatpak`
-succeeds, `flatpak list --system --app` lists at least one application, and
-`_nvidia_loaded_version` succeeds. Otherwise it prints a `Flatpak NVIDIA GL:` heading and:
+succeeds, `_flatpak_has_apps` returns 0, and `_nvidia_loaded_version` succeeds. Otherwise
+it prints a `Flatpak NVIDIA GL:` heading and:
 
 - `doctor_warn` when `GL.nvidia-<loaded>` is not installed (any arch), naming the loaded
   driver and both causes:
   `no GL.nvidia-<loaded> for loaded driver <dotted>: run ./setup_env.sh -t update; if it already ran since the reboot, Flathub does not publish it yet and nothing local fixes it`.
   This warning stays until Flathub publishes the extension, which is correct: Steam has no
   matching GL until then. `GL32` is not required: a host can run only 64-bit flatpaks.
-- `doctor_warn` once per stale ref, naming it and the remedy `./setup_env.sh -t update`,
-  using the update section's per-(family, arch) rule: a ref is stale only when its
-  group's `<loaded>` ref is installed. Otherwise doctor would prescribe an update that,
-  correctly, keeps the ref.
+- `doctor_warn` once per installed `GL.nvidia-*` or `GL32.nvidia-*` ref whose version is
+  not the loaded one, any arch, with a pastable remedy line:
+  `stale <application/arch/branch> (driver <version> not loaded); remove with: sudo flatpak uninstall -y --noninteractive --system <application/arch/branch>`.
+  Removing it loses nothing for the running driver: both metadata files declare
+  `enable-if = active-gl-driver`, so flatpak never mounts an inactive driver's extension.
+  Booting back into the old driver costs one re-download at the next `-t update`. In
+  normal operation this never fires, because step 1's auto-prune removes such refs; it
+  exists to catch a repeat of the unexplained 2026-10-11 survival of the 580 pair.
 - `doctor_pass` when neither applies.
-- `doctor_warn` when `_flatpak_nvidia_gl_refs` itself fails ("cannot list flatpak
-  runtimes").
+- `doctor_warn` when `_flatpak_nvidia_gl_refs` fails ("cannot list flatpak runtimes") or
+  `_flatpak_has_apps` returns 2.
 
-It never calls `doctor_fail`: Steam still runs, on software GL. A failed
-`_flatpak_has_apps` (rc 2) is reported the same way as a failed runtime list. It is wired into
+It never calls `doctor_fail` (Steam still runs, on software GL) and never runs a mutating
+flatpak command: the remedy is printed for the operator to run. It is wired into
 `run_doctor` beside `_doctor_check_conffile_dist`. Its gap-covering value is the window
-between a driver bump plus reboot and the next `-t update`.
+between a driver bump plus reboot and the next `-t update`, plus the stale-ref detection.
 
 ### 4. Comment fixes carried from dotfiles#334's code review
 
@@ -190,8 +192,8 @@ between a driver bump plus reboot and the next `-t update`.
 - New `tests/mocks/flatpak`, recording every call to `MOCK_CALLS_FILE`. `list` prints
   `MOCK_FLATPAK_LIST_RUNTIME` for `--runtime` and `MOCK_FLATPAK_LIST_APP` for `--app`.
   `MOCK_FLATPAK_FAIL_SUBCMD` fails one subcommand (`update`, `uninstall`, `list`).
-  `MOCK_FLATPAK_FAIL_ARGS` fails only a call whose argv contains the value, so the
-  stale-ref uninstall and the `--unused` uninstall can fail separately.
+  `MOCK_FLATPAK_FAIL_ARGS` fails only a call whose argv contains the value, so
+  `list --app` and `list --runtime` can fail separately.
 - `_NVIDIA_MODULE_VERSION_FILE` points at a fixture in every test. `load_mocks` exports it
   to a nonexistent path by default, because `claude` and `workstation` have a real
   `/sys/module/nvidia/version` and a test would otherwise read the host's driver.
@@ -200,7 +202,7 @@ between a driver bump plus reboot and the next `-t update`.
 - Runtime-list fixtures are captured from real `flatpak list --system --runtime
   --columns=application,arch,branch` output on `claude` (tab-separated, no header,
   including the `VAAPI.nvidia` refs) and committed under `tests/fixtures/flatpak/`.
-  Stale-ref and multi-arch cases are edits of that captured file, not hand-typed lists.
+  Doctor's stale-ref cases are edits of that captured file, not hand-typed lists.
 - One host-gated, read-only test runs the real `flatpak list` (mocks directory stripped
   from `PATH`) through `_flatpak_nvidia_gl_refs`. It skips where flatpak is absent, as on
   CI. It asserts that every output line matches
@@ -213,29 +215,32 @@ between a driver bump plus reboot and the next `-t update`.
 - **R1.** `_nvidia_loaded_version` prints `615-71-09` for a file containing `615.71.09\n`, and returns 1 with no output for an absent file, an empty file, and the value `615.71.09-beta`.
 - **R2.** `_flatpak_nvidia_gl_refs` prints only `org.freedesktop.Platform.GL.nvidia-*` and `org.freedesktop.Platform.GL32.nvidia-*` refs from `flatpak list --system --runtime --columns=application,arch,branch`, as `application/arch/branch`, and returns 1 when `flatpak list` fails.
 - **R3.** `update_flatpak_packages` runs `sudo flatpak update -y --noninteractive --system` first, and returns 1 without any `uninstall` call when it fails.
-- **R4.** With loaded version `615-71-09`, `update_flatpak_packages` uninstalls, in one `sudo flatpak uninstall -y --noninteractive --system` call, every `GL.nvidia-*` ref other than `GL.nvidia-615-71-09` whose arch has `GL.nvidia-615-71-09` installed, and every `GL32.nvidia-*` ref other than `GL32.nvidia-615-71-09` whose arch has `GL32.nvidia-615-71-09` installed; it never names a `*-615-71-09` ref and makes no such call when nothing is stale.
-- **R5.** With the loaded version known, a (family, arch) group that has other versions installed but not `<family>.nvidia-<loaded>` has none of its refs uninstalled; `update_flatpak_packages` prints a line naming the family, arch, loaded version and kept refs, still prunes the other groups per R4, still runs the `--unused` uninstall, and returns 2.
-- **R6.** With the loaded version unknown, `update_flatpak_packages` uninstalls no `GL*.nvidia-*` ref, prints no warning, and returns 0 when update and `--unused` succeed.
-- **R7.** `update_flatpak_packages` runs `sudo flatpak uninstall -y --noninteractive --system --unused` as its last uninstall call, and returns 1 when it or the stale-ref uninstall fails.
+- **R4.** Withdrawn in round 2: `update_flatpak_packages` no longer removes GL refs by name (see R16).
+- **R5.** Withdrawn in round 2, with the per-group keep rule it described.
+- **R6.** With the loaded version unknown, `update_flatpak_packages` runs no missing-GL check, prints no warning, and returns 0 when update and `--unused` succeed.
+- **R7.** `update_flatpak_packages` runs `sudo flatpak uninstall -y --noninteractive --system --unused` after the update, and returns 1 without running the missing-GL check when it fails.
 - **R8.** `run_update` records a `flatpak` section directly after `snap` in `_UPDATE_SECTION_ORDER`; rc 0 reports OK, rc 2 reports WARN with the function's output in the detail, rc 1 reports FAIL, and no `flatpak` binary reports SKIP "flatpak not installed on this host".
 - **R9.** `_doctor_check_flatpak_gl` prints nothing when `LINUX` is unset, flatpak is absent, no flatpak app is installed, or the loaded version is unknown.
-- **R10.** `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a message naming both `-t update` and Flathub not yet publishing it, warns once per ref that R4 would uninstall (and for no other ref), passes when neither applies, warns when the runtime list fails, and never fails.
+- **R10.** `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a message naming both `-t update` and Flathub not yet publishing it; warns once per installed `GL.nvidia-*` / `GL32.nvidia-*` ref whose version is not the loaded one, printing `sudo flatpak uninstall -y --noninteractive --system <ref>` for that ref; passes when neither applies; warns when the runtime list or the app list fails; and never fails.
 - **R11.** `run_doctor` calls `_doctor_check_flatpak_gl`.
 - **R12.** The three dotfiles#334 comment fixes in Design §4 are applied.
-- **R13.** With loaded version `615-71-09` and at least one flatpak app installed, `update_flatpak_packages` returns 2 and prints the missing-GL line when no `GL.nvidia-615-71-09` ref is installed after step 1, including when the runtime list contains no `GL*.nvidia-*` ref at all; with no app installed it prints no such line.
-- **R14.** Grouping is by (family, arch): a `GL.nvidia-<old>` ref under an arch that has no `GL.nvidia-<loaded>` ref is not uninstalled, even when `GL.nvidia-<loaded>` is installed under another arch.
-- **R15.** `update_flatpak_packages` returns 1 without any `uninstall` call when `_flatpak_nvidia_gl_refs` fails, and returns 1 when `_flatpak_has_apps` returns 2.
-- **V1.** On `claude` and `workstation`, `./setup_env.sh -t update` reports `flatpak` OK and `-t doctor` reports the flatpak GL check PASS. Both hosts hold only the loaded pair, so V1 shows the section runs clean; it does not exercise the prune, which R4, R5 and R13 cover in bats against captured real output.
+- **R13.** With loaded version `615-71-09` and at least one flatpak app installed, `update_flatpak_packages` returns 2 and prints the missing-GL line when no `GL.nvidia-615-71-09` ref is installed after the update and `--unused` steps, including when the runtime list contains no `GL*.nvidia-*` ref at all; with no app installed it prints no such line.
+- **R14.** Withdrawn in round 2, with the (family, arch) grouping it described.
+- **R15.** With the loaded version known, `update_flatpak_packages` returns 1 when `_flatpak_nvidia_gl_refs` fails or `_flatpak_has_apps` returns 2.
+- **R16.** The only `flatpak uninstall` call `update_flatpak_packages` makes is the `--unused` one; it never names a ref.
+- **V1.** On `claude` and `workstation`, `./setup_env.sh -t update` reports `flatpak` OK and `-t doctor` reports the flatpak GL check PASS. Both hosts hold only the loaded pair, so V1 shows the section runs clean; doctor's stale detection is covered by bats against captured real output.
 - **V2.** `make test` passes, and CI bash coverage stays at or above the 91% floor.
-- **V3.** Post-merge, not a merge gate: after the next NVIDIA point release is installed and booted on either host, `-t update` leaves only that release's `GL`/`GL32` pair in `flatpak list --system --runtime`. Recorded in a follow-up commit when it happens.
+- **V3.** Post-merge, not a merge gate: after the next NVIDIA point release is installed and booted on either host, `-t update` leaves only that release's `GL`/`GL32` pair in `flatpak list --system --runtime` (flatpak's own auto-prune), and `-t doctor` reports PASS. Recorded in a follow-up commit when it happens.
 - **N1.** No `--user` flatpak installation is read, updated or uninstalled.
-- **N2.** No flatpak app is installed or removed; the Steam install path in `_install_ubuntu_gui_tools` is unchanged.
-- **N3.** No GL extension other than `GL.nvidia-*` / `GL32.nvidia-*` is uninstalled by name.
+- **N2.** This change installs or removes no flatpak app by name, and the Steam install path in `_install_ubuntu_gui_tools` is unchanged. flatpak's own update may rebase an end-of-life app (Design §2).
+- **N3.** No code in this change uninstalls a flatpak ref by name; doctor's remove command is printed, never run.
 - **N4.** `_doctor_check_flatpak_gl` never calls `doctor_fail` and never runs a mutating flatpak command.
 
 ## Multi-Lens Review
 
 Reviewed at commit: `7d0df709` (Step 7 self-review commit, before Step 8 dispatch)
+
+Every reference in a round's blocks — step numbers, requirement numbers, section names — is frozen at the commit that round reviewed; later revisions renumbered the steps and withdrew R4, R5 and R14.
 
 ### Goal-Fit
 
@@ -269,20 +274,20 @@ Reviewed at commit: `3271ecf4` (round-1 revision; all three lenses re-run, told 
 Finding: Worth building, but cut the stale-GL prune (§2 step 2, R4, R5, R14, doctor's per-ref stale warnings) unless shown necessary. Steps 1, 3 and 4 (update, `--unused`, missing-GL WARN) close both measured defects, which came from `flatpak update` never running. The prune rests on one unexplained observation (580 survived 2026-10-11); the spec's "hung off 25.08" explanation is refuted by the live 26.08 Platform metadata, which already relates `GL` branch `1.4`. Reads-it: update WARN persists in `~/.dotfiles-update.log` (ledger records no WARN); doctor is print-only and marginal; host test feeds `make test` via pre-push.
 Assumption: `flatpak update` does not reliably remove a superseded `GL.nvidia-<old>`; settle by reading flatpak 1.16.6's related-ref/autoprune logic, or by V3 before building the prune.
 Assumption checked by the orchestrator, 2026-10-12, flatpak 1.16.6 source plus live metadata on `claude`: refuted for the current install. Both the 26.08 Platform metadata and Steam's metadata declare `autoprune-unless = active-gl-driver` on the GL / GL32 extensions. `find_used_refs` (`common/flatpak-dir.c` ~16828) does not count an autoprune related ref as used. A plain `flatpak update` with no ref arguments sets `include_unused_uninstall_ops` (`app/flatpak-builtins-update.c` ~246), so `add_uninstall_unused_ops` (`common/flatpak-transaction.c` ~4981) removes every unused, autopruned ref with no "already unused" exclusion. That is the mechanism behind the round-1 probe. Why 580 survived 2026-10-11 remains unproven; the 25.08 refs installed then are gone, so their metadata cannot be read.
-Disposition:
+Disposition: Addressed (user, 2026-10-12) — prune, keep rule and arch grouping removed (R4, R5, R14 withdrawn; R16 added); the update relies on flatpak's own auto-prune, which the source read confirms. Doctor keeps stale detection and prints the remove command (user's choice over dropping it).
 
 ### Ergonomics (round 2, `3271ecf4`)
 
 Finding: The WARN detail can lose the line that explains it: `_update_write_detail_from_err` (`lib/update_summary.sh:82-93`) keeps `tail -10` of the section output, and the step-2 "kept" line prints before step 3's `--unused` table (10-11 refs on a Platform bump). Fix: print collected warnings last, or build the detail from them; add a bats case with >=10 lines of `--unused` output. Reasoned from the helper, not measured. Premise verified: Flathub lists 610.43.02/.03, 610.57.04, 615.71.09, 615.78.08 while Ubuntu ships 615.71.09, so the WARNs should rarely fire unattended.
 Assumption: Flathub keeps publishing `GL.nvidia-<ver>` before or with Ubuntu's `nvidia-driver-*-open`; check `apt-cache madison` and `flatpak remote-ls` on the day of the next driver bump.
-Disposition:
+Disposition: Addressed (user, 2026-10-12) — moot after the prune was removed: the only warning (step 3) now prints last, inside the 10-line detail tail.
 
 ### Risk (round 2, `3271ecf4`)
 
 Finding: The keep branch (R5, R14) guards a deletion step 1 has already done: `flatpak update` removes GL extensions outside its active driver list, and that list comes from the same `/sys/module/nvidia/version`. In the Flathub-lag case step 1 removes the old pair before R5 "keeps" it, so the kept line is likely unreachable and step 4 fires instead. Step 1 can also EOL-rebase an app under `-y --noninteractive`, which N2 ("no flatpak app is installed or removed") cannot promise and no test can show. Step 2 deletes only by-name nvidia refs; step 3 is correct with zero apps. Arch grouping never splits anything on these hosts (all `x86_64`, branch `1.4`).
 Assumption: step 1 leaves a stale pair in place when the new driver's extension is unavailable; settle in the flatpak source (`add_related`/autoprune for GL on a Platform with no pending commit).
 Assumption checked by the orchestrator: see Goal-Fit round 2 — with current metadata, flatpak's own update autoprunes inactive-driver GL extensions, so the assumption is false for this install.
-Disposition:
+Disposition: Addressed (user, 2026-10-12) — keep branch removed with the prune; N2 narrowed to removals by name and the EOL rebase stated in Design §2.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
