@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-12
 - **Status:** Spec
+- **Approved:** 2026-10-12
 - **Backlog row:** "**Next spec:** flatpak is install-only; no update, unused-runtime prune, or GL/driver match check"
 
 ## Problem
