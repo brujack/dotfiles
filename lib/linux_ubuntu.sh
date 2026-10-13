@@ -440,6 +440,25 @@ _go_remove_damaged() {
   sudo rm -rf "$1"
 }
 
+# _go_verify <file> <sha> <source> -- names the real cause; only rc 1 is a mismatch.
+_go_verify() {
+  local _file="$1" _sha="$2" _src="$3" _rc=0 _actual=""
+  _verify_sha256 "${_file}" "${_sha}" || _rc=$?
+  case "${_rc}" in
+    0) return 0 ;;
+    1)
+      if _actual="$(sha256sum "${_file}" 2> /dev/null)"; then
+        _actual="${_actual%% *}"
+      fi
+      _sha256_pin_ok "${_actual}" || _actual="unreadable"
+      log_warn "go: sha256 mismatch: ${_src} expects ${_sha}, download is ${_actual}"
+      ;;
+    3) log_warn "go: could not read the download to verify it" ;;
+    *) log_warn "go: sha256 check could not run (rc ${_rc})" ;;
+  esac
+  return 1
+}
+
 # Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
 # tarball is extracted in a throwaway directory under _DL_TMP_ROOT, chowned to
 # root:root (tar ran as the user and a rename keeps ownership), then swapped in.
@@ -452,18 +471,36 @@ _go_remove_damaged() {
 # written only after the swap succeeded, so an interrupted run installs again
 # next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
-# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN. The
+# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN,
+# _GO_SHA256 (overrides the per-arch GO_SHA256_* pin; empty means unset). The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
 # No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
 # mktemp reaches the explicit sudo rm -rf below.
 _install_go_from_tarball() {
   local _root="${_GO_INSTALL_ROOT:-/usr/local}"
   local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/go"
-  local _tmp _stage="" _moved=0
+  local _tmp _stage="" _moved=0 _sha="" _src=""
 
   if [[ -f ${_stamp} && -x ${_root}/go/bin/go && "$(< "${_stamp}")" == "${GO_DOWNLOAD_URL}" ]]; then
     printf 'go: up to date (stamp %s); rm it to force a re-install\n' "${_stamp}"
     return 0
+  fi
+
+  if [[ -n ${_GO_SHA256:-} ]]; then
+    _sha="${_GO_SHA256}"; _src="_GO_SHA256"
+  else
+    case "${_LINUX_ARCH}" in
+      amd64) _sha="${GO_SHA256_AMD64}"; _src="GO_SHA256_AMD64" ;;
+      arm64) _sha="${GO_SHA256_ARM64}"; _src="GO_SHA256_ARM64" ;;
+    esac
+  fi
+  if [[ -z ${_src} ]]; then
+    log_warn "go: no GO_SHA256_* pin for ${_LINUX_ARCH}; refusing to download"
+    return 1
+  fi
+  if ! _sha256_pin_ok "${_sha}"; then
+    log_warn "go: ${_src} is not a 64-hex sha256; refusing to download"
+    return 1
   fi
 
   mkdir -p "${_DL_TMP_ROOT:-${HOME}/software_downloads}" || {
@@ -477,6 +514,8 @@ _install_go_from_tarball() {
 
   if ! wget -O "${_tmp}/go.tgz" "${GO_DOWNLOAD_URL}"; then
     _stage="download"
+  elif ! _go_verify "${_tmp}/go.tgz" "${_sha}" "${_src}"; then
+    _stage="verify"
   elif ! "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/go.tgz" -C "${_tmp}"; then
     _stage="extract"
   elif ! [[ -f ${_tmp}/go/bin/go && ! -L ${_tmp}/go/bin/go && -s ${_tmp}/go/bin/go ]]; then

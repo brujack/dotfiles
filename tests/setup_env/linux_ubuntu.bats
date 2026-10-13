@@ -1110,6 +1110,9 @@ _go_stamp() { printf '%s/go' "${_DL_STAMP_DIR}"; }
   _seed_go
   printf 'not a tarball' > "${BATS_TEST_TMPDIR}/junk"
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/junk"
+  # Verify runs before extract, so the pin must be this fixture's own hash.
+  _GO_SHA256="$(sha256sum "${BATS_TEST_TMPDIR}/junk" | cut -d' ' -f1)"
+  export _GO_SHA256
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
   [[ "$output" == *"go: extract failed"* ]]
@@ -1136,6 +1139,9 @@ _assert_go_extract_refused() {
   printf 'new' > "${_src}/go/bin/v"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/nobin.tgz" -C "${_src}" go
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/nobin.tgz"
+  # Verify runs before extract, so the pin must be this fixture's own hash.
+  _GO_SHA256="$(sha256sum "${BATS_TEST_TMPDIR}/nobin.tgz" | cut -d' ' -f1)"
+  export _GO_SHA256
   run _install_ubuntu_go
   _assert_go_extract_refused
 }
@@ -1149,6 +1155,9 @@ _assert_go_extract_refused() {
   ln -s v "${_src}/go/bin/go"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/link.tgz" -C "${_src}" go
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/link.tgz"
+  # Verify runs before extract, so the pin must be this fixture's own hash.
+  _GO_SHA256="$(sha256sum "${BATS_TEST_TMPDIR}/link.tgz" | cut -d' ' -f1)"
+  export _GO_SHA256
   run _install_ubuntu_go
   _assert_go_extract_refused
 }
@@ -2185,6 +2194,10 @@ SHIM
   # The recording tar mock, not the real one the setup seam selects.
   unset _DL_TAR_BIN
   export MOCK_TAR_EXIT=1
+  # Pin the hash of whatever the wget mock serves so verify passes and the tar
+  # stage this test is about is reached.
+  _GO_SHA256="$(sha256sum "${MOCK_WGET_FILE}" | cut -d' ' -f1)"
+  export _GO_SHA256
   run _install_go_from_tarball
   [ "$status" -ne 0 ]
   grep -q "^tar " "${MOCK_CALLS_FILE}"

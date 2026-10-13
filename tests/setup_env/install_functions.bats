@@ -400,7 +400,10 @@ teardown() {
   export GO_VER="1.18"
   export PATH="${BATS_TEST_DIRNAME}/../mocks:${PATH}"
   # The mock wget writes an empty file, so the install fails at extract; this
-  # test is only about the tarball path being taken.
+  # test is only about the tarball path being taken. Verify runs before
+  # extract, so pin the empty file's real hash to reach it.
+  _GO_SHA256="$(sha256sum /dev/null | cut -d' ' -f1)"
+  export _GO_SHA256
   run _install_ubuntu_go
   [ "$status" -eq 1 ]
   [[ "$output" == *"go: extract failed"* ]]

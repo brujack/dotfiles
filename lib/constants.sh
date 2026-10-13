@@ -40,10 +40,14 @@ _LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
 # together or the Linux installer fetches one version while doctor demands
 # another. Both the .linux-amd64 and .linux-arm64 tarballs must be published
 # for the pinned release; _fetch_go_latest checks that before --update writes
-# the pin.
+# the pin, and the two GO_SHA256_* pins, which --update writes in the same edit.
 GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go
 GO_DOWNLOAD_URL="https://go.dev/dl/${GO_DOWNLOAD_FILENAME}"
+# read by lib/linux_ubuntu.sh:_install_go_from_tarball; written by
+# lib/workflows.sh:_update_go_pin in the same edit as GO_DOWNLOAD_FILENAME
+GO_SHA256_AMD64="ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5"
+GO_SHA256_ARM64="94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8"
 # read by lib/linux_ubuntu.sh:_install_rustup_rs
 RUSTUP_VER="1.29.1"
 # rustup publishes under KERNEL arch names (x86_64/aarch64), not the Debian/GitHub
