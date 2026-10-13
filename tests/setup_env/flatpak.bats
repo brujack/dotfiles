@@ -170,7 +170,9 @@ _with_driver() {
   local _u _x
   _u="$(grep -n '^flatpak update' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
   _x="$(grep -n '^flatpak uninstall' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
-  [ -n "${_u}" ] && [ -n "${_x}" ] && [ "${_u}" -lt "${_x}" ]
+  [ -n "${_u}" ]
+  [ -n "${_x}" ]
+  [ "${_u}" -lt "${_x}" ]
   ! grep -q '^flatpak list' "${MOCK_CALLS_FILE}"
 }
 
@@ -182,6 +184,9 @@ _with_driver() {
   [ "$status" -eq 0 ]
   [ "$(grep -c '^flatpak uninstall' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -qx 'flatpak uninstall -y --noninteractive --system --unused' "${MOCK_CALLS_FILE}"
+  grep -qx 'flatpak update -y --noninteractive --system' "${MOCK_CALLS_FILE}"
+  grep -qx 'sudo flatpak update -y --noninteractive --system' "${MOCK_CALLS_FILE}"
+  grep -qx 'sudo flatpak uninstall -y --noninteractive --system --unused' "${MOCK_CALLS_FILE}"
 }
 
 @test "update_flatpak_packages: no driver version file returns 0, no flatpak: line, no list call" {
@@ -217,6 +222,7 @@ _with_driver() {
   export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
   run update_flatpak_packages
   [ "$status" -eq 2 ]
+  [[ "$output" == *"flatpak: no GL.nvidia-615-71-09"* ]]
 }
 
 @test "update_flatpak_packages: GL32 only returns 2" {
@@ -226,6 +232,17 @@ _with_driver() {
   export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
   run update_flatpak_packages
   [ "$status" -eq 2 ]
+  [[ "$output" == *"flatpak: no GL.nvidia-615-71-09"* ]]
+}
+
+@test "update_flatpak_packages: a ref whose version only extends the loaded one returns 2" {
+  _with_driver
+  printf 'org.freedesktop.Platform.GL.nvidia-615-71-09x\tx86_64\t1.4\n' > "${BATS_TEST_TMPDIR}/prefix.tsv"
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/prefix.tsv"
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  run update_flatpak_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"flatpak: no GL.nvidia-615-71-09"* ]]
 }
 
 @test "update_flatpak_packages: GL missing but no apps returns 0, no line" {
@@ -241,9 +258,11 @@ _with_driver() {
 @test "update_flatpak_packages: runtime list failure returns 1" {
   _with_driver
   export MOCK_FLATPAK_LIST_RUNTIME="${FIXTURE}"
-  export MOCK_FLATPAK_FAIL_SUBCMD=list
+  export MOCK_FLATPAK_LIST_APP="com.valvesoftware.Steam"
+  export MOCK_FLATPAK_FAIL_ARGS=--runtime
   run update_flatpak_packages
   [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot list runtimes"* ]]
 }
 
 @test "update_flatpak_packages: app list failure returns 1" {
