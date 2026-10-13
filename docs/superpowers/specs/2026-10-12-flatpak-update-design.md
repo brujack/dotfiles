@@ -259,3 +259,31 @@ Disposition: Addressed (user, 2026-10-12) — (1) fixtures captured from real by
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — round 2
+
+Reviewed at commit: `3271ecf4` (round-1 revision; all three lenses re-run, told round 1 is history)
+
+### Goal-Fit (round 2, `3271ecf4`)
+
+Finding: Worth building, but cut the stale-GL prune (§2 step 2, R4, R5, R14, doctor's per-ref stale warnings) unless shown necessary. Steps 1, 3 and 4 (update, `--unused`, missing-GL WARN) close both measured defects, which came from `flatpak update` never running. The prune rests on one unexplained observation (580 survived 2026-10-11); the spec's "hung off 25.08" explanation is refuted by the live 26.08 Platform metadata, which already relates `GL` branch `1.4`. Reads-it: update WARN persists in `~/.dotfiles-update.log` (ledger records no WARN); doctor is print-only and marginal; host test feeds `make test` via pre-push.
+Assumption: `flatpak update` does not reliably remove a superseded `GL.nvidia-<old>`; settle by reading flatpak 1.16.6's related-ref/autoprune logic, or by V3 before building the prune.
+Assumption checked by the orchestrator, 2026-10-12, flatpak 1.16.6 source plus live metadata on `claude`: refuted for the current install. Both the 26.08 Platform metadata and Steam's metadata declare `autoprune-unless = active-gl-driver` on the GL / GL32 extensions. `find_used_refs` (`common/flatpak-dir.c` ~16828) does not count an autoprune related ref as used. A plain `flatpak update` with no ref arguments sets `include_unused_uninstall_ops` (`app/flatpak-builtins-update.c` ~246), so `add_uninstall_unused_ops` (`common/flatpak-transaction.c` ~4981) removes every unused, autopruned ref with no "already unused" exclusion. That is the mechanism behind the round-1 probe. Why 580 survived 2026-10-11 remains unproven; the 25.08 refs installed then are gone, so their metadata cannot be read.
+Disposition:
+
+### Ergonomics (round 2, `3271ecf4`)
+
+Finding: The WARN detail can lose the line that explains it: `_update_write_detail_from_err` (`lib/update_summary.sh:82-93`) keeps `tail -10` of the section output, and the step-2 "kept" line prints before step 3's `--unused` table (10-11 refs on a Platform bump). Fix: print collected warnings last, or build the detail from them; add a bats case with >=10 lines of `--unused` output. Reasoned from the helper, not measured. Premise verified: Flathub lists 610.43.02/.03, 610.57.04, 615.71.09, 615.78.08 while Ubuntu ships 615.71.09, so the WARNs should rarely fire unattended.
+Assumption: Flathub keeps publishing `GL.nvidia-<ver>` before or with Ubuntu's `nvidia-driver-*-open`; check `apt-cache madison` and `flatpak remote-ls` on the day of the next driver bump.
+Disposition:
+
+### Risk (round 2, `3271ecf4`)
+
+Finding: The keep branch (R5, R14) guards a deletion step 1 has already done: `flatpak update` removes GL extensions outside its active driver list, and that list comes from the same `/sys/module/nvidia/version`. In the Flathub-lag case step 1 removes the old pair before R5 "keeps" it, so the kept line is likely unreachable and step 4 fires instead. Step 1 can also EOL-rebase an app under `-y --noninteractive`, which N2 ("no flatpak app is installed or removed") cannot promise and no test can show. Step 2 deletes only by-name nvidia refs; step 3 is correct with zero apps. Arch grouping never splits anything on these hosts (all `x86_64`, branch `1.4`).
+Assumption: step 1 leaves a stale pair in place when the new driver's extension is unavailable; settle in the flatpak source (`add_related`/autoprune for GL on a Platform with no pending commit).
+Assumption checked by the orchestrator: see Goal-Fit round 2 — with current metadata, flatpak's own update autoprunes inactive-driver GL extensions, so the assumption is false for this install.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
