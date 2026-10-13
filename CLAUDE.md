@@ -643,7 +643,7 @@ two-second grep appears to refute the rule.
 
 - `MOCK_WGET_FAIL_URL`/`MOCK_CURL_FAIL_URL`/`MOCK_APT_FAIL_SUBCMD`/`MOCK_MV_FAIL_ARGS`, and the `SHIM_DIR` shims in `tests/setup_env/linux_ubuntu.bats`
   - Each fails only the call whose argv contains the value (`MOCK_APT_FAIL_SUBCMD` matches the subcommand), so one command in a step fails while its siblings succeed. A set `MOCK_WGET_EXIT`/`MOCK_CURL_EXIT` wins over the URL knob.
-  - `SHIM_DIR` holds per-argument wrappers (`SHIM_APT_FAIL_PKGS`, `SHIM_SNAP_FAIL_ARGS`, `SHIM_TEE_FAIL_ARGS`, `SHIM_USERMOD_EXIT`, `SHIM_FLATPAK_*`) and the `usermod`/`flatpak` shims, because no mock exists for them and the real binaries would run. Set the `SHIM_*` variable in the test, never at setup scope.
+  - `SHIM_DIR` holds per-argument wrappers (`SHIM_APT_FAIL_PKGS`, `SHIM_SNAP_FAIL_ARGS`, `SHIM_TEE_FAIL_ARGS`, `SHIM_USERMOD_EXIT`, `SHIM_FLATPAK_*`) and the `usermod`/`flatpak` shims, because the real binaries would run: no mock exists for `usermod`, and the `flatpak` shim predates `tests/mocks/flatpak` and drives install-path cases that mock does not model. Set the `SHIM_*` variable in the test, never at setup scope.
 
 - `_TFLINT_URL`/`_TFLINT_SHA256`/`_TFSEC_URL`/`_TFSEC_SHA256` (`lib/linux_ubuntu.sh:_install_ubuntu_tflint`/`_install_ubuntu_tfsec`)
   - Drive `_install_pinned_release_binary` with a local fixture URL and a deliberately wrong checksum via these four vars; never mock `sha256sum` itself, mirroring the rustup rule — mocking it would make every mismatch case vacuous. → `dotfiles-test-seams.md` § `_TFLINT_URL / _TFLINT_SHA256 / _TFSEC_URL / _TFSEC_SHA256 seams`
