@@ -10,7 +10,9 @@ setup() {
   load_setup_env
   _f="${BATS_TEST_TMPDIR}/f"
   printf 'abc' > "${_f}"
-  _hash="$(sha256sum "${_f}" | cut -d' ' -f1)"
+  # Known SHA-256 vector for "abc"; hard-coded so the expectation does not come
+  # from the same sha256sum the function under test calls.
+  _hash="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 }
 
 @test "_verify_sha256: matching hash returns 0" {
@@ -57,4 +59,25 @@ setup() {
 @test "_sha256_pin_ok: empty returns 1" {
   run _sha256_pin_ok ""
   [ "$status" -eq 1 ]
+}
+
+@test "_verify_sha256: a directory with a valid pin returns 3" {
+  mkdir "${BATS_TEST_TMPDIR}/d"
+  run _verify_sha256 "${BATS_TEST_TMPDIR}/d" "${_hash}"
+  [ "$status" -eq 3 ]
+}
+
+# The [0-9a-fA-F] range matched non-ASCII letters only where the locale's range
+# collation is non-ASCII (Linux glibc en_US.UTF-8; the Studio does not
+# reproduce it), so this discriminates on Linux and CI. Skips if the locale is
+# not installed, since the C fallback cannot exhibit the defect.
+@test "_sha256_pin_ok: non-ASCII letter in a 64-char pin is rejected under en_US.UTF-8" {
+  locale -a | grep -qix 'en_US.utf-\?8' || skip "en_US.UTF-8 not installed"
+  local _pin
+  _pin="$(printf '%063d' 0)é"
+  export LC_ALL=en_US.UTF-8
+  run _sha256_pin_ok "${_pin}"
+  [ "$status" -eq 1 ]
+  run _verify_sha256 "${BATS_TEST_TMPDIR}/nonexistent" "${_pin}"
+  [ "$status" -eq 2 ]
 }
