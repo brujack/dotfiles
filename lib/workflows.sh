@@ -1385,7 +1385,7 @@ print(best[1])
 
 # Prints "<amd64-sha> <arm64-sha>" for stable release go<version>; rc 1 and
 # empty output when the release, either linux tarball, or either 64-hex sha256
-# is missing. Feeds _update_go_pin only.
+# is missing, or the feed cannot be fetched or parsed. Feeds _update_go_pin only.
 _fetch_go_sha256() {
   local _version="$1" _body
   [[ "${_version}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || return 1
@@ -1405,7 +1405,7 @@ for entry in data:
     files = entry.get("files")
     if not isinstance(files, list):
         sys.exit(1)
-    shas = {f.get("filename"): f.get("sha256") for f in files if isinstance(f, dict)}
+    shas = {f["filename"]: f.get("sha256") for f in files if isinstance(f, dict) and isinstance(f.get("filename"), str)}
     out = []
     for arch in ("amd64", "arm64"):
         s = shas.get(want + ".linux-" + arch + ".tar.gz")
@@ -1640,12 +1640,12 @@ _update_go_pin() {
   _shas=$(_fetch_go_sha256 "${_latest}") || _shas=""
   read -r _amd _arm <<< "${_shas}"
   if ! _sha256_pin_ok "${_amd}" || ! _sha256_pin_ok "${_arm}"; then
-    printf "  go: refusing pin update: no sha256 for %s in the go.dev feed\n" "${_latest}"
+    printf "  go: refusing pin update: could not get sha256 for %s from the go.dev feed (fetch failed or not listed)\n" "${_latest}"
     return 1
   fi
 
-  # Edit a same-directory copy and move it over the original only after both
-  # lines read back, so a partial edit can never be left in constants.sh.
+  # Edit a same-directory copy and move it over the original only after all
+  # four pins read back, so a partial edit can never be left in constants.sh.
   _tmp="${_constants}.new.$$"
   cp "${_constants}" "${_tmp}" || return 1
   sed -i.bak "s|^GO_VER=\".*\"|GO_VER=\"${_series}\"|" "${_tmp}"

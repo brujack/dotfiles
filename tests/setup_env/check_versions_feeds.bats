@@ -570,6 +570,8 @@ _stub_go_sha256() {
   run run_check_versions <<< "y"
   grep -Fqx 'GO_DOWNLOAD_FILENAME="go1.27.2.linux-${_LINUX_ARCH}.tar.gz"' "${_CP}"
   [[ "$output" == *"Updated GO_VER → 1.27.2"* ]]
+  grep -Fqx 'GO_SHA256_AMD64="'"$(printf 'a%.0s' {1..64})"'"' "${_CP}"
+  grep -Fqx 'GO_SHA256_ARM64="'"$(printf 'b%.0s' {1..64})"'"' "${_CP}"
 }
 
 @test "go update refuses a two-part latest: byte-identical, message, no Updated" {
@@ -631,6 +633,7 @@ _go_sha_fixture() {
  {"version":"go1.28.2","stable":true,"files":[{"filename":"go1.28.2.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.2.linux-arm64.tar.gz","sha256":"${_sha_b}"}]},
  {"version":"go1.28.1","stable":true,"files":[{"filename":"go1.28.1.linux-amd64.tar.gz","sha256":"${_sha_a}"}]},
  {"version":"go1.28.0","stable":true,"files":[{"filename":"go1.28.0.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.0.linux-arm64.tar.gz"}]},
+ {"version":"go1.28.4","stable":true,"files":[{"filename":["x"],"sha256":"${_sha_a}"},{"filename":"go1.28.4.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.28.4.linux-arm64.tar.gz","sha256":"${_sha_b}"}]},
  {"version":"go1.27.9","stable":true,"files":[{"filename":"go1.27.9.linux-amd64.tar.gz","sha256":"${_sha_a}"},{"filename":"go1.27.9.linux-arm64.tar.gz","sha256":"${_sha_b:1}"}]}
 ]
 JSON
@@ -685,7 +688,7 @@ JSON
   _fetch_go_sha256() { return 1; }
   run _update_go_pin "1.28.0"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"no sha256 for"* ]]
+  [[ "$output" == *"could not get sha256 for"* ]]
   cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
   if compgen -G "${_CP}.new*" >/dev/null; then false; fi
 }
@@ -712,6 +715,34 @@ JSON
   run _update_go_pin "1.28.0"
   [ "$status" -eq 1 ]
   [[ "$output" == *"go: pin update failed: GO_SHA256_ARM64 is not ${_sha_b}"* ]]
+  cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  if compgen -G "${_CP}.new*" >/dev/null; then false; fi
+}
+
+@test "_fetch_go_sha256 tolerates a list-valued filename: no traceback, rc 0 from valid entries" {
+  MOCK_CURL_STDOUT="$(_go_sha_fixture)" run _fetch_go_sha256 "1.28.4"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_sha_a} ${_sha_b}" ]
+}
+
+@test "_fetch_go_sha256 fails empty without a traceback when the only filename is a list" {
+  MOCK_CURL_STDOUT='[{"version":"go1.28.5","stable":true,"files":[{"filename":["x"],"sha256":"'"${_sha_a}"'"}]}]' \
+    run _fetch_go_sha256 "1.28.5"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+}
+
+@test "go update refuses a non-hex arm64 digest: rc 1, constants byte-identical" {
+  _seed_constants
+  _seed_go "1.27" "1.27.1"
+  cp "${_CP}" "${BATS_TEST_TMPDIR}/before"
+  _fetch_go_sha256() {
+    [[ "$1" == "1.28.0" ]] || return 1
+    printf '%s %s\n' "${_sha_a}" "$(printf 'z%.0s' {1..64})"
+  }
+  run _update_go_pin "1.28.0"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not get sha256 for 1.28.0"* ]]
   cmp "${_CP}" "${BATS_TEST_TMPDIR}/before"
   if compgen -G "${_CP}.new*" >/dev/null; then false; fi
 }
