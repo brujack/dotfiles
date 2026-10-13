@@ -161,9 +161,11 @@ Silent (`return 0`, no output) unless all hold: `LINUX` set, `command -v flatpak
 succeeds, `_flatpak_has_apps` returns 0, and `_nvidia_loaded_version` succeeds. Otherwise
 it prints a `Flatpak NVIDIA GL:` heading and:
 
-- `doctor_warn` when `GL.nvidia-<loaded>` is not installed (any arch), naming the loaded
-  driver and both causes:
-  `no GL.nvidia-<loaded> for loaded driver <dotted>: run ./setup_env.sh -t update; if it already ran since the reboot, Flathub does not publish it yet and nothing local fixes it`.
+- `doctor_warn` when `GL.nvidia-<loaded>` is not installed (any arch). The reason and the
+  remedy are separate lines, so the remedy can be pasted on its own:
+  `no GL.nvidia-<loaded> for loaded driver <dotted>; if this command already ran since the reboot, Flathub does not publish it yet and nothing local fixes it. Fetch it with:`
+  followed by a line holding only `sudo flatpak update -y --noninteractive --system`.
+  That command updates flatpak alone, not every update section.
   This warning stays until Flathub publishes the extension, which is correct: Steam has no
   matching GL until then. `GL32` is not required: a host can run only 64-bit flatpaks.
 - `doctor_warn` once per installed `GL.nvidia-*` or `GL32.nvidia-*` ref whose version is
@@ -229,7 +231,7 @@ between a driver bump plus reboot and the next `-t update`, plus the stale-ref d
 - **R7.** `update_flatpak_packages` runs `sudo flatpak uninstall -y --noninteractive --system --unused` after the update, and returns 1 without running the missing-GL check when it fails.
 - **R8.** `run_update` records a `flatpak` section directly after `snap` in `_UPDATE_SECTION_ORDER`; rc 0 reports OK, rc 2 reports WARN with the function's output in the detail, rc 1 reports FAIL, and no `flatpak` binary reports SKIP "flatpak not installed on this host".
 - **R9.** `_doctor_check_flatpak_gl` prints nothing when `LINUX` is unset, flatpak is absent, no flatpak app is installed, or the loaded version is unknown.
-- **R10.** `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a message naming both `-t update` and Flathub not yet publishing it; warns once per installed `GL.nvidia-*` / `GL32.nvidia-*` ref whose version is not the loaded one, printing `sudo flatpak uninstall -y --noninteractive --system <ref>` for that ref; passes when neither applies; warns when the runtime list or the app list fails; and never fails.
+- **R10.** `_doctor_check_flatpak_gl` warns when `GL.nvidia-<loaded>` is missing, with a reason line naming Flathub not yet publishing it, followed by a line consisting solely of `sudo flatpak update -y --noninteractive --system`; warns once per installed `GL.nvidia-*` / `GL32.nvidia-*` ref whose version is not the loaded one, printing `sudo flatpak uninstall -y --noninteractive --system <ref>` for that ref; passes when neither applies; warns when the runtime list or the app list fails; and never fails.
 - **R11.** `run_doctor` calls `_doctor_check_flatpak_gl`.
 - **R12.** The three dotfiles#334 comment fixes in Design §4 are applied.
 - **R13.** With loaded version `615-71-09` and at least one flatpak app installed, `update_flatpak_packages` returns 2 and prints the missing-GL line when no `GL.nvidia-615-71-09` ref is installed after the update and `--unused` steps, including when the runtime list contains no `GL*.nvidia-*` ref at all; with no app installed it prints no such line.
@@ -309,13 +311,13 @@ Reviewed at commit: `c40b0d7c` (round-2 revision; all three lenses re-run, told 
 
 Finding: The value is §2 steps 1-2 and the section wiring. Reads-it: the step-3 missing-GL WARN fires only when Flathub has not published the extension, and its remedy ("re-run later") is what the operator does anyway; doctor missing-GL is stdout-only and closes itself at the next `-t update` (no cron or timer runs `setup_env.sh` on Linux); doctor stale-ref "never fires" by the spec's own account. Simpler path: ship steps 1-2 plus V3, add detection only if V3 shows stale pairs surviving. Note: this reverses round 1's Goal-fit, which asked for the missing-GL WARN because it is the only check that turns an empty or misparsed runtime list (and `claude`'s original no-GL state) into something other than OK.
 Assumption: on a driver point release a plain `flatpak update` auto-prunes the previous pair; if the decision reads `autoprune-unless` only from the GL ref's parent Platform, a pair whose Platform branch changed escapes, which would explain 580 and predict recurrence at the next Platform bump. Settle by V3, or by reading `find_used_refs` for which metadata supplies the related refs.
-Disposition:
+Disposition: Accepted (user, 2026-10-12) — missing-GL WARN and doctor check kept: the WARN is the only check that turns an empty or misparsed runtime list, and `claude`'s original no-GL state, into something other than OK.
 
 ### Ergonomics (round 3, `c40b0d7c`)
 
 Finding: Doctor's missing-GL remedy is prose with a condition ("run ./setup_env.sh -t update; if it already ran ..."), not a pastable line, and the command it names runs every update section (apt can install another driver) to fetch one runtime. Fix: condition on its own line, then the bare command `sudo flatpak update -y --noninteractive --system` (or `./setup_env.sh -t update --pkgs-only`, `lib/helpers.sh:1399`); R10 should require the printed line. Verified: flatpak reads `/sys/module/nvidia/version` with the same dot-to-dash transform (`common/flatpak-utils.c:490`); the stale remove command is correct as typed (`ID/ARCH/BRANCH` accepted; `--noninteractive` implies `-y`); rc-2 mapping matches cargo-tools.
 Assumption: the next driver bump plus reboot plus plain `flatpak update` removes the old pair; settled by V3.
-Disposition:
+Disposition: Addressed (user, 2026-10-12) — doctor prints the reason, then `sudo flatpak update -y --noninteractive --system` alone on the next line; R10 requires that line.
 
 ### Risk (round 3, `c40b0d7c`)
 
