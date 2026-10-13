@@ -95,6 +95,20 @@ assert_silent() {
   assert_no_mutating_flatpak_call
 }
 
+@test "no NVIDIA GL refs at all: one missing-GL WARN, no stale WARN with an empty ref" {
+  grep -vE 'Platform\.GL(32)?\.nvidia-' "${FIXTURE}" > "${BATS_TEST_TMPDIR}/no-nvidia-gl.tsv"
+  [ "$(grep -cE 'Platform\.GL(32)?\.nvidia-' "${BATS_TEST_TMPDIR}/no-nvidia-gl.tsv")" -eq 0 ]
+  [ -s "${BATS_TEST_TMPDIR}/no-nvidia-gl.tsv" ]
+  export MOCK_FLATPAK_LIST_RUNTIME="${BATS_TEST_TMPDIR}/no-nvidia-gl.tsv"
+  run_check
+  [ "$(grep -c '\[WARN\]' <<<"$output")" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  [[ "$output" != *"uninstall"* ]]
+  [ "$(grep -A1 '\[WARN\]' <<<"$output" | tail -1)" = '    sudo flatpak update -y --noninteractive --system' ]
+  assert_no_mutating_flatpak_call
+}
+
 @test "stale GL refs: one WARN each with the exact uninstall remedy, none for the loaded version" {
   cp "${FIXTURE}" "${BATS_TEST_TMPDIR}/stale.tsv"
   printf '%s\t%s\t%s\n' 'org.freedesktop.Platform.GL.nvidia-580-159-03' x86_64 1.4 >> "${BATS_TEST_TMPDIR}/stale.tsv"
