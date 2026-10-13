@@ -11,6 +11,29 @@ log_info()  { printf "${_GREEN}[INFO]${_NC}  %s\n" "$*"; }
 log_warn()  { printf "${_YELLOW}[WARN]${_NC}  %s\n" "$*" >&2; }
 log_error() { printf "${_RED}[ERROR]${_NC} %s\n" "$*" >&2; }
 
+# _sha256_pin_ok <sha> -- rc 0 only for exactly 64 hex characters. Callers that
+# must refuse a bad pin before downloading call this first.
+_sha256_pin_ok() {
+  [[ "${1}" =~ ^[[:xdigit:]]{64}$ ]]
+}
+
+# _verify_sha256 <file> <sha> -- rc 0 match, 1 mismatch, 2 malformed pin,
+# 3 not a readable regular file; any other rc is sha256sum's own (126/127).
+# Logs nothing.
+# The pin is checked first: macOS sha256sum exits 0 on a malformed checksum
+# line. The -f/-r check exists because sha256sum -c returns 1 for a file it
+# cannot read (or a directory), the same code as a mismatch (measured
+# 2026-10-13: missing file on GNU and on the Studio's /sbin/sha256sum,
+# mode-000 as non-root on GNU, directory on GNU).
+# Uppercase hex is accepted by both (measured 2026-10-13); do not lower-case
+# pins.
+_verify_sha256() {
+  local _file="$1" _sha="$2"
+  _sha256_pin_ok "${_sha}" || return 2
+  [[ -f "${_file}" && -r "${_file}" ]] || return 3
+  printf '%s  %s\n' "${_sha}" "${_file}" | sha256sum -c - > /dev/null 2>&1
+}
+
 # ── command wrapper ───────────────────────────────────────────────────────────
 # The only writer of the *global* DRY_RUN in this tree is process_args, and it
 # only ever writes the literal "1". scripts/sync_git_repos.sh:77 also assigns
