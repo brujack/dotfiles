@@ -1635,6 +1635,13 @@ _refresh_pins_bin() {
   printf '%s\n' "${DOTFILES_REPO_ROOT}/scripts/refresh-sha256-pins.sh"
 }
 
+# _release_pin_constants_path -- the constants file the release-pin writer edits.
+# Hangs off DOTFILES_REPO_ROOT (resolved once at source time) for the same reason
+# as _refresh_pins_bin.
+_release_pin_constants_path() {
+  printf '%s\n' "${_OVERRIDE_CONSTANTS_PATH:-${DOTFILES_REPO_ROOT}/lib/constants.sh}"
+}
+
 # _update_release_pin <tool> <var> <latest> -- moves a kind/yq version pin and
 # its sha256 pins together. Works on a same-directory temp copy and renames it
 # over lib/constants.sh only when the version edit and the refresh both
@@ -1643,7 +1650,8 @@ _refresh_pins_bin() {
 # behind (lib/ cannot trap); .gitignore covers it.
 _update_release_pin() {
   local _tool="$1" _var="$2" _latest="$3"
-  local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
+  local _constants
+  _constants="$(_release_pin_constants_path)"
   local _refresh
   _refresh="$(_refresh_pins_bin)"
 

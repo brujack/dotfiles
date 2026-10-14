@@ -1896,6 +1896,19 @@ _stub_refresher_fail() {
   [[ "${_bin}" == */scripts/refresh-sha256-pins.sh ]]
 }
 
+@test "_release_pin_constants_path default is the repo's lib/constants.sh regardless of cwd" {
+  unset _OVERRIDE_CONSTANTS_PATH
+  local _path
+  _path=$(cd / && _release_pin_constants_path)
+  [ "${_path}" = "${DOTFILES_REPO_ROOT}/lib/constants.sh" ]
+  [ -f "${_path}" ]
+}
+
+@test "_release_pin_constants_path honours _OVERRIDE_CONSTANTS_PATH" {
+  _OVERRIDE_CONSTANTS_PATH="${BATS_TEST_TMPDIR}/c.sh"
+  [ "$(_release_pin_constants_path)" = "${BATS_TEST_TMPDIR}/c.sh" ]
+}
+
 @test "_refresh_pins_bin honours the override only while BATS_TEST_TMPDIR is set" {
   _stub_refresher_ok
   [ "$(_refresh_pins_bin)" = "${_REFRESHER}" ]
@@ -3966,8 +3979,35 @@ _stub_cv_callees() {
   export UPDATE_VERSIONS=1
   run run_check_versions
   [ "$status" -eq 0 ]
-  [[ "$output" == *"pinned=${KIND_VER}"*"latest=${KIND_VER}"* ]]
+  # Each tool's own repo and pin: a mistyped repo name fetches nothing and a
+  # swapped pin prints another tool's version, so assert all three lines.
+  [[ "$output" == *"[OK]"*"kind"*"pinned=${KIND_VER}"*"latest=${KIND_VER}"* ]]
+  [[ "$output" == *"[OK]"*"yq"*"pinned=${YQ_VER}"*"latest=${YQ_VER}"* ]]
+  [[ "$output" == *"[OK]"*"shellcheck"*"pinned=${SHELLCHECK_VER}"*"latest=${SHELLCHECK_VER}"* ]]
   [[ "$output" != *"[y/N]"* ]]
+}
+
+@test "run_check_versions hands each pinned-release tool its own version variable to the update prompt" {
+  # Real _check_one_pinned_release; only the network and the prompt are stubbed.
+  _check_one_version() { printf '  [OK]       %s\n' "$1"; }
+  _check_one_pin_version() { printf '  [OK]       %s\n' "$1"; }
+  _check_cv_homebrew_install() { printf '  [OK]       brew\n'; }
+  _check_one_cargo_version() { printf '  [OK]       %s\n' "$1"; }
+  # shellcheck disable=SC2034 # read by run_check_versions, sourced from setup_env.sh
+  CARGO_TOOLS=(foo@1.0.0)
+  _fetch_github_latest() {
+    case "$1" in
+      kubernetes-sigs/kind | mikefarah/yq | koalaman/shellcheck) printf '99.0.0' ;;
+    esac
+  }
+  _prompt_version_update() { printf '%s %s %s %s\n' "$1" "$2" "$3" "$4" >> "${BATS_TEST_TMPDIR}/prompts"; }
+  : > "${BATS_TEST_TMPDIR}/prompts"
+  export UPDATE_VERSIONS=1
+  run run_check_versions
+  [ "$(wc -l < "${BATS_TEST_TMPDIR}/prompts")" -eq 3 ]
+  grep -Fqx "kind KIND_VER ${KIND_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
+  grep -Fqx "yq YQ_VER ${YQ_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
+  grep -Fqx "shellcheck SHELLCHECK_VER ${SHELLCHECK_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
 }
 
 # ── run_check_versions summary counting ──────────────────────────────────────
