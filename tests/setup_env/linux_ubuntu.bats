@@ -1611,7 +1611,7 @@ EOF
   unset HAS_RUST
   run _install_ubuntu_rust
   [ "$status" -eq 0 ]
-  ! grep -q "rustup" "${MOCK_CALLS_FILE}"
+  run ! grep -q "rustup" "${MOCK_CALLS_FILE}"
 }
 
 # Renamed rather than re-asserted: the assertion (no sh.rustup.rs call) still holds,
@@ -2356,7 +2356,7 @@ _docker_fetch_ok() {
   unset HAS_DOCKER
   run _install_ubuntu_docker
   [ "$status" -eq 0 ]
-  ! grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_docker: HAS_DOCKER set installs docker-ce" {
@@ -3113,7 +3113,7 @@ _cloud_env() {
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for cloudflare repo" {
@@ -3413,7 +3413,7 @@ _az_cloud_env() {
   unset HAS_DEVTOOLS
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  ! grep -q "brew install ggshield" "${MOCK_CALLS_FILE}"
+  run ! grep -q "brew install ggshield" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_brew_packages: calls install_homebrew when brew is absent" {
@@ -3448,7 +3448,7 @@ _az_cloud_env() {
   unset HAS_DEVTOOLS HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
-  ! grep -q "apt install virtualbox" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install virtualbox" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: HAS_SNAP installs albert" {
@@ -3918,9 +3918,14 @@ _gui_env() {
   _pin_fetched YQ "${MOCK_WGET_FILE}"
   export MOCK_WGET_FAIL_URL="yq_linux_"
   export HAS_DEVTOOLS=1
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
   run _install_ubuntu_misc
   [ "$status" -eq 1 ]
+  [[ "$output" == *"yq: download failed"* ]]
   [[ "$output" == *"misc: yq: install failed"* ]]
+  grep -qF -- " ${_yq_url}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: a failing nala install is named, returns 1 and autoremove is still attempted" {

@@ -1362,11 +1362,19 @@ _install_fetched_binary() {
   local _unverified=0 _name _url="" _kind _member _dest_name=""
   local _stamp _bin _tmp _src _stage="" _stamp_text _sha="" _shavar="" _pin_line
   local _upper _forvar _verivar _arch="${_LINUX_ARCH:-}" _rc
+  local _args="$*"
   if [[ ${1:-} == "--unverified" ]]; then
     _unverified=1
     shift
-    [[ $# -ge 4 && $# -le 5 ]] || return 1
+    if ! [[ $# -ge 4 && $# -le 5 ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
     _name="$1" _url="$2" _kind="$3" _member="$4" _dest_name="${5:-}"
+    if [[ -z ${_name} ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
     case "${_name}" in
       consul | vault | nomad | packer | vagrant) ;;
       *)
@@ -1374,13 +1382,21 @@ _install_fetched_binary() {
         return 1
         ;;
     esac
-    [[ -n ${_url} ]] || return 1
+    if [[ -z ${_url} ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
   else
-    [[ $# -ge 3 && $# -le 4 ]] || return 1
+    if ! [[ $# -ge 3 && $# -le 4 ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
     _name="$1" _kind="$2" _member="$3" _dest_name="${4:-}"
   fi
-  [[ -n ${_name} ]] || return 1
-  [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]] || return 1
+  if [[ -z ${_name} ]] || ! [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]]; then
+    log_warn "_install_fetched_binary: bad arguments: ${_args}"
+    return 1
+  fi
   _dest_name="${_dest_name:-${_name}}"
 
   if [[ ${_unverified} -eq 0 ]]; then

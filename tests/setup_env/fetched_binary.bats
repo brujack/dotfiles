@@ -261,19 +261,25 @@ _make_tar() {
   _assert_root_empty
 }
 
-@test "_install_fetched_binary: unknown kind and missing or surplus arguments are rejected before any fetch" {
+@test "_install_fetched_binary: unknown kind and missing or surplus arguments are rejected before any fetch, naming the call" {
   run _install_fetched_binary tool bogus ""
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bogus "* ]]
   run _install_fetched_binary "" bin ""
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments:  bin "* ]]
   run _install_fetched_binary tool "" bin ""
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool  bin "* ]]
   run _install_fetched_binary tool bin
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bin"* ]]
   run _install_fetched_binary tool
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool"* ]]
   run _install_fetched_binary tool bin "" one two
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bin  one two"* ]]
   [ "$(_wget_count)" -eq 0 ]
   [ ! -e "${_DL_BIN_DIR}/bin" ]
   [ "$(cat "${DEST}")" = "old" ]
@@ -543,10 +549,19 @@ _assert_refused_before_download() {
 @test "_install_fetched_binary: --unverified rejects missing and surplus arguments" {
   run _install_fetched_binary --unverified consul "https://example.invalid/c" bin
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul https://example.invalid/c bin"* ]]
   run _install_fetched_binary --unverified consul "https://example.invalid/c" bin "" one two
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
   run _install_fetched_binary --unverified consul "" bin ""
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul  bin"* ]]
+  run _install_fetched_binary --unverified "" "https://example.invalid/c" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified  https://example.invalid/c bin"* ]]
+  run _install_fetched_binary --unverified consul "https://example.invalid/c" bogus ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
   [ "$(_wget_count)" -eq 0 ]
 }
 
@@ -554,4 +569,107 @@ _assert_refused_before_download() {
   run _install_fetched_binary tool bin "" renamed --resolve
   [ "$status" -eq 1 ]
   [ "$(_wget_count)" -eq 0 ]
+}
+
+# ── archives are not extracted before the sha256 passes ──────────────────────
+
+# An extractor stub that records each call, then delegates to the real tool.
+_recording_extractor() {
+  local _real="$1" _stub="${BATS_TEST_TMPDIR}/$2"
+  printf '#!/usr/bin/env bash\nprintf "called\\n" >> "%s"\nexec "%s" "$@"\n' \
+    "${BATS_TEST_TMPDIR}/extract-calls" "${_real}" > "${_stub}"
+  chmod +x "${_stub}"
+  : > "${BATS_TEST_TMPDIR}/extract-calls"
+  printf '%s' "${_stub}"
+}
+
+_wrong_pin() {
+  export _FETCHED_SHA256
+  _FETCHED_SHA256="$(printf 'a%.0s' {1..64})"
+}
+
+@test "_install_fetched_binary: a wrong pin never runs unzip" {
+  _make_zip
+  export _DL_UNZIP_BIN
+  _DL_UNZIP_BIN="$(_recording_extractor "${_DL_UNZIP_BIN}" unzip-rec)"
+  _wrong_pin
+  run _install_fetched_binary tool zip tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 mismatch"* ]]
+  [ ! -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_tmp_was_used
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: a wrong pin never runs tar" {
+  _make_tar
+  export _DL_TAR_BIN
+  _DL_TAR_BIN="$(_recording_extractor "${_DL_TAR_BIN}" tar-rec)"
+  _wrong_pin
+  run _install_fetched_binary tool tar pkg/bin/tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 mismatch"* ]]
+  [ ! -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_tmp_was_used
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: the recording extractors ARE called when the pin is right (positive control)" {
+  _make_zip
+  export _DL_UNZIP_BIN
+  _DL_UNZIP_BIN="$(_recording_extractor "${_DL_UNZIP_BIN}" unzip-rec)"
+  run _install_fetched_binary tool zip tool
+  [ "$status" -eq 0 ]
+  [ -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  _make_tar
+  export _DL_TAR_BIN
+  _DL_TAR_BIN="$(_recording_extractor "${_DL_TAR_BIN}" tar-rec)"
+  rm -f "${STAMP}"
+  run _install_fetched_binary tool tar pkg/bin/tool
+  [ "$status" -eq 0 ]
+  [ -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+}
+
+# ── _sha256_check ────────────────────────────────────────────────────────────
+
+@test "_sha256_check: a match is silent and returns 0" {
+  run _sha256_check n "${FIXTURE}" VAR "${_FETCHED_SHA256}" "${URL}" "tail"
+  [ "$status" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "_sha256_check: a mismatch returns 1 and names variable, pin, actual, URL and tail" {
+  local _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  run _sha256_check n "${FIXTURE}" VAR "${_bad}" "${URL}" "the-tail"
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"n: sha256 mismatch: VAR expects ${_bad}, download is ${_FETCHED_SHA256} from ${URL}; the-tail"* ]]
+}
+
+@test "_sha256_check: a mismatch whose actual-hash read fails says unreadable" {
+  local _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  sha256sum() { return 1; }
+  run _sha256_check n "${FIXTURE}" VAR "${_bad}" "${URL}" "the-tail"
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"download is unreadable from ${URL}"* ]]
+}
+
+@test "_sha256_check: rc 3 passes through with its own message" {
+  run _sha256_check n "${BATS_TEST_TMPDIR}/absent" VAR "${_FETCHED_SHA256}" "${URL}" "t"
+  [ "$status" -eq 3 ]
+  [[ "${output}" == *"n: could not read the download to verify it"* ]]
+  [[ "${output}" != *"mismatch"* ]]
+}
+
+@test "_sha256_check: rc 126 passes through with its own message" {
+  _verify_sha256() { return 126; }
+  run _sha256_check n "${FIXTURE}" VAR "${_FETCHED_SHA256}" "${URL}" "t"
+  [ "$status" -eq 126 ]
+  [[ "${output}" == *"n: sha256 check could not run (rc 126)"* ]]
+  [[ "${output}" != *"mismatch"* ]]
 }
