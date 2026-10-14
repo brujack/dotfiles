@@ -430,3 +430,24 @@ fixes plus one more removal, the design shrank in every round (10 tools to 2 pin
 no downloads in the refresher, no retirement code), and the remaining risk sits in test apparatus for
 Phase 2's first red tests.
 
+## Spec alignment (2026-10-14)
+
+- spec: docs/superpowers/specs/2026-10-13-release-asset-sha256-design.md
+- anchor: f4b31c1f84f07d84b7e0324a7378a729c23fe2b7
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 6/6 pinned assets downloaded and hashed locally 2026-10-14 (kind v0.33.0 amd64/arm64, yq v4.54.1 amd64/arm64, shellcheck v0.11.0 x86_64/aarch64); every sha256 equals its committed pin; table in PR body.
+- V2: Post-merge: not yet run.
+- V3: At aaa518c4, each mutation alone in a scratch copy: (a) verify stage deleted -> 6 fetched_binary tests red; (b) kind arch arms swapped -> release_asset_pins test red; (c) --unverified accepts any name -> 1 red; (d) refresher writes amd64 digest to both arches -> 3 refresh tests red; (e) unchanged-version refusal dropped -> 1 red.

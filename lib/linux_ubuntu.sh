@@ -616,17 +616,26 @@ _install_rustup_rs() {
   # HAS_RUST + Ubuntu gated), but the bats suite runs on the Studio, and a case
   # statement that fails closed on the developer's own arch makes the suite
   # unrunnable locally for a reason that has nothing to do with the code.
-  local _sha _machine
+  local _sha _shavar _machine
   _machine="$(uname -m)"
   case "${_machine}" in
-    x86_64 | amd64) _sha="${RUSTUP_INIT_SHA256_X86_64}" ;;
-    aarch64 | arm64) _sha="${RUSTUP_INIT_SHA256_AARCH64}" ;;
+    x86_64 | amd64)
+      _sha="${RUSTUP_INIT_SHA256_X86_64}"
+      _shavar="RUSTUP_INIT_SHA256_X86_64"
+      ;;
+    aarch64 | arm64)
+      _sha="${RUSTUP_INIT_SHA256_AARCH64}"
+      _shavar="RUSTUP_INIT_SHA256_AARCH64"
+      ;;
     *)
       log_error "no pinned rustup-init sha256 for ${_machine} — refusing an unverified download"
       return 1
       ;;
   esac
-  _sha="${_RUSTUP_INIT_SHA256:-${_sha}}"
+  if [[ -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
+    _sha="${_RUSTUP_INIT_SHA256}"
+    _shavar="_RUSTUP_INIT_SHA256"
+  fi
 
   # Refuse a bad pin before any download; _verify_sha256 would also return 2,
   # but only after a network fetch.
@@ -644,8 +653,8 @@ _install_rustup_rs() {
     return 1
   fi
 
-  if ! _verify_sha256 "${_tmp}/rustup-init" "${_sha}"; then
-    log_error "rustup-init sha256 mismatch — refusing to execute"
+  if ! _sha256_check "rustup-init" "${_tmp}/rustup-init" "${_shavar}" "${_sha}" \
+    "${_RUSTUP_INIT_URL:-${RUSTUP_INIT_URL}}" "refusing to execute"; then
     rm -rf "${_tmp}"
     return 1
   fi
@@ -895,13 +904,8 @@ _install_ubuntu_k8s_tools() {
   local _keyring="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}/kubernetes-apt-keyring.gpg"
   if [[ -n ${HAS_K8S} ]]; then
     printf "Installing kind\\n"
-    _install_fetched_binary kind "${KIND_URL}" bin kind || {
+    _install_fetched_binary kind bin kind || {
       log_warn "k8s_tools: kind: install failed"
-      _k8s_rc=1
-    }
-    printf "Installing telepresence\\n"
-    _install_fetched_binary telepresence "${TELEPRESENCE_URL}" bin telepresence --resolve || {
-      log_warn "k8s_tools: telepresence: install failed"
       _k8s_rc=1
     }
   fi
@@ -952,7 +956,7 @@ _install_ubuntu_hashicorp() {
     _arch="${_LINUX_ARCH}"
     # vagrant has no ARM64 Linux build — amd64 only
     [[ ${_tool} == "vagrant" ]] && _arch="amd64"
-    _install_fetched_binary "${_tool}" \
+    _install_fetched_binary --unverified "${_tool}" \
       "${HASHICORP_URL}/${_tool}/${_ver}/${_tool}_${_ver}_linux_${_arch}.zip" zip "${_tool}" || {
       log_warn "hashicorp: ${_tool}: install failed"
       _hc_rc=1
@@ -1066,11 +1070,6 @@ _install_ubuntu_cloud_tools() {
     _cloud_rc=1
   }
 
-  printf "Installing cf-terraforming Ubuntu\\n"
-  _install_fetched_binary cf-terraforming "${CF_TERRAFORMING_URL}" tar cf-terraforming || {
-    log_warn "cloud_tools: cf-terraforming: install failed"
-    _cloud_rc=1
-  }
   ((_cloud_rc == 0)) || return 1
   return 0
 }
@@ -1166,7 +1165,7 @@ _install_ubuntu_brew_packages() {
   fi
 
   # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
 
   if [[ ${#_failed[@]} -gt 0 ]]; then
     log_warn "brew: ${#_failed[@]} package(s) failed: ${_failed[*]}"
@@ -1290,55 +1289,184 @@ _install_apt_keyring() {
   return 0
 }
 
-# Fetch a binary into a throwaway dir, install it last, and stamp the URL only
-# after the install succeeds, so an interrupted run leaves the destination
+# Print the GitHub release asset URL for a tool at its pinned *_VER.
+# Usage: _release_asset_url <kind|yq|shellcheck> <amd64|arm64>
+# Returns 2 for an unknown tool, 3 for an unknown arch; prints nothing on failure.
+_release_asset_url() {
+  local _tool="${1:-}" _arch="${2:-}" _sc_arch
+  case "${_tool}" in
+    kind | yq | shellcheck) ;;
+    *) return 2 ;;
+  esac
+  case "${_arch}" in
+    amd64) _sc_arch="x86_64" ;;
+    arm64) _sc_arch="aarch64" ;;
+    *) return 3 ;;
+  esac
+  case "${_tool}" in
+    kind)
+      printf 'https://github.com/kubernetes-sigs/kind/releases/download/v%s/kind-linux-%s\n' "${KIND_VER}" "${_arch}"
+      ;;
+    yq)
+      printf 'https://github.com/mikefarah/yq/releases/download/v%s/yq_linux_%s\n' "${YQ_VER}" "${_arch}"
+      ;;
+    shellcheck)
+      printf 'https://github.com/koalaman/shellcheck/releases/download/v%s/shellcheck-v%s.linux.%s.tar.xz\n' \
+        "${SHELLCHECK_VER}" "${SHELLCHECK_VER}" "${_sc_arch}"
+      ;;
+  esac
+}
+
+# Print "<VARIABLE> <value>" for a tool's sha256 pin. Explicit case so a grep
+# for a pin variable finds its reader.
+# Usage: _release_asset_sha <kind|yq|shellcheck> <amd64|arm64>
+# Returns 2 for an unknown tool, 3 for an unknown arch.
+_release_asset_sha() {
+  local _tool="${1:-}" _arch="${2:-}"
+  case "${_tool}" in
+    kind | yq | shellcheck) ;;
+    *) return 2 ;;
+  esac
+  case "${_arch}" in
+    amd64 | arm64) ;;
+    *) return 3 ;;
+  esac
+  case "${_tool}:${_arch}" in
+    kind:amd64) printf '%s %s\n' KIND_SHA256_AMD64 "${KIND_SHA256_AMD64}" ;;
+    kind:arm64) printf '%s %s\n' KIND_SHA256_ARM64 "${KIND_SHA256_ARM64}" ;;
+    yq:amd64) printf '%s %s\n' YQ_SHA256_AMD64 "${YQ_SHA256_AMD64}" ;;
+    yq:arm64) printf '%s %s\n' YQ_SHA256_ARM64 "${YQ_SHA256_ARM64}" ;;
+    shellcheck:amd64) printf '%s %s\n' SHELLCHECK_SHA256_AMD64 "${SHELLCHECK_SHA256_AMD64}" ;;
+    shellcheck:arm64) printf '%s %s\n' SHELLCHECK_SHA256_ARM64 "${SHELLCHECK_SHA256_ARM64}" ;;
+  esac
+}
+
+# Fetch a binary into a throwaway dir, verify it, install it last, and stamp
+# only after the install succeeds, so an interrupted run leaves the destination
 # untouched and the next run fetches again. The stamp is the idempotency check:
-# a stamp equal to the (resolved) URL plus an executable destination is a skip.
-# Usage: _install_fetched_binary <name> <url> <bin|zip|tar> <member> [<dest-name>] [--resolve]
+# a stamp equal to the expected text plus an executable destination is a skip.
+# Usage (pinned):     _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>]
+#        (unverified): _install_fetched_binary --unverified <name> <url> <bin|zip|tar> <member> [<dest-name>]
 # <member> is the path inside a zip/tar (ignored for bin); <dest-name> defaults
-# to <name>. --resolve follows redirects first and uses the final URL as the
-# identity (for "latest" links); a failed resolution keeps a stamped, non-empty,
-# executable copy and otherwise fails.
-# Returns 0 installed, up to date, or kept; 1 on bad arguments or a failed stage
-# (named in a warning). A stamp that cannot be written warns and still returns 0.
+# to <name>.
+# Pinned: URL and sha256 come from _release_asset_url/_release_asset_sha for
+# ${_LINUX_ARCH}. An unknown tool, an unknown arch, a pin recorded for another
+# version than <NAME>_VER, or a malformed pin is refused (rc 1) before the stamp
+# check and any download, so no network call is made on inconsistent constants.
+# The download is checked against the pin before extraction; the stamp holds
+# "<url> <sha256>", so a refreshed pin forces a reinstall.
+# --unverified exists only until the HashiCorp tools move to their apt repo
+# (PR B): accepted for those five names, URL-only stamp, no check, and a
+# "not verified" line so the gap stays visible.
+# Returns 0 installed, up to date, or kept; 1 on bad arguments, a refusal or a
+# failed stage (named in a warning). A stamp that cannot be written warns and
+# still returns 0.
 # Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, _DL_BIN_DIR,
-# _DL_UNZIP_BIN, _DL_TAR_BIN. No EXIT/RETURN trap (check-lib-exit-traps.sh;
-# shell.md): every path below reaches an explicit rm -rf.
+# _DL_UNZIP_BIN, _DL_TAR_BIN. _FETCHED_URL and _FETCHED_SHA256 replace the URL
+# and pin (and skip the _FOR_VER check) but are honoured only under bats, so a
+# stray export in an interactive shell cannot swap these tools' pins. No
+# EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path below
+# reaches an explicit rm -rf.
 _install_fetched_binary() {
-  [[ $# -ge 4 ]] || return 1
-  local _name="$1" _url="$2" _kind="$3" _member="$4"
-  local _dest_name="" _resolve=0 _arg _stamp _bin _tmp _src _stage="" _resolved
-  [[ -n ${_name} && -n ${_url} ]] || return 1
-  [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]] || return 1
-  shift 4
-  for _arg in "$@"; do
-    if [[ ${_arg} == "--resolve" ]]; then
-      _resolve=1
-    else
-      [[ -z ${_dest_name} ]] || return 1
-      _dest_name="${_arg}"
+  local _unverified=0 _name _url="" _kind _member _dest_name=""
+  local _stamp _bin _tmp _src _stage="" _stamp_text _sha="" _shavar="" _pin_line
+  local _upper _forvar _verivar _arch="${_LINUX_ARCH:-}" _rc
+  local _args="$*"
+  if [[ ${1:-} == "--unverified" ]]; then
+    _unverified=1
+    shift
+    if ! [[ $# -ge 4 && $# -le 5 ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
     fi
-  done
+    _name="$1" _url="$2" _kind="$3" _member="$4" _dest_name="${5:-}"
+    if [[ -z ${_name} ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
+    case "${_name}" in
+      consul | vault | nomad | packer | vagrant) ;;
+      *)
+        log_warn "${_name}: --unverified is only for the HashiCorp tools"
+        return 1
+        ;;
+    esac
+    if [[ -z ${_url} ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
+  else
+    if ! [[ $# -ge 3 && $# -le 4 ]]; then
+      log_warn "_install_fetched_binary: bad arguments: ${_args}"
+      return 1
+    fi
+    _name="$1" _kind="$2" _member="$3" _dest_name="${4:-}"
+  fi
+  if [[ -z ${_name} ]] || ! [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]]; then
+    log_warn "_install_fetched_binary: bad arguments: ${_args}"
+    return 1
+  fi
   _dest_name="${_dest_name:-${_name}}"
+
+  if [[ ${_unverified} -eq 0 ]]; then
+    if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_URL:-} ]]; then
+      _url="${_FETCHED_URL}"
+    else
+      _url="$(_release_asset_url "${_name}" "${_arch}")"
+      _rc=$?
+      case "${_rc}" in
+        0) ;;
+        2)
+          log_warn "${_name}: unknown tool"
+          return 1
+          ;;
+        3)
+          log_warn "${_name}: no pin for arch '${_arch}'"
+          return 1
+          ;;
+        *) return 1 ;;
+      esac
+    fi
+    if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_SHA256:-} ]]; then
+      _shavar="_FETCHED_SHA256"
+      _sha="${_FETCHED_SHA256}"
+    else
+      _pin_line="$(_release_asset_sha "${_name}" "${_arch}")"
+      _rc=$?
+      case "${_rc}" in
+        0) ;;
+        2)
+          log_warn "${_name}: unknown tool"
+          return 1
+          ;;
+        3)
+          log_warn "${_name}: no pin for arch '${_arch}'"
+          return 1
+          ;;
+        *) return 1 ;;
+      esac
+      _shavar="${_pin_line%% *}"
+      _sha="${_pin_line#* }"
+      _upper="${_name^^}"
+      _forvar="${_upper}_SHA256_FOR_VER"
+      _verivar="${_upper}_VER"
+      if [[ ${!_forvar:-} != "${!_verivar:-}" ]]; then
+        log_warn "${_name}: repo constants are inconsistent: pins are for ${!_forvar:-}, ${_verivar} is ${!_verivar:-}; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh ${_name})"
+        return 1
+      fi
+    fi
+    if ! _sha256_pin_ok "${_sha}"; then
+      log_warn "${_name}: ${_shavar} is not a 64-hex sha256; refusing to download"
+      return 1
+    fi
+    _stamp_text="${_url} ${_sha}"
+  else
+    _stamp_text="${_url}"
+  fi
   _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_name}"
   _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
 
-  if [[ ${_resolve} -eq 1 ]]; then
-    _resolved="$(curl -fsSIL --proto-redir =https -o /dev/null -w '%{url_effective}' "${_url}")" || _resolved=""
-    # The resolved URL becomes the download target, so anything but https is
-    # a failed resolution even if curl was somehow told to follow it.
-    if [[ -z ${_resolved} || ${_resolved} != https://* || ${_resolved} == "${_url}" ]]; then
-      if [[ -f ${_stamp} && -x ${_bin} && -s ${_bin} ]]; then
-        log_warn "${_name}: could not resolve ${_url}; keeping installed copy"
-        return 0
-      fi
-      log_warn "${_name}: resolve failed"
-      return 1
-    fi
-    _url="${_resolved}"
-  fi
-
-  if [[ -f ${_stamp} && -x ${_bin} && "$(< "${_stamp}")" == "${_url}" ]]; then
+  if [[ -f ${_stamp} && -x ${_bin} && "$(< "${_stamp}")" == "${_stamp_text}" ]]; then
     printf '%s: up to date (stamp %s); rm it to force a re-install\n' "${_name}" "${_stamp}"
     return 0
   fi
@@ -1354,6 +1482,9 @@ _install_fetched_binary() {
 
   if ! wget -O "${_tmp}/dl" "${_url}"; then
     _stage="download"
+  elif [[ ${_unverified} -eq 0 ]] && ! _sha256_check "${_name}" "${_tmp}/dl" "${_shavar}" "${_sha}" "${_url}" \
+    "nothing installed, existing binary kept. Re-run; if it repeats at an unchanged version, upstream changed the asset: investigate before scripts/refresh-sha256-pins.sh --accept-changed ${_name}"; then
+    _stage="verify"
   elif [[ ${_kind} == "bin" ]]; then
     _src="${_tmp}/dl"
   else
@@ -1364,6 +1495,9 @@ _install_fetched_binary() {
       "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
     fi
     _src="${_tmp}/x/${_member}"
+  fi
+  if [[ -z ${_stage} && ${_unverified} -eq 0 ]]; then
+    printf '%s: sha256 verified\n' "${_name}"
   fi
   # -s alone passes a directory and follows a symlink to any non-empty file.
   if [[ -z ${_stage} ]] && ! [[ -f ${_src} && ! -L ${_src} && -s ${_src} ]]; then
@@ -1381,8 +1515,11 @@ _install_fetched_binary() {
     return 1
   fi
 
-  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${_url}" > "${_stamp}"; } 2> /dev/null; then
+  if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${_stamp_text}" > "${_stamp}"; } 2> /dev/null; then
     log_warn "${_name}: could not write stamp ${_stamp}; it will be re-installed next run"
+  fi
+  if [[ ${_unverified} -eq 1 ]]; then
+    printf '%s: not verified (pending HashiCorp apt, PR B)\n' "${_name}"
   fi
   return 0
 }
@@ -1662,8 +1799,8 @@ _install_pinned_release_binary() {
     return 1
   fi
 
-  if ! _verify_sha256 "${_artifact}" "${_sha256}"; then
-    log_error "${_name} sha256 mismatch — refusing to install"
+  if ! _sha256_check "${_name}" "${_artifact}" "pinned sha256" "${_sha256}" "${_url}" \
+    "refusing to install"; then
     rm -rf "${_tmp}"
     return 1
   fi
@@ -1850,19 +1987,13 @@ _install_ubuntu_tfenv() {
 }
 
 _install_ubuntu_misc() {
-  # rc 1 when docker-compose, yq, opentofu or the nala install failed; each is
+  # rc 1 when yq, opentofu or the nala install failed; each is
   # named in a warning and the rest are still attempted. dotnet, tflint, tfsec,
   # tfenv and nala autoremove are advisory.
   local _misc_rc=0
-  printf "Installing docker-compose Ubuntu\\n"
-  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || {
-    log_warn "misc: docker-compose: install failed"
-    _misc_rc=1
-  }
-
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing yq\\n"
-    _install_fetched_binary yq "${YQ_URL}" bin yq || {
+    _install_fetched_binary yq bin yq || {
       log_warn "misc: yq: install failed"
       _misc_rc=1
     }

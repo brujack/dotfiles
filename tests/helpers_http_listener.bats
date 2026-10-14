@@ -23,6 +23,26 @@ teardown() {
   grep -q 'X-Probe: p1' "${HTTP_LISTENER_HEADERS}"
 }
 
+@test "listener logs the request path and can serve a body file with a chosen status" {
+  printf '{"assets": []}' >"${BATS_TEST_TMPDIR}/body.json"
+  export HTTP_LISTENER_BODY_FILE="${BATS_TEST_TMPDIR}/body.json" HTTP_LISTENER_STATUS=403
+  start_http_listener "${BATS_TEST_TMPDIR}"
+  local code out
+  out=$(/usr/bin/env curl -s -o /dev/stdout -w '|%{http_code}' "${HTTP_LISTENER_URL}/repos/o/r/releases/tags/v1")
+  code="${out##*|}"
+  [ "${code}" = 403 ]
+  [ "${out%|*}" = '{"assets": []}' ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/o/r/releases/tags/v1" ]
+}
+
+@test "listener defaults to status 200 and the tag_name body when no option is set" {
+  unset HTTP_LISTENER_BODY_FILE HTTP_LISTENER_STATUS
+  start_http_listener "${BATS_TEST_TMPDIR}"
+  local out
+  out=$(/usr/bin/env curl -s -w '|%{http_code}' "${HTTP_LISTENER_URL}/x")
+  [ "${out}" = '{"tag_name": "v9.9.9"}|200' ]
+}
+
 @test "listener with no request exits on its own after the deadline" {
   HTTP_LISTENER_DEADLINE=1 start_http_listener "${BATS_TEST_TMPDIR}"
   # Positive control: it was alive right after start.

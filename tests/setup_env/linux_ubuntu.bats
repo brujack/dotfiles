@@ -1611,7 +1611,7 @@ EOF
   unset HAS_RUST
   run _install_ubuntu_rust
   [ "$status" -eq 0 ]
-  ! grep -q "rustup" "${MOCK_CALLS_FILE}"
+  run ! grep -q "rustup" "${MOCK_CALLS_FILE}"
 }
 
 # Renamed rather than re-asserted: the assertion (no sh.rustup.rs call) still holds,
@@ -1881,6 +1881,52 @@ exit 0'
   [[ "$output" == *"sha256 mismatch"* ]]
   # The positive control: the binary must not have run at all.
   refute_grep "SHOULD NOT RUN" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_rustup_rs: mismatch names the chosen variable, expected, actual and URL" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  # tests/mocks/curl writes MOCK_CURL_STDOUT (not the URL's content) to -o
+  export MOCK_CURL_STDOUT="payload"
+  local _actual
+  _actual="$(printf '%s' "${MOCK_CURL_STDOUT}" | sha256sum | awk '{print $1}')"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  export _RUSTUP_INIT_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
+  run --separate-stderr _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"rustup-init: sha256 mismatch: _RUSTUP_INIT_SHA256 expects 0000000000000000000000000000000000000000000000000000000000000000, download is ${_actual} from file://${_fixture}; refusing to execute"* ]]
+}
+
+@test "_install_rustup_rs: without the seam the label is the per-arch pin variable" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  unset _RUSTUP_INIT_SHA256
+  run --separate-stderr _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"sha256 mismatch: RUSTUP_INIT_SHA256_"* ]]
+}
+
+@test "_install_rustup_rs: verify rc 3 and rc 126 print their own message, not mismatch" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  local _rc
+  for _rc in 3 126; do
+    FAKE_VERIFY_RC="${_rc}"
+    _verify_sha256() { return "${FAKE_VERIFY_RC}"; }
+    run --separate-stderr _install_rustup_rs
+    [ "$status" -eq 1 ]
+    [[ "$stderr" != *mismatch* ]]
+    if [[ "${_rc}" -eq 3 ]]; then
+      [[ "$stderr" == *"rustup-init: could not read the download to verify it"* ]]
+    else
+      [[ "$stderr" == *"rustup-init: sha256 check could not run (rc 126)"* ]]
+    fi
+  done
 }
 
 @test "_install_rustup_rs: malformed pinned sha256 is refused before any download" {
@@ -2356,7 +2402,7 @@ _docker_fetch_ok() {
   unset HAS_DOCKER
   run _install_ubuntu_docker
   [ "$status" -eq 0 ]
-  ! grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_docker: HAS_DOCKER set installs docker-ce" {
@@ -2734,79 +2780,124 @@ _nvidia_seams() {
 
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
 
-# kind and telepresence go through _install_fetched_binary (a plain file as the
-# download); telepresence resolves its "latest" link first, so curl's stdout must
-# name a different URL. The same curl stdout is the kubectl key body.
+# Point a pinned tool's real pin variables at a fixture's own sha256 (both
+# arches) and its _FOR_VER at the current *_VER, so the caller-name to
+# pin-variable wiring runs for real. Never sets the installer's bats seams.
+_pin_fetched() {
+  local _t="$1" _s _v="${1}_VER"
+  _s="$(sha256sum "$2")"
+  _s="${_s%% *}"
+  export "${_t}_SHA256_AMD64=${_s}" "${_t}_SHA256_ARM64=${_s}" "${_t}_SHA256_FOR_VER=${!_v}"
+}
+
+# kind goes through _install_fetched_binary (a plain file as the download). The
+# curl stdout is the kubectl key body.
 _k8s_env() {
   export HAS_K8S=1
   export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.example/dl/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
-  export TELEPRESENCE_URL="https://tp.example/latest/telepresence"
   unset HAS_SNAP
-  export MOCK_CURL_STDOUT="https://resolved.example/telepresence-2.20"
   printf 'binary-body' > "${BATS_TEST_TMPDIR}/blob"
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob"
+  _pin_fetched KIND "${MOCK_WGET_FILE}"
+  KIND_URL_EXPECTED="$(_release_asset_url kind "${_LINUX_ARCH}")"
+  [ -n "${KIND_URL_EXPECTED}" ]
 }
 
-@test "_install_ubuntu_k8s_tools: clean run returns 0 and installs kind, telepresence and the kubectl source" {
+@test "_install_ubuntu_k8s_tools: clean run returns 0 and installs kind and the kubectl source" {
   _k8s_env
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   [ -x "${_DL_BIN_DIR}/kind" ]
-  [ -x "${_DL_BIN_DIR}/telepresence" ]
   [ -f "${_DL_STAMP_DIR}/kind" ]
   [ -s "${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" ]
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/kubernetes-apt-keyring.gpg" "${_APT_SOURCES_DIR}/kubernetes.list"
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: kind is fetched from the builder URL and verified against its pin" {
+  _k8s_env
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  grep -qE "^wget -O .* ${KIND_URL_EXPECTED}$" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"kind: sha256 verified"* ]]
+  [ "$(cat "${_DL_STAMP_DIR}/kind")" = "${KIND_URL_EXPECTED} ${KIND_SHA256_AMD64}" ]
+}
+
+# Distinct per-arch pins: only the pin for the running arch matches the fixture.
+@test "_install_ubuntu_k8s_tools: kind on arm64 installs with its own pin" {
+  export _LINUX_ARCH=arm64
+  _k8s_env
+  local _good="${KIND_SHA256_ARM64}"
+  export KIND_SHA256_AMD64
+  KIND_SHA256_AMD64="$(printf 'a%.0s' {1..64})"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  [[ "${KIND_URL_EXPECTED}" == *"kind-linux-arm64" ]]
+  grep -qE "^wget -O .* ${KIND_URL_EXPECTED}$" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_STAMP_DIR}/kind")" = "${KIND_URL_EXPECTED} ${_good}" ]
+}
+
+@test "_install_ubuntu_k8s_tools: kind on arm64 fails when the arm64 and amd64 pins are swapped" {
+  export _LINUX_ARCH=arm64
+  _k8s_env
+  local _good="${KIND_SHA256_ARM64}" _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  export KIND_SHA256_AMD64="${_good}" KIND_SHA256_ARM64="${_bad}"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kind: sha256 mismatch: KIND_SHA256_ARM64 expects ${_bad}"* ]]
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
+  [ ! -e "${_DL_STAMP_DIR}/kind" ]
+  # Positive control: the download was attempted and the step went on to kubectl.
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: kind on amd64 fails when the pins are swapped" {
+  export _LINUX_ARCH=amd64
+  _k8s_env
+  local _good="${KIND_SHA256_AMD64}" _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  export KIND_SHA256_AMD64="${_bad}" KIND_SHA256_ARM64="${_good}"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kind: sha256 mismatch: KIND_SHA256_AMD64 expects ${_bad}"* ]]
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
+}
+
 @test "_install_ubuntu_k8s_tools: a stamped, installed kind is not fetched again" {
   _k8s_env
   mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${KIND_URL}" > "${_DL_STAMP_DIR}/kind"
+  printf '%s %s\n' "${KIND_URL_EXPECTED}" "${KIND_SHA256_AMD64}" > "${_DL_STAMP_DIR}/kind"
   printf 'old' > "${_DL_BIN_DIR}/kind"
   chmod 0755 "${_DL_BIN_DIR}/kind"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   [[ "$output" == *"kind: up to date"* ]]
-  refute_grep "wget .*kind.example" "${MOCK_CALLS_FILE}"
-  grep -q "wget .*resolved.example" "${MOCK_CALLS_FILE}"
+  refute_grep "wget .*kind-linux" "${MOCK_CALLS_FILE}"
+  # Positive control: the step ran and reached kubectl.
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind and leaves telepresence installed" {
+@test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind" {
   _k8s_env
-  export MOCK_WGET_FAIL_URL="kind.example"
+  export MOCK_WGET_FAIL_URL="kind-linux"
   printf 'old' > "${_DL_BIN_DIR}/kind"
   chmod 0755 "${_DL_BIN_DIR}/kind"
   run --separate-stderr _install_ubuntu_k8s_tools
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"k8s_tools: kind:"* ]]
   # Positive control: the kind fetch was really attempted.
-  grep -q "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DL_BIN_DIR}/kind")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/kind" ]
   [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
-  # Sibling still ran.
-  [ -x "${_DL_BIN_DIR}/telepresence" ]
-  [ -f "${_DL_STAMP_DIR}/telepresence" ]
+  # A kind failure must not stop the step: kubectl still installs.
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_k8s_tools: a failed telepresence resolve returns 1, names telepresence and leaves kind installed" {
-  _k8s_env
-  export MOCK_CURL_FAIL_URL="tp.example"
-  run --separate-stderr _install_ubuntu_k8s_tools
-  [ "$status" -eq 1 ]
-  [[ "$stderr" == *"k8s_tools: telepresence:"* ]]
-  # Positive control: the resolve was really attempted.
-  grep -q "curl .*tp.example" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_DL_BIN_DIR}/telepresence" ]
-  [ ! -e "${_DL_STAMP_DIR}/telepresence" ]
-  [ -x "${_DL_BIN_DIR}/kind" ]
-  [ -f "${_DL_STAMP_DIR}/kind" ]
-}
-
-@test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind and telepresence" {
+@test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind" {
   _k8s_env
   unset HAS_K8S
   run _install_ubuntu_k8s_tools
@@ -2959,6 +3050,17 @@ _hc_env() {
   grep -q "wget.*consul" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_hashicorp: all five tools install through the unverified form with the not-verified line" {
+  _hc_env
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    [[ "$output" == *"${_t}: not verified (pending HashiCorp apt, PR B)"* ]]
+    [ -x "${_DL_BIN_DIR}/${_t}" ]
+  done
+}
+
 @test "_install_ubuntu_hashicorp: a stamped, installed consul is not fetched again" {
   _hc_env
   mkdir -p "${_DL_STAMP_DIR}"
@@ -3014,32 +3116,30 @@ _hc_env() {
   grep -q "vagrant.*amd64" "${MOCK_CALLS_FILE}"
 }
 
-# ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
-
-# cf-terraforming arrives as a tarball holding the binary; _install_fetched_binary
-# fetches it through the wget mock, which copies MOCK_WGET_FILE to the -O target.
-_cf_tarball() {
-  mkdir -p "${BATS_TEST_TMPDIR}/cfsrc"
-  printf 'cf-body' > "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
-  chmod 0755 "${BATS_TEST_TMPDIR}/cfsrc/cf-terraforming"
-  "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/cf.tgz" -C "${BATS_TEST_TMPDIR}/cfsrc" cf-terraforming
-  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz"
+# telepresence, cf-terraforming and docker-compose are retired (R6): docker compose
+# comes from docker-compose-plugin and the other two have no caller. kind and yq
+# are the positive control that the three steps really fetched something.
+@test "retired tools: k8s, cloud_tools and misc steps never fetch telepresence, cf-terraforming or docker-compose" {
+  _k8s_env
+  _cloud_env
+  _misc_env
+  run _install_ubuntu_k8s_tools
+  run _install_ubuntu_cloud_tools
+  run _install_ubuntu_misc
+  grep -q "^wget .*kind" "${MOCK_CALLS_FILE}"
+  grep -q "^wget .*yq" "${MOCK_CALLS_FILE}"
+  refute_grep "^wget .*(telepresence|cf-terraforming|docker-compose)" "${MOCK_CALLS_FILE}" -E
+  refute_grep "telepresence|cf-terraforming" "${MOCK_CALLS_FILE}" -E
 }
 
-# HAS_DEVTOOLS cloud_tools run with a good cf-terraforming tarball and a URL
-# naming its version; everything else is seamed by setup().
+# ── _install_ubuntu_cloud_tools ──────────────────────────────────────────────
+
 _cloud_env() {
   export HAS_DEVTOOLS=1
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://cf.example/dl/cf-terraforming_0.13.0_linux_amd64.tar.gz"
   unset RESOLUTE
-  _cf_tarball
 }
 
 @test "_install_ubuntu_cloud_tools: installs google-cloud-cli packages, not retired google-cloud-sdk names" {
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  _cf_tarball
   unset HAS_DEVTOOLS
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -3050,9 +3150,6 @@ _cloud_env() {
 
 @test "_install_ubuntu_cloud_tools: HAS_DEVTOOLS installs teleport" {
   export HAS_DEVTOOLS=1
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -3060,31 +3157,14 @@ _cloud_env() {
 
 @test "_install_ubuntu_cloud_tools: no HAS_DEVTOOLS skips teleport" {
   unset HAS_DEVTOOLS
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  _cf_tarball
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_cloud_tools: cf-terraforming filename uses _LINUX_ARCH" {
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_arm64.tar.gz"
-  _cf_tarball
-  export _LINUX_ARCH="arm64"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  grep -q "cf-terraforming.*arm64" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for cloudflare repo" {
   export RESOLUTE=1
   export HAS_DEVTOOLS=1
-  export CF_TERRAFORMING_VER="0.27.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.27.0/cf-terraforming_0.27.0_linux_amd64.tar.gz"
-  _cf_tarball
   export _CF_SOURCES_LIST="${BATS_TEST_TMPDIR}/cloudflare.list"
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
@@ -3093,16 +3173,13 @@ _cloud_env() {
   [ "$status" -ne 0 ]
 }
 
-@test "_install_ubuntu_cloud_tools: clean run returns 0, writes the source lists and installs cf-terraforming" {
+@test "_install_ubuntu_cloud_tools: clean run returns 0, writes the source lists" {
   _cloud_env
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" "${_APT_SOURCES_DIR}/teleport.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloudflare-warp-archive-keyring.gpg" "${_APT_SOURCES_DIR}/cloudflare-client.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloud.google.gpg" "${_APT_SOURCES_DIR}/google-cloud-sdk.list"
-  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "cf-body" ]
-  [ "$(cat "${_DL_STAMP_DIR}/cf-terraforming")" = "${CF_TERRAFORMING_URL}" ]
-  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
 }
 
 @test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with no keyring returns 1, writes no list, and the siblings still run" {
@@ -3117,7 +3194,6 @@ _cloud_env() {
   grep -q "curl .*deb.releases.teleport.dev" "${MOCK_CALLS_FILE}"
   [ -s "${_APT_SOURCES_DIR}/cloudflare-client.list" ]
   [ -s "${_APT_SOURCES_DIR}/google-cloud-sdk.list" ]
-  [ -x "${_DL_BIN_DIR}/cf-terraforming" ]
 }
 
 @test "_install_ubuntu_cloud_tools: a failed cloudflared apt install returns 1 and gcloud is still attempted" {
@@ -3137,22 +3213,6 @@ _cloud_env() {
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli install failed"* ]]
   grep -q "apt install google-cloud-cli-app-engine-go" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_cloud_tools: a failed cf-terraforming download returns 1 and leaves the destination, stamp and workdir alone" {
-  _cloud_env
-  printf 'old' > "${_DL_BIN_DIR}/cf-terraforming"
-  chmod 0755 "${_DL_BIN_DIR}/cf-terraforming"
-  export MOCK_WGET_FAIL_URL="cf-terraforming"
-  run --separate-stderr _install_ubuntu_cloud_tools
-  [ "$status" -eq 1 ]
-  [[ "$stderr" == *"cloud_tools: cf-terraforming: install failed"* ]]
-  grep -q "wget .*cf-terraforming" "${MOCK_CALLS_FILE}"
-  [ "$(cat "${_DL_BIN_DIR}/cf-terraforming")" = "old" ]
-  [ ! -e "${_DL_STAMP_DIR}/cf-terraforming" ]
-  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
-  # The earlier tools were not held up by it.
-  [ -s "${_APT_SOURCES_DIR}/teleport.list" ]
 }
 
 @test "_install_ubuntu_cloud_tools: a failed teleport apt install returns 1" {
@@ -3226,9 +3286,6 @@ _cloud_keyring_failure() {
 # ── azure-cli via linuxbrew ──────────────────────────────────────────────────
 
 _az_cloud_env() {
-  export CF_TERRAFORMING_VER="0.13.0"
-  export CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v0.13.0/cf-terraforming_0.13.0_linux_amd64.tar.gz"
-  _cf_tarball
   unset HAS_DEVTOOLS
 }
 
@@ -3402,7 +3459,7 @@ _az_cloud_env() {
   unset HAS_DEVTOOLS
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  ! grep -q "brew install ggshield" "${MOCK_CALLS_FILE}"
+  run ! grep -q "brew install ggshield" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_brew_packages: calls install_homebrew when brew is absent" {
@@ -3437,7 +3494,7 @@ _az_cloud_env() {
   unset HAS_DEVTOOLS HAS_SNAP
   run _install_ubuntu_gui_tools
   [ "$status" -eq 0 ]
-  ! grep -q "apt install virtualbox" "${MOCK_CALLS_FILE}"
+  run ! grep -q "apt install virtualbox" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_gui_tools: HAS_SNAP installs albert" {
@@ -3902,42 +3959,22 @@ _gui_env() {
 
 # ── _install_ubuntu_misc ─────────────────────────────────────────────────────
 
-@test "_install_ubuntu_misc: calls wget for docker-compose when file does not exist" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
+@test "_install_ubuntu_misc: a yq fetch failure is named misc: yq and returns 1" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_misc
-  [ "$status" -eq 0 ]
-  grep -q "wget.*docker-compose" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_misc: a docker-compose fetch failure is named misc: docker-compose and returns 1" {
-  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
-  export YQ_URL="https://example.invalid/yq"
-  export MOCK_WGET_FAIL_URL="${DOCKER_COMPOSE_URL}"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_misc
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"misc: docker-compose: install failed"* ]]
-}
-
-@test "_install_ubuntu_misc: a yq fetch failure is named misc: yq and returns 1, docker-compose unaffected" {
-  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
-  export YQ_URL="https://example.invalid/yq"
-  export MOCK_WGET_FAIL_URL="${YQ_URL}"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
+  export MOCK_WGET_FAIL_URL="yq_linux_"
   export HAS_DEVTOOLS=1
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
   run _install_ubuntu_misc
   [ "$status" -eq 1 ]
+  [[ "$output" == *"yq: download failed"* ]]
   [[ "$output" == *"misc: yq: install failed"* ]]
-  [[ "$output" != *"misc: docker-compose:"* ]]
-  [ -x "${_DL_BIN_DIR}/docker-compose" ]
+  grep -qF -- " ${_yq_url}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: a failing nala install is named, returns 1 and autoremove is still attempted" {
-  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
-  export YQ_URL="https://example.invalid/yq"
   unset HAS_DEVTOOLS
   check_and_install_nala() { return 1; }
   run _install_ubuntu_misc
@@ -3947,8 +3984,6 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: a successful nala install logs no nala failure" {
-  export DOCKER_COMPOSE_URL="https://example.invalid/docker-compose"
-  export YQ_URL="https://example.invalid/yq"
   unset HAS_DEVTOOLS
   check_and_install_nala() { return 0; }
   run _install_ubuntu_misc
@@ -3957,10 +3992,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   local _stub_dir _stdin="${BATS_TEST_TMPDIR}/caller_stdin"
   _stub_dir="$(stdin_probe_stub_path nala)"
@@ -3971,10 +4004,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: nala autoremove sees DEBIAN_FRONTEND=noninteractive" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS DEBIAN_FRONTEND
   local _stub_dir
   _stub_dir="$(frontend_probe_stub_path nala)"
@@ -3983,30 +4014,10 @@ _gui_env() {
   grep -qE '^frontend: nala autoremove .* DEBIAN_FRONTEND=noninteractive$' "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_misc: skips docker-compose wget when file already exists" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
-  export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
-  # Idempotency is the stamp (URL) plus an executable destination, not a file
-  # left in ~/software_downloads.
-  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
-  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${DOCKER_COMPOSE_URL}" > "${_DL_STAMP_DIR}/docker-compose"
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_misc
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"docker-compose: up to date"* ]]
-  ! grep -qF "wget -O" "${MOCK_CALLS_FILE}"
-}
-
 @test "_install_ubuntu_misc: HAS_DEVTOOLS installs yq" {
   export HAS_DEVTOOLS=1
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   # Stubbed: _install_pinned_release_binary has its own coverage in
   # release_binary.bats; without this, HAS_DEVTOOLS=1 here would also reach
   # tflint/tfsec's real curl+sha256sum path.
@@ -4015,26 +4026,28 @@ _gui_env() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -qE "wget -O .* ${YQ_URL}$" "${MOCK_CALLS_FILE}"
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
+  grep -qE "wget -O .* ${_yq_url}$" "${MOCK_CALLS_FILE}"
   [ -x "${_DL_BIN_DIR}/yq" ]
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
   unset HAS_DEVTOOLS
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -qF "${YQ_URL}" "${MOCK_CALLS_FILE}"
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
+  ! grep -qF "${_yq_url}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: calls nala autoremove" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
@@ -4042,10 +4055,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: does not pip install glances" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   run grep "pip.*glances" "${MOCK_CALLS_FILE}"
@@ -4053,10 +4064,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: HAS_DEVTOOLS attempts dotnet-sdk-10.0 install" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
@@ -4071,10 +4080,8 @@ _gui_env() {
   # resolute 10.0.112-0ubuntu1~26.04.1, measured 2026-09-13 -- so this guard is
   # no longer covering a known-missing package. It stays for the next release
   # that drops it, which is how 8.0 failed on resolute in the first place.
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # Fail dotnet only. A blanket MOCK_APT_EXIT also failed the opentofu install,
   # which runs only on a host without tofu, so the test passed or failed by host.
@@ -4091,10 +4098,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: opentofu absent installs via apt (not piped sh)" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -4115,10 +4120,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: opentofu apt setup adds GPG key" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -4132,10 +4135,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: opentofu creates /etc/apt/keyrings before GPG import" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -4149,10 +4150,8 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: opentofu already present skips install" {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # Mock tofu present on PATH and no force flag — install branch must be skipped
   # regardless of whether the host actually has tofu.
@@ -4172,10 +4171,8 @@ _gui_env() {
 # HAS_DEVTOOLS misc with seamed fetch targets. The dotnet/tflint/tfsec/tfenv
 # members are stubbed: they are advisory and have their own coverage.
 _misc_env() {
-  export DOCKER_COMPOSE_VER="2.24.0"
-  export DOCKER_COMPOSE_URL="https://dc.example/dl/docker-compose-linux-x86_64"
   export YQ_VER="4.40.5"
-  export YQ_URL="https://yq.example/dl/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_shellcheck() { :; }
@@ -4184,51 +4181,35 @@ _misc_env() {
   _install_ubuntu_tfenv() { :; }
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fetched-body"
   printf 'body' > "${MOCK_WGET_FILE}"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
+  YQ_URL_EXPECTED="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${YQ_URL_EXPECTED}" ]
 }
 
-@test "_install_ubuntu_misc: a clean run installs both binaries, stamps them, and returns 0" {
+@test "_install_ubuntu_misc: a clean run installs yq and opentofu, stamps yq, and returns 0" {
   _misc_env
   run --separate-stderr _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  [ -x "${_DL_BIN_DIR}/docker-compose" ]
   [ -x "${_DL_BIN_DIR}/yq" ]
-  [ "$(cat "${_DL_STAMP_DIR}/docker-compose")" = "${DOCKER_COMPOSE_URL}" ]
-  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL}" ]
+  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL_EXPECTED} ${YQ_SHA256_AMD64}" ]
   [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
   grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
   [[ "$stderr" != *"misc:"* ]]
 }
 
-@test "_install_ubuntu_misc: a failed docker-compose download returns 1 and leaves destination, stamp and workdir alone; yq still installs" {
-  _misc_env
-  printf 'old' > "${_DL_BIN_DIR}/docker-compose"
-  chmod 0755 "${_DL_BIN_DIR}/docker-compose"
-  export MOCK_WGET_FAIL_URL="docker-compose"
-  run --separate-stderr _install_ubuntu_misc
-  [ "$status" -eq 1 ]
-  [[ "$stderr" == *"docker-compose: download failed"* ]]
-  grep -q "wget .*docker-compose" "${MOCK_CALLS_FILE}"
-  [ "$(cat "${_DL_BIN_DIR}/docker-compose")" = "old" ]
-  [ ! -e "${_DL_STAMP_DIR}/docker-compose" ]
-  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
-  # Positive control: the sibling was not held up.
-  [ -x "${_DL_BIN_DIR}/yq" ]
-  [ -s "${_DL_STAMP_DIR}/yq" ]
-}
-
-@test "_install_ubuntu_misc: a failed yq download returns 1 and docker-compose still installs" {
+@test "_install_ubuntu_misc: a failed yq download returns 1 and opentofu still installs" {
   _misc_env
   printf 'old' > "${_DL_BIN_DIR}/yq"
   chmod 0755 "${_DL_BIN_DIR}/yq"
-  export MOCK_WGET_FAIL_URL="yq.example"
+  export MOCK_WGET_FAIL_URL="yq_linux_"
   run --separate-stderr _install_ubuntu_misc
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"yq: download failed"* ]]
-  grep -q "wget .*yq.example" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DL_BIN_DIR}/yq")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/yq" ]
-  [ -x "${_DL_BIN_DIR}/docker-compose" ]
-  [ -s "${_DL_STAMP_DIR}/docker-compose" ]
+  # A yq failure must not stop the step: opentofu still installs.
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: a failed opentofu keyring fetch with no keyring returns 1, writes no list, and skips with a warning" {
@@ -4771,7 +4752,7 @@ _albert_assert_last_good_untouched() {
 # ── install_ubuntu_packages: clean run, every step real ──────────────────────
 
 # wget shim that hands back the right fixture per URL: the Go tarball, the
-# HashiCorp zip, the cf-terraforming tarball, or a plain body. tests/mocks/wget
+# HashiCorp zip, or a plain body. tests/mocks/wget
 # serves one MOCK_WGET_FILE for every call, which cannot satisfy a dispatcher run.
 _dispatch_wget_shim() {
   cat > "${SHIM_DIR}/wget" << SHIM
@@ -4779,7 +4760,6 @@ _dispatch_wget_shim() {
 case "\$*" in
   *"${GO_DOWNLOAD_URL}"*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz" ;;
   *releases.hashicorp.com*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip" ;;
-  *cf-terraforming*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/cf.tgz" ;;
   *) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob" ;;
 esac
 exec "${REPO_ROOT}/tests/mocks/wget" "\$@"
@@ -4802,32 +4782,21 @@ SHIM
   _cloud_env
   _misc_env
   _k8s_env
+  # The dispatcher serves blob for kind and yq alike.
+  _pin_fetched YQ "${BATS_TEST_TMPDIR}/blob"
   _gui_env
   _docker_fetch_ok
   _go_stub 1.27.1
   _PWSH_BIN="$(_pwsh_stub_bin 0)"
   export _PWSH_BIN
   # The albert key is the one fixture with a pinned fingerprint, so it is the curl
-  # body for every fetch; it is also the "resolved" telepresence URL (!= its link).
+  # body for every fetch.
   _albert_good_key
-  # _make_go_tarball and _cf_tarball write go.tgz and cf.tgz where the shim reads them;
+  # _make_go_tarball writes go.tgz where the shim reads it;
   # _hc_env wrote hc.zip and _k8s_env wrote blob.
   _make_go_tarball
-  _cf_tarball
   [ -s "${BATS_TEST_TMPDIR}/hc.zip" ] && [ -s "${BATS_TEST_TMPDIR}/blob" ]
   _dispatch_wget_shim
-  # --resolve's curl asks for %{url_effective}, which must be an https URL
-  # different from the link; every other curl (key fetches) keeps the key body.
-  cat > "${SHIM_DIR}/curl" << SHIM
-#!/usr/bin/env bash
-if [[ "\$*" == *'%{url_effective}'* ]]; then
-  printf 'curl %s\\n' "\$*" >> "\${MOCK_CALLS_FILE}"
-  printf 'https://example.invalid/telepresence-resolved'
-  exit 0
-fi
-exec "${REPO_ROOT}/tests/mocks/curl" "\$@"
-SHIM
-  /bin/chmod +x "${SHIM_DIR}/curl"
 
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 0 ]
@@ -4842,12 +4811,8 @@ SHIM
   for _t in consul vault nomad packer vagrant; do
     grep -q "^wget .*releases.hashicorp.com/${_t}/" "${MOCK_CALLS_FILE}"
   done
-  grep -q "^wget .*${KIND_URL}" "${MOCK_CALLS_FILE}"
-  grep -q "^wget .*${CF_TERRAFORMING_URL}" "${MOCK_CALLS_FILE}"
-  grep -q "^wget .*${DOCKER_COMPOSE_URL}" "${MOCK_CALLS_FILE}"
-  grep -q "^wget .*${YQ_URL}" "${MOCK_CALLS_FILE}"
-  # Its wget URL is the resolved one (the key body here), so assert on the stamp.
-  [ -s "${_DL_STAMP_DIR}/telepresence" ]
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
   grep -q "apt-get install.* cloudflare-warp" "${MOCK_CALLS_FILE}"
   grep -q "apt install google-cloud-cli" "${MOCK_CALLS_FILE}"
@@ -4865,7 +4830,8 @@ SHIM
   _after="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
   # Go is stamped too, so the only wget the second run may add is none.
   [ "${_after}" -eq "${_before}" ]
-  for _t in go consul vault nomad packer vagrant kind telepresence cf-terraforming docker-compose yq; do
+  local _t
+  for _t in go consul vault nomad packer vagrant kind yq; do
     [[ "$output$stderr" == *"${_t}: up to date (stamp"* ]]
   done
 }

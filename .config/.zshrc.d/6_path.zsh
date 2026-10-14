@@ -105,8 +105,8 @@ fi
 # every login shell and its descendants. The actor that loses it is a
 # non-interactive login shell (`zsh -l -c`); cron, launchd and
 # `ssh host '<cmd>'` read neither file, so they never had it. Nothing in this
-# repo invokes any of the four that way -- lib/linux_ubuntu.sh's docker-compose
-# callers are Linux install paths that never see ~/.docker/bin -- so the
+# repo invokes any of the four that way -- lib/linux_ubuntu.sh's install paths
+# are Linux and never see ~/.docker/bin -- so the
 # narrowing costs nothing here. It is the same mechanism that makes brew
 # unreachable to a non-interactive setup_env.sh on the workstation.
 #

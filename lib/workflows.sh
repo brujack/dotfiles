@@ -1556,6 +1556,42 @@ _check_one_version() {
   fi
 }
 
+# _check_one_pinned_release <tool> <pinned> <repo> -- compares the PIN with the
+# latest GitHub release and never runs the installed binary, so Linux and macOS
+# give the same answer for tools whose version is pinned in lib/constants.sh.
+_check_one_pinned_release() {
+  local _tool="$1" _pinned="$2" _repo="$3"
+
+  local _latest
+  _latest=$(_fetch_github_latest "${_repo}")
+  if [[ -z "${_latest}" ]]; then
+    printf "  [WARN]     %-12s could not fetch latest version\n" "${_tool}"
+    return 0
+  fi
+  _latest="${_latest#"${_latest%%[0-9]*}"}"
+
+  if [[ ! "${_latest}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    printf "  [WARN]     %-12s could not parse latest version\n" "${_tool}"
+    return 0
+  fi
+
+  # Only a NEWER latest is OUTDATED: a pin ahead of latest must not offer a downgrade.
+  case "$(_semver_cmp "${_pinned}" "${_latest}")" in
+    -1)
+      printf "  [OUTDATED] %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+      return 1
+      ;;
+    0)
+      printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+      ;;
+    *)
+      printf "  [WARN]     %-12s pinned=%-10s latest=%s  (pin is newer than latest)\n" \
+        "${_tool}" "${_pinned}" "${_latest}"
+      ;;
+  esac
+  return 0
+}
+
 _update_url_pins() {
   local _tool="$1" _old="$2" _new="$3" _constants="$4"
 
@@ -1574,15 +1610,8 @@ _update_url_pins() {
         rm -f "${_constants}.bak"
       fi
       ;;
-    yq)
-      # YQ_URL may contain a literal version or a ${YQ_VER} variable reference — update both
-      # shellcheck disable=SC2016 # single-quoted ${YQ_VER} is intentional — matches literal text in constants.sh
-      sed -i.bak -e "s|/v${_old}/|/v${_new}/|g" \
-                 -e 's|/v\${YQ_VER}/|/v'"${_new}"'/|g' "${_constants}"
-      rm -f "${_constants}.bak"
-      ;;
     *)
-      # vagrant, python3, ruby, zsh, shellcheck — no URL vars to update
+      # every other tool: no URL vars to update
       ;;
   esac
 }
@@ -1595,9 +1624,84 @@ _update_version_pin() {
   _update_url_pins "${_tool}" "${_old}" "${_new}" "${_constants}"
 }
 
+# _refresh_pins_bin -- the refresher to run. The override is a bats-only seam;
+# the default hangs off DOTFILES_REPO_ROOT, resolved once at source time, because
+# a call-time relative BASH_SOURCE answers about the caller's cwd.
+_refresh_pins_bin() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_OVERRIDE_REFRESH_PINS:-} ]]; then
+    printf '%s\n' "${_OVERRIDE_REFRESH_PINS}"
+    return 0
+  fi
+  printf '%s\n' "${DOTFILES_REPO_ROOT}/scripts/refresh-sha256-pins.sh"
+}
+
+# _release_pin_constants_path -- the constants file the release-pin writer edits.
+# Hangs off DOTFILES_REPO_ROOT (resolved once at source time) for the same reason
+# as _refresh_pins_bin.
+_release_pin_constants_path() {
+  printf '%s\n' "${_OVERRIDE_CONSTANTS_PATH:-${DOTFILES_REPO_ROOT}/lib/constants.sh}"
+}
+
+# _update_release_pin <tool> <var> <latest> -- moves a kind/yq version pin and
+# its sha256 pins together. Works on a same-directory temp copy and renames it
+# over lib/constants.sh only when the version edit and the refresh both
+# succeed, so any failure leaves the file byte-identical. Each failure names
+# its own step. A crash between mktemp and mv can leave lib/.constants.*
+# behind (lib/ cannot trap); .gitignore covers it.
+_update_release_pin() {
+  local _tool="$1" _var="$2" _latest="$3"
+  local _constants
+  _constants="$(_release_pin_constants_path)"
+  local _refresh
+  _refresh="$(_refresh_pins_bin)"
+
+  if [[ ! "${_latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf "  %s: refusing pin update: latest version \"%s\" is not X.Y.Z\n" "${_tool}" "${_latest}"
+    return 1
+  fi
+  if [[ -L "${_constants}" ]]; then
+    printf "  %s: refusing pin update: %s is a symlink\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+
+  local _tmp
+  if ! _tmp=$(mktemp "$(dirname "${_constants}")/.constants.XXXXXXXX"); then
+    printf "  %s: refusing pin update: cannot create a temp file beside %s\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+  if ! { cp -p "${_constants}" "${_tmp}" \
+    && sed -i.bak "s|^${_var}=\"[^\"]*\"|${_var}=\"${_latest}\"|" "${_tmp}" \
+    && rm -f "${_tmp}.bak" \
+    && grep -Fqx "${_var}=\"${_latest}\"" "${_tmp}"; }; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  %s: refusing pin update: could not write %s in %s\n" "${_tool}" "${_var}" "${_tmp}"
+    return 1
+  fi
+  if ! "${_refresh}" --constants "${_tmp}" "${_tool}"; then
+    rm -f "${_tmp}"
+    printf "  %s: refusing pin update: could not refresh sha256 pins\n" "${_tool}"
+    return 1
+  fi
+  if ! mv -f "${_tmp}" "${_constants}"; then
+    rm -f "${_tmp}"
+    printf "  %s: refusing pin update: could not replace %s\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+  printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+  printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
+    "${_tool}" "${_latest}"
+}
+
 _prompt_version_update() {
   local _tool="$1" _var="$2" _pinned="$3" _latest="$4"
   local _reply
+  # NOTE: the shellcheck pin cannot be bumped from here: its pins also live in three places in
+  # ci.yml, which this tool does not edit. Say so before any prompt.
+  if [[ "${_tool}" == "shellcheck" ]]; then
+    printf '  shellcheck: bump by hand: SHELLCHECK_VER, scripts/refresh-sha256-pins.sh shellcheck, and the three SC_VER/SC_SHA256 sites in .github/workflows/ci.yml (darwin hash: gh api repos/koalaman/shellcheck/releases/tags/v<ver> --jq %s; the two linux SC_SHA256 values are SHELLCHECK_SHA256_AMD64 after the refresh)\n' \
+      "'.assets[]|select(.name|test(\"darwin.aarch64.tar.xz\"))|.digest|ltrimstr(\"sha256:\")'"
+    return 0
+  fi
   printf "  Update %s from %s to %s? [y/N] " "${_tool}" "${_pinned}" "${_latest}"
   read -r _reply
   if [[ "${_reply}" =~ ^[Yy]$ ]]; then
@@ -1609,6 +1713,9 @@ _prompt_version_update() {
       python3)
         _update_python_pin "${_pinned}" "${_latest}" || return 1
         printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+        ;;
+      kind|yq)
+        _update_release_pin "${_tool}" "${_var}" "${_latest}" || return 1
         ;;
       *)
         _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
@@ -1795,7 +1902,6 @@ run_check_versions() {
   printf "=== Version Check ===\n\n"
 
   if [[ -n ${GITHUB_TOKEN:-} ]] && ! _github_auth_header "${GITHUB_TOKEN}" >/dev/null 2>&1; then
-    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the 5 checks that send it were not run; fix the variable\n"
     _token_refused=1
   fi
 
@@ -1823,6 +1929,13 @@ run_check_versions() {
       "$(_check_one_version "${_tool}" "${_pinned}" "${_repo}" "${_cmd}" "${_regex}" 2>&1)"
   }
 
+  _run_cv_pinned_release() {
+    local _tool="$1" _pinned="$2" _repo="$3" _var="$4"
+    if [[ ${_token_refused} -eq 1 ]]; then _unchecked=$(( _unchecked + 1 )); return 0; fi
+    _tally_cv_out "${_tool}" "${_pinned}" "${_var}" \
+      "$(_check_one_pinned_release "${_tool}" "${_pinned}" "${_repo}" 2>&1)"
+  }
+
   _run_cv_pin_check() {
     _tally_cv_out "$1" "$2" "$3" "$(_check_one_pin_version "$1" "$2" 2>&1)"
   }
@@ -1839,10 +1952,11 @@ run_check_versions() {
   # to prefix-match every installed zsh (5.9), while this check wants upstream
   # latest (5.9.2), and one constant cannot be both. doctor still floors the
   # version, and _doctor_check_tools still checks zsh is present at all.
-  _run_cv_check "yq"         "${YQ_VER}"          "mikefarah/yq"        "yq --version"         "[0-9]+\.[0-9]+\.[0-9]+"    "YQ_VER"
-  _run_cv_check "shellcheck" "${SHELLCHECK_VER}"  "koalaman/shellcheck" "shellcheck --version" "[0-9]+\.[0-9]+\.[0-9]+"    "SHELLCHECK_VER"
+  _run_cv_pinned_release "yq"         "${YQ_VER}"         "mikefarah/yq"        "YQ_VER"
+  _run_cv_pinned_release "shellcheck" "${SHELLCHECK_VER}" "koalaman/shellcheck" "SHELLCHECK_VER"
   _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"
   _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
+  _run_cv_pinned_release "kind"       "${KIND_VER}"       "kubernetes-sigs/kind" "KIND_VER"
   _check_cv_homebrew_install
 
   local _cargo_pin _cargo_crate _cargo_version _cargo_out
@@ -1857,13 +1971,17 @@ run_check_versions() {
     fi
   done
 
+  if [[ ${_token_refused} -eq 1 ]]; then
+    printf "  [WARN]     GITHUB_TOKEN contains a line break -- the %d checks that send it were not run; fix the variable\n" "${_unchecked}"
+  fi
+
   printf "\n%d outdated, %d skipped, %d warnings, %d OK" \
     "${_outdated}" "${_skipped}" "${_warned}" "${_ok}"
   [[ ${_unchecked} -gt 0 ]] && printf ", %d not checked" "${_unchecked}"
   printf "\n"
 
   # A refused token outranks "outdated" (rc 1): the caller cannot act on a
-  # version verdict that skipped five of its inputs.
+  # version verdict that skipped some of its inputs.
   [[ ${_token_refused} -eq 1 ]] && return 2
   [[ ${_outdated} -eq 0 ]]
 }

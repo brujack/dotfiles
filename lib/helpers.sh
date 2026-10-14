@@ -34,6 +34,29 @@ _verify_sha256() {
   printf '%s  %s\n' "${_sha}" "${_file}" | sha256sum -c - > /dev/null 2>&1
 }
 
+# _sha256_check <name> <file> <var> <pin> <url> <tail> -- _verify_sha256 plus the
+# warning that names the real cause; only rc 1 says "mismatch". Returns
+# _verify_sha256's rc. <tail> is the remedy text appended to the mismatch line.
+# _go_verify (lib/linux_ubuntu.sh) predates this and keeps its own wording.
+_sha256_check() {
+  local _name="$1" _file="$2" _var="$3" _pin="$4" _url="$5" _tail="$6"
+  local _rc=0 _actual=""
+  _verify_sha256 "${_file}" "${_pin}" || _rc=$?
+  case "${_rc}" in
+    0) return 0 ;;
+    1)
+      if _actual="$(sha256sum "${_file}" 2> /dev/null)"; then
+        _actual="${_actual%% *}"
+      fi
+      _sha256_pin_ok "${_actual}" || _actual="unreadable"
+      log_warn "${_name}: sha256 mismatch: ${_var} expects ${_pin}, download is ${_actual} from ${_url}; ${_tail}"
+      ;;
+    3) log_warn "${_name}: could not read the download to verify it" ;;
+    *) log_warn "${_name}: sha256 check could not run (rc ${_rc})" ;;
+  esac
+  return "${_rc}"
+}
+
 # ── command wrapper ───────────────────────────────────────────────────────────
 # The only writer of the *global* DRY_RUN in this tree is process_args, and it
 # only ever writes the literal "1". scripts/sync_git_repos.sh:77 also assigns
@@ -183,7 +206,7 @@ brew_update() {
   fi
 
   # Re-establish tap trust on every update; Homebrew 6.0 trust checks block installs otherwise.
-  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
 
   log_info "Upgrading installed formulae..."
   if ! brew upgrade --yes; then

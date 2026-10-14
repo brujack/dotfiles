@@ -2,12 +2,21 @@
 
 bats_require_minimum_version 1.5.0
 
-# _install_fetched_binary <name> <url> <bin|zip|tar> <member> [<dest-name>] [--resolve]:
-# fetch into a throwaway dir, install last, stamp the URL only on success. A
+# _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>] (pinned) and
+# --unverified <name> <url> ...: fetch into a throwaway dir, verify, install
+# last, stamp only on success. A
 # failure at any stage must leave the destination untouched, no stamp, and no
 # throwaway directory behind.
 # The chmod-based tests (read-only dirs) assume a non-root runner; root ignores
 # those permission bits.
+
+# Pinned-form seams: the real sha256 of the file the wget mock will serve.
+# Recompute after every switch of MOCK_WGET_FILE; sha256sum is never mocked.
+_seam_for() {
+  export _FETCHED_URL="${URL}"
+  _FETCHED_SHA256="$(sha256sum "$1")"
+  export _FETCHED_SHA256="${_FETCHED_SHA256%% *}"
+}
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -39,6 +48,7 @@ setup() {
   FIXTURE="${BATS_TEST_TMPDIR}/fixture"
   printf 'new' > "${FIXTURE}"
   export MOCK_WGET_FILE="${FIXTURE}"
+  _seam_for "${FIXTURE}"
 }
 
 teardown() {
@@ -68,6 +78,7 @@ _make_zip() {
   printf 'zipped' > "${_src}/tool"
   (cd "${_src}" && "${_ZIP_BIN}" -q "${BATS_TEST_TMPDIR}/fixture.zip" tool)
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fixture.zip"
+  _seam_for "${MOCK_WGET_FILE}"
 }
 
 _make_tar() {
@@ -76,11 +87,12 @@ _make_tar() {
   printf 'tarred' > "${_src}/pkg/bin/tool"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/fixture.tgz" -C "${_src}" pkg
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fixture.tgz"
+  _seam_for "${MOCK_WGET_FILE}"
 }
 
 @test "_install_fetched_binary: download failure leaves dest, no stamp, no workdir, then retry succeeds" {
   export MOCK_WGET_FAIL_URL="example.invalid"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: download failed"* ]]
   [ "$(_wget_count)" -eq 1 ]
@@ -89,16 +101,16 @@ _make_tar() {
   _assert_root_empty
   [ "$(cat "${DEST}")" = "old" ]
   unset MOCK_WGET_FAIL_URL
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 2 ]
   [ "$(cat "${DEST}")" = "new" ]
-  [ "$(cat "${STAMP}")" = "${URL}" ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
 }
 
 @test "_install_fetched_binary: extract failure leaves dest, no stamp, no workdir, then retry succeeds" {
   # FIXTURE is plain text, not a zip, so the real unzip rejects it.
-  run _install_fetched_binary tool "${URL}" zip tool
+  run _install_fetched_binary tool zip tool
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: extract failed"* ]]
   [ "$(_wget_count)" -eq 1 ]
@@ -107,11 +119,11 @@ _make_tar() {
   _assert_root_empty
   [ "$(cat "${DEST}")" = "old" ]
   _make_zip
-  run _install_fetched_binary tool "${URL}" zip tool
+  run _install_fetched_binary tool zip tool
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 2 ]
   [ "$(cat "${DEST}")" = "zipped" ]
-  [ "$(cat "${STAMP}")" = "${URL}" ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
 }
 
 # The member check alone would accept these: the extractor wrote a good member
@@ -122,7 +134,7 @@ _make_tar() {
   printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_DL_UNZIP_BIN}" > "${_stub}"
   chmod +x "${_stub}"
   export _DL_UNZIP_BIN="${_stub}"
-  run _install_fetched_binary tool "${URL}" zip tool
+  run _install_fetched_binary tool zip tool
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: extract failed"* ]]
   _assert_tmp_was_used
@@ -137,7 +149,7 @@ _make_tar() {
   printf '#!/usr/bin/env bash\n"%s" "$@"\nexit 1\n' "${_DL_TAR_BIN}" > "${_stub}"
   chmod +x "${_stub}"
   export _DL_TAR_BIN="${_stub}"
-  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  run _install_fetched_binary tool tar pkg/bin/tool
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: extract failed"* ]]
   _assert_tmp_was_used
@@ -148,7 +160,7 @@ _make_tar() {
 
 @test "_install_fetched_binary: install failure leaves dest, no stamp, no workdir, then retry succeeds" {
   chmod 0555 "${_DL_BIN_DIR}"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: install failed"* ]]
   [ "$(_wget_count)" -eq 1 ]
@@ -157,17 +169,17 @@ _make_tar() {
   _assert_root_empty
   [ "$(cat "${DEST}")" = "old" ]
   chmod 0755 "${_DL_BIN_DIR}"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 2 ]
   [ "$(cat "${DEST}")" = "new" ]
-  [ "$(cat "${STAMP}")" = "${URL}" ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
 }
 
 @test "_install_fetched_binary: a failing rename leaves dest, no .new, no stamp, and fails" {
   # tests/mocks/mv is the failure knob; the staged copy is made by the real install.
   export MOCK_MV_FAIL_ARGS=".new"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: install failed"* ]]
   # Positive control: the rename was attempted, so the absences below are a
@@ -183,7 +195,7 @@ _make_tar() {
   mkdir -p "${BATS_TEST_TMPDIR}/ro"
   chmod 0555 "${BATS_TEST_TMPDIR}/ro"
   export _DL_STAMP_DIR="${BATS_TEST_TMPDIR}/ro/stamps"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 1 ]
   [ "$(cat "${DEST}")" = "new" ]
@@ -194,8 +206,8 @@ _make_tar() {
 
 @test "_install_fetched_binary: matching stamp and executable dest skips with the skip line and no fetch" {
   mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${URL}" > "${STAMP}"
-  run _install_fetched_binary tool "${URL}" bin ""
+  printf '%s\n' "${URL} ${_FETCHED_SHA256}" > "${STAMP}"
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 0 ]
   [[ "${output}" == *"tool: up to date (stamp ${STAMP}); rm it to force a re-install"* ]]
@@ -203,7 +215,7 @@ _make_tar() {
 }
 
 @test "_install_fetched_binary: the same fixture without a stamp fetches exactly once" {
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 1 ]
   [[ "${output}" != *"up to date"* ]]
@@ -213,17 +225,17 @@ _make_tar() {
 @test "_install_fetched_binary: a stamp for a different URL fetches" {
   mkdir -p "${_DL_STAMP_DIR}"
   printf '%s\n' "https://example.invalid/other" > "${STAMP}"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 1 ]
-  [ "$(cat "${STAMP}")" = "${URL}" ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
 }
 
 @test "_install_fetched_binary: matching stamp but missing dest fetches" {
   mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${URL}" > "${STAMP}"
+  printf '%s\n' "${URL} ${_FETCHED_SHA256}" > "${STAMP}"
   rm -f "${DEST}"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 0 ]
   [ "$(_wget_count)" -eq 1 ]
   [ "$(cat "${DEST}")" = "new" ]
@@ -231,132 +243,43 @@ _make_tar() {
 
 @test "_install_fetched_binary: zip success installs the member" {
   _make_zip
-  run _install_fetched_binary tool "${URL}" zip tool
+  run _install_fetched_binary tool zip tool
   [ "$status" -eq 0 ]
   [ "$(cat "${DEST}")" = "zipped" ]
-  [ "$(cat "${STAMP}")" = "${URL}" ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
   _assert_tmp_was_used
   _assert_root_empty
 }
 
 @test "_install_fetched_binary: tar success installs a member in a subpath under a different dest name" {
   _make_tar
-  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool renamed
+  run _install_fetched_binary tool tar pkg/bin/tool renamed
   [ "$status" -eq 0 ]
   [ "$(cat "${_DL_BIN_DIR}/renamed")" = "tarred" ]
-  [ "$(cat "${_DL_STAMP_DIR}/tool")" = "${URL}" ]
+  [ "$(cat "${_DL_STAMP_DIR}/tool")" = "${URL} ${_FETCHED_SHA256}" ]
   _assert_tmp_was_used
   _assert_root_empty
 }
 
-@test "_install_fetched_binary: --resolve with a matching stamp and executable dest skips without wget" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  export MOCK_CURL_STDOUT="https://example.invalid/v1"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 0 ]
-  grep -q '^curl ' "${MOCK_CALLS_FILE}"
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"tool: up to date"* ]]
-}
-
-@test "_install_fetched_binary: --resolve to a new URL installs and stamps the resolved URL" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  export MOCK_CURL_STDOUT="https://example.invalid/v2"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 0 ]
-  [ "$(_wget_count)" -eq 1 ]
-  grep -q '^wget .*https://example.invalid/v2' "${MOCK_CALLS_FILE}"
-  [ "$(cat "${DEST}")" = "new" ]
-  [ "$(cat "${STAMP}")" = "https://example.invalid/v2" ]
-}
-
-@test "_install_fetched_binary: a resolution that redirects to plain http is a failed resolution" {
-  export MOCK_CURL_STDOUT="http://example.invalid/v2"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
+@test "_install_fetched_binary: unknown kind and missing or surplus arguments are rejected before any fetch, naming the call" {
+  run _install_fetched_binary tool bogus ""
   [ "$status" -eq 1 ]
-  [[ "${output}" == *"tool: resolve failed"* ]]
-  [ "$(_wget_count)" -eq 0 ]
-  [ ! -e "${STAMP}" ]
-  [ "$(cat "${DEST}")" = "old" ]
-}
-
-@test "_install_fetched_binary: the resolve call restricts redirects to https" {
-  export MOCK_CURL_STDOUT="https://example.invalid/v2"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 0 ]
-  grep -q '^curl .*--proto-redir =https' "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_fetched_binary: dest-name followed by --resolve are both honoured" {
-  export MOCK_CURL_STDOUT="https://example.invalid/v2"
-  run _install_fetched_binary tool "${URL}" bin "" renamed --resolve
-  [ "$status" -eq 0 ]
-  [ "$(cat "${_DL_BIN_DIR}/renamed")" = "new" ]
-}
-
-@test "_install_fetched_binary: failed resolution with stamp and non-empty executable dest keeps the copy" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  export MOCK_CURL_EXIT=22
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 0 ]
-  grep -q '^curl ' "${MOCK_CALLS_FILE}"
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"tool: could not resolve ${URL}; keeping installed copy"* ]]
-  [ "$(cat "${DEST}")" = "old" ]
-}
-
-@test "_install_fetched_binary: failed resolution with no stamp fails" {
-  export MOCK_CURL_EXIT=22
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bogus "* ]]
+  run _install_fetched_binary "" bin ""
   [ "$status" -eq 1 ]
-  grep -q '^curl ' "${MOCK_CALLS_FILE}"
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"tool: resolve failed"* ]]
-  [ "$(cat "${DEST}")" = "old" ]
-}
-
-@test "_install_fetched_binary: failed resolution with a stamp but a 0-byte dest fails" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  : > "${DEST}"
-  export MOCK_CURL_EXIT=22
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 1 ]
-  grep -q '^curl ' "${MOCK_CALLS_FILE}"
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"tool: resolve failed"* ]]
-}
-
-@test "_install_fetched_binary: a resolved URL equal to the input counts as a failed resolution" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  export MOCK_CURL_STDOUT="${URL}"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 0 ]
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"keeping installed copy"* ]]
-  rm -f "${STAMP}"
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 1 ]
-  [ "$(_wget_count)" -eq 0 ]
-}
-
-@test "_install_fetched_binary: unknown kind and missing or surplus arguments are rejected before any fetch" {
-  run _install_fetched_binary tool "${URL}" bogus ""
-  [ "$status" -eq 1 ]
-  run _install_fetched_binary "" "${URL}" bin ""
-  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments:  bin "* ]]
   run _install_fetched_binary tool "" bin ""
   [ "$status" -eq 1 ]
-  run _install_fetched_binary tool "${URL}" bin
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool  bin "* ]]
+  run _install_fetched_binary tool bin
   [ "$status" -eq 1 ]
-  run _install_fetched_binary tool "${URL}"
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bin"* ]]
+  run _install_fetched_binary tool
   [ "$status" -eq 1 ]
-  run _install_fetched_binary tool "${URL}" bin "" one two
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool"* ]]
+  run _install_fetched_binary tool bin "" one two
   [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: tool bin  one two"* ]]
   [ "$(_wget_count)" -eq 0 ]
   [ ! -e "${_DL_BIN_DIR}/bin" ]
   [ "$(cat "${DEST}")" = "old" ]
@@ -380,7 +303,8 @@ _assert_extract_failed_clean() {
   ln -s "${_src}/real" "${_src}/pkg/bin/tool"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/link.tgz" -C "${_src}" pkg
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/link.tgz"
-  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  _seam_for "${MOCK_WGET_FILE}"
+  run _install_fetched_binary tool tar pkg/bin/tool
   _assert_extract_failed_clean
 }
 
@@ -390,53 +314,394 @@ _assert_extract_failed_clean() {
   printf 'x' > "${_src}/pkg/bin/tool/inner"
   "${_DL_TAR_BIN}" -czf "${BATS_TEST_TMPDIR}/dir.tgz" -C "${_src}" pkg
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/dir.tgz"
-  run _install_fetched_binary tool "${URL}" tar pkg/bin/tool
+  _seam_for "${MOCK_WGET_FILE}"
+  run _install_fetched_binary tool tar pkg/bin/tool
   _assert_extract_failed_clean
 }
 
 @test "_install_fetched_binary: a tar lacking the member is refused" {
   _make_tar
-  run _install_fetched_binary tool "${URL}" tar pkg/bin/missing
+  run _install_fetched_binary tool tar pkg/bin/missing
   _assert_extract_failed_clean
 }
 
 @test "_install_fetched_binary: a successful but empty download is refused" {
   : > "${BATS_TEST_TMPDIR}/empty"
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/empty"
-  run _install_fetched_binary tool "${URL}" bin ""
+  _seam_for "${MOCK_WGET_FILE}"
+  run _install_fetched_binary tool bin ""
   _assert_extract_failed_clean
-}
-
-@test "_install_fetched_binary: failed resolution with a stamp but a missing dest fails" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  rm -f "${DEST}"
-  export MOCK_CURL_EXIT=22
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"tool: resolve failed"* ]]
-  [ "$(_wget_count)" -eq 0 ]
-}
-
-@test "_install_fetched_binary: failed resolution with a stamp but a non-executable dest fails" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/v1" > "${STAMP}"
-  chmod 0644 "${DEST}"
-  export MOCK_CURL_EXIT=22
-  run _install_fetched_binary tool "${URL}" bin "" --resolve
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"tool: resolve failed"* ]]
-  [ "$(_wget_count)" -eq 0 ]
 }
 
 @test "_install_fetched_binary: an uncreatable workdir fails before any fetch" {
   mkdir -p "${BATS_TEST_TMPDIR}/ro2"
   chmod 0555 "${BATS_TEST_TMPDIR}/ro2"
   export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/ro2/tmp"
-  run _install_fetched_binary tool "${URL}" bin ""
+  run _install_fetched_binary tool bin ""
   [ "$status" -eq 1 ]
   [[ "${output}" == *"tool: workdir failed"* ]]
   [ "$(_wget_count)" -eq 0 ]
   [ "$(cat "${DEST}")" = "old" ]
   [ ! -e "${STAMP}" ]
+}
+
+# ── pinned form: refusals before any download ────────────────────────────────
+
+# Real kind constants pointed at the fixture's own digest, seams off, so the
+# builder -> pin -> verify path runs exactly as a caller's does.
+_kind_real_pins() {
+  unset _FETCHED_URL _FETCHED_SHA256
+  local _s
+  _s="$(sha256sum "${MOCK_WGET_FILE}")"
+  _s="${_s%% *}"
+  export _LINUX_ARCH=amd64
+  export KIND_SHA256_AMD64="${_s}" KIND_SHA256_ARM64="${_s}"
+  export KIND_SHA256_FOR_VER="${KIND_VER}"
+  KIND_FIXTURE_SHA="${_s}"
+  KIND_URL_EXPECTED="$(_release_asset_url kind "${_LINUX_ARCH}")"
+}
+
+_assert_refused_before_download() {
+  [ "$status" -eq 1 ]
+  [ "$(_wget_count)" -eq 0 ]
+  [ ! -e "${_DL_STAMP_DIR}/${1}" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_fetched_binary: an unknown tool is refused with no download" {
+  unset _FETCHED_URL _FETCHED_SHA256
+  export _LINUX_ARCH=amd64
+  run _install_fetched_binary bogus bin bogus
+  _assert_refused_before_download bogus
+  [[ "${output}" == *"bogus: unknown tool"* ]]
+}
+
+@test "_install_fetched_binary: an unknown arch is refused with no download" {
+  _kind_real_pins
+  export _LINUX_ARCH=riscv64
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: no pin for arch 'riscv64'"* ]]
+}
+
+@test "_install_fetched_binary: an unknown tool is refused at the pin lookup when only the URL is seamed" {
+  # _FETCHED_URL bypasses the URL lookup, so the pin lookup is the only stage
+  # left that can name the tool as unknown.
+  unset _FETCHED_SHA256
+  export _FETCHED_URL="${URL}" _LINUX_ARCH=amd64
+  run _install_fetched_binary bogus bin bogus
+  _assert_refused_before_download bogus
+  [[ "${output}" == *"bogus: unknown tool"* ]]
+}
+
+@test "_install_fetched_binary: an unknown arch is refused at the pin lookup when only the URL is seamed" {
+  unset _FETCHED_SHA256
+  export _FETCHED_URL="${URL}" _LINUX_ARCH=riscv64
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: no pin for arch 'riscv64'"* ]]
+}
+
+@test "_install_fetched_binary: a workdir that mkdir accepts but mktemp cannot create fails before any fetch" {
+  if [ "$(id -u)" -eq 0 ]; then skip "running as root: a read-only directory does not stop mktemp"; fi
+  mkdir -p "${BATS_TEST_TMPDIR}/ro3"
+  chmod 0555 "${BATS_TEST_TMPDIR}/ro3"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/ro3"
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: workdir failed"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
+@test "_install_fetched_binary: pins recorded for another version are refused" {
+  _kind_real_pins
+  export KIND_SHA256_FOR_VER="0.0.1"
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: repo constants are inconsistent: pins are for 0.0.1, KIND_VER is ${KIND_VER}; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh kind)"* ]]
+}
+
+@test "_install_fetched_binary: a malformed pin is refused naming its variable" {
+  _kind_real_pins
+  export KIND_SHA256_AMD64="not-a-sha"
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: KIND_SHA256_AMD64 is not a 64-hex sha256; refusing to download"* ]]
+}
+
+@test "_install_fetched_binary: a missing pin is refused" {
+  _kind_real_pins
+  export KIND_SHA256_AMD64=""
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: KIND_SHA256_AMD64 is not a 64-hex sha256; refusing to download"* ]]
+}
+
+@test "_install_fetched_binary: the bats seam pin is checked for shape too" {
+  export _FETCHED_SHA256="xyz"
+  run _install_fetched_binary tool bin ""
+  _assert_refused_before_download tool
+  [[ "${output}" == *"tool: _FETCHED_SHA256 is not a 64-hex sha256; refusing to download"* ]]
+}
+
+# ── pinned form: verify stage ────────────────────────────────────────────────
+
+@test "_install_fetched_binary: success prints sha256 verified and writes the two-field stamp" {
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"tool: sha256 verified"* ]]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
+  [ "$(cat "${DEST}")" = "new" ]
+}
+
+@test "_install_fetched_binary: a wrong pin installs nothing and reports the real digest and URL" {
+  local _real="${_FETCHED_SHA256}"
+  export _FETCHED_SHA256
+  _FETCHED_SHA256="$(printf 'x%.0s' {1..64} | tr 'x' 'a')"
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 mismatch: _FETCHED_SHA256 expects ${_FETCHED_SHA256}, download is ${_real} from ${URL}; nothing installed, existing binary kept. Re-run; if it repeats at an unchanged version, upstream changed the asset: investigate before scripts/refresh-sha256-pins.sh --accept-changed tool"* ]]
+  [ "$(_wget_count)" -eq 1 ]
+  _assert_tmp_was_used
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+  [[ "${output}" != *"sha256 verified"* ]]
+}
+
+@test "_install_fetched_binary: verify rc 3 says could-not-read, not mismatch" {
+  _verify_sha256() { return 3; }
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: could not read the download to verify it"* ]]
+  [[ "${output}" != *"mismatch"* ]]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: verify rc 126 says could-not-run with the rc, not mismatch" {
+  _verify_sha256() { return 126; }
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 check could not run (rc 126)"* ]]
+  [[ "${output}" != *"mismatch"* ]]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: a stamp with the right URL and an old sha reinstalls" {
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s %s\n' "${URL}" "$(printf 'b%.0s' {1..64})" > "${STAMP}"
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 0 ]
+  [ "$(_wget_count)" -eq 1 ]
+  [ "$(cat "${STAMP}")" = "${URL} ${_FETCHED_SHA256}" ]
+}
+
+@test "_install_fetched_binary: a URL-only legacy stamp reinstalls" {
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "${URL}" > "${STAMP}"
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 0 ]
+  [ "$(_wget_count)" -eq 1 ]
+}
+
+@test "_install_fetched_binary: kind downloads the builder URL and verifies with its real pin" {
+  _kind_real_pins
+  run _install_fetched_binary kind bin kind
+  [ "$status" -eq 0 ]
+  [ -n "${KIND_URL_EXPECTED}" ]
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  [[ "${output}" == *"kind: sha256 verified"* ]]
+  [ "$(cat "${_DL_STAMP_DIR}/kind")" = "${KIND_URL_EXPECTED} ${KIND_FIXTURE_SHA}" ]
+}
+
+# ── seams are bats-only ──────────────────────────────────────────────────────
+
+@test "_install_fetched_binary: the _FETCHED_* seams are ignored outside bats" {
+  _kind_real_pins
+  # Seams exported but pointing somewhere else entirely; real pin is wrong.
+  export _FETCHED_URL="https://example.invalid/seam" _FETCHED_SHA256="${KIND_FIXTURE_SHA}"
+  export KIND_SHA256_AMD64
+  KIND_SHA256_AMD64="$(printf 'c%.0s' {1..64})"
+  local _saved="${BATS_TEST_TMPDIR}"
+  BATS_TEST_TMPDIR=""
+  run _install_fetched_binary kind bin kind
+  BATS_TEST_TMPDIR="${_saved}"
+  [ "$status" -eq 1 ]
+  [ -n "${KIND_URL_EXPECTED}" ]
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  [[ "${output}" == *"kind: sha256 mismatch: KIND_SHA256_AMD64 expects $(printf 'c%.0s' {1..64}), download is ${KIND_FIXTURE_SHA} from ${KIND_URL_EXPECTED}"* ]]
+  run ! grep -qF "example.invalid/seam" "${MOCK_CALLS_FILE}"
+}
+
+# ── --unverified ─────────────────────────────────────────────────────────────
+
+@test "_install_fetched_binary: --unverified installs each HashiCorp name with a URL-only stamp and the not-verified line" {
+  local _n
+  for _n in consul vault nomad packer vagrant; do
+    : > "${MOCK_CALLS_FILE}"
+    printf 'old' > "${_DL_BIN_DIR}/${_n}"
+    chmod 0755 "${_DL_BIN_DIR}/${_n}"
+    run _install_fetched_binary --unverified "${_n}" "https://example.invalid/${_n}.zip" bin ""
+    [ "$status" -eq 0 ]
+    [ "$(_wget_count)" -eq 1 ]
+    [ "$(cat "${_DL_BIN_DIR}/${_n}")" = "new" ]
+    [ "$(cat "${_DL_STAMP_DIR}/${_n}")" = "https://example.invalid/${_n}.zip" ]
+    [[ "${output}" == *"${_n}: not verified (pending HashiCorp apt, PR B)"* ]]
+    [[ "${output}" != *"sha256 verified"* ]]
+  done
+}
+
+@test "_install_fetched_binary: --unverified skips a URL-only stamp match without the not-verified line" {
+  mkdir -p "${_DL_STAMP_DIR}"
+  printf '%s\n' "https://example.invalid/consul.zip" > "${_DL_STAMP_DIR}/consul"
+  printf 'old' > "${_DL_BIN_DIR}/consul"
+  chmod 0755 "${_DL_BIN_DIR}/consul"
+  run _install_fetched_binary --unverified consul "https://example.invalid/consul.zip" bin ""
+  [ "$status" -eq 0 ]
+  [ "$(_wget_count)" -eq 0 ]
+  [[ "${output}" == *"consul: up to date"* ]]
+  [[ "${output}" != *"not verified"* ]]
+}
+
+@test "_install_fetched_binary: --unverified is refused for any other name" {
+  run _install_fetched_binary --unverified kind "https://example.invalid/kind" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"kind: --unverified is only for the HashiCorp tools"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+  [ ! -e "${_DL_STAMP_DIR}/kind" ]
+}
+
+@test "_install_fetched_binary: --unverified rejects missing and surplus arguments" {
+  run _install_fetched_binary --unverified consul "https://example.invalid/c" bin
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul https://example.invalid/c bin"* ]]
+  run _install_fetched_binary --unverified consul "https://example.invalid/c" bin "" one two
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
+  run _install_fetched_binary --unverified consul "" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul  bin"* ]]
+  run _install_fetched_binary --unverified "" "https://example.invalid/c" bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified  https://example.invalid/c bin"* ]]
+  run _install_fetched_binary --unverified consul "https://example.invalid/c" bogus ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+}
+
+@test "_install_fetched_binary: --resolve is no longer an option" {
+  run _install_fetched_binary tool bin "" renamed --resolve
+  [ "$status" -eq 1 ]
+  [ "$(_wget_count)" -eq 0 ]
+}
+
+# ── archives are not extracted before the sha256 passes ──────────────────────
+
+# An extractor stub that records each call, then delegates to the real tool.
+_recording_extractor() {
+  local _real="$1" _stub="${BATS_TEST_TMPDIR}/$2"
+  printf '#!/usr/bin/env bash\nprintf "called\\n" >> "%s"\nexec "%s" "$@"\n' \
+    "${BATS_TEST_TMPDIR}/extract-calls" "${_real}" > "${_stub}"
+  chmod +x "${_stub}"
+  : > "${BATS_TEST_TMPDIR}/extract-calls"
+  printf '%s' "${_stub}"
+}
+
+_wrong_pin() {
+  export _FETCHED_SHA256
+  _FETCHED_SHA256="$(printf 'a%.0s' {1..64})"
+}
+
+@test "_install_fetched_binary: a wrong pin never runs unzip" {
+  _make_zip
+  export _DL_UNZIP_BIN
+  _DL_UNZIP_BIN="$(_recording_extractor "${_DL_UNZIP_BIN}" unzip-rec)"
+  _wrong_pin
+  run _install_fetched_binary tool zip tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 mismatch"* ]]
+  [ ! -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_tmp_was_used
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: a wrong pin never runs tar" {
+  _make_tar
+  export _DL_TAR_BIN
+  _DL_TAR_BIN="$(_recording_extractor "${_DL_TAR_BIN}" tar-rec)"
+  _wrong_pin
+  run _install_fetched_binary tool tar pkg/bin/tool
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: sha256 mismatch"* ]]
+  [ ! -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  _assert_tmp_was_used
+  _assert_root_empty
+}
+
+@test "_install_fetched_binary: the recording extractors ARE called when the pin is right (positive control)" {
+  _make_zip
+  export _DL_UNZIP_BIN
+  _DL_UNZIP_BIN="$(_recording_extractor "${_DL_UNZIP_BIN}" unzip-rec)"
+  run _install_fetched_binary tool zip tool
+  [ "$status" -eq 0 ]
+  [ -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+  _make_tar
+  export _DL_TAR_BIN
+  _DL_TAR_BIN="$(_recording_extractor "${_DL_TAR_BIN}" tar-rec)"
+  rm -f "${STAMP}"
+  run _install_fetched_binary tool tar pkg/bin/tool
+  [ "$status" -eq 0 ]
+  [ -s "${BATS_TEST_TMPDIR}/extract-calls" ]
+}
+
+# ── _sha256_check ────────────────────────────────────────────────────────────
+
+@test "_sha256_check: a match is silent and returns 0" {
+  run _sha256_check n "${FIXTURE}" VAR "${_FETCHED_SHA256}" "${URL}" "tail"
+  [ "$status" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "_sha256_check: a mismatch returns 1 and names variable, pin, actual, URL and tail" {
+  local _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  run _sha256_check n "${FIXTURE}" VAR "${_bad}" "${URL}" "the-tail"
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"n: sha256 mismatch: VAR expects ${_bad}, download is ${_FETCHED_SHA256} from ${URL}; the-tail"* ]]
+}
+
+@test "_sha256_check: a mismatch whose actual-hash read fails says unreadable" {
+  local _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  sha256sum() { return 1; }
+  run _sha256_check n "${FIXTURE}" VAR "${_bad}" "${URL}" "the-tail"
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"download is unreadable from ${URL}"* ]]
+}
+
+@test "_sha256_check: rc 3 passes through with its own message" {
+  run _sha256_check n "${BATS_TEST_TMPDIR}/absent" VAR "${_FETCHED_SHA256}" "${URL}" "t"
+  [ "$status" -eq 3 ]
+  [[ "${output}" == *"n: could not read the download to verify it"* ]]
+  [[ "${output}" != *"mismatch"* ]]
+}
+
+@test "_sha256_check: rc 126 passes through with its own message" {
+  _verify_sha256() { return 126; }
+  run _sha256_check n "${FIXTURE}" VAR "${_FETCHED_SHA256}" "${URL}" "t"
+  [ "$status" -eq 126 ]
+  [[ "${output}" == *"n: sha256 check could not run (rc 126)"* ]]
+  [[ "${output}" != *"mismatch"* ]]
 }

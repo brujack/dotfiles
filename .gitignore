@@ -67,3 +67,7 @@ htmlcov/
 .cursor/
 .claude/loop-log/*.jsonl
 .claude/triage-log/*.jsonl
+
+# Interrupted check-versions --update leftovers (lib/ cannot trap)
+lib/.constants.*
+lib/.refresh-pins.*

@@ -7,8 +7,11 @@
 start_http_listener() {
   local _dir="$1" _i
   HTTP_LISTENER_HEADERS="${_dir}/headers"
+  # shellcheck disable=SC2034 # HTTP_LISTENER_PATHS is read by the sourcing test
+  HTTP_LISTENER_PATHS="${_dir}/paths"
   local _ready="${_dir}/port"
   python3 -I - "${_ready}" "${HTTP_LISTENER_HEADERS}" "${HTTP_LISTENER_DEADLINE:-10}" \
+    "${HTTP_LISTENER_PATHS}" \
     3>&- >"${_dir}/listener.log" 2>&1 <<'PY' &
 import http.server, os, socketserver, sys
 # 3>&- closes bats' fd 3 only. A caller (a git hook, for one) can hand down
@@ -19,13 +22,23 @@ for _fd in [int(n) for n in os.listdir("/dev/fd")]:
             os.close(_fd)
         except OSError:
             pass
-ready, out, deadline = sys.argv[1], sys.argv[2], float(sys.argv[3])
+ready, out, deadline, paths = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
+# Optional response shaping, read from the environment the caller exported:
+# HTTP_LISTENER_BODY_FILE (response body) and HTTP_LISTENER_STATUS (default 200).
+body_file = os.environ.get("HTTP_LISTENER_BODY_FILE")
+status = int(os.environ.get("HTTP_LISTENER_STATUS", "200"))
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         with open(out, "a") as f:
             f.write(str(self.headers))
-        body = b'{"tag_name": "v9.9.9"}'
-        self.send_response(200)
+        with open(paths, "a") as f:
+            f.write(self.path + "\n")
+        if body_file:
+            with open(body_file, "rb") as f:
+                body = f.read()
+        else:
+            body = b'{"tag_name": "v9.9.9"}'
+        self.send_response(status)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
