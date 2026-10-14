@@ -182,10 +182,6 @@ AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 HASHICORP_URL="https://releases.hashicorp.com"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
-KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-${_LINUX_ARCH}"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_misc
-YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_${_LINUX_ARCH}"
 
 # locations of directories
 # read by lib/macos.sh:install_macos_casks/install_macos_packages, lib/workflows.sh:run_brew_install, lib/helpers.sh:run_doctor

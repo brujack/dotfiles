@@ -2734,16 +2734,28 @@ _nvidia_seams() {
 
 # ── _install_ubuntu_k8s_tools ────────────────────────────────────────────────
 
+# Point a pinned tool's real pin variables at a fixture's own sha256 (both
+# arches) and its _FOR_VER at the current *_VER, so the caller-name to
+# pin-variable wiring runs for real. Never sets the installer's bats seams.
+_pin_fetched() {
+  local _t="$1" _s _v="${1}_VER"
+  _s="$(sha256sum "$2")"
+  _s="${_s%% *}"
+  export "${_t}_SHA256_AMD64=${_s}" "${_t}_SHA256_ARM64=${_s}" "${_t}_SHA256_FOR_VER=${!_v}"
+}
+
 # kind goes through _install_fetched_binary (a plain file as the download). The
 # curl stdout is the kubectl key body.
 _k8s_env() {
   export HAS_K8S=1
   export KIND_VER="0.22.0"
-  export KIND_URL="https://kind.example/dl/kind-linux-amd64"
   export KUBERNETES_VER="v1.29"
   unset HAS_SNAP
   printf 'binary-body' > "${BATS_TEST_TMPDIR}/blob"
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob"
+  _pin_fetched KIND "${MOCK_WGET_FILE}"
+  KIND_URL_EXPECTED="$(_release_asset_url kind "${_LINUX_ARCH}")"
+  [ -n "${KIND_URL_EXPECTED}" ]
 }
 
 @test "_install_ubuntu_k8s_tools: clean run returns 0 and installs kind and the kubectl source" {
@@ -2757,30 +2769,81 @@ _k8s_env() {
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_k8s_tools: kind is fetched from the builder URL and verified against its pin" {
+  _k8s_env
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  grep -qE "^wget -O .* ${KIND_URL_EXPECTED}$" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"kind: sha256 verified"* ]]
+  [ "$(cat "${_DL_STAMP_DIR}/kind")" = "${KIND_URL_EXPECTED} ${KIND_SHA256_AMD64}" ]
+}
+
+# Distinct per-arch pins: only the pin for the running arch matches the fixture.
+@test "_install_ubuntu_k8s_tools: kind on arm64 installs with its own pin" {
+  export _LINUX_ARCH=arm64
+  _k8s_env
+  local _good="${KIND_SHA256_ARM64}"
+  export KIND_SHA256_AMD64
+  KIND_SHA256_AMD64="$(printf 'a%.0s' {1..64})"
+  run _install_ubuntu_k8s_tools
+  [ "$status" -eq 0 ]
+  [[ "${KIND_URL_EXPECTED}" == *"kind-linux-arm64" ]]
+  grep -qE "^wget -O .* ${KIND_URL_EXPECTED}$" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${_DL_STAMP_DIR}/kind")" = "${KIND_URL_EXPECTED} ${_good}" ]
+}
+
+@test "_install_ubuntu_k8s_tools: kind on arm64 fails when the arm64 and amd64 pins are swapped" {
+  export _LINUX_ARCH=arm64
+  _k8s_env
+  local _good="${KIND_SHA256_ARM64}" _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  export KIND_SHA256_AMD64="${_good}" KIND_SHA256_ARM64="${_bad}"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kind: sha256 mismatch: KIND_SHA256_ARM64 expects ${_bad}"* ]]
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
+  [ ! -e "${_DL_STAMP_DIR}/kind" ]
+  # Positive control: the download was attempted and the step went on to kubectl.
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_k8s_tools: kind on amd64 fails when the pins are swapped" {
+  export _LINUX_ARCH=amd64
+  _k8s_env
+  local _good="${KIND_SHA256_AMD64}" _bad
+  _bad="$(printf 'a%.0s' {1..64})"
+  export KIND_SHA256_AMD64="${_bad}" KIND_SHA256_ARM64="${_good}"
+  run --separate-stderr _install_ubuntu_k8s_tools
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"kind: sha256 mismatch: KIND_SHA256_AMD64 expects ${_bad}"* ]]
+  [ ! -e "${_DL_BIN_DIR}/kind" ]
+}
+
 @test "_install_ubuntu_k8s_tools: a stamped, installed kind is not fetched again" {
   _k8s_env
   mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${KIND_URL}" > "${_DL_STAMP_DIR}/kind"
+  printf '%s %s\n' "${KIND_URL_EXPECTED}" "${KIND_SHA256_AMD64}" > "${_DL_STAMP_DIR}/kind"
   printf 'old' > "${_DL_BIN_DIR}/kind"
   chmod 0755 "${_DL_BIN_DIR}/kind"
   run _install_ubuntu_k8s_tools
   [ "$status" -eq 0 ]
   [[ "$output" == *"kind: up to date"* ]]
-  refute_grep "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  refute_grep "wget .*kind-linux" "${MOCK_CALLS_FILE}"
   # Positive control: the step ran and reached kubectl.
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_k8s_tools: a failed kind download returns 1, names kind" {
   _k8s_env
-  export MOCK_WGET_FAIL_URL="kind.example"
+  export MOCK_WGET_FAIL_URL="kind-linux"
   printf 'old' > "${_DL_BIN_DIR}/kind"
   chmod 0755 "${_DL_BIN_DIR}/kind"
   run --separate-stderr _install_ubuntu_k8s_tools
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"k8s_tools: kind:"* ]]
   # Positive control: the kind fetch was really attempted.
-  grep -q "wget .*kind.example" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DL_BIN_DIR}/kind")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/kind" ]
   [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
@@ -2939,6 +3002,17 @@ _hc_env() {
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
   grep -q "wget.*consul" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: all five tools install through the unverified form with the not-verified line" {
+  _hc_env
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _t
+  for _t in consul vault nomad packer vagrant; do
+    [[ "$output" == *"${_t}: not verified (pending HashiCorp apt, PR B)"* ]]
+    [ -x "${_DL_BIN_DIR}/${_t}" ]
+  done
 }
 
 @test "_install_ubuntu_hashicorp: a stamped, installed consul is not fetched again" {
@@ -3840,8 +3914,9 @@ _gui_env() {
 # ── _install_ubuntu_misc ─────────────────────────────────────────────────────
 
 @test "_install_ubuntu_misc: a yq fetch failure is named misc: yq and returns 1" {
-  export YQ_URL="https://example.invalid/yq"
-  export MOCK_WGET_FAIL_URL="${YQ_URL}"
+  export YQ_VER="4.40.5"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
+  export MOCK_WGET_FAIL_URL="yq_linux_"
   export HAS_DEVTOOLS=1
   run _install_ubuntu_misc
   [ "$status" -eq 1 ]
@@ -3849,7 +3924,6 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: a failing nala install is named, returns 1 and autoremove is still attempted" {
-  export YQ_URL="https://example.invalid/yq"
   unset HAS_DEVTOOLS
   check_and_install_nala() { return 1; }
   run _install_ubuntu_misc
@@ -3859,7 +3933,6 @@ _gui_env() {
 }
 
 @test "_install_ubuntu_misc: a successful nala install logs no nala failure" {
-  export YQ_URL="https://example.invalid/yq"
   unset HAS_DEVTOOLS
   check_and_install_nala() { return 0; }
   run _install_ubuntu_misc
@@ -3869,7 +3942,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: nala autoremove does not inherit the caller's stdin" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   local _stub_dir _stdin="${BATS_TEST_TMPDIR}/caller_stdin"
   _stub_dir="$(stdin_probe_stub_path nala)"
@@ -3881,7 +3954,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: nala autoremove sees DEBIAN_FRONTEND=noninteractive" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS DEBIAN_FRONTEND
   local _stub_dir
   _stub_dir="$(frontend_probe_stub_path nala)"
@@ -3893,7 +3966,7 @@ _gui_env() {
 @test "_install_ubuntu_misc: HAS_DEVTOOLS installs yq" {
   export HAS_DEVTOOLS=1
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   # Stubbed: _install_pinned_release_binary has its own coverage in
   # release_binary.bats; without this, HAS_DEVTOOLS=1 here would also reach
   # tflint/tfsec's real curl+sha256sum path.
@@ -3902,22 +3975,28 @@ _gui_env() {
   _install_ubuntu_tfenv() { :; }
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  grep -qE "wget -O .* ${YQ_URL}$" "${MOCK_CALLS_FILE}"
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
+  grep -qE "wget -O .* ${_yq_url}$" "${MOCK_CALLS_FILE}"
   [ -x "${_DL_BIN_DIR}/yq" ]
 }
 
 @test "_install_ubuntu_misc: no HAS_DEVTOOLS skips yq" {
   unset HAS_DEVTOOLS
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
-  ! grep -qF "${YQ_URL}" "${MOCK_CALLS_FILE}"
+  local _yq_url
+  _yq_url="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${_yq_url}" ]
+  ! grep -qF "${_yq_url}" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: calls nala autoremove" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   [ "$status" -eq 0 ]
@@ -3926,7 +4005,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: does not pip install glances" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   unset HAS_DEVTOOLS
   run _install_ubuntu_misc
   run grep "pip.*glances" "${MOCK_CALLS_FILE}"
@@ -3935,7 +4014,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: HAS_DEVTOOLS attempts dotnet-sdk-10.0 install" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   _install_ubuntu_tflint() { :; }
   _install_ubuntu_tfsec() { :; }
@@ -3951,7 +4030,7 @@ _gui_env() {
   # no longer covering a known-missing package. It stays for the next release
   # that drops it, which is how 8.0 failed on resolute in the first place.
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # Fail dotnet only. A blanket MOCK_APT_EXIT also failed the opentofu install,
   # which runs only on a host without tofu, so the test passed or failed by host.
@@ -3969,7 +4048,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: opentofu absent installs via apt (not piped sh)" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -3991,7 +4070,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: opentofu apt setup adds GPG key" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -4006,7 +4085,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: opentofu creates /etc/apt/keyrings before GPG import" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # tofu may already be installed on the host (/usr/bin/tofu on Linux, brew on
   # macOS); force the install branch so the test is independent of host state.
@@ -4021,7 +4100,7 @@ _gui_env() {
 
 @test "_install_ubuntu_misc: opentofu already present skips install" {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   # Mock tofu present on PATH and no force flag — install branch must be skipped
   # regardless of whether the host actually has tofu.
@@ -4042,7 +4121,7 @@ _gui_env() {
 # members are stubbed: they are advisory and have their own coverage.
 _misc_env() {
   export YQ_VER="4.40.5"
-  export YQ_URL="https://yq.example/dl/yq_linux_amd64"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
   export HAS_DEVTOOLS=1
   export _FORCE_OPENTOFU_INSTALL=1
   _install_ubuntu_shellcheck() { :; }
@@ -4051,6 +4130,9 @@ _misc_env() {
   _install_ubuntu_tfenv() { :; }
   export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/fetched-body"
   printf 'body' > "${MOCK_WGET_FILE}"
+  _pin_fetched YQ "${MOCK_WGET_FILE}"
+  YQ_URL_EXPECTED="$(_release_asset_url yq "${_LINUX_ARCH}")"
+  [ -n "${YQ_URL_EXPECTED}" ]
 }
 
 @test "_install_ubuntu_misc: a clean run installs yq and opentofu, stamps yq, and returns 0" {
@@ -4058,7 +4140,7 @@ _misc_env() {
   run --separate-stderr _install_ubuntu_misc
   [ "$status" -eq 0 ]
   [ -x "${_DL_BIN_DIR}/yq" ]
-  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL}" ]
+  [ "$(cat "${_DL_STAMP_DIR}/yq")" = "${YQ_URL_EXPECTED} ${YQ_SHA256_AMD64}" ]
   [ -s "${_APT_SOURCES_DIR}/opentofu.list" ]
   grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
   [[ "$stderr" != *"misc:"* ]]
@@ -4068,11 +4150,11 @@ _misc_env() {
   _misc_env
   printf 'old' > "${_DL_BIN_DIR}/yq"
   chmod 0755 "${_DL_BIN_DIR}/yq"
-  export MOCK_WGET_FAIL_URL="yq.example"
+  export MOCK_WGET_FAIL_URL="yq_linux_"
   run --separate-stderr _install_ubuntu_misc
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"yq: download failed"* ]]
-  grep -q "wget .*yq.example" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DL_BIN_DIR}/yq")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/yq" ]
   # A yq failure must not stop the step: opentofu still installs.
@@ -4649,6 +4731,8 @@ SHIM
   _cloud_env
   _misc_env
   _k8s_env
+  # The dispatcher serves blob for kind and yq alike.
+  _pin_fetched YQ "${BATS_TEST_TMPDIR}/blob"
   _gui_env
   _docker_fetch_ok
   _go_stub 1.27.1
@@ -4676,8 +4760,8 @@ SHIM
   for _t in consul vault nomad packer vagrant; do
     grep -q "^wget .*releases.hashicorp.com/${_t}/" "${MOCK_CALLS_FILE}"
   done
-  grep -q "^wget .*${KIND_URL}" "${MOCK_CALLS_FILE}"
-  grep -q "^wget .*${YQ_URL}" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
+  grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
   grep -q "apt-get install.* cloudflare-warp" "${MOCK_CALLS_FILE}"
   grep -q "apt install google-cloud-cli" "${MOCK_CALLS_FILE}"
