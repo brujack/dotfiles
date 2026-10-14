@@ -346,6 +346,12 @@ _stub_all_but_pins() {
   [[ "$output" == *"6 not checked"* ]]
   [[ "$output" == *"pinned=1.27.1"* ]]
   [[ "$output" == *"pinned=3.14.8"* ]]
+  local _warn_ln _last_check_ln _summary_ln
+  _warn_ln=$(printf '%s\n' "$output" | grep -n 'GITHUB_TOKEN' | cut -d: -f1)
+  _last_check_ln=$(printf '%s\n' "$output" | grep -n '^  \[' | grep -v 'GITHUB_TOKEN' | tail -1 | cut -d: -f1)
+  _summary_ln=$(printf '%s\n' "$output" | grep -n ' outdated, ' | cut -d: -f1)
+  [ "${_warn_ln}" -gt "${_last_check_ln}" ]
+  [ "${_warn_ln}" -lt "${_summary_ln}" ]
 }
 
 # ── --update writers (_update_go_pin, _update_python_pin) ───────────────────

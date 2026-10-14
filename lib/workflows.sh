@@ -1570,12 +1570,26 @@ _check_one_pinned_release() {
   fi
   _latest="${_latest#"${_latest%%[0-9]*}"}"
 
-  if [[ "${_pinned}" == "${_latest}" ]]; then
-    printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+  if [[ ! "${_latest}" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    printf "  [WARN]     %-12s could not parse latest version\n" "${_tool}"
     return 0
   fi
-  printf "  [OUTDATED] %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
-  return 1
+
+  # Only a NEWER latest is OUTDATED: a pin ahead of latest must not offer a downgrade.
+  case "$(_semver_cmp "${_pinned}" "${_latest}")" in
+    -1)
+      printf "  [OUTDATED] %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+      return 1
+      ;;
+    0)
+      printf "  [OK]       %-12s pinned=%-10s latest=%s\n" "${_tool}" "${_pinned}" "${_latest}"
+      ;;
+    *)
+      printf "  [WARN]     %-12s pinned=%-10s latest=%s  (pin is newer than latest)\n" \
+        "${_tool}" "${_pinned}" "${_latest}"
+      ;;
+  esac
+  return 0
 }
 
 _update_url_pins() {
@@ -1610,41 +1624,64 @@ _update_version_pin() {
   _update_url_pins "${_tool}" "${_old}" "${_new}" "${_constants}"
 }
 
+# _refresh_pins_bin -- the refresher to run. The override is a bats-only seam;
+# the default hangs off DOTFILES_REPO_ROOT, resolved once at source time, because
+# a call-time relative BASH_SOURCE answers about the caller's cwd.
+_refresh_pins_bin() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_OVERRIDE_REFRESH_PINS:-} ]]; then
+    printf '%s\n' "${_OVERRIDE_REFRESH_PINS}"
+    return 0
+  fi
+  printf '%s\n' "${DOTFILES_REPO_ROOT}/scripts/refresh-sha256-pins.sh"
+}
+
 # _update_release_pin <tool> <var> <latest> -- moves a kind/yq version pin and
 # its sha256 pins together. Works on a same-directory temp copy and renames it
 # over lib/constants.sh only when the version edit and the refresh both
-# succeed, so a failed refresh leaves the file byte-identical.
+# succeed, so any failure leaves the file byte-identical. Each failure names
+# its own step. A crash between mktemp and mv can leave lib/.constants.*
+# behind (lib/ cannot trap); .gitignore covers it.
 _update_release_pin() {
   local _tool="$1" _var="$2" _latest="$3"
   local _constants="${_OVERRIDE_CONSTANTS_PATH:-$(dirname "${BASH_SOURCE[0]}")/../lib/constants.sh}"
   local _refresh
-  _refresh="$(dirname "${BASH_SOURCE[0]}")/../scripts/refresh-sha256-pins.sh"
-  # Test seam: honoured only under bats, so a stray export cannot swap the refresher.
-  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_OVERRIDE_REFRESH_PINS:-} ]]; then
-    _refresh="${_OVERRIDE_REFRESH_PINS}"
-  fi
+  _refresh="$(_refresh_pins_bin)"
 
   if [[ ! "${_latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     printf "  %s: refusing pin update: latest version \"%s\" is not X.Y.Z\n" "${_tool}" "${_latest}"
     return 1
   fi
+  if [[ -L "${_constants}" ]]; then
+    printf "  %s: refusing pin update: %s is a symlink\n" "${_tool}" "${_constants}"
+    return 1
+  fi
 
   local _tmp
-  _tmp=$(mktemp "$(dirname "${_constants}")/.constants.XXXXXXXX") || return 1
-  if cp -p "${_constants}" "${_tmp}" \
+  if ! _tmp=$(mktemp "$(dirname "${_constants}")/.constants.XXXXXXXX"); then
+    printf "  %s: refusing pin update: cannot create a temp file beside %s\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+  if ! { cp -p "${_constants}" "${_tmp}" \
     && sed -i.bak "s|^${_var}=\"[^\"]*\"|${_var}=\"${_latest}\"|" "${_tmp}" \
     && rm -f "${_tmp}.bak" \
-    && grep -Fqx "${_var}=\"${_latest}\"" "${_tmp}" \
-    && "${_refresh}" --constants "${_tmp}" "${_tool}" \
-    && mv -f "${_tmp}" "${_constants}"; then
-    printf "  Updated %s → %s\n" "${_var}" "${_latest}"
-    printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
-      "${_tool}" "${_latest}"
-    return 0
+    && grep -Fqx "${_var}=\"${_latest}\"" "${_tmp}"; }; then
+    rm -f "${_tmp}" "${_tmp}.bak"
+    printf "  %s: refusing pin update: could not write %s in %s\n" "${_tool}" "${_var}" "${_tmp}"
+    return 1
   fi
-  rm -f "${_tmp}" "${_tmp}.bak"
-  printf "  %s: refusing pin update: could not refresh sha256 pins\n" "${_tool}"
-  return 1
+  if ! "${_refresh}" --constants "${_tmp}" "${_tool}"; then
+    rm -f "${_tmp}"
+    printf "  %s: refusing pin update: could not refresh sha256 pins\n" "${_tool}"
+    return 1
+  fi
+  if ! mv -f "${_tmp}" "${_constants}"; then
+    rm -f "${_tmp}"
+    printf "  %s: refusing pin update: could not replace %s\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+  printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+  printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
+    "${_tool}" "${_latest}"
 }
 
 _prompt_version_update() {

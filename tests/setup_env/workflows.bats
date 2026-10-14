@@ -1830,6 +1830,83 @@ _stub_refresher_fail() {
   done
 }
 
+@test "_prompt_version_update success keeps the constants file mode" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  chmod 640 "${_TEST_CONSTANTS_PATH}"
+  run _prompt_version_update "yq" "YQ_VER" "4.54.1" "9.9.9" <<< "y"
+  [ "$status" -eq 0 ]
+  local _mode
+  _mode=$(stat -c %a "${_TEST_CONSTANTS_PATH}" 2>/dev/null || stat -f %Lp "${_TEST_CONSTANTS_PATH}")
+  [ "${_mode}" = "640" ]
+}
+
+@test "_prompt_version_update refuses precisely when the version line cannot be written" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  sed -i.bak '/^YQ_VER=/d' "${_TEST_CONSTANTS_PATH}"; rm -f "${_TEST_CONSTANTS_PATH}.bak"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  run _prompt_version_update "yq" "YQ_VER" "4.54.1" "9.9.9" <<< "y"
+  [ "$status" -eq 1 ]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  [[ "$output" == *"yq: refusing pin update: could not write YQ_VER in "* ]]
+  [[ "$output" != *"could not refresh sha256 pins"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [ -z "$(find "${BATS_TEST_TMPDIR}" -maxdepth 1 -name '.constants.*')" ]
+}
+
+@test "_prompt_version_update refuses precisely when the constants directory is not writable" {
+  if [ "$(id -u)" -eq 0 ]; then skip "running as root: a read-only directory does not stop mktemp"; fi
+  setup_constants_copy
+  _stub_refresher_ok
+  local _ro="${BATS_TEST_TMPDIR}/ro"
+  mkdir "${_ro}"
+  cp "${_TEST_CONSTANTS_PATH}" "${_ro}/constants.sh"
+  chmod 555 "${_ro}"
+  export _OVERRIDE_CONSTANTS_PATH="${_ro}/constants.sh"
+  run _prompt_version_update "yq" "YQ_VER" "4.54.1" "9.9.9" <<< "y"
+  chmod 755 "${_ro}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"yq: refusing pin update: cannot create a temp file beside ${_ro}/constants.sh"* ]]
+  [[ "$output" != *"Updated"* ]]
+}
+
+@test "_prompt_version_update refuses a symlinked constants file" {
+  setup_constants_copy
+  _stub_refresher_ok
+  ln -s "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/link.sh"
+  export _OVERRIDE_CONSTANTS_PATH="${BATS_TEST_TMPDIR}/link.sh"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  run _prompt_version_update "kind" "KIND_VER" "0.33.0" "0.34.0" <<< "y"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: refusing pin update: ${BATS_TEST_TMPDIR}/link.sh is a symlink"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [ -L "${BATS_TEST_TMPDIR}/link.sh" ]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
+@test "_refresh_pins_bin default resolves to an executable file regardless of cwd" {
+  unset _OVERRIDE_REFRESH_PINS
+  local _bin
+  _bin=$(cd / && _refresh_pins_bin)
+  [ -f "${_bin}" ]
+  [ -x "${_bin}" ]
+  [[ "${_bin}" == */scripts/refresh-sha256-pins.sh ]]
+}
+
+@test "_refresh_pins_bin honours the override only while BATS_TEST_TMPDIR is set" {
+  _stub_refresher_ok
+  [ "$(_refresh_pins_bin)" = "${_REFRESHER}" ]
+  local _saved="${BATS_TEST_TMPDIR}" _got
+  BATS_TEST_TMPDIR=""
+  _got=$(_refresh_pins_bin)
+  BATS_TEST_TMPDIR="${_saved}"
+  [ "${_got}" != "${_REFRESHER}" ]
+  [[ "${_got}" == "${DOTFILES_REPO_ROOT}/scripts/refresh-sha256-pins.sh" ]]
+}
+
 @test "_prompt_version_update skips update on n reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
@@ -3787,6 +3864,36 @@ _poison_tool() {
   done
 }
 
+@test "_check_one_pinned_release warns, never OUTDATED, when the pin is newer than latest" {
+  _fetch_github_latest() { printf '1.2.3'; }
+  local _rc=0
+  _out=$(_check_one_pinned_release "kind" "1.10.0" "some/repo") || _rc=$?
+  [ "${_rc}" -eq 0 ]
+  [[ "${_out}" == *"[WARN]"*"kind"*"pinned=1.10.0"*"latest=1.2.3"*"(pin is newer than latest)"* ]]
+  [[ "${_out}" != *"OUTDATED"* ]]
+}
+
+@test "_check_one_pinned_release compares numerically, so 1.9.0 is older than 1.10.0" {
+  _fetch_github_latest() { printf '1.10.0'; }
+  local _rc=0
+  _out=$(_check_one_pinned_release "kind" "1.9.0" "some/repo") || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [[ "${_out}" == *"[OUTDATED]"* ]]
+}
+
+@test "_check_one_pinned_release warns 'could not parse latest version' for a non-numeric latest" {
+  local _bad _rc
+  for _bad in "abc" "1.2.x" "1..2"; do
+    FAKE_LATEST="${_bad}"
+    _fetch_github_latest() { printf '%s' "${FAKE_LATEST}"; }
+    _rc=0
+    _out=$(_check_one_pinned_release "kind" "1.2.3" "some/repo") || _rc=$?
+    [ "${_rc}" -eq 0 ]
+    [[ "${_out}" == *"[WARN]"*"could not parse latest version"* ]]
+    [[ "${_out}" != *"OUTDATED"* ]]
+  done
+}
+
 @test "_check_one_pinned_release prints WARN and returns 0 when latest cannot be fetched" {
   _fetch_github_latest() { printf ''; }
   run _check_one_pinned_release "kind" "0.33.0" "kubernetes-sigs/kind"
@@ -3820,6 +3927,13 @@ _stub_cv_callees() {
   [[ "$output" == *"6 not checked"* ]]
   [[ "$output" == *"the 6 checks that send it were not run"* ]]
   [ "$(printf '%s\n' "$output" | grep -c 'GITHUB_TOKEN')" -eq 1 ]
+  # WARN sits after the last check line and before the summary line.
+  local _warn_ln _last_check_ln _summary_ln
+  _warn_ln=$(printf '%s\n' "$output" | grep -n 'GITHUB_TOKEN' | cut -d: -f1)
+  _last_check_ln=$(printf '%s\n' "$output" | grep -n '^  \[' | grep -v 'GITHUB_TOKEN' | tail -1 | cut -d: -f1)
+  _summary_ln=$(printf '%s\n' "$output" | grep -n ' outdated, ' | cut -d: -f1)
+  [ "${_warn_ln}" -gt "${_last_check_ln}" ]
+  [ "${_warn_ln}" -lt "${_summary_ln}" ]
 }
 
 @test "run_check_versions runs three version checks, three pinned-release checks and two feed checks with a valid token" {
