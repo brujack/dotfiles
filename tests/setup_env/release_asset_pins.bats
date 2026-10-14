@@ -108,3 +108,32 @@ _set_pins() {
   run grep -cE '^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=' "${REPO_ROOT}/lib/constants.sh"
   [ "$output" -eq 3 ]
 }
+
+# Reads the real lib/constants.sh in a clean child shell: setup() overrides the
+# *_VER variables with fixtures, which would mask the committed values.
+_committed() {
+  env -i HOME="${BATS_TEST_TMPDIR}" PATH="${PATH}" bash -c '
+    source "$1/lib/constants.sh"; source "$1/lib/helpers.sh"
+    printf -v v "%s" "${!2}"; printf "%s" "$v"' _ "${REPO_ROOT}" "$1"
+}
+
+@test "committed pins: each of the six is a real 64-hex digest, not zeros" {
+  local zeros v
+  zeros="$(printf '0%.0s' {1..64})"
+  for name in KIND_SHA256_AMD64 KIND_SHA256_ARM64 YQ_SHA256_AMD64 YQ_SHA256_ARM64 \
+    SHELLCHECK_SHA256_AMD64 SHELLCHECK_SHA256_ARM64; do
+    v="$(_committed "${name}")"
+    _sha256_pin_ok "${v}" || { printf '%s=%s\n' "${name}" "${v}" >&2; return 1; }
+    [ "${v}" != "${zeros}" ] || { printf '%s is zeros\n' "${name}" >&2; return 1; }
+  done
+}
+
+@test "committed pins: _FOR_VER equals *_VER and *_VER is non-empty" {
+  local a b
+  a="$(_committed KIND_VER)"; b="$(_committed KIND_SHA256_FOR_VER)"
+  [ -n "${a}" ]; [ "${a}" = "${b}" ]
+  a="$(_committed YQ_VER)"; b="$(_committed YQ_SHA256_FOR_VER)"
+  [ -n "${a}" ]; [ "${a}" = "${b}" ]
+  a="$(_committed SHELLCHECK_VER)"; b="$(_committed SHELLCHECK_SHA256_FOR_VER)"
+  [ -n "${a}" ]; [ "${a}" = "${b}" ]
+}

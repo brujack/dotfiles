@@ -97,11 +97,11 @@ NVIDIA_CONTAINER_LIST_URL="https://nvidia.github.io/libnvidia-container/stable/d
 NVIDIA_CONTAINER_KEYRING="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
 KIND_VER="0.33.0"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
-KIND_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
+KIND_SHA256_AMD64="aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
-KIND_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
+KIND_SHA256_ARM64="20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2"
 # read by scripts/refresh-sha256-pins.sh and lib/linux_ubuntu.sh:_install_fetched_binary
-KIND_SHA256_FOR_VER=""
+KIND_SHA256_FOR_VER="0.33.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 NOMAD_VER="2.0.7"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
@@ -125,7 +125,7 @@ SHELLCHECK_VER="0.11.0"
 SHELLCHECK_SHA256_AMD64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
 SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
 # read by scripts/refresh-sha256-pins.sh
-SHELLCHECK_SHA256_FOR_VER=""
+SHELLCHECK_SHA256_FOR_VER="0.11.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)
 TFLINT_VER="0.64.0"
@@ -150,11 +150,11 @@ VAULT_VER="2.1.2"
 VIRTUALBOX_VER="virtualbox-7.2"
 YQ_VER="4.54.1"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
-YQ_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
+YQ_SHA256_AMD64="8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
-YQ_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
+YQ_SHA256_ARM64="189088da0c6429ec5178dfaab1a114805f6cab0b61b165ab236efedf1d57a71b"
 # read by scripts/refresh-sha256-pins.sh and lib/linux_ubuntu.sh:_install_fetched_binary
-YQ_SHA256_FOR_VER=""
+YQ_SHA256_FOR_VER="4.54.1"
 # read by lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 # Prefix-matched by lib/helpers.sh:_doctor_check_one_version, so this must be a
 # prefix of every zsh the fleet ships: apt gives 5.9 on 24.04 and 26.04, brew

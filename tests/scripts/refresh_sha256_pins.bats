@@ -18,7 +18,13 @@ setup() {
   SCRIPT="${REPO_ROOT}/scripts/refresh-sha256-pins.sh"
   source "${REPO_ROOT}/tests/helpers/http_listener.bash"
   C="${BATS_TEST_TMPDIR}/constants.sh"
-  sed -E 's/^(KIND|YQ|SHELLCHECK)_VER=.*/\1_VER="1.2.3"/' "${REPO_ROOT}/lib/constants.sh" >"${C}"
+  # Explicit starting state, independent of the real file's committed pins.
+  sed -E -e 's/^(KIND|YQ|SHELLCHECK)_VER=.*/\1_VER="1.2.3"/' \
+    -e 's/^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=.*/\1_SHA256_FOR_VER=""/' \
+    -e 's/^((KIND|YQ)_SHA256_(AMD64|ARM64))=.*/\1="'"$(printf '0%.0s' {1..64})"'"/' \
+    "${REPO_ROOT}/lib/constants.sh" >"${C}"
+  [ "$(grep -cE '^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=""$' "${C}")" -eq 3 ]
+  [ "$(grep -cE '^(KIND|YQ)_SHA256_(AMD64|ARM64)="0{64}"$' "${C}")" -eq 4 ]
   export GITHUB_TOKEN=""
   unset _REFRESH_ASSET_URL HTTP_LISTENER_STATUS
   export HTTP_LISTENER_BODY_FILE="${BATS_TEST_TMPDIR}/release.json"
