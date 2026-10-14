@@ -3,169 +3,179 @@
 - **Date:** 2026-10-13
 - **Backlog row:** "helper-installed binaries have no checksum and `wget` follows any redirect"
 - **Builds on:** dotfiles#337 (`_sha256_pin_ok`, `_verify_sha256`, the go tarball pins)
-- **Scope:** PR A of two. PR A pins the GitHub-hosted tools and removes the standalone
-  docker-compose. PR B (own spec, after this merges) moves the five HashiCorp tools to HashiCorp's
-  GPG-signed apt repo with version holds, which replaces the earlier "HashiCorp GPG" follow-up.
+- **Scope:** PR A of two. PR A pins kind and yq, gives shellcheck a pin refresher, and retires the
+  standalone docker-compose, telepresence and cf-terraforming on Linux. PR B (own spec, after this
+  merges) moves the five HashiCorp tools to HashiCorp's GPG-signed apt repo with version holds.
 
 ## Problem
 
 `_install_fetched_binary` (`lib/linux_ubuntu.sh`) downloads with a bare `wget`, then extracts and
-installs into `/usr/local/bin` with `sudo`. It checks nothing about the bytes. Ten tools go through
-it from six call lines: kind, telepresence, cf-terraforming, docker-compose, yq and the five
-HashiCorp tools. Premise checked 2026-10-13 by reading the function and its callers, and confirmed by
-all six Step 8 lens passes.
+installs into `/usr/local/bin` with `sudo`, checking nothing about the bytes. Ten tools go through it
+from six call lines (kind, telepresence, cf-terraforming, docker-compose, yq, and the five HashiCorp
+tools). Premise checked 2026-10-13 by reading the function and its callers, and confirmed by nine
+Step 8 lens passes.
 
-Found while checking, all measured 2026-10-13:
+Measured 2026-10-13 while reviewing:
 
 1. **`check-versions --update` already breaks shellcheck.** It bumps `SHELLCHECK_VER` and leaves
    `SHELLCHECK_SHA256_AMD64`/`_ARM64` at the old release, so the next update makes the pinned install
    refuse on every Linux box. shellcheck is also pinned at three sites in `.github/workflows/ci.yml`
-   (two linux x86_64, one darwin aarch64), and `tests/setup_env/shellcheck_pin.bats` checks the
-   versions match.
-2. **telepresence is stale.** It installs `.../tel2/linux/<arch>/latest/telepresence`, which for
-   amd64 resolved to **2.20.2** on S3; GitHub's latest release is **v2.32.2**.
-3. **check-versions does not see kind, telepresence or cf-terraforming,** and where it does see a
-   tool it compares the _installed_ binary with upstream (`_check_one_version`). `-t update` never
-   reinstalls these tools (only `-t setup`/`-t developer` reach `install_ubuntu_packages`), so on
-   `claude` kind is 0.32.0 against a 0.33.0 pin, and on the Studio Homebrew holds its own versions.
-   An installed-vs-latest check would prompt "update X from V to V" and nag forever on macOS.
-4. **The standalone docker-compose is redundant.** `_install_ubuntu_docker` installs
-   `docker-compose-plugin` from Docker's signed apt repo (`docker compose version`: v5.6.0 on
-   `claude`), while `/usr/local/bin/docker-compose` there is a stale v5.1.4 that no tracked script
-   runs.
+   (two linux x86_64, one darwin aarch64), checked by `tests/setup_env/shellcheck_pin.bats`.
+2. **check-versions compares the installed binary, not the pin** (`_check_one_version`), while
+   `-t update` never reinstalls these tools (only `-t setup`/`-t developer` reach
+   `install_ubuntu_packages`). On `claude` kind is 0.32.0 against a 0.33.0 pin that equals latest; on
+   the Studio Homebrew holds its own versions. Such a check prompts "update X from V to V" and nags
+   forever on macOS.
+3. **Three of the ten tools are unused and one is redundant.** No tracked script in any personal repo
+   runs `telepresence`, `cf-terraforming` or the hyphenated `docker-compose`; `claude` shows no shell
+   history or daemons for them; the operator confirmed neither telepresence nor cf-terraforming is
+   used. `docker compose` comes from `docker-compose-plugin` (Docker's signed apt repo, v5.6.0), while
+   `/usr/local/bin/docker-compose` on `claude` and `workstation` is a stale v5.1.4. telepresence is
+   also stale: its `latest` URL resolved to 2.20.2.
 
-Upstream checksums for the four tools PR A pins: per-asset `.sha256sum` (kind), `checksums.txt`
-(cf-terraforming), a multi-hash `checksums` file (yq), none (telepresence). Every one of them is a
-GitHub release asset with a sha256 `digest` in the releases API (kind's `kind.sigs.k8s.io/dl` URL
-redirects to it), and none shows a re-upload (`updated_at` within seconds of `created_at`).
-Population: the four assets at their pinned versions plus shellcheck v0.11.0, queried from `claude`.
+kind and yq are GitHub release assets, and the GitHub releases API publishes a sha256 `digest` for
+each asset; neither pinned asset shows a re-upload (`updated_at` within seconds of `created_at`).
+Population: kind v0.33.0, yq v4.54.1 and shellcheck v0.11.0, linux amd64 and arm64, from `claude`.
 
 ## Design
 
 ### 1. URL builder (`lib/linux_ubuntu.sh`)
 
-`_release_asset_url <tool> <arch>` prints the URL for a tool at its pinned `*_VER` and `amd64` or
-`arm64`. It returns **2** with no output for an unknown tool. All five tools ship both arches.
+`_release_asset_url <tool> <arch>` prints the GitHub release download URL for a tool at its pinned
+`*_VER` and `amd64` or `arm64`. It returns 2 with no output for an unknown tool. Every URL has the
+shape `https://github.com/<owner>/<repo>/releases/download/<tag>/<asset>`.
 
-| tool            | URL                                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| kind            | `https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-${arch}`                                                                                         |
-| telepresence    | `https://github.com/telepresenceio/telepresence/releases/download/v${TELEPRESENCE_VER}/telepresence-linux-${arch}`                                    |
-| cf-terraforming | `https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${arch}.tar.gz` |
-| yq              | `https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_${arch}`                                                                       |
-| shellcheck      | `https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VER}/shellcheck-v${SHELLCHECK_VER}.linux.${x86_64\|aarch64}.tar.xz`           |
+| tool       | URL                                                                                                                                         |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| kind       | `https://github.com/kubernetes-sigs/kind/releases/download/v${KIND_VER}/kind-linux-${arch}`                                                 |
+| yq         | `https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_${arch}`                                                             |
+| shellcheck | `https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VER}/shellcheck-v${SHELLCHECK_VER}.linux.${x86_64\|aarch64}.tar.xz` |
 
-The installer and the refresher both call it, so the URL hashed is the URL installed. `KIND_URL`,
-`TELEPRESENCE_URL`, `CF_TERRAFORMING_URL` and `YQ_URL` are deleted from `lib/constants.sh`, with the
-`yq` branch of `_update_url_pins`. `HASHICORP_URL` stays for PR B. The shellcheck installer's
-`_SHELLCHECK_URL` seam stays, defaulting to the builder.
+kind moves from `kind.sigs.k8s.io/dl/...`, which redirects to this asset, to the asset URL itself.
+The installers and the refresher both call the builder, so the URL pinned is the URL installed.
+`KIND_URL` and `YQ_URL` are deleted from `lib/constants.sh`, with the `yq` branch of
+`_update_url_pins`. The shellcheck installer's `_SHELLCHECK_URL` seam stays, defaulting to the
+builder.
 
 ### 2. Pins (`lib/constants.sh`)
 
-New: `TELEPRESENCE_VER="2.32.2"`; for `KIND`, `TELEPRESENCE`, `CF_TERRAFORMING` and `YQ`:
-`<TOOL>_SHA256_AMD64`, `<TOOL>_SHA256_ARM64` and `<TOOL>_SHA256_FOR_VER`; and
-`SHELLCHECK_SHA256_FOR_VER` beside the existing shellcheck pins. That is 8 new hashes and 5
-`_FOR_VER` lines. `<TOOL>_SHA256_FOR_VER` is the `*_VER` the hashes were computed for. arm64 pins
-are kept, matching shellcheck's, although every Linux box is amd64 today.
+New for `KIND` and `YQ`: `<TOOL>_SHA256_AMD64`, `<TOOL>_SHA256_ARM64`, `<TOOL>_SHA256_FOR_VER`; and
+`SHELLCHECK_SHA256_FOR_VER` beside the existing shellcheck pins. That is 4 new hashes and 3
+`_FOR_VER` lines. `<TOOL>_SHA256_FOR_VER` records the `*_VER` the hashes are for. arm64 pins are kept,
+matching shellcheck's, although every Linux box is amd64 today.
 
-Phase 2 adds the lines with all-zero hashes and an empty `_FOR_VER`, then runs the refresher, so no
-value is typed by hand.
+Phase 2 adds the lines with all-zero hashes and an empty `_FOR_VER`, then runs the refresher; no value
+is typed by hand.
 
-`_release_asset_sha <tool> <arch>` prints the pin's variable name and value, and returns 2 for an
+`_release_asset_sha <tool> <arch>` prints the pin's variable name and value and returns 2 for an
 unknown tool. It is an explicit `case` naming every variable, so a grep for a pin finds its reader.
 
 ### 3. Installer (`_install_fetched_binary`)
 
 Two calling forms:
 
-- **Pinned:** `_install_fetched_binary <name> <bin|zip|tar> <member> [<dest>]`. URL and pin come
-  from the builder for `_LINUX_ARCH`.
-- **Unverified (PR B removes it):** `_install_fetched_binary --unverified <url> <name> <kind>
-<member> [<dest>]`, accepted only for `consul`, `vault`, `nomad`, `packer` and `vagrant`. Any other
-  name with `--unverified` is refused with rc 1, so a pinned tool cannot opt out.
+- **Pinned:** `_install_fetched_binary <name> <bin|zip|tar> <member> [<dest>]`, used by kind and yq.
+  URL and pin come from the builder for `_LINUX_ARCH`.
+- **Unverified (PR B removes it):** `_install_fetched_binary --unverified <name> <url> <kind>
+<member> [<dest>]`, accepted only for consul, vault, nomad, packer and vagrant; any other name is
+  refused with rc 1. It keeps today's URL-only stamp, so those five do not re-download, and prints
+  `<name>: not verified (pending HashiCorp apt, PR B)`.
 
 Pinned form, before the stamp check and before any download:
 
 - unknown tool (builder rc 2): `<name>: unknown tool`, rc 1
-- `<TOOL>_SHA256_FOR_VER` differs from `*_VER`: `<name>: repo constants are inconsistent: pins are
-for <for-ver>, <TOOL>_VER is <ver>; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh
+- `_FOR_VER` differs from `*_VER`: `<name>: repo constants are inconsistent: pins are for
+<for-ver>, <TOOL>_VER is <ver>; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh
 <name>)`, rc 1
 - missing or malformed pin: `<name>: <VAR> is not a 64-hex sha256; refusing to download`, rc 1
 
-The stamp file holds `<url> <sha256>`, so a refreshed pin forces a reinstall. Old URL-only stamps
-never match, so every pinned tool reinstalls, verified, on the first `-t setup`/`-t developer` after
-merge (roughly 210 MB on amd64, mostly telepresence; one cached `sudo` session).
+The pinned stamp holds `<url> <sha256>`, so a refreshed pin forces a reinstall, and the old URL-only
+kind and yq stamps never match: both reinstall, verified, on the first `-t setup`/`-t developer` after
+merge (about 20 MB on amd64).
 
-A `verify` stage between download and extract reports by `_verify_sha256`'s rc: rc 1
-`<name>: sha256 mismatch: <VAR> expects <pin>, download is <actual>; nothing installed, existing
-binary kept`, rc 3 `<name>: could not read the download to verify it`, any other rc
-`<name>: sha256 check could not run (rc N)`. Only rc 1 says "mismatch". Success prints
-`<name>: sha256 verified`. Any failed stage installs nothing and writes no stamp.
+A `verify` stage between download and extract reports by `_verify_sha256`'s rc: rc 1 `<name>: sha256
+mismatch: <VAR> expects <pin>, download is <actual> from <url>; nothing installed, existing binary
+kept. Re-run; if it repeats at an unchanged version, upstream changed the asset: investigate before
+scripts/refresh-sha256-pins.sh --accept-changed <name>`, rc 3 `<name>: could not read the download to
+verify it`, any other rc `<name>: sha256 check could not run (rc N)`. Only rc 1 says "mismatch".
+Success prints `<name>: sha256 verified`. Any failed stage installs nothing and writes no stamp.
 
-`--resolve` is deleted; telepresence was its only caller. telepresence moves from 2.20.2 to 2.32.2
-on its first run; compatibility of a 2.32 client with a 2.20 traffic-manager already in a cluster is
-unmeasured, so V2 records `telepresence version`.
+`--resolve` is deleted with telepresence, its only caller.
 
-Test seams `_FETCHED_URL` and `_FETCHED_SHA256` (read only when non-empty) replace the URL and pin and
-bypass the `_FOR_VER` check. They are for unit tests of the installer only. Caller tests set the real
-pin variables (`KIND_SHA256_AMD64`, `KIND_SHA256_FOR_VER`, …) to their fixture's values, so the
-caller-name to pin-variable wiring runs in every caller test.
+Test seams `_FETCHED_URL` and `_FETCHED_SHA256` replace the URL and pin and bypass the `_FOR_VER`
+check. They are honoured only when `BATS_TEST_TMPDIR` is set, so a stray export in an interactive
+shell cannot replace the pin. Caller tests do not use them: they set the real pin variables
+(`KIND_SHA256_AMD64`, `KIND_SHA256_FOR_VER`, …) to their fixture's values, so caller-name to
+pin-variable wiring runs in every caller test.
 
-### 4. docker-compose removal
+### 4. Retiring docker-compose, telepresence and cf-terraforming
 
-`_install_ubuntu_misc` stops installing docker-compose. When `${_DL_STAMP_DIR}/docker-compose`
-exists, which proves this repo installed the binary, it runs `sudo rm -f /usr/local/bin/docker-compose`
-and removes the stamp, printing `docker-compose: removed standalone binary; use docker compose`. A
-`/usr/local/bin/docker-compose` without that stamp is left alone. `DOCKER_COMPOSE_VER` and
-`DOCKER_COMPOSE_URL` are deleted, and the comments in `.config/.zshrc.d/6_path.zsh` and ADR-0041 that
-name it are updated. The Docker plugin, macOS and Windows are untouched.
+Their install calls, `TELEPRESENCE_URL`, `CF_TERRAFORMING_URL`, `CF_TERRAFORMING_VER`,
+`DOCKER_COMPOSE_URL` and `DOCKER_COMPOSE_VER` are deleted. `_install_ubuntu_misc` calls
+`_remove_stamped_binary <name>` for each of the three, on every run whatever the `HAS_*` flags.
+
+`_remove_stamped_binary <name>` acts only when `${_DL_STAMP_DIR}/<name>` exists, which shows this repo
+installed the binary, and only when `${_DL_BIN_DIR:-/usr/local/bin}/<name> version` prints an X.Y.Z
+version that appears in the stamp's URL, which shows the binary is still the one this repo installed.
+Then it runs `sudo rm -f` on that path, and removes the stamp only if `rm` succeeded, printing
+`<name>: removed (no longer installed by dotfiles)`. Without a stamp it does nothing and prints
+nothing. With a stamp but a version that differs from it, it removes nothing and prints `<name>: not
+removed: <path> is <found>, not the <stamped> dotfiles installed`. A failed `rm` prints a warning and
+leaves the stamp. None of these changes `_install_ubuntu_misc`'s return code: retiring is cleanup.
+
+`docker compose` (the plugin) is untouched. The Brewfile telepresence entries (`Brewfile:24`,
+`Brewfile.devtools:5`) are macOS and out of scope (N3); see the open question below.
+`.config/.zshrc.d/6_path.zsh`'s docker-compose comment and ADR-0041's tool list are updated.
 
 ### 5. Pin refresher (`scripts/refresh-sha256-pins.sh`)
 
-A standalone executable, run as its own process and never sourced; it sources the target constants
+A standalone executable, run as its own process and never sourced. It sources the target constants
 file once (sourcing `lib/constants.sh` twice in one shell aborts on a readonly array).
 
 `refresh-sha256-pins.sh [--constants <file>] [--accept-changed] [tool…]`:
 
 1. Reads `*_VER` and `_FOR_VER` from the target (default `lib/constants.sh`). Every pin line must
    already exist; a missing line is an error, never appended.
-2. Selects the named tools, else every tool whose `_FOR_VER` differs from `*_VER` (prints
-   `pins up to date` when none). Unchanged tools are never re-downloaded.
-3. For each tool and arch prints `fetching <url>`, then downloads with
-   `curl -fsSL --proto =https --proto-redir =https --max-time 600` and hashes it.
-4. If a tool's `_FOR_VER` already equals its `*_VER` and a new hash differs from the committed one,
-   prints `<tool>: <arch> asset changed at unchanged version <ver>` with old and new hashes and exits
-   1 without writing, unless `--accept-changed` was given. That flag is the only sanctioned re-pin at
-   an unchanged version, for a deliberate upstream rebuild.
+2. Selects the named tools, else every tool whose `_FOR_VER` differs from its `*_VER` (prints
+   `pins up to date` when none).
+3. For each tool and arch, takes `_release_asset_url`, splits it into owner, repo, tag and asset (any
+   URL not of the GitHub release shape is an error), prints `querying <url>`, and reads the asset's
+   `digest` from `https://api.github.com/repos/<owner>/<repo>/releases/tags/<tag>`, sending
+   `GITHUB_TOKEN` through `_github_auth_header` when set. A digest that is absent, not `sha256:`, or
+   not 64 hex is an error. No asset is downloaded.
+4. If a tool's `_FOR_VER` already equals its `*_VER` and a digest differs from the committed pin, it
+   prints `<tool>: <arch> asset changed at unchanged version <ver>` with both hashes and exits 1 without
+   writing, unless `--accept-changed` was given.
 5. Writes hashes and `_FOR_VER` into a same-directory copy, reads every line back with `grep -Fqx`,
    and `mv`s it over the target only if all read back; prints `<VAR> <old> -> <new>` per change. Any
-   failure prints tool, arch and cause, leaves the target byte-identical, and exits 1.
+   failure prints tool, arch and cause, removes its copy, leaves the target byte-identical, and exits
+   1. An interrupt can leave the copy behind; the target is never partly written.
 
-A hand bump is: edit `*_VER`, run the script, commit both. Until the script runs, a bats test fails
-(section 7), so a forgotten run is caught at pre-push.
+A hand bump is: edit `*_VER`, run the script, commit both. Until it runs, a bats test fails (Testing),
+so a forgotten run is caught at pre-push.
 
 ### 6. `check-versions`
 
-**Pin-based check.** New `_check_one_pinned_release <tool> <pinned> <repo>` compares the **pin**
-with GitHub's latest release: `[OK]` when equal, `[OUTDATED]` when latest is newer, `[WARN]` on a
-fetch failure. It does not run the installed binary, so it behaves the same on Linux and macOS and
-never offers an update to the version already pinned. kind, telepresence, cf-terraforming and yq use
-it (yq moves off the installed-binary check). The token-refusal message derives its count of
-GitHub-token checks from the list instead of the literal "5", and its tests assert the derived count.
+**Pin-based check.** `_check_one_pinned_release <tool> <pinned> <repo>` compares the **pin** with
+GitHub's latest release: `[OK]` when equal, `[OUTDATED]` when latest is newer, `[WARN]` on a fetch
+failure. It never runs the installed binary, so Linux and macOS agree. kind, yq and shellcheck use it.
+It goes through the same `_token_refused` gate as `_run_cv_check`, so a refused token counts these
+as "not checked", and the refusal message derives its count of token-sending checks from the list
+(8 today) instead of the literal "5".
 
-**`--update`** for those four tools goes through a new arm in `_prompt_version_update`, not the
-catch-all: `_update_release_pin <tool> <var> <latest>` copies the constants file to a same-directory
-temp, writes and reads back the new `*_VER`, runs `refresh-sha256-pins.sh --constants <temp> <tool>`,
-and `mv`s the temp over the original only if both succeed. On failure the temp is removed, the
-original is untouched, it prints `<tool>: refusing pin update: could not refresh sha256 pins`, and
-returns 1. On success it prints `<tool>: run ./setup_env.sh -t developer on each Linux box to
-install <latest>`. A Ctrl-C leaves the original intact.
+**`--update`.** `_prompt_version_update` dispatches shellcheck before printing any prompt: it prints
+`shellcheck: bump by hand: SHELLCHECK_VER, scripts/refresh-sha256-pins.sh shellcheck, and the three
+SC_VER/SC_SHA256 sites in .github/workflows/ci.yml (darwin hash: gh api
+repos/koalaman/shellcheck/releases/tags/v<ver> --jq '.assets[]|select(.name|test("darwin.aarch64.tar.xz"))|.digest')`
+and changes nothing.
 
-**shellcheck** gets its own arm that prompts nothing and prints
-`shellcheck: bump by hand: SHELLCHECK_VER, scripts/refresh-sha256-pins.sh shellcheck, and the three SC_VER/SC_SHA256 sites in .github/workflows/ci.yml (darwin hash: gh api repos/koalaman/shellcheck/releases/tags/v<ver> --jq '.assets[]|select(.name|test("darwin.aarch64.tar.xz"))|.digest')`,
-then returns 1.
-
-The catch-all arm (ruby, zsh, gitleaks, vagrant) gains `|| return 1`.
+kind and yq get their own arm, `_update_release_pin <tool> <var> <latest>`, after the prompt: it copies
+the constants file to a same-directory temp, writes and reads back the new `*_VER`, runs
+`refresh-sha256-pins.sh --constants <temp> <tool>`, and `mv`s the temp over the original only if both
+succeed, printing `Updated <var> → <latest>` and `<tool>: run ./setup_env.sh -t developer on each
+Linux box to install <latest>`. On failure the temp is removed, the original is untouched, and it
+prints `<tool>: refusing pin update: could not refresh sha256 pins` and not "Updated". The run's exit
+code does not change (it stays 1 for any OUTDATED, as today); the printed lines are the signal.
 
 ### 7. Older verify call sites
 
@@ -174,73 +184,81 @@ three rc-specific messages as section 3, replacing the single "sha256 mismatch" 
 
 ## Trust model
 
-The pins are hashes of what the upstream URL served when the refresher ran. They protect every later
-install against a changed, truncated or substituted download and a redirect to another host, and the
-refresher will not re-pin a changed asset at an unchanged version without `--accept-changed`. They
-are not independent provenance; V1 cross-checks against the GitHub API `digest`, which catches a
-corrupted fetch, not a compromised release.
+The pins come from the GitHub releases API digest at the time the refresher ran. They protect every
+later install against a changed, truncated or substituted download and a redirect to another host, and
+the refresher will not re-pin a changed asset at an unchanged version without `--accept-changed`. They
+are not independent provenance: a release compromised before the refresher ran is pinned as is. V1
+downloads each pinned asset and hashes it, a derivation independent of the API digest, which catches a
+wrong digest or a mis-mapped asset, not a compromised release.
+
+## Open question for review
+
+The Brewfile still installs telepresence on macOS. The operator said it is unused. Removing it is a
+macOS change (N3 forbids it here); the choice is a one-line Brewfile PR or a backlog row.
 
 ## Testing
 
-- `_release_asset_url`: all five tools on both arches against a hand-typed URL table (not derived
-  from the function); an unknown tool returns 2 with no output, in the same file.
-- `_release_asset_sha`: each of the 10 pins (8 new, 2 shellcheck) returns its variable name and
-  value; unknown tool returns 2.
-- Committed constants, named explicitly: every pin passes `_sha256_pin_ok` and every `_FOR_VER`
-  equals its `*_VER`. Bumping one `*_VER` alone turns this red.
+- `_release_asset_url`: kind, yq and shellcheck on both arches against a hand-typed URL table; an
+  unknown tool returns 2 with no output, in the same file.
+- `_release_asset_sha`: each of the 6 pins (4 new, 2 shellcheck) returns its variable name and value;
+  unknown tool returns 2.
+- Committed constants, named explicitly: each pin passes `_sha256_pin_ok` and each `_FOR_VER` equals
+  its `*_VER`. Bumping one `*_VER` alone turns this red.
 - Installer unit tests (`tests/setup_env/fetched_binary.bats`) set `_FETCHED_URL` and
   `_FETCHED_SHA256` and keep their assertions; stamp assertions change only to the `<url> <sha256>`
-  form; `--resolve` tests are deleted. New: wrong pin (mismatch with the fixture's real hash, nothing
-  installed, no stamp); malformed, missing and `_FOR_VER`-mismatched pins (named refusal, no `wget`);
-  unknown tool (rc 1, no `wget`); rc 3 and rc 126 (no "mismatch"); success prints `sha256 verified`;
-  a stamp with the right URL and an old sha reinstalls; `--unverified` accepted for each HashiCorp
-  name and refused for every other name.
+  form; `--resolve` tests are deleted. New: wrong pin (mismatch message with the fixture's real hash
+  and the URL, nothing installed, no stamp); malformed, missing and `_FOR_VER`-mismatched pins and an
+  unknown tool (named refusal, no `wget`); rc 3 and rc 126 (their own message, and no "mismatch");
+  success prints `sha256 verified` and writes the two-field stamp; a stamp with the right URL and an
+  old sha reinstalls; `--unverified` installs for each HashiCorp name with a URL-only stamp and the
+  "not verified" line, and is refused for kind; the seams are ignored with `BATS_TEST_TMPDIR` unset.
 - Caller tests (`tests/setup_env/linux_ubuntu.bats`) set the real pin and `_FOR_VER` variables to
-  their fixture's values instead of the seams, and every grep for a URL asserts the URL is non-empty.
-  amd64 and arm64 select their own pin through a caller (passes under its arch, fails with the pins
-  swapped).
-- docker-compose: with a stamp, the binary and stamp are removed and the message prints; without a
-  stamp, an existing `/usr/local/bin/docker-compose` (fixture dir) is untouched; no install is
-  attempted either way.
-- Refresher (curl shim writing URL-dependent content): writes each hash and `_FOR_VER` to the right
-  variable; prints `fetching` per asset and the changes; default selects only stale tools; refuses a
-  changed hash at an unchanged version and accepts it with `--accept-changed`; a missing line is an
-  error. Each failure case asserts the printed cause, that the shim was called, and that the target
-  is byte-identical (`cmp`).
-- check-versions: each of the four tools prints `[OK]` or `[OUTDATED]` from a stubbed latest (not
-  `[SKIP]`); a pin equal to latest never prompts; `--update` success changes `*_VER`, pins and
-  `_FOR_VER` together and prints the `-t developer` line; refresh failure leaves the file
-  byte-identical, prints the refusal and not "Updated"; shellcheck prints the hand-bump message with
-  no prompt and changes nothing; the token-refusal count matches the list.
-- Older call sites: rc 3 and rc 126 print their messages and not "mismatch".
+  their fixture's values, and every grep for a URL asserts the URL is non-empty. kind under amd64 and
+  under arm64 each installs with its own pin and fails with the pins swapped.
+- Retirement, with `_DL_BIN_DIR` and `_DL_STAMP_DIR` at fixture dirs (no test touches
+  `/usr/local/bin`): stamped and version-matching binary is removed, stamp removed after, message
+  printed; stamped but different version is kept with the "not removed" message; no stamp does nothing
+  while a stamped sibling in the same run is removed (positive control); a failed `rm` keeps the stamp
+  and warns; the misc step's rc is unchanged in each case.
+- Refresher (an API shim returning release JSON): writes each digest and `_FOR_VER` to the right
+  variable and prints `querying` and the changes; default selects only stale tools and the shim shows
+  the stale tool queried and the fresh one not; refuses a changed digest at an unchanged version and
+  accepts it with `--accept-changed`; a missing line, a non-GitHub URL, a missing or malformed digest
+  and a read-back failure each print their cause, and the target is byte-identical (`cmp`).
+- check-versions: kind, yq and shellcheck print `[OK]` or `[OUTDATED]` from a stubbed latest (not
+  `[SKIP]`), and an equal pin prints `[OK]` and no prompt; a refused token counts them as not checked
+  and the message's count is 8; `--update` success changes `*_VER`, pins and `_FOR_VER` together and
+  prints both lines; refresh failure leaves the file byte-identical and prints the refusal and not
+  "Updated"; shellcheck prints the hand-bump message with no `[y/N]` and changes nothing.
+- Older call sites: rc 3 and rc 126 print their own messages and not "mismatch".
 - Mutation controls, recorded in the PR: delete the installer's verify stage; swap the arch arms in
-  `_release_asset_sha`; let `--unverified` accept any name; make the refresher write the amd64 hash
-  to both arches; drop the unchanged-version refusal; route the four tools through the catch-all arm.
-  Each single change turns a named test red.
+  `_release_asset_sha`; let `--unverified` accept any name; make the refresher write the amd64 digest
+  to both arches; drop the unchanged-version refusal; drop the version check in
+  `_remove_stamped_binary`. Each single change turns a named test red.
 
 ## Requirements
 
-- **R1.** `[PR1]` `_release_asset_url <tool> <arch>` returns the URL in section 1's table for kind, telepresence, cf-terraforming, yq and shellcheck on both arches, and returns 2 with no output for an unknown tool.
-- **R2.** `[PR1]` `lib/constants.sh` defines `TELEPRESENCE_VER="2.32.2"`, the 8 new hash pins and 5 `<TOOL>_SHA256_FOR_VER` lines of section 2 each equal to its `*_VER`, and no longer defines `KIND_URL`, `TELEPRESENCE_URL`, `CF_TERRAFORMING_URL`, `YQ_URL`, `DOCKER_COMPOSE_VER` or `DOCKER_COMPOSE_URL`.
+- **R1.** `[PR1]` `_release_asset_url <tool> <arch>` returns the URL in section 1's table for kind, yq and shellcheck on both arches, and returns 2 with no output for an unknown tool.
+- **R2.** `[PR1]` `lib/constants.sh` defines the 4 new hash pins and 3 `<TOOL>_SHA256_FOR_VER` lines of section 2, each equal to its `*_VER`, and no longer defines `KIND_URL`, `YQ_URL`, `TELEPRESENCE_URL`, `CF_TERRAFORMING_URL`, `CF_TERRAFORMING_VER`, `DOCKER_COMPOSE_URL` or `DOCKER_COMPOSE_VER`.
 - **R3.** `[PR1]` In its pinned form, `_install_fetched_binary` refuses with rc 1 and no download on an unknown tool, a `_FOR_VER` mismatch, or a missing or malformed pin, naming the cause, before its stamp check.
-- **R4.** `[PR1]` `_install_fetched_binary` runs `_verify_sha256` between download and extract in its pinned form; on failure it installs nothing, writes no stamp and says "mismatch" only for rc 1; on success it prints `sha256 verified` and writes a stamp holding the URL and the pin.
-- **R5.** `[PR1]` `_install_fetched_binary --unverified` is accepted only for consul, vault, nomad, packer and vagrant, and `--resolve` is removed.
-- **R6.** `[PR1]` `_install_ubuntu_misc` no longer installs docker-compose, and removes `/usr/local/bin/docker-compose` and its stamp only when that stamp exists.
-- **R7.** `[PR1]` `scripts/refresh-sha256-pins.sh` refreshes only tools whose `_FOR_VER` differs from `*_VER` unless tools are named, refuses a changed hash at an unchanged version unless `--accept-changed` is given, never appends missing lines, writes through an atomic read-back replace, and leaves the target byte-identical on any failure.
-- **R8.** `[PR1]` `check-versions` compares the pins of kind, telepresence, cf-terraforming and yq with GitHub's latest release, without running the installed binary.
-- **R9.** `[PR1]` `check-versions --update` for those four tools changes `*_VER`, pins and `_FOR_VER` together through a temp copy and `mv`, and on refresh failure leaves `lib/constants.sh` byte-identical, prints the refusal and does not print "Updated".
-- **R10.** `[PR1]` `check-versions --update` for shellcheck prompts nothing, changes nothing and prints the hand-bump instruction naming the three `ci.yml` sites.
+- **R4.** `[PR1]` In its pinned form, `_install_fetched_binary` runs `_verify_sha256` between download and extract; on failure it installs nothing, writes no stamp, and says "mismatch" only for rc 1; on success it prints `sha256 verified` and writes a stamp holding the URL and the pin.
+- **R5.** `[PR1]` `_install_fetched_binary --unverified` is accepted only for consul, vault, nomad, packer and vagrant, keeps a URL-only stamp and prints the "not verified" line; `--resolve` is removed.
+- **R6.** `[PR1]` telepresence, cf-terraforming and docker-compose are no longer installed, and `_remove_stamped_binary` removes each one's binary only when its stamp exists and the binary's version appears in the stamp, removing the stamp only after a successful `rm`.
+- **R7.** `[PR1]` `scripts/refresh-sha256-pins.sh` pins from the GitHub releases API digest without downloading assets, refreshes only stale tools unless tools are named, refuses a changed digest at an unchanged version unless `--accept-changed`, never appends missing lines, writes through an atomic read-back replace, and leaves the target byte-identical on any failure.
+- **R8.** `[PR1]` `check-versions` compares the pins of kind, yq and shellcheck with GitHub's latest release without running the installed binary, inside the token-refusal gate.
+- **R9.** `[PR1]` `check-versions --update` for kind and yq changes `*_VER`, pins and `_FOR_VER` together through a temp copy and `mv`, and on refresh failure leaves `lib/constants.sh` byte-identical and prints the refusal and not "Updated".
+- **R10.** `[PR1]` `check-versions --update` prints the shellcheck hand-bump instruction naming the three `ci.yml` sites before any prompt, and changes nothing for shellcheck.
 - **R11.** `[PR1]` `_install_pinned_release_binary` and `_install_rustup_rs` print the rc-specific verify messages of R4.
-- **R12.** `[PR1]` `CLAUDE.md` documents the refresher and its hand-bump procedure, the `_FETCHED_URL`/`_FETCHED_SHA256` seams and the caller-test rule, the pin and `_FOR_VER` naming, the `--unverified` allowlist, the docker-compose removal, and the pin-based check-versions.
-- **V1.** Each new pin equals the releases API `digest` for its asset; record the comparison in the PR.
-- **V2.** After merge, on `claude` and `workstation`, run the k8s, cf-terraforming and misc install steps with `_DL_STAMP_DIR` pointed at an empty temp dir (after noting whether a docker-compose stamp existed); kind, telepresence, cf-terraforming and yq each print `sha256 verified`, `telepresence version` reports 2.32.2, and docker-compose is removed where it was stamped.
+- **R12.** `[PR1]` `CLAUDE.md` documents the refresher and hand-bump procedure, the test-only `_FETCHED_URL`/`_FETCHED_SHA256` seams and the caller-test rule, the pin and `_FOR_VER` naming, the `--unverified` allowlist, the three retired tools, and the pin-based check-versions.
+- **V1.** Download each of the 6 pinned assets once and confirm its sha256 equals its pin; record the comparison in the PR.
+- **V2.** After merge, on `claude` and `workstation`: run the misc step against the real stamp dir and confirm the three retired binaries are removed where stamped (noting each stamp and version first); then run the k8s and misc install steps with `_DL_STAMP_DIR` pointed at an empty temp dir and confirm kind and yq print `sha256 verified`, then delete that temp dir.
 - **V3.** The mutation controls in Testing each turn a named test red; record them in the PR.
-- **N1.** No change to how the five HashiCorp tools are downloaded (PR B).
+- **N1.** No change to how the five HashiCorp tools are downloaded beyond the `--unverified` form (PR B).
 - **N2.** No change to how tflint or tfsec pins are bumped.
 - **N3.** No change to macOS or Windows installs.
 - **N4.** `_install_fetched_binary` keeps `wget` for downloads.
 - **N5.** No automated edit of `.github/workflows/ci.yml`.
-- **N6.** No removal of `docker-compose-plugin` or any `docker-compose` binary this repo did not stamp.
+- **N6.** No removal of `docker-compose-plugin`, or of any binary without a matching dotfiles stamp.
 
 ## Multi-Lens Review
 
@@ -336,4 +354,42 @@ telepresence version recorded in V2.
 Signals at this point: findings were still design-level, and the corrections removed surface (10 to 4
 pinned tools, 19 to 8 hashes, the vagrant arm, the arch-skip arm, docker-compose), so a full round 3
 follows.
+
+### Round 3
+
+Reviewed at commit: `7481b0a4` (all three lenses, PR A scope with four pinned tools)
+
+**Goal-Fit.** Finding: V2 pointed the stamp dir at an empty temp dir, so the stamp-gated docker-compose
+removal could never be observed; the `--update` return codes and the catch-all `|| return 1` are read
+by nothing (`_tally_cv_out` discards them); shellcheck kept the installed-binary check; the refresher
+could read the API `digest` instead of downloading ~260 MB per telepresence bump.
+Assumption: telepresence and cf-terraforming are still used. Settled by the operator: neither is.
+Disposition: Addressed (operator, 2026-10-13): both retired with docker-compose (PR A pins kind and yq
+only); V2 split into a real-stamp removal pass and an empty-dir verify pass; decorative rc clauses
+removed and tests assert on output; shellcheck moved to the pin-based check; refresher pins from the
+API digest and V1 downloads and hashes independently.
+
+**Ergonomics.** Finding: same V2 and shellcheck findings; the shellcheck arm sat after the `[y/N]`
+prompt; the mismatch message had no next step; HashiCorp tools printed nothing, indistinguishable from
+a skipped verify; `--unverified <url> <name>` swapped argument order; the token gate for the new checks
+was unstated; four absence-only tests lacked positive controls; telepresence had no rollback hint.
+Assumption: the forced telepresence 2.32 client works against existing traffic-managers; void now that
+telepresence is retired.
+Disposition: Addressed (operator, 2026-10-13): shellcheck dispatched before the prompt; next-step
+mismatch message with the URL; `not verified (pending PR B)` line; `--unverified <name> <url>`;
+token-gated checks with a derived count of 8; positive controls added.
+
+**Risk.** Finding: section 4 hardcoded `sudo rm -f /usr/local/bin/docker-compose`, so the test would
+touch the real path through the sudo mock; stamp removal was not ordered after `rm`, and a stamp alone
+does not prove the binary is ours; the `--unverified` stamp format was unspecified (a two-field stamp
+would re-download the five tools every run); the `_FETCHED_*` seams were honoured in production;
+Ctrl-C can leave temp copies beside `lib/constants.sh`.
+Assumption: the OSS telepresenceio build is a drop-in for Ambassador's; void now that telepresence is
+retired.
+Disposition: Addressed (operator, 2026-10-13): `${_DL_BIN_DIR}`; stamp removed only after `rm`;
+version-in-stamp ownership check; `--unverified` keeps URL-only stamps; seams honoured only with
+`BATS_TEST_TMPDIR`; the interrupt claim narrowed to the target file.
+
+Signals: the corrections again removed surface (4 to 2 pinned tools, 8 to 4 hashes, no downloads in
+the refresher, decorative return codes gone). Operator asked for a full round 4.
 
