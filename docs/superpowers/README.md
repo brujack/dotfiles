@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| 2026-10-13 | [release asset sha256 pins (PR A)](plans/2026-10-13-release-asset-sha256.md) | [release asset sha256 pins](specs/2026-10-13-release-asset-sha256-design.md) | In Progress |
+| 2026-10-13 | [release asset sha256 pins (PR A)](plans/2026-10-13-release-asset-sha256.md) | [release asset sha256 pins](specs/2026-10-13-release-asset-sha256-design.md) | Done — #338 |
 | 2026-10-13 | [go tarball sha256](plans/2026-10-13-go-tarball-sha256.md) | [go tarball sha256 verification](specs/2026-10-13-go-tarball-sha256-design.md) | Done — #337 |
 | 2026-10-12 | [flatpak update](plans/2026-10-12-flatpak-update.md) | [flatpak update section and NVIDIA GL check](specs/2026-10-12-flatpak-update-design.md) | Done |
 | 2026-10-11 | [ansible-venv-interpreter-guard](plans/2026-10-11-ansible-venv-interpreter-guard.md) | [ansible-venv-interpreter-guard](specs/2026-10-11-ansible-venv-interpreter-guard-design.md) | Done — #332 |
@@ -406,6 +406,7 @@ None open.
 | stale `inotify_conf_write:` test names | From #327 reviews: three tests in `tests/setup_env/linux_ubuntu.bats` still name the removed `_inotify_conf_write`; the function is `_sysctl_conf_write` |
 | _install_fetched_binary is 156 lines | pin resolution (two rc-2/rc-3 case blocks) and five bad-argument exits could fold into one helper and one exit; maintainability-review 2026-10-14 |
 | release-pinned tool list is written in five places | kind/yq/shellcheck appears in _release_asset_url, _release_asset_sha, the refresher's usage, argument case and default loop, plus kind\|yq in _prompt_version_update; keep one list or test that they agree |
+| _install_fetched_binary cannot extract shellcheck's .tar.xz | _release_asset_url/_release_asset_sha accept shellcheck, but the `tar` kind runs `tar -xzf` (gzip); shellcheck installs through _install_pinned_release_binary instead, so the gap is latent; restrict the header to kind and yq or add an xz kind (code review of #338, scored 50) |
 | call-time BASH_SOURCE constants path in three check-versions writers | _update_version_pin, _update_go_pin and _update_python_pin default lib/constants.sh from a call-time relative BASH_SOURCE (shell.md pitfall); use DOTFILES_REPO_ROOT |
 | older pinned-download seams are not bats-gated | _RUSTUP_INIT_URL/_RUSTUP_INIT_SHA256 and the tflint/tfsec/go overrides are honoured outside bats, unlike _FETCHED_* (ADR-0046) |
 

@@ -1,3 +1,5 @@
+> **Status: DONE** — merged as #338 (f389df25), 2026-10-14
+
 # Release Asset sha256 Pins (PR A) Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-13-release-asset-sha256-design.md
