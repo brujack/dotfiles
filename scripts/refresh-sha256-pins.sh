@@ -256,6 +256,11 @@ main() {
     return 1
   }
   trap _cleanup_tmp EXIT
+  # bash runs a trapped signal's handler only after the foreground child (curl)
+  # exits, so this cleanup follows curl's last write to the body file.
+  trap '_cleanup_tmp; exit 143' TERM
+  trap '_cleanup_tmp; exit 130' INT
+  trap '_cleanup_tmp; exit 129' HUP
 
   # shellcheck source=/dev/null # the target is a runtime argument
   source "${_constants}" || return 1

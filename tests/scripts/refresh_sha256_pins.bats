@@ -357,6 +357,18 @@ _curl_shim() {
   [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/kubernetes-sigs/kind/releases/tags/v1.2.3" ]
 }
 
+@test "proxy environment variables do not divert the token-bearing API call" {
+  unset no_proxy NO_PROXY
+  export http_proxy=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9
+  export https_proxy=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
+  export GITHUB_TOKEN="tok-proxy-555"
+  _listen
+  run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 0 ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/kubernetes-sigs/kind/releases/tags/v1.2.3" ]
+  grep -q 'Authorization: Bearer tok-proxy-555' "${HTTP_LISTENER_HEADERS}"
+}
+
 @test "a symlinked --constants target is refused and left alone" {
   local real="${BATS_TEST_TMPDIR}/real.sh" link="${BATS_TEST_TMPDIR}/link.sh"
   mv "${C}" "${real}"
@@ -395,22 +407,33 @@ _curl_shim() {
   [ "$(wc -l <"${HTTP_LISTENER_PATHS}" | tr -d ' ')" -eq 1 ]
 }
 
-@test "SIGTERM mid-request removes the body temp file" {
-  local tmpd="${BATS_TEST_TMPDIR}/tmpd" shim="${BATS_TEST_TMPDIR}/slow" real pid
+@test "SIGTERM mid-request: exits 143 and leaves no temp file once curl has finished" {
+  local tmpd="${BATS_TEST_TMPDIR}/tmpd" shim="${BATS_TEST_TMPDIR}/slow" real pid rc=0
   mkdir -p "${tmpd}" "${shim}"
   real="$(command -v curl)"
-  printf '#!/usr/bin/env bash\nsleep 1\nexec "%s" "$@"\n' "${real}" >"${shim}/curl"
+  # The shim signals readiness through a file, then lingers so the signal lands
+  # while the request is in flight; its exec'd curl then writes the body file.
+  printf '#!/usr/bin/env bash\ntouch "%s/ready"\nsleep 1\nexec "%s" "$@"\n' "${BATS_TEST_TMPDIR}" "${real}" >"${shim}/curl"
   chmod +x "${shim}/curl"
   _listen
   TMPDIR="${tmpd}" PATH="${shim}:${PATH}" "${SCRIPT}" --constants "${C}" kind >/dev/null 2>&1 &
   pid=$!
-  for _ in $(seq 100); do
-    compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null && break
+  for _ in $(seq 200); do
+    [[ -e "${BATS_TEST_TMPDIR}/ready" ]] && break
     sleep 0.05
   done
-  # Positive control: the temp file existed while the request was in flight.
+  # Positive controls: the request was in flight and its body file existed.
+  [ -e "${BATS_TEST_TMPDIR}/ready" ]
   compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null
   kill -TERM "${pid}"
-  wait "${pid}" || :
-  run ! compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null
+  wait "${pid}" || rc=$?
+  [ "${rc}" -eq 143 ]
+  # The orphaned curl may outlive the script; wait for every process of this test.
+  for _ in $(seq 200); do
+    pgrep -f "${BATS_TEST_TMPDIR}/(tmpd|slow)" >/dev/null || break
+    sleep 0.05
+  done
+  run ! pgrep -f "${BATS_TEST_TMPDIR}/(tmpd|slow)"
+  run ! compgen -G "${tmpd}/refresh-pins-body.*"
+  run ! compgen -G "${tmpd}/.refresh-pins.*"
 }
