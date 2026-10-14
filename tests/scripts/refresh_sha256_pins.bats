@@ -443,3 +443,84 @@ _curl_shim() {
   run ! compgen -G "${tmpd}/refresh-pins-body.*"
   run ! compgen -G "${tmpd}/.refresh-pins.*"
 }
+
+# _shim_fail <command> [<match>] -- a PATH shim that exits 1 for <command>, only when
+# an argument contains <match> if one is given, and otherwise runs the real binary.
+# Sets SHIM_PATH for use as `env PATH="${SHIM_PATH}"`; never changes the test's PATH.
+_shim_fail() {
+  local _cmd="$1" _match="${2:-}" _real _dir="${BATS_TEST_TMPDIR}/failshim"
+  _real="$(command -v "${_cmd}")"
+  mkdir -p "${_dir}"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'for a in "$@"; do\n'
+    printf '  case "$a" in *"%s"*) exit 1 ;; esac\n' "${_match}"
+    printf 'done\n'
+    printf 'exec "%s" "$@"\n' "${_real}"
+  } >"${_dir}/${_cmd}"
+  chmod +x "${_dir}/${_cmd}"
+  SHIM_PATH="${_dir}:${PATH}"
+}
+
+@test "an unreachable API: names the curl exit code and the URL, writes nothing" {
+  _snapshot
+  export _GITHUB_API="http://127.0.0.1:1"
+  run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: GitHub API request failed (curl rc 7) for http://127.0.0.1:1/repos/kubernetes-sigs/kind/releases/tags/v1.2.3"* ]]
+  _unchanged
+}
+
+@test "an uncreatable body temp file is refused before any request" {
+  _listen
+  _snapshot
+  TMPDIR="${BATS_TEST_TMPDIR}/no-such-tmpdir" run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: cannot create a temp file"* ]]
+  [ ! -e "${HTTP_LISTENER_PATHS}" ]
+  _unchanged
+}
+
+@test "an uncreatable temp copy beside the target is refused and writes nothing" {
+  _listen
+  _snapshot
+  _shim_fail mktemp ".refresh-pins."
+  run env PATH="${SHIM_PATH}" "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot create a temp copy next to ${C}"* ]]
+  _unchanged
+}
+
+@test "a failing cp is reported, removes its copy and leaves the target unchanged" {
+  _listen
+  _snapshot
+  _shim_fail cp
+  run env PATH="${SHIM_PATH}" "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot copy ${C}"* ]]
+  _unchanged
+  run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*"
+}
+
+@test "a failing sed is reported, removes its copy and leaves the target unchanged" {
+  _listen
+  _snapshot
+  _shim_fail sed
+  run env PATH="${SHIM_PATH}" "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sed failed on ${C}"* ]]
+  _unchanged
+  run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*"
+}
+
+@test "a failing final rename is reported, removes its copy and leaves the target unchanged" {
+  _listen
+  _snapshot
+  _shim_fail mv
+  run env PATH="${SHIM_PATH}" "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot replace ${C}"* ]]
+  [[ "$output" != *"KIND_SHA256_AMD64"*"->"* ]]
+  _unchanged
+  run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*"
+}

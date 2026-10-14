@@ -384,6 +384,38 @@ _assert_refused_before_download() {
   [[ "${output}" == *"kind: no pin for arch 'riscv64'"* ]]
 }
 
+@test "_install_fetched_binary: an unknown tool is refused at the pin lookup when only the URL is seamed" {
+  # _FETCHED_URL bypasses the URL lookup, so the pin lookup is the only stage
+  # left that can name the tool as unknown.
+  unset _FETCHED_SHA256
+  export _FETCHED_URL="${URL}" _LINUX_ARCH=amd64
+  run _install_fetched_binary bogus bin bogus
+  _assert_refused_before_download bogus
+  [[ "${output}" == *"bogus: unknown tool"* ]]
+}
+
+@test "_install_fetched_binary: an unknown arch is refused at the pin lookup when only the URL is seamed" {
+  unset _FETCHED_SHA256
+  export _FETCHED_URL="${URL}" _LINUX_ARCH=riscv64
+  run _install_fetched_binary kind bin kind
+  _assert_refused_before_download kind
+  [[ "${output}" == *"kind: no pin for arch 'riscv64'"* ]]
+}
+
+@test "_install_fetched_binary: a workdir that mkdir accepts but mktemp cannot create fails before any fetch" {
+  if [ "$(id -u)" -eq 0 ]; then skip "running as root: a read-only directory does not stop mktemp"; fi
+  mkdir -p "${BATS_TEST_TMPDIR}/ro3"
+  chmod 0555 "${BATS_TEST_TMPDIR}/ro3"
+  export _DL_TMP_ROOT="${BATS_TEST_TMPDIR}/ro3"
+  run _install_fetched_binary tool bin ""
+  [ "$status" -eq 1 ]
+  [[ "${output}" == *"tool: workdir failed"* ]]
+  [ "$(_wget_count)" -eq 0 ]
+  [ "$(cat "${DEST}")" = "old" ]
+  [ ! -e "${STAMP}" ]
+  [ -z "$(ls -A "${_DL_TMP_ROOT}")" ]
+}
+
 @test "_install_fetched_binary: pins recorded for another version are refused" {
   _kind_real_pins
   export KIND_SHA256_FOR_VER="0.0.1"

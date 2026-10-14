@@ -1887,6 +1887,37 @@ _stub_refresher_fail() {
   cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
 }
 
+@test "_prompt_version_update refuses precisely when the final rename fails, and leaves no temp file" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  local _shim="${BATS_TEST_TMPDIR}/mvshim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${_shim}/mv"
+  chmod +x "${_shim}/mv"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  PATH="${_shim}:${PATH}" run _prompt_version_update "yq" "YQ_VER" "4.54.1" "9.9.9" <<< "y"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"yq: refusing pin update: could not replace ${_TEST_CONSTANTS_PATH}"* ]]
+  [[ "$output" != *"could not refresh sha256 pins"* ]]
+  [[ "$output" != *"Updated"* ]]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  [ -z "$(find "${BATS_TEST_TMPDIR}" -maxdepth 1 -name '.constants.*')" ]
+}
+
+@test "_prompt_version_update on y for a tool with no special arm edits only that version line" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_fail
+  run _prompt_version_update "vagrant" "VAGRANT_VER" "2.4.9" "2.5.0" <<< "y"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Updated VAGRANT_VER → 2.5.0"* ]]
+  grep -Fqx 'VAGRANT_VER="2.5.0"' "${_TEST_CONSTANTS_PATH}"
+  # the refresher belongs to kind/yq only: this arm must never call it
+  [[ "$output" != *"refresh sha256 pins"* ]]
+  [ "$(diff "${REPO_ROOT}/lib/constants.sh" "${_TEST_CONSTANTS_PATH}" | grep -c '^>')" -eq 1 ]
+}
+
 @test "_refresh_pins_bin default resolves to an executable file regardless of cwd" {
   unset _OVERRIDE_REFRESH_PINS
   local _bin
@@ -3610,6 +3641,69 @@ _cheat_mode() {
   unset UPDATE_CLAUDE UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   run_update
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_claude"
+}
+
+# _fake_claude_script <name> <exit-code> -- a stand-in for ~/.claude/scripts/<name>
+# (HOME is redirected per test), so the post-update scan never touches the real scanner.
+_fake_claude_script() {
+  mkdir -p "${HOME}/.claude/scripts"
+  printf 'import sys\nprint("%s ran")\nsys.exit(%s)\n' "$1" "$2" > "${HOME}/.claude/scripts/$1"
+}
+
+_claude_only_env() {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+}
+
+@test "run_update: a skill scan that finds red flags prints HOLD but never aborts the update" {
+  _claude_only_env
+  _fake_claude_script scan_skills.py 2
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[skill-scan] Scanning updated plugins for malicious content..."* ]]
+  [[ "$output" == *"[skill-scan] HOLD: one or more plugins contain red-flag patterns."* ]]
+  [[ "$output" != *"[skill-scan] REVIEW"* ]]
+}
+
+@test "run_update: a skill scan that could not analyse a plugin prints REVIEW, not HOLD" {
+  _claude_only_env
+  _fake_claude_script scan_skills.py 1
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[skill-scan] REVIEW: one or more plugins could not be fully analyzed."* ]]
+  [[ "$output" == *"re-running the scanner does not clear this"* ]]
+  [[ "$output" != *"[skill-scan] HOLD"* ]]
+}
+
+@test "run_update: a clean skill scan prints neither HOLD nor REVIEW" {
+  _claude_only_env
+  _fake_claude_script scan_skills.py 0
+  run run_update
+  [ "$status" -eq 0 ]
+  # positive control: the scanner really ran, so the absence below means clean
+  [[ "$output" == *"scan_skills.py ran"* ]]
+  [[ "$output" != *"[skill-scan] HOLD"* ]]
+  [[ "$output" != *"[skill-scan] REVIEW"* ]]
+}
+
+@test "run_update: stale plugin attestations are reported but never abort the update" {
+  _claude_only_env
+  _fake_claude_script plugin_verdicts.py 1
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"plugin_verdicts.py ran"* ]]
+  [[ "$output" == *"[skill-scan] Stale attestations detected. Re-scan flagged plugins."* ]]
+}
+
+@test "run_update: current plugin attestations print no staleness line" {
+  _claude_only_env
+  _fake_claude_script plugin_verdicts.py 0
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"plugin_verdicts.py ran"* ]]
+  [[ "$output" != *"Stale attestations"* ]]
 }
 
 @test "run_update converges json2yaml to its pin" {

@@ -9,6 +9,8 @@
 # always points at a BATS_TEST_TMPDIR subdirectory so nothing touches
 # /usr/local/bin and the install step never needs sudo.
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -695,4 +697,61 @@ EOF
       return 1
     fi
   done
+}
+
+@test "_install_pinned_release_binary: tarxz kind fails closed when the archive is not an xz tarball" {
+  # A download that matches its pin but is not extractable: the verify stage
+  # passes, so the extraction branch is the only thing that can refuse it.
+  local _fixture="${BATS_TEST_TMPDIR}/not-xz.tar.xz"
+  printf 'this is plain text, not an xz stream\n' > "${_fixture}"
+  local _sha
+  _sha="$(sha256sum "${_fixture}" | awk '{print $1}')"
+
+  local _shim="${BATS_TEST_TMPDIR}/notxz-curl-shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/curl" << EOF2
+#!/usr/bin/env bash
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then out="\$2"; shift 2; continue; fi
+  shift
+done
+cp "${_fixture}" "\${out}"
+exit 0
+EOF2
+  chmod +x "${_shim}/curl"
+
+  export _RELEASE_TMP_ROOT="${BATS_TEST_TMPDIR}/release-tmp"
+  mkdir -p "${_RELEASE_TMP_ROOT}"
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/not-xz.tar.xz" \
+    "${_sha}" tarxz '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"footool tar extraction failed"* ]]
+  # The checksum passed, so this is the extraction branch and not the verify one.
+  [[ "$output" != *"mismatch"* ]]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+  [ -z "$(ls -A "${_RELEASE_BIN_DIR}")" ]
+  [ -z "$(ls -A "${_RELEASE_TMP_ROOT}")" ]
+}
+
+@test "_install_ubuntu_tfsec: passes the pinned arm64 sha and URL" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=arm64
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_tfsec
+  [ "$status" -eq 0 ]
+  grep -qF "tfsec-linux-arm64 ${TFSEC_SHA256_ARM64} raw" "${MOCK_CALLS_FILE}"
+  run ! grep -qF "${TFSEC_SHA256_AMD64}" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfsec: unknown arch warns and skips without attempting a download" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=riscv64
+  : > "${MOCK_CALLS_FILE}"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  run _install_ubuntu_tfsec
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no pinned tfsec sha256 for riscv64; skipping"* ]]
+  [ ! -s "${MOCK_CALLS_FILE}" ]
 }
