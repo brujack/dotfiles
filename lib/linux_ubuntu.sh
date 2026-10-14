@@ -616,17 +616,26 @@ _install_rustup_rs() {
   # HAS_RUST + Ubuntu gated), but the bats suite runs on the Studio, and a case
   # statement that fails closed on the developer's own arch makes the suite
   # unrunnable locally for a reason that has nothing to do with the code.
-  local _sha _machine
+  local _sha _shavar _machine
   _machine="$(uname -m)"
   case "${_machine}" in
-    x86_64 | amd64) _sha="${RUSTUP_INIT_SHA256_X86_64}" ;;
-    aarch64 | arm64) _sha="${RUSTUP_INIT_SHA256_AARCH64}" ;;
+    x86_64 | amd64)
+      _sha="${RUSTUP_INIT_SHA256_X86_64}"
+      _shavar="RUSTUP_INIT_SHA256_X86_64"
+      ;;
+    aarch64 | arm64)
+      _sha="${RUSTUP_INIT_SHA256_AARCH64}"
+      _shavar="RUSTUP_INIT_SHA256_AARCH64"
+      ;;
     *)
       log_error "no pinned rustup-init sha256 for ${_machine} — refusing an unverified download"
       return 1
       ;;
   esac
-  _sha="${_RUSTUP_INIT_SHA256:-${_sha}}"
+  if [[ -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
+    _sha="${_RUSTUP_INIT_SHA256}"
+    _shavar="_RUSTUP_INIT_SHA256"
+  fi
 
   # Refuse a bad pin before any download; _verify_sha256 would also return 2,
   # but only after a network fetch.
@@ -644,8 +653,8 @@ _install_rustup_rs() {
     return 1
   fi
 
-  if ! _verify_sha256 "${_tmp}/rustup-init" "${_sha}"; then
-    log_error "rustup-init sha256 mismatch — refusing to execute"
+  if ! _sha256_check "rustup-init" "${_tmp}/rustup-init" "${_shavar}" "${_sha}" \
+    "${_RUSTUP_INIT_URL:-${RUSTUP_INIT_URL}}" "refusing to execute"; then
     rm -rf "${_tmp}"
     return 1
   fi
@@ -1790,8 +1799,8 @@ _install_pinned_release_binary() {
     return 1
   fi
 
-  if ! _verify_sha256 "${_artifact}" "${_sha256}"; then
-    log_error "${_name} sha256 mismatch — refusing to install"
+  if ! _sha256_check "${_name}" "${_artifact}" "pinned sha256" "${_sha256}" "${_url}" \
+    "refusing to install"; then
     rm -rf "${_tmp}"
     return 1
   fi

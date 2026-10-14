@@ -1883,6 +1883,52 @@ exit 0'
   refute_grep "SHOULD NOT RUN" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_rustup_rs: mismatch names the chosen variable, expected, actual and URL" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  # tests/mocks/curl writes MOCK_CURL_STDOUT (not the URL's content) to -o
+  export MOCK_CURL_STDOUT="payload"
+  local _actual
+  _actual="$(printf '%s' "${MOCK_CURL_STDOUT}" | sha256sum | awk '{print $1}')"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  export _RUSTUP_INIT_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
+  run --separate-stderr _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"rustup-init: sha256 mismatch: _RUSTUP_INIT_SHA256 expects 0000000000000000000000000000000000000000000000000000000000000000, download is ${_actual} from file://${_fixture}; refusing to execute"* ]]
+}
+
+@test "_install_rustup_rs: without the seam the label is the per-arch pin variable" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  unset _RUSTUP_INIT_SHA256
+  run --separate-stderr _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"sha256 mismatch: RUSTUP_INIT_SHA256_"* ]]
+}
+
+@test "_install_rustup_rs: verify rc 3 and rc 126 print their own message, not mismatch" {
+  rm -f "${HOME}/.cargo/bin/rustup"
+  local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
+  printf 'payload\n' > "${_fixture}"
+  export _RUSTUP_INIT_URL="file://${_fixture}"
+  local _rc
+  for _rc in 3 126; do
+    FAKE_VERIFY_RC="${_rc}"
+    _verify_sha256() { return "${FAKE_VERIFY_RC}"; }
+    run --separate-stderr _install_rustup_rs
+    [ "$status" -eq 1 ]
+    [[ "$stderr" != *mismatch* ]]
+    if [[ "${_rc}" -eq 3 ]]; then
+      [[ "$stderr" == *"rustup-init: could not read the download to verify it"* ]]
+    else
+      [[ "$stderr" == *"rustup-init: sha256 check could not run (rc 126)"* ]]
+    fi
+  done
+}
+
 @test "_install_rustup_rs: malformed pinned sha256 is refused before any download" {
   rm -f "${HOME}/.cargo/bin/rustup"
   export _RUSTUP_INIT_SHA256="abc"

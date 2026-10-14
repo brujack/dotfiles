@@ -44,6 +44,39 @@ teardown() {
   [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
 }
 
+@test "_install_pinned_release_binary: sha256 mismatch names the label, expected, actual and URL" {
+  export MOCK_CURL_STDOUT="not the real payload"
+  local _actual
+  _actual="$(printf '%s' "${MOCK_CURL_STDOUT}" | sha256sum | awk '{print $1}')"
+  run --separate-stderr _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "0000000000000000000000000000000000000000000000000000000000000000" \
+    raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"footool: sha256 mismatch: pinned sha256 expects 0000000000000000000000000000000000000000000000000000000000000000, download is ${_actual} from https://example.invalid/footool; refusing to install"* ]]
+}
+
+@test "_install_pinned_release_binary: verify rc 3 and rc 126 print their own message, not mismatch" {
+  local _rc
+  for _rc in 3 126; do
+    FAKE_VERIFY_RC="${_rc}"
+    export MOCK_CURL_STDOUT="payload"
+    _verify_sha256() { return "${FAKE_VERIFY_RC}"; }
+    run --separate-stderr _install_pinned_release_binary footool 9.9.9 \
+      "https://example.invalid/footool" \
+      "0000000000000000000000000000000000000000000000000000000000000000" \
+      raw '^footool version 9\.9\.9$'
+    [ "$status" -eq 1 ]
+    [[ "$stderr" != *mismatch* ]]
+    if [[ "${_rc}" -eq 3 ]]; then
+      [[ "$stderr" == *"footool: could not read the download to verify it"* ]]
+    else
+      [[ "$stderr" == *"footool: sha256 check could not run (rc 126)"* ]]
+    fi
+    [ ! -e "${_RELEASE_BIN_DIR}/footool" ]
+  done
+}
+
 @test "_install_pinned_release_binary: raw kind installs and the binary is executable" {
   local _payload="raw-payload-9.9.9"
   local _sha
