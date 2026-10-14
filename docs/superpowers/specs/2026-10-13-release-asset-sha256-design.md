@@ -1,6 +1,7 @@
 # Release asset sha256 pins
 
 - **Date:** 2026-10-13
+- **Approved:** 2026-10-13
 - **Backlog row:** "helper-installed binaries have no checksum and `wget` follows any redirect"
 - **Builds on:** dotfiles#337 (`_sha256_pin_ok`, `_verify_sha256`, the go tarball pins)
 - **Scope:** PR A of two. PR A pins kind and yq, gives shellcheck a pin refresher, and retires the
@@ -121,8 +122,14 @@ and `workstation` all three stamps and the binaries' own `version` output were m
 known. No code path removes anything. A backlog row records that any other Linux box (the WSL
 `wsl2_workstation` profile) keeps its stale copies until removed by hand.
 
-`docker compose` (the plugin) is untouched. The Brewfile telepresence entries (`Brewfile:24`,
-`Brewfile.devtools:5`) are macOS and out of scope (N3); see the open question below.
+`docker compose` (the plugin) is untouched. The operator confirmed telepresence and cf-terraforming
+are unused (terraform_ansible's own session found no invocation; its Cloudflare v5 state came through
+`terraform import` and `moved` blocks). The two Brewfile telepresence entries (`Brewfile:24`,
+`Brewfile.devtools:5`) are deleted too, with the `datawire/blackbird` tap lines they need
+(`Brewfile:3`, `Brewfile.devtools:2`) and that tap's entry in the three `brew trust` calls
+(`lib/helpers.sh`, `lib/macos.sh`, `lib/linux_ubuntu.sh`); it serves no other formula. The
+`brewfile_drift.bats` fixtures that use the tap name as test data stay. This is the one macOS change in
+this PR; removing a Brewfile line does not uninstall the formula from a mac that already has it.
 `.config/.zshrc.d/6_path.zsh`'s docker-compose comment and ADR-0041's tool list are updated.
 
 ### 5. Pin refresher (`scripts/refresh-sha256-pins.sh`)
@@ -195,11 +202,6 @@ are not independent provenance: a release compromised before the refresher ran i
 downloads each pinned asset and hashes it, a derivation independent of the API digest, which catches a
 wrong digest or a mis-mapped asset, not a compromised release.
 
-## Open question for review
-
-The Brewfile still installs telepresence on macOS. The operator said it is unused. Removing it is a
-macOS change (N3 forbids it here); the choice is a one-line Brewfile PR or a backlog row.
-
 ## Testing
 
 - `_release_asset_url`: kind, yq and shellcheck on both arches against a hand-typed URL table; an
@@ -245,7 +247,7 @@ macOS change (N3 forbids it here); the choice is a one-line Brewfile PR or a bac
 - **R3.** `[PR1]` In its pinned form, `_install_fetched_binary` refuses with rc 1 and no download on an unknown tool, a `_FOR_VER` mismatch, or a missing or malformed pin, naming the cause, before its stamp check.
 - **R4.** `[PR1]` In its pinned form, `_install_fetched_binary` runs `_verify_sha256` between download and extract; on failure it installs nothing, writes no stamp, and says "mismatch" only for rc 1; on success it prints `sha256 verified` and writes a stamp holding the URL and the pin.
 - **R5.** `[PR1]` `_install_fetched_binary --unverified` is accepted only for consul, vault, nomad, packer and vagrant, keeps a URL-only stamp and prints the "not verified" line; `--resolve` is removed.
-- **R6.** `[PR1]` telepresence, cf-terraforming and docker-compose are no longer installed by any step, and no code path removes binaries.
+- **R6.** `[PR1]` telepresence, cf-terraforming and docker-compose are no longer installed by any Linux step; the telepresence formulae and `datawire/blackbird` tap lines are deleted from `Brewfile` and `Brewfile.devtools`, and the tap from the three `brew trust` calls; no code path removes binaries.
 - **R7.** `[PR1]` `scripts/refresh-sha256-pins.sh` pins from the GitHub releases API digest without downloading assets, refreshes only stale tools unless tools are named, refuses a changed digest at an unchanged version unless `--accept-changed`, never appends missing lines, writes through an atomic read-back replace, and leaves the target byte-identical on any failure.
 - **R8.** `[PR1]` `check-versions` compares the pins of kind, yq and shellcheck with GitHub's latest release without running the installed binary, inside the token-refusal gate.
 - **R9.** `[PR1]` `check-versions --update` for kind and yq changes `*_VER`, pins and `_FOR_VER` together through a temp copy and `mv`, and on refresh failure leaves `lib/constants.sh` byte-identical and prints the refusal and not "Updated".
@@ -257,7 +259,7 @@ macOS change (N3 forbids it here); the choice is a one-line Brewfile PR or a bac
 - **V3.** The mutation controls in Testing each turn a named test red; record them in the PR.
 - **N1.** No change to how the five HashiCorp tools are downloaded beyond the `--unverified` form (PR B).
 - **N2.** No change to how tflint or tfsec pins are bumped.
-- **N3.** No change to macOS or Windows installs.
+- **N3.** No change to macOS or Windows installs other than removing telepresence and its tap from the Brewfiles and `brew trust` lists.
 - **N4.** `_install_fetched_binary` keeps `wget` for downloads.
 - **N5.** No automated edit of `.github/workflows/ci.yml`.
 - **N6.** No removal of `docker-compose-plugin`, and no code that deletes installed binaries.
