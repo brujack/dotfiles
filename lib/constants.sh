@@ -16,10 +16,8 @@
 BATS_VER="1.14.0"
 # read by lib/workflows.sh:run_check_versions (_run_cv_check)
 GITLEAKS_VER="8.30.1"
-CF_TERRAFORMING_VER="0.29.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 CONSUL_VER="2.0.4"
-DOCKER_COMPOSE_VER="v5.6.0"
 # npm global packages — pinned by exact version at both lib/workflows.sh call sites.
 # Unlike the GitHub-release pins above, these are NOT covered by
 # `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching
@@ -182,16 +180,10 @@ ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"
 # read by lib/developer.sh:_aws_verify_pkg and tests/setup_env/developer.bats
 AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 
-# read by lib/linux_ubuntu.sh:_install_ubuntu_cloud_tools
-CF_TERRAFORMING_URL="https://github.com/cloudflare/cf-terraforming/releases/download/v${CF_TERRAFORMING_VER}/cf-terraforming_${CF_TERRAFORMING_VER}_linux_${_LINUX_ARCH}.tar.gz"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_misc
-DOCKER_COMPOSE_URL="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 HASHICORP_URL="https://releases.hashicorp.com"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
 KIND_URL="https://kind.sigs.k8s.io/dl/v${KIND_VER}/kind-linux-${_LINUX_ARCH}"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_k8s_tools
-TELEPRESENCE_URL="https://app.getambassador.io/download/tel2/linux/${_LINUX_ARCH}/latest/telepresence"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_misc
 YQ_URL="https://github.com/mikefarah/yq/releases/download/v${YQ_VER}/yq_linux_${_LINUX_ARCH}"
 

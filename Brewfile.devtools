@@ -1,8 +1,6 @@
 # Brewfile.devtools — installed on HAS_DEVTOOLS machines
-tap "datawire/blackbird"
 tap "redpanda-data/tap"
 tap "snyk/tap"
-brew "datawire/blackbird/telepresence-arm64"
 brew "ggshield"
 brew "go-task"
 brew "ntfy"

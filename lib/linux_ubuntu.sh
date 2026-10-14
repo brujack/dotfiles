@@ -899,11 +899,6 @@ _install_ubuntu_k8s_tools() {
       log_warn "k8s_tools: kind: install failed"
       _k8s_rc=1
     }
-    printf "Installing telepresence\\n"
-    _install_fetched_binary telepresence "${TELEPRESENCE_URL}" bin telepresence --resolve || {
-      log_warn "k8s_tools: telepresence: install failed"
-      _k8s_rc=1
-    }
   fi
 
   # Purge stale baltocdn helm APT source left by pre-PR#155 runs — the repo
@@ -1066,11 +1061,6 @@ _install_ubuntu_cloud_tools() {
     _cloud_rc=1
   }
 
-  printf "Installing cf-terraforming Ubuntu\\n"
-  _install_fetched_binary cf-terraforming "${CF_TERRAFORMING_URL}" tar cf-terraforming || {
-    log_warn "cloud_tools: cf-terraforming: install failed"
-    _cloud_rc=1
-  }
   ((_cloud_rc == 0)) || return 1
   return 0
 }
@@ -1166,7 +1156,7 @@ _install_ubuntu_brew_packages() {
   fi
 
   # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare datawire/blackbird getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
 
   if [[ ${#_failed[@]} -gt 0 ]]; then
     log_warn "brew: ${#_failed[@]} package(s) failed: ${_failed[*]}"
@@ -1902,16 +1892,10 @@ _install_ubuntu_tfenv() {
 }
 
 _install_ubuntu_misc() {
-  # rc 1 when docker-compose, yq, opentofu or the nala install failed; each is
+  # rc 1 when yq, opentofu or the nala install failed; each is
   # named in a warning and the rest are still attempted. dotnet, tflint, tfsec,
   # tfenv and nala autoremove are advisory.
   local _misc_rc=0
-  printf "Installing docker-compose Ubuntu\\n"
-  _install_fetched_binary docker-compose "${DOCKER_COMPOSE_URL}" bin docker-compose || {
-    log_warn "misc: docker-compose: install failed"
-    _misc_rc=1
-  }
-
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing yq\\n"
     _install_fetched_binary yq "${YQ_URL}" bin yq || {
