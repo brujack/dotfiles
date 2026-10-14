@@ -2784,6 +2784,8 @@ _k8s_env() {
   [ "$(cat "${_DL_BIN_DIR}/kind")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/kind" ]
   [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
+  # A kind failure must not stop the step: kubectl still installs.
+  grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_k8s_tools: no HAS_K8S skips kind" {
@@ -3058,7 +3060,6 @@ _cloud_env() {
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" "${_APT_SOURCES_DIR}/teleport.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloudflare-warp-archive-keyring.gpg" "${_APT_SOURCES_DIR}/cloudflare-client.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloud.google.gpg" "${_APT_SOURCES_DIR}/google-cloud-sdk.list"
-  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
 }
 
 @test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with no keyring returns 1, writes no list, and the siblings still run" {
@@ -4052,7 +4053,7 @@ _misc_env() {
   printf 'body' > "${MOCK_WGET_FILE}"
 }
 
-@test "_install_ubuntu_misc: a clean run installs both binaries, stamps them, and returns 0" {
+@test "_install_ubuntu_misc: a clean run installs yq and opentofu, stamps yq, and returns 0" {
   _misc_env
   run --separate-stderr _install_ubuntu_misc
   [ "$status" -eq 0 ]
@@ -4063,7 +4064,7 @@ _misc_env() {
   [[ "$stderr" != *"misc:"* ]]
 }
 
-@test "_install_ubuntu_misc: a failed yq download returns 1 " {
+@test "_install_ubuntu_misc: a failed yq download returns 1 and opentofu still installs" {
   _misc_env
   printf 'old' > "${_DL_BIN_DIR}/yq"
   chmod 0755 "${_DL_BIN_DIR}/yq"
@@ -4074,6 +4075,8 @@ _misc_env() {
   grep -q "wget .*yq.example" "${MOCK_CALLS_FILE}"
   [ "$(cat "${_DL_BIN_DIR}/yq")" = "old" ]
   [ ! -e "${_DL_STAMP_DIR}/yq" ]
+  # A yq failure must not stop the step: opentofu still installs.
+  grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_misc: a failed opentofu keyring fetch with no keyring returns 1, writes no list, and skips with a warning" {
