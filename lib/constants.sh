@@ -100,7 +100,7 @@ KIND_VER="0.33.0"
 KIND_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
 KIND_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
-# read by lib/linux_ubuntu.sh:_release_asset_sha
+# read by scripts/refresh-sha256-pins.sh and lib/linux_ubuntu.sh:_install_fetched_binary
 KIND_SHA256_FOR_VER=""
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 NOMAD_VER="2.0.7"
@@ -121,9 +121,10 @@ RUBY_VER="4.0.7"
 # package is whatever the distro ships -- 0.9.0 on 24.04, 0.11.0 on 26.04 -- so
 # this is pinned rather than listed in ubuntu_common_packages.txt.
 SHELLCHECK_VER="0.11.0"
+# read by lib/linux_ubuntu.sh:_release_asset_sha and _install_ubuntu_shellcheck
 SHELLCHECK_SHA256_AMD64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
 SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
-# read by lib/linux_ubuntu.sh:_release_asset_sha
+# read by scripts/refresh-sha256-pins.sh
 SHELLCHECK_SHA256_FOR_VER=""
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)
@@ -152,7 +153,7 @@ YQ_VER="4.54.1"
 YQ_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
 # read by lib/linux_ubuntu.sh:_release_asset_sha
 YQ_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
-# read by lib/linux_ubuntu.sh:_release_asset_sha
+# read by scripts/refresh-sha256-pins.sh and lib/linux_ubuntu.sh:_install_fetched_binary
 YQ_SHA256_FOR_VER=""
 # read by lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 # Prefix-matched by lib/helpers.sh:_doctor_check_one_version, so this must be a

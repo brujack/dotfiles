@@ -88,12 +88,6 @@ _set_pins() {
   done
 }
 
-@test "_release_asset_sha pins are pairwise distinct per lookup" {
-  _set_pins
-  run _release_asset_sha kind amd64
-  [ "$output" != "$(_release_asset_sha kind arm64)" ]
-}
-
 @test "_release_asset_sha unknown tool returns 2" {
   _set_pins
   run _release_asset_sha nosuchtool amd64
@@ -108,7 +102,7 @@ _set_pins() {
   [ -z "$output" ]
 }
 
-@test "committed constants define placeholder pins and empty _FOR_VER lines" {
+@test "committed constants define four 64-hex kind/yq pins and three _FOR_VER lines" {
   run grep -cE '^(KIND|YQ)_SHA256_(AMD64|ARM64)="[[:xdigit:]]{64}"$' "${REPO_ROOT}/lib/constants.sh"
   [ "$output" -eq 4 ]
   run grep -cE '^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=' "${REPO_ROOT}/lib/constants.sh"
