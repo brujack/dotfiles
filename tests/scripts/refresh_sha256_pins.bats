@@ -78,7 +78,7 @@ _unchanged() { cmp "${C}" "${BATS_TEST_TMPDIR}/before"; }
   [ "$status" -eq 0 ]
   [ "$(diff "${BATS_TEST_TMPDIR}/before" "${C}" | grep -c '^>')" -eq 3 ]
   [ "$(stat -c %a "${C}" 2>/dev/null || stat -f %Lp "${C}")" = 640 ]
-  ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*" >/dev/null
+  run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*" >/dev/null
 }
 
 @test "a second run is a no-op: pins up to date, no request, file unchanged" {
@@ -272,7 +272,7 @@ _unchanged() { cmp "${C}" "${BATS_TEST_TMPDIR}/before"; }
   _listen
   run "${SCRIPT}" --constants "${C}" kind
   [ "$status" -eq 0 ]
-  ! grep -qi '^Authorization:' "${HTTP_LISTENER_HEADERS}"
+  run ! grep -qi '^Authorization:' "${HTTP_LISTENER_HEADERS}"
 }
 
 @test "a token with a line break is refused and nothing is requested" {
@@ -294,7 +294,7 @@ _unchanged() { cmp "${C}" "${BATS_TEST_TMPDIR}/before"; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"kind: amd64: read-back failed for KIND_SHA256_AMD64"* ]]
   _unchanged
-  ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*" >/dev/null
+  run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*" >/dev/null
 }
 
 @test "unknown option and unknown tool exit 2 with usage" {
@@ -311,4 +311,106 @@ _unchanged() { cmp "${C}" "${BATS_TEST_TMPDIR}/before"; }
   [ "$status" -eq 2 ]
   run "${SCRIPT}" --constants "${BATS_TEST_TMPDIR}/nope.sh" kind
   [ "$status" -eq 1 ]
+}
+
+@test "a *_VER with characters outside the safe set is refused before any request" {
+  sed -i.bak 's/^KIND_VER=.*/KIND_VER="1.2.3\&x"/' "${C}"
+  _snapshot
+  _listen
+  run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: KIND_VER has characters outside [A-Za-z0-9.+-] in ${C}"* ]]
+  _unchanged
+  [ ! -e "${HTTP_LISTENER_PATHS}" ]
+}
+
+# _curl_shim -- puts a curl on PATH that logs its argv, then execs the real one.
+_curl_shim() {
+  local _real shim="${BATS_TEST_TMPDIR}/shim"
+  _real="$(command -v curl)"
+  mkdir -p "${shim}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" >>"%s"\nexec "%s" "$@"\n' \
+    "${BATS_TEST_TMPDIR}/curl-argv" "${_real}" >"${shim}/curl"
+  chmod +x "${shim}/curl"
+  PATH="${shim}:${PATH}"
+}
+
+@test "the token reaches curl on stdin only: absent from argv, present in the header" {
+  export GITHUB_TOKEN="tok-secret-777"
+  _curl_shim
+  _listen
+  run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 0 ]
+  # Positive control: the shim really saw the call.
+  grep -q 'releases/tags/v1.2.3' "${BATS_TEST_TMPDIR}/curl-argv"
+  run ! grep -q 'tok-secret-777' "${BATS_TEST_TMPDIR}/curl-argv"
+  grep -q 'Authorization: Bearer tok-secret-777' "${HTTP_LISTENER_HEADERS}"
+}
+
+@test "proxy environment variables do not divert the loopback API call" {
+  unset no_proxy NO_PROXY
+  export http_proxy=http://127.0.0.1:9 HTTP_PROXY=http://127.0.0.1:9
+  export https_proxy=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
+  _listen
+  run "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 0 ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/kubernetes-sigs/kind/releases/tags/v1.2.3" ]
+}
+
+@test "a symlinked --constants target is refused and left alone" {
+  local real="${BATS_TEST_TMPDIR}/real.sh" link="${BATS_TEST_TMPDIR}/link.sh"
+  mv "${C}" "${real}"
+  ln -s "${real}" "${link}"
+  cp -p "${real}" "${BATS_TEST_TMPDIR}/before"
+  _listen
+  run "${SCRIPT}" --constants "${link}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${link} is a symlink; pass the real file"* ]]
+  [ -L "${link}" ]
+  cmp "${real}" "${BATS_TEST_TMPDIR}/before"
+  [ ! -e "${HTTP_LISTENER_PATHS}" ]
+}
+
+@test "missing python3 is reported as such, before any request" {
+  local shim="${BATS_TEST_TMPDIR}/nopy" b p
+  mkdir -p "${shim}"
+  for b in bash env sed grep cp mv rm mktemp dirname basename cut curl cat tr sort uname date head tail awk ls chmod mkdir sleep stat; do
+    p="$(command -v "${b}" 2>/dev/null)" || continue
+    [[ "${p}" == /* ]] && ln -sf "${p}" "${shim}/${b}"
+  done
+  [ ! -e "${shim}/python3" ]
+  _snapshot
+  _listen
+  run env PATH="${shim}" "${SCRIPT}" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"python3 not found; it parses the GitHub API response"* ]]
+  _unchanged
+  [ ! -e "${HTTP_LISTENER_PATHS}" ]
+}
+
+@test "a tool named twice is processed once" {
+  _listen
+  run "${SCRIPT}" --constants "${C}" kind kind
+  [ "$status" -eq 0 ]
+  [ "$(wc -l <"${HTTP_LISTENER_PATHS}" | tr -d ' ')" -eq 1 ]
+}
+
+@test "SIGTERM mid-request removes the body temp file" {
+  local tmpd="${BATS_TEST_TMPDIR}/tmpd" shim="${BATS_TEST_TMPDIR}/slow" real pid
+  mkdir -p "${tmpd}" "${shim}"
+  real="$(command -v curl)"
+  printf '#!/usr/bin/env bash\nsleep 1\nexec "%s" "$@"\n' "${real}" >"${shim}/curl"
+  chmod +x "${shim}/curl"
+  _listen
+  TMPDIR="${tmpd}" PATH="${shim}:${PATH}" "${SCRIPT}" --constants "${C}" kind >/dev/null 2>&1 &
+  pid=$!
+  for _ in $(seq 100); do
+    compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null && break
+    sleep 0.05
+  done
+  # Positive control: the temp file existed while the request was in flight.
+  compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null
+  kill -TERM "${pid}"
+  wait "${pid}" || :
+  run ! compgen -G "${tmpd}/refresh-pins-body.*" >/dev/null
 }

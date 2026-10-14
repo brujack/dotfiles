@@ -13,6 +13,16 @@
 _REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly _REPO_ROOT
 
+# Temp files this run created; the EXIT trap removes them if a signal or an
+# unexpected return skipped the explicit cleanup on the failure paths.
+_TMP_FILES=()
+_cleanup_tmp() {
+  local _f
+  for _f in "${_TMP_FILES[@]}"; do
+    rm -f "${_f}"
+  done
+}
+
 _usage() {
   printf "usage: %s [--constants <file>] [--accept-changed] [kind|yq|shellcheck ...]\n" "$(basename "$0")" >&2
 }
@@ -73,6 +83,7 @@ _resolve_pins() {
     printf "%s: cannot create a temp file\n" "${_tool}" >&2
     return 1
   }
+  _TMP_FILES+=("${_body}")
 
   for _arch in amd64 arm64; do
     _url="$(_release_asset_url "${_tool}" "${_arch}")" || {
@@ -166,6 +177,7 @@ _write_updates() {
     printf "cannot create a temp copy next to %s\n" "${_file}" >&2
     return 1
   }
+  _TMP_FILES+=("${_tmp}")
   cp -p "${_file}" "${_tmp}" || {
     printf "cannot copy %s\n" "${_file}" >&2
     rm -f "${_tmp}"
@@ -219,7 +231,10 @@ main() {
         shift
         ;;
       kind | yq | shellcheck)
-        _tools+=("$1")
+        case " ${_tools[*]:-} " in
+          *" $1 "*) ;;
+          *) _tools+=("$1") ;;
+        esac
         shift
         ;;
       *)
@@ -232,6 +247,15 @@ main() {
     printf "%s: no such file\n" "${_constants}" >&2
     return 1
   }
+  if [[ -L "${_constants}" ]]; then
+    printf "%s is a symlink; pass the real file\n" "${_constants}" >&2
+    return 1
+  fi
+  command -v python3 >/dev/null 2>&1 || {
+    printf "python3 not found; it parses the GitHub API response\n" >&2
+    return 1
+  }
+  trap _cleanup_tmp EXIT
 
   # shellcheck source=/dev/null # the target is a runtime argument
   source "${_constants}" || return 1
