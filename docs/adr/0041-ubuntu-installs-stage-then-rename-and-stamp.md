@@ -9,8 +9,7 @@
 an `if` with no true branch, so they returned 0 even when every install in them failed, and
 nvidia's "skip when docker failed" guard could not fire for a failed docker install.
 
-Downloaded tools (kind, telepresence, the HashiCorp tools, cf-terraforming, docker-compose,
-yq, Go) were fetched into `~/software_downloads` and copied into `/usr/local`. `wget -O`
+Downloaded tools (kind, the HashiCorp tools, yq, Go) were fetched into `~/software_downloads` and copied into `/usr/local`. `wget -O`
 truncates its target before it fails, and the copy still ran, so one failed fetch replaced a
 working binary with an empty file. Each tool's skip guard read that download, so any failure
 after the download left an artifact that made every later run skip the tool and report
@@ -26,8 +25,7 @@ which truncates the live keyring when curl fails.
   throwaway directory, stages the binary with `sudo install -m 0755` to `<dest>.new`, renames
   it into place, and only then writes a stamp holding the download URL under
   `~/.local/share/dotfiles/installed`. A run is skipped only when the stamp matches the URL
-  and the binary is executable. telepresence stamps the versioned https URL that its `latest`
-  link resolves to.
+  and the binary is executable. Stamps for pinned tools hold `<url> <sha256>` (ADR-0046).
 - Go uses the same throwaway directory and stamp. The tree is chowned to root before the
   swap, every move checks that its destination is absent, the old tree is restored if the new
   one cannot be moved in, and a damaged `go` or `go.old` is removed rather than kept.
