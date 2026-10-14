@@ -1290,6 +1290,58 @@ _install_apt_keyring() {
   return 0
 }
 
+# Print the GitHub release asset URL for a tool at its pinned *_VER.
+# Usage: _release_asset_url <kind|yq|shellcheck> <amd64|arm64>
+# Returns 2 for an unknown tool, 3 for an unknown arch; prints nothing on failure.
+_release_asset_url() {
+  local _tool="${1:-}" _arch="${2:-}" _sc_arch
+  case "${_tool}" in
+    kind | yq | shellcheck) ;;
+    *) return 2 ;;
+  esac
+  case "${_arch}" in
+    amd64) _sc_arch="x86_64" ;;
+    arm64) _sc_arch="aarch64" ;;
+    *) return 3 ;;
+  esac
+  case "${_tool}" in
+    kind)
+      printf 'https://github.com/kubernetes-sigs/kind/releases/download/v%s/kind-linux-%s\n' "${KIND_VER}" "${_arch}"
+      ;;
+    yq)
+      printf 'https://github.com/mikefarah/yq/releases/download/v%s/yq_linux_%s\n' "${YQ_VER}" "${_arch}"
+      ;;
+    shellcheck)
+      printf 'https://github.com/koalaman/shellcheck/releases/download/v%s/shellcheck-v%s.linux.%s.tar.xz\n' \
+        "${SHELLCHECK_VER}" "${SHELLCHECK_VER}" "${_sc_arch}"
+      ;;
+  esac
+}
+
+# Print "<VARIABLE> <value>" for a tool's sha256 pin. Explicit case so a grep
+# for a pin variable finds its reader.
+# Usage: _release_asset_sha <kind|yq|shellcheck> <amd64|arm64>
+# Returns 2 for an unknown tool, 3 for an unknown arch.
+_release_asset_sha() {
+  local _tool="${1:-}" _arch="${2:-}"
+  case "${_tool}" in
+    kind | yq | shellcheck) ;;
+    *) return 2 ;;
+  esac
+  case "${_arch}" in
+    amd64 | arm64) ;;
+    *) return 3 ;;
+  esac
+  case "${_tool}:${_arch}" in
+    kind:amd64) printf '%s %s\n' KIND_SHA256_AMD64 "${KIND_SHA256_AMD64}" ;;
+    kind:arm64) printf '%s %s\n' KIND_SHA256_ARM64 "${KIND_SHA256_ARM64}" ;;
+    yq:amd64) printf '%s %s\n' YQ_SHA256_AMD64 "${YQ_SHA256_AMD64}" ;;
+    yq:arm64) printf '%s %s\n' YQ_SHA256_ARM64 "${YQ_SHA256_ARM64}" ;;
+    shellcheck:amd64) printf '%s %s\n' SHELLCHECK_SHA256_AMD64 "${SHELLCHECK_SHA256_AMD64}" ;;
+    shellcheck:arm64) printf '%s %s\n' SHELLCHECK_SHA256_ARM64 "${SHELLCHECK_SHA256_ARM64}" ;;
+  esac
+}
+
 # Fetch a binary into a throwaway dir, install it last, and stamp the URL only
 # after the install succeeds, so an interrupted run leaves the destination
 # untouched and the next run fetches again. The stamp is the idempotency check:

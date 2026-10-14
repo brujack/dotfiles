@@ -96,6 +96,12 @@ NVIDIA_CONTAINER_LIST_URL="https://nvidia.github.io/libnvidia-container/stable/d
 # read by lib/linux_ubuntu.sh:_install_ubuntu_nvidia
 NVIDIA_CONTAINER_KEYRING="/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
 KIND_VER="0.33.0"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+KIND_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+KIND_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+KIND_SHA256_FOR_VER=""
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
 NOMAD_VER="2.0.7"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
@@ -117,6 +123,8 @@ RUBY_VER="4.0.7"
 SHELLCHECK_VER="0.11.0"
 SHELLCHECK_SHA256_AMD64="8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
 SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa7e7c14588"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+SHELLCHECK_SHA256_FOR_VER=""
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)
 TFLINT_VER="0.64.0"
@@ -140,6 +148,12 @@ VAULT_VER="2.1.2"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_gui_tools
 VIRTUALBOX_VER="virtualbox-7.2"
 YQ_VER="4.54.1"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+YQ_SHA256_AMD64="0000000000000000000000000000000000000000000000000000000000000000"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+YQ_SHA256_ARM64="0000000000000000000000000000000000000000000000000000000000000000"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+YQ_SHA256_FOR_VER=""
 # read by lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 # Prefix-matched by lib/helpers.sh:_doctor_check_one_version, so this must be a
 # prefix of every zsh the fleet ships: apt gives 5.9 on 24.04 and 26.04, brew
