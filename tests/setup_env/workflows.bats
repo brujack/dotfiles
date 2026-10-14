@@ -1730,12 +1730,6 @@ setup_constants_copy() {
   grep -q 'go1.27' "${_TEST_CONSTANTS_PATH}"
 }
 
-@test "_update_url_pins updates YQ_URL for yq" {
-  setup_constants_copy
-  _update_url_pins "yq" "${YQ_VER}" "9.9.9" "${_TEST_CONSTANTS_PATH}"
-  grep -q '/v9.9.9/' "${_TEST_CONSTANTS_PATH}"
-}
-
 @test "_update_url_pins leaves constants unchanged for vagrant" {
   setup_constants_copy
   cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"

@@ -1574,15 +1574,8 @@ _update_url_pins() {
         rm -f "${_constants}.bak"
       fi
       ;;
-    yq)
-      # YQ_URL may contain a literal version or a ${YQ_VER} variable reference — update both
-      # shellcheck disable=SC2016 # single-quoted ${YQ_VER} is intentional — matches literal text in constants.sh
-      sed -i.bak -e "s|/v${_old}/|/v${_new}/|g" \
-                 -e 's|/v\${YQ_VER}/|/v'"${_new}"'/|g' "${_constants}"
-      rm -f "${_constants}.bak"
-      ;;
     *)
-      # vagrant, python3, ruby, zsh, shellcheck — no URL vars to update
+      # every other tool: no URL vars to update
       ;;
   esac
 }
