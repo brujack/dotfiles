@@ -166,6 +166,7 @@ JSON
 
 _stub_all_but_pins() {
   _check_one_version() { printf '  [OK]       %-12s\n' "$1"; }
+  _check_one_pinned_release() { printf '  [OK]       %-12s\n' "$1"; }
   _check_cv_homebrew_install() { printf '  [OK]       brew\n'; }
   _check_one_cargo_version() { printf '  [OK]       %s\n' "$1"; }
   # shellcheck disable=SC2034 # read by run_check_versions, sourced from setup_env.sh
@@ -317,7 +318,7 @@ _stub_all_but_pins() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[INFO]"* ]]
   [[ "$output" == *"0 outdated"* ]]
-  [[ "$output" == *"8 OK"* ]]
+  [[ "$output" == *"9 OK"* ]]
   [[ "$output" == *"[OK]       python3      pinned=3.14.8"* ]]
 }
 
@@ -332,7 +333,7 @@ _stub_all_but_pins() {
   [[ "$output" == *"1 outdated"* ]]
 }
 
-@test "token-refused: go and python3 still run, 5 checks not run" {
+@test "token-refused: go and python3 still run, 6 checks not run" {
   _stub_all_but_pins
   export GITHUB_TOKEN=$'a\nb'
   export GO_DOWNLOAD_FILENAME="go1.27.1.linux-amd64.tar.gz"
@@ -341,8 +342,8 @@ _stub_all_but_pins() {
   _fetch_python_latest() { printf '3.14.8 3.15.1'; }
   run run_check_versions
   [ "$status" -eq 2 ]
-  [[ "$output" == *"the 5 checks that send it were not run"* ]]
-  [[ "$output" == *"5 not checked"* ]]
+  [[ "$output" == *"the 6 checks that send it were not run"* ]]
+  [[ "$output" == *"6 not checked"* ]]
   [[ "$output" == *"pinned=1.27.1"* ]]
   [[ "$output" == *"pinned=3.14.8"* ]]
 }

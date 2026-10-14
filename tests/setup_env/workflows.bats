@@ -1755,29 +1755,111 @@ setup_constants_copy() {
 # function did anything at all. The two reds announced themselves; the vacuous
 # green did not, which is the more expensive half. Seeding makes all three
 # discriminate no matter what the repo pins.
-@test "_prompt_version_update calls _update_version_pin on y reply" {
+# Stub refresher: acts like refresh-sha256-pins.sh by writing known pins into the
+# --constants file it is handed, so a test can see all three fields move.
+_stub_refresher_ok() {
+  _REFRESHER="${BATS_TEST_TMPDIR}/refresher-ok"
+  cat > "${_REFRESHER}" <<'STUB'
+#!/usr/bin/env bash
+[[ "$1" == "--constants" ]] || exit 2
+f="$2"; tool="$3"
+T="$(printf '%s' "${tool}" | tr '[:lower:]' '[:upper:]')"
+sed -i.bak -e "s|^${T}_SHA256_AMD64=.*|${T}_SHA256_AMD64=\"$(printf 'c%.0s' {1..64})\"|" \
+  -e "s|^${T}_SHA256_ARM64=.*|${T}_SHA256_ARM64=\"$(printf 'd%.0s' {1..64})\"|" \
+  -e "s|^${T}_SHA256_FOR_VER=.*|${T}_SHA256_FOR_VER=\"$(sed -n "s/^${T}_VER=\"\(.*\)\"/\1/p" "${f}")\"|" "${f}"
+rm -f "${f}.bak"
+STUB
+  chmod +x "${_REFRESHER}"
+  export _OVERRIDE_REFRESH_PINS="${_REFRESHER}"
+}
+
+_stub_refresher_fail() {
+  _REFRESHER="${BATS_TEST_TMPDIR}/refresher-fail"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${_REFRESHER}"
+  chmod +x "${_REFRESHER}"
+  export _OVERRIDE_REFRESH_PINS="${_REFRESHER}"
+}
+
+@test "_prompt_version_update on y moves yq and kind versions, both pins and _FOR_VER together" {
+  local _t _T
+  for _t in yq kind; do
+    _T="$(printf '%s' "${_t}" | tr '[:lower:]' '[:upper:]')"
+    setup_constants_copy
+    export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+    _stub_refresher_ok
+    local _before; _before="$(grep -E "^${_T}_(VER|SHA256_AMD64|SHA256_ARM64|SHA256_FOR_VER)=" "${_TEST_CONSTANTS_PATH}")"
+    run _prompt_version_update "${_t}" "${_T}_VER" "9.9.9" "9.10.0" <<< "y"
+    [ "$status" -eq 0 ]
+    grep -Fqx "${_T}_VER=\"9.10.0\"" "${_TEST_CONSTANTS_PATH}"
+    grep -Fqx "${_T}_SHA256_FOR_VER=\"9.10.0\"" "${_TEST_CONSTANTS_PATH}"
+    grep -Fqx "${_T}_SHA256_AMD64=\"$(printf 'c%.0s' {1..64})\"" "${_TEST_CONSTANTS_PATH}"
+    grep -Fqx "${_T}_SHA256_ARM64=\"$(printf 'd%.0s' {1..64})\"" "${_TEST_CONSTANTS_PATH}"
+    [ "$(grep -E "^${_T}_(VER|SHA256_AMD64|SHA256_ARM64|SHA256_FOR_VER)=" "${_TEST_CONSTANTS_PATH}")" != "${_before}" ]
+    [[ "$output" == *"Updated ${_T}_VER → 9.10.0"* ]]
+    [[ "$output" == *"${_t}: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install 9.10.0"* ]]
+    # no temp file left beside the constants file
+    [ -z "$(find "${BATS_TEST_TMPDIR}" -maxdepth 1 -name '.constants.*')" ]
+  done
+}
+
+@test "_prompt_version_update leaves constants byte-identical and refuses when the refresher fails" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
-  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"   # precondition, not decoration
-  _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< "y"
-  grep -q 'YQ_VER="1.27"' "${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_fail
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  run _prompt_version_update "kind" "KIND_VER" "0.33.0" "0.34.0" <<< "y"
+  [ "$status" -eq 1 ]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  [[ "$output" == *"kind: refusing pin update: could not refresh sha256 pins"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [ -z "$(find "${BATS_TEST_TMPDIR}" -maxdepth 1 -name '.constants.*')" ]
+}
+
+@test "_prompt_version_update refuses a latest that is not X.Y.Z before writing anything" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  local _bad
+  for _bad in "1.2" "1.2.3-rc1" "1.2.3|x" ""; do
+    run _prompt_version_update "yq" "YQ_VER" "4.54.1" "${_bad}" <<< "y"
+    [ "$status" -eq 1 ]
+    cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+    [[ "$output" == *"refusing pin update"* ]]
+    [[ "$output" != *"Updated"* ]]
+  done
 }
 
 @test "_prompt_version_update skips update on n reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
   _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< "n"
-  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
 }
 
 @test "_prompt_version_update skips update on empty reply" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
-  sed -i.bak 's|^YQ_VER=.*|YQ_VER="1.26"|' "${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
   _prompt_version_update "yq" "YQ_VER" "1.26" "1.27" <<< ""
-  grep -q 'YQ_VER="1.26"' "${_TEST_CONSTANTS_PATH}"
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
+@test "_prompt_version_update prints the shellcheck hand-bump line, never prompts, changes nothing" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  _stub_refresher_ok
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  # A "y" on stdin would be accepted if a prompt were issued.
+  run _prompt_version_update "shellcheck" "SHELLCHECK_VER" "0.11.0" "0.12.0" <<< "y"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"shellcheck: bump by hand: SHELLCHECK_VER, scripts/refresh-sha256-pins.sh shellcheck, and the three SC_VER/SC_SHA256 sites in .github/workflows/ci.yml (darwin hash: gh api repos/koalaman/shellcheck/releases/tags/v<ver> --jq '.assets[]|select(.name|test(\"darwin.aarch64.tar.xz\"))|.digest|ltrimstr(\"sha256:\")'; the two linux SC_SHA256 values are SHELLCHECK_SHA256_AMD64 after the refresh)"* ]]
+  [[ "$output" != *"[y/N]"* ]]
+  [[ "$output" != *"Updated"* ]]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
 }
 
 # ── _fetch_github_latest ─────────────────────────────────────────────────────
@@ -3666,9 +3748,56 @@ _cheat_mode() {
   [[ "${_out}" == *"latest=2.5.1"* ]]
 }
 
+# ── _check_one_pinned_release ────────────────────────────────────────────────
+
+# A PATH shim named <tool> that records a marker file when run: proves the
+# pin-based check never executes the installed binary.
+_poison_tool() {
+  local _d="${BATS_TEST_TMPDIR}/poison"
+  mkdir -p "${_d}"
+  printf '#!/bin/bash\n: > "%s/ran-%s"\n' "${BATS_TEST_TMPDIR}" "$1" > "${_d}/$1"
+  chmod +x "${_d}/$1"
+  export PATH="${_d}:${PATH}"
+}
+
+@test "_check_one_pinned_release prints OK for each tool when the pin equals latest, without running the tool" {
+  local _t
+  for _t in kind yq shellcheck; do
+    _poison_tool "${_t}"
+    _fetch_github_latest() { printf '1.2.3'; }
+    run _check_one_pinned_release "${_t}" "1.2.3" "some/repo"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[OK]"*"${_t}"*"pinned=1.2.3"*"latest=1.2.3"* ]]
+    [[ "$output" != *"installed="* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/ran-${_t}" ]
+  done
+}
+
+@test "_check_one_pinned_release prints OUTDATED and returns 1 for each tool when latest is newer, without running the tool" {
+  local _t _rc
+  for _t in kind yq shellcheck; do
+    _poison_tool "${_t}"
+    _fetch_github_latest() { printf '1.3.0'; }
+    _rc=0
+    _out=$(_check_one_pinned_release "${_t}" "1.2.3" "some/repo") || _rc=$?
+    [ "${_rc}" -eq 1 ]
+    [[ "${_out}" == *"[OUTDATED]"*"${_t}"*"pinned=1.2.3"*"latest=1.3.0"* ]]
+    [[ "${_out}" != *"installed="* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/ran-${_t}" ]
+  done
+}
+
+@test "_check_one_pinned_release prints WARN and returns 0 when latest cannot be fetched" {
+  _fetch_github_latest() { printf ''; }
+  run _check_one_pinned_release "kind" "0.33.0" "kubernetes-sigs/kind"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"*"kind"*"could not fetch latest version"* ]]
+}
+
 _stub_cv_callees() {
   : > "${BATS_TEST_TMPDIR}/rec"
   _check_one_version() { printf '_check_one_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
+  _check_one_pinned_release() { printf '_check_one_pinned_release\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
   _check_one_pin_version() { printf '_check_one_pin_version\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] %s\n' "$1"; }
   _check_cv_oh_my_zsh() { printf '_check_cv_oh_my_zsh\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] omz\n'; }
   _check_cv_homebrew_install() { printf '_check_cv_homebrew_install\n' >> "${BATS_TEST_TMPDIR}/rec"; printf '  [OK] brew\n'; }
@@ -3683,60 +3812,90 @@ _stub_cv_callees() {
   run run_check_versions
   [ "$status" -eq 2 ]
   [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
+  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
   [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
   [ "$(grep -c '^_check_cv_homebrew_install$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
   [ "$(grep -c '^_check_one_cargo_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
-  [[ "$output" == *"5 not checked"* ]]
-  [[ "$output" == *"the 5 checks that send it were not run"* ]]
+  [[ "$output" == *"6 not checked"* ]]
+  [[ "$output" == *"the 6 checks that send it were not run"* ]]
   [ "$(printf '%s\n' "$output" | grep -c 'GITHUB_TOKEN')" -eq 1 ]
 }
 
-@test "run_check_versions runs five GitHub checks and two feed checks with a valid token" {
+@test "run_check_versions runs three version checks, three pinned-release checks and two feed checks with a valid token" {
   _stub_cv_callees
   export GITHUB_TOKEN="ok-tok"
   run run_check_versions
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 5 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 3 ]
+  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 3 ]
   [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [[ "$output" != *"not checked"* ]]
+}
+
+@test "run_check_versions with UPDATE_VERSIONS never prompts for pinned-release tools whose pin equals latest" {
+  # Real _check_one_pinned_release; only its network call is stubbed, answering
+  # with each tool's own pin (FAKE_* so no caller local is read).
+  _check_one_version() { printf '  [OK]       %s\n' "$1"; }
+  _check_one_pin_version() { printf '  [OK]       %s\n' "$1"; }
+  _check_cv_homebrew_install() { printf '  [OK]       brew\n'; }
+  _check_one_cargo_version() { printf '  [OK]       %s\n' "$1"; }
+  # shellcheck disable=SC2034 # read by run_check_versions, sourced from setup_env.sh
+  CARGO_TOOLS=(foo@1.0.0)
+  _fetch_github_latest() {
+    case "$1" in
+      kubernetes-sigs/kind) printf '%s' "${KIND_VER}" ;;
+      mikefarah/yq) printf '%s' "${YQ_VER}" ;;
+      koalaman/shellcheck) printf '%s' "${SHELLCHECK_VER}" ;;
+    esac
+  }
+  export UPDATE_VERSIONS=1
+  run run_check_versions
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pinned=${KIND_VER}"*"latest=${KIND_VER}"* ]]
+  [[ "$output" != *"[y/N]"* ]]
 }
 
 # ── run_check_versions summary counting ──────────────────────────────────────
 
 @test "run_check_versions counts skipped tools in summary" {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
+  _check_one_pinned_release() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"5 skipped"* ]]
+  [[ "$output" == *"6 skipped"* ]]
 }
 
 @test "run_check_versions counts warned tools in summary" {
-  # 5 GitHub tools via _check_one_version (stubbed here) plus go and python3 via
-  # the real _check_one_pin_version, which also WARNs (the curl mock returns no
-  # feed body) = 7 via _run_cv_check, + 1 more function (_check_cv_homebrew_install)
-  # also emits [WARN] when curl fails in test env, plus the 8 CARGO_TOOLS pins
-  # via the real (unstubbed) _check_one_cargo_version, whose curl call also fails
-  # in test env = 16 total. Was 17 until _check_cv_oh_my_zsh was deleted on
+  # 3 GitHub tools via _check_one_version and 3 via _check_one_pinned_release
+  # (both stubbed here) plus go and python3 via the real _check_one_pin_version,
+  # which also WARNs (the curl mock returns no feed body) = 8, + 1 more function
+  # (_check_cv_homebrew_install) also emits [WARN] when curl fails in test env,
+  # plus the 8 CARGO_TOOLS pins via the real (unstubbed) _check_one_cargo_version,
+  # whose curl call also fails in test env = 17 total. Was 16 until kind joined
+  # the pinned-release checks. Was 17 until _check_cv_oh_my_zsh was deleted on
   # 2026-10-08 (oh-my-zsh has no releases; the endpoint returned 404 every run).
   # Was 9 until the cargo loop was added to run_check_versions on 2026-09-17.
   # Was 8 + 2 = 10 until zsh was dropped from the _run_cv_check list on 2026-09-12.
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
+  _check_one_pinned_release() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"16 warnings"* ]]
+  [[ "$output" == *"17 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {
   _check_one_version() { printf "  [OK]       %-12s\n" "$1"; }
+  _check_one_pinned_release() { printf "  [OK]       %-12s\n" "$1"; }
   _check_one_pin_version() { printf "  [OK]       %-12s\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"7 OK"* ]]
+  [[ "$output" == *"8 OK"* ]]
 }
 
 @test "run_check_versions counts outdated tools and returns non-zero" {
   _check_one_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
+  _check_one_pinned_release() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   _check_one_pin_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   run run_check_versions
-  [[ "$output" == *"7 outdated"* ]]
+  [[ "$output" == *"8 outdated"* ]]
   [ "$status" -ne 0 ]
 }
 
