@@ -181,7 +181,9 @@ Add a new row to the group that matches its priority and type.
 
 ### P1 — bugs and security
 
-None open.
+| Feature | Notes |
+| ------- | ----- |
+| A third-party apt key rotation stops every OS update | `update_apt_packages` runs `apt update \|\| return 1` before `nala full-upgrade`; a source signed by a key that no longer matches its vendored keyring makes `apt update` exit 100, so `-t update` upgrades nothing, security fixes included, until a PR vendors the new key. Applies to edge, albert, docker and (after PR B) hashicorp. Measured: wrong keyring rc 100, unreachable host rc 0. Detail: `specs/2026-10-15-hashicorp-apt-design.md` round 2, K4'. |
 
 ### P2 — bugs and security
 
