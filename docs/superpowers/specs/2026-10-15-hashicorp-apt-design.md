@@ -38,8 +38,12 @@ Each line names the population the command covered.
   `.list` uses the box's own codename.
 - **Pinned versions present.** `packer 1.16.1-1` and `vagrant 2.4.9-1` are in `noble` for amd64,
   and `packer 1.16.1-1` for arm64; vagrant has no arm64 entry. Measured on
-  `dists/noble/main/binary-{amd64,arm64}/Packages.gz`, 2026-10-15. The same two versions were
-  found in `resolute` amd64 on 2026-10-14; `resolute` arm64 was not read.
+  `dists/noble/main/binary-{amd64,arm64}/Packages.gz`, 2026-10-15. Step 8 lenses then read all
+  four `{noble,resolute}` x `{amd64,arm64}` indexes: packer 1.16.1-1 is in all four, vagrant
+  2.4.9-1 in both amd64 and neither arm64.
+- **Revision suffix is not always `-1`.** The noble amd64 index also carries `packer 1.6.1-2`,
+  `packer 1.6.2-2` and `vagrant 2.2.10-4`; every recent version is `-1`. Measured by the Step 8
+  goal-fit and ergonomics lenses on that one index.
 - **Deb contents.** `packer_1.16.1-1_amd64.deb`: `/usr/bin/packer`, a licence file, a
   `conffiles` entry, no maintainer scripts; `Depends: openssl`. `vagrant_2.4.9-1_amd64.deb`:
   `/usr/bin/vagrant` and `/opt/vagrant/**`, no maintainer scripts, no `Depends`. Measured with
@@ -48,11 +52,31 @@ Each line names the population the command covered.
   `D55C0D1AC78A8D8126CB631CFC9CA96ACA026560`, created 2026-09-09, expires 2031-09-08, uid
   "HashiCorp Security (HashiCorp Package Signing) <security+packaging@hashicorp.com>". Measured on
   the file as served 2026-10-14.
-- **Live state.** On `claude`: all five tools in `/usr/local/bin`, no HashiCorp dpkg package, apt
-  source or keyring. Measured on `claude` only; `workstation` is assumed to match because both run
-  the same step, and V1 verifies it.
+- **Live state.** On `claude` and `workstation`: all five tools in `/usr/local/bin`, each with a
+  stamp in `~/.local/share/dotfiles/installed/` (the `claude` packer stamp is the 1.15.4 zip URL),
+  and no HashiCorp dpkg package, apt source or keyring. Measured on those two boxes only (the
+  `workstation` reading by the Step 8 risk lens over `ssh`).
+- **nala and holds.** `-t update` upgrades with `nala full-upgrade`. nala 0.16.0's
+  `nala/nala.py:316-342` collects packages apt's depcache kept back into a separate `held_pkgs`
+  table after `cache.upgrade`, i.e. it reports holds rather than overriding them. Read from the
+  source on `claude` only; V1 confirms it on a live hold.
 - **macOS.** On the Studio: core `packer` 1.9.4 installed, `vagrant` cask 2.4.9 installed, and
   `consul`, `vault`, `nomad` formulae installed. Measured on the Studio only.
+
+## Alternatives considered
+
+- **Keep the zips, verify each against HashiCorp's signed `SHA256SUMS`.** Every release publishes
+  `<tool>_<ver>_SHA256SUMS` and a detached `.sig`, made with HashiCorp's long-standing release key
+  (subkey `374EC75B485913604A831CC7C820C6D5CD27AB87`), a different key from the apt key. This would
+  keep `/usr/local/bin`, need no apt source, no holds and no migration. Rejected by the operator on
+  2026-10-15 in favour of the apt repo, which ADR-0046 and the backlog row had already named as
+  PR B's plan: apt verifies index and package with one key through a mechanism every other
+  third-party source on these boxes already uses, and removing the three server tools removed the
+  deb side effects that had made apt costly.
+- **apt with no pin.** Let the repo's latest flow through `-t update`. Rejected: the pin in
+  `lib/constants.sh` stays the single authority for what version a box runs ("own the stack"),
+  which is what the hold buys. The cost is a "kept back" line for packer and vagrant on every
+  `-t update`, and a bump needs check-versions, a PR and a `-t setup`/`-t developer` run per box.
 
 ## Design
 
@@ -79,7 +103,7 @@ key happens at install time.
 
 `_install_ubuntu_hashicorp` then:
 
-1. **Migration** (section 3) runs first, on every path.
+1. **Migration of the removed tools** (section 3) runs first, on every path.
 2. **Keyring.** `_build_pinned_keyring <vendored key> <_APT_KEYRINGS_DIR>/hashicorp-archive-keyring.gpg "${HASHICORP_GPG_FPR}"`.
    rc 1 (not the pinned key) removes the `.list` and keyring and fails the step; rc 2/3 keep the
    last verified keyring and `.list` and fail the step, mirroring `_install_ubuntu_albert`.
@@ -90,13 +114,24 @@ key happens at install time.
 5. **Per tool**, packer then vagrant, each attempted regardless of the other:
    - vagrant on a box whose `_LINUX_ARCH` is not `amd64` is skipped with
      `hashicorp: vagrant: no arm64 build; skipped`, and counts as success.
-   - Already done: `dpkg-query -W -f='${Version}'` prints `<VER>-1` **and** `apt-mark showhold`
-     lists the tool. Skip with `<tool>: up to date (<VER>-1, held)`.
-   - Otherwise:
-     `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" --allow-change-held-packages <tool>=<VER>-1`,
-     then `sudo apt-mark hold <tool>`. `--allow-change-held-packages` is what lets a pin bump
-     replace a held older version.
-   - A failure is named `hashicorp: <tool>: <install|hold> failed` on stderr.
+   - **Resolve the deb version.** The candidate is the highest version `apt-cache madison <tool>`
+     lists whose upstream part is exactly `<VER>` (matches `^<VER>-`). None found: fail the tool
+     with `hashicorp: <tool>: <VER> not in apt.releases.hashicorp.com; the release may not be
+     published yet, or the repo key may have rotated (keys/hashicorp.asc)`.
+   - **Already done:** `dpkg-query -W -f='${db:Status-Abbrev} ${Version}'` prints `ii ` and a
+     version whose upstream part is `<VER>`, **and** `apt-mark showhold` lists the tool. Skip with
+     `<tool>: up to date (<installed deb version>, held)`. A package in `rc` state (removed,
+     conffiles left) is not done.
+   - **Otherwise:**
+     `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" --allow-change-held-packages --allow-downgrades <tool>=<resolved version>`,
+     then `sudo apt-mark hold <tool>`. `--allow-change-held-packages` lets a pin bump replace a
+     held version; `--allow-downgrades` lets a pin rollback do the same. The first flag applies to
+     the whole transaction, so a hold the operator placed on packer's dependency `openssl` would
+     also be overridden if that transaction touched it; accepted, since the transaction names only
+     the one tool.
+   - **Then** remove the tool's stamped `/usr/local/bin` copy (section 3), only after its apt
+     install and hold succeeded.
+   - A failure is named `hashicorp: <tool>: <install|hold|remove> failed` on stderr.
 6. Returns 0 when every attempted tool succeeded, else 1 (the existing step contract).
 
 The hold means `-t update`'s apt upgrade keeps both packages back; the pin in `lib/constants.sh` is
@@ -104,7 +139,10 @@ the only thing that moves them, by the next `-t setup`/`-t developer` run.
 
 ### 3. Migration of existing boxes
 
-Before the keyring step, for each of consul, vault, nomad, packer and vagrant:
+consul, vault and nomad are handled before the keyring step. packer and vagrant are handled per
+tool, after that tool's apt install and hold succeeded, so a failed apt install (repo down, version
+not yet published, wrong key) never leaves a box with neither the old binary nor the new one. For
+each tool, at its point:
 
 - If `${_DL_STAMP_DIR}/<tool>` exists, dotfiles installed `${_DL_BIN_DIR}/<tool>`: remove the
   binary (`sudo rm -f`) and the stamp (`rm -f`), and log `hashicorp: removed <path> (installed by dotfiles)`.
@@ -116,6 +154,8 @@ Before the keyring step, for each of consul, vault, nomad, packer and vagrant:
   wrote that path; it does not prove the operator has not since replaced the file. That case is
   accepted: replacing a dotfiles-managed binary by hand without deleting its stamp is outside any
   workflow this repo supports.
+- On an arm64 box vagrant is never apt-installed (section 2), so a stamped arm64 vagrant (the
+  broken amd64 binary) is removed at that point instead, with the skip line.
 
 The second run finds no stamps and removes nothing. Brew formulae on macOS are not removed by any
 code: `brew bundle` installs and never uninstalls.
@@ -123,16 +163,30 @@ code: `brew bundle` installs and never uninstalls.
 ### 4. macOS, check-versions, docs
 
 - **Brewfile.** Add `tap "hashicorp/tap"` and replace `brew "packer"` with
-  `brew "hashicorp/tap/packer"`, both tagged `# [HAS_DEVTOOLS]`. `vagrant` stays a cask.
+  `brew "hashicorp/tap/packer"`, both tagged `# [HAS_DEVTOOLS]`. `vagrant` stays a cask. The tag
+  selects drift expectations only (CLAUDE.md, Brewfile Capability Tags): every mac, `mac_mini`
+  included, taps hashicorp/tap and installs tap packer. macOS packer is unpinned: the tap installs
+  its latest, as the vagrant cask already does. `PACKER_VER` governs Linux only.
+- **Core-packer guard.** On a mac that still has homebrew-core `packer`, `brew bundle` is expected
+  to fail on the tap formula, and `install_macos_casks`'s `|| return 1` would then skip
+  `Brewfile.gui` and `Brewfile.devtools`. Before the main bundle, `install_macos_casks` checks
+  `brew list --formula --full-name` for a bare `packer` line and, when present, prints a warning
+  naming `brew uninstall packer` as the one-time fix. It removes nothing (N1). Expected, not
+  measured: the Studio is migrated by the uninstall first, so the conflict is never observed there.
 - **Tap trust.** Add `hashicorp/tap` to the two `brew trust` calls that list the macOS taps
   (`install_macos_casks` in `lib/macos.sh` and the update path in `lib/helpers.sh`). The Linux
   brew-packages call is unchanged: Linux packer comes from apt.
-- **check-versions.** Add a packer entry next to vagrant in `run_check_versions`:
-  `_run_cv_check "packer" "${PACKER_VER}" "hashicorp/packer" "packer --version" "[0-9]+\.[0-9]+\.[0-9]+" "PACKER_VER"`.
-  It is counted in the token-gated set the CLAUDE.md `check-versions` paragraph derives its count
-  from. Known window: GitHub can publish a release before the apt repo carries `<ver>-1`; a
-  `--update` in that window writes a pin apt cannot install yet, and the next install fails naming
-  packer. Accepted and documented rather than solved.
+- **check-versions.** packer and vagrant are checked pin-against-latest, through
+  `_run_cv_pinned_release` (the kind/yq/shellcheck route), never installed-binary-against-latest:
+  on a mac the tap and the cask track latest, so the installed-binary route would report OK while
+  the pin is stale. `_run_cv_pinned_release "packer" "${PACKER_VER}" "hashicorp/packer" "PACKER_VER"`
+  is added and vagrant's `_run_cv_check` line is replaced by
+  `_run_cv_pinned_release "vagrant" "${VAGRANT_VER}" "hashicorp/vagrant" "VAGRANT_VER"`.
+  `--update` for both writes only the `*_VER` line (no digests). Both stay in the token-gated set
+  the CLAUDE.md `check-versions` paragraph derives its count from. Known window, both tools:
+  GitHub can publish a release before the apt repo carries it; a `--update` in that window writes
+  a pin apt cannot install yet, and the next install fails with the section 2 "not in
+  apt.releases.hashicorp.com" line. Accepted and documented rather than solved.
 - **ADR-0046** gets a dated amendment: PR B moved packer and vagrant to the signed apt repo with
   holds, and consul, vault and nomad were removed, not moved.
 - **`docs/superpowers/README.md`**: remove the backlog row "HashiCorp tools are installed without a
@@ -151,18 +205,58 @@ a wrong key without touching the vendored one.
 
 Cases:
 
-- clean install of both tools: install line carries `=<VER>-1`, `--allow-change-held-packages` and
-  `APT_CONFFILE_OPTS`, then a hold;
-- already installed at `<VER>-1` and held: no install call;
+- clean install of both tools: install line carries `packer=1.16.1-1`, `--allow-change-held-packages`,
+  `--allow-downgrades` and `APT_CONFFILE_OPTS`, then `apt-mark hold packer`;
+- madison lists `1.16.1-2` and `1.16.1-1`: install line carries `packer=1.16.1-2`;
+- madison lists no `1.16.1-`: rc 1 and the "not in apt.releases.hashicorp.com" line;
+- installed `ii 1.16.1-1` and held: the line `packer: up to date (1.16.1-1, held)` and no install call;
+- installed `rc 1.16.1-1` and held: install runs;
 - installed at an older version and held: install runs;
-- arm64: vagrant skipped with its line, packer installed;
+- arm64: vagrant skip line, stamped vagrant removed, packer installed;
 - a wrong key: rc 1, `.list` and keyring absent, no install call;
-- packer install fails: rc 1, packer named, vagrant still installed and held;
-- stamped `/usr/local/bin/consul`: binary and stamp removed;
+- packer install fails: rc 1, packer named, stamped `/usr/local/bin/packer` and its stamp still
+  present, vagrant still installed, held and its stamped copy removed;
+- stamped `/usr/local/bin/consul`: binary and stamp removed, removal line printed;
 - unstamped `/usr/local/bin/packer`: kept, shadow warning printed;
-- second run after migration: no removal lines.
+- second run after migration: both `up to date (…, held)` lines and no removal line;
+- mac: a bare `packer` in `brew list --formula --full-name` prints the uninstall warning; `hashicorp/tap/packer` alone prints nothing;
+- check-versions: `PACKER_VER` behind the mocked GitHub latest reports outdated while the installed `packer --version` equals latest.
 
 `tests/scripts/dpkg_sudo_frontend.bats` must pass over the new install line unchanged.
+
+## Multi-Lens Review
+
+### Round 1 — spec at `0ae607c9`
+
+Three general-purpose lenses (goal-fit, ergonomics, risk), no conversation context. Adversarial
+gate not triggered: no comparison design, no judge, concrete acceptance criteria. Every lens
+re-verified the premise (stamps on `claude` and `workstation`, the four apt indexes, the key
+fingerprint) and found it true. No R-vs-N contradiction found.
+
+| # | Lens | Sev | Finding | Disposition |
+|---|------|-----|---------|-------------|
+| G1 | goal-fit | MAJOR | Signed-`SHA256SUMS` zip verification is never weighed against apt | Addressed: Alternatives section records it and the operator's choice |
+| G2 / E5 | goal-fit, ergonomics | MINOR | `<VER>-1` is hardcoded; the index carries `-2`/`-4` revisions | Addressed: version resolved from `apt-cache madison` matching `^<VER>-` (R7) |
+| G3 | goal-fit | MINOR | `dpkg-query ${Version}` reads an `rc` package as installed | Addressed: skip requires `ii` (R8) |
+| G4 / E7 / K5 | all three | MINOR | "held: no install call" and "second run: no removal lines" pass on a no-op | Addressed: both assert the `up to date (…, held)` lines |
+| E1 | ergonomics | MAJOR | check-versions compares the installed binary, so a mac tracking latest hides a stale pin | Addressed: packer and vagrant move to `_run_cv_pinned_release` (R16) |
+| E2 | ergonomics | MAJOR | V2's `packer --version == PACKER_VER` fails once the tap moves past the pin | Addressed: macOS packer declared unpinned; V2 asserts at-or-above |
+| E3 | ergonomics | MAJOR | Core packer left on a mac makes `brew bundle` fail and skips the gui/devtools bundles | Addressed: pre-bundle warning naming the uninstall (R17); conflict expected, not measured |
+| E4 | ergonomics | MINOR | The hold's cost (kept-back line, per-box bump) is not named | Addressed: Alternatives, "apt with no pin" |
+| E6 | ergonomics | MINOR | The release-before-apt window applies to vagrant too | Addressed: section 4 names both tools |
+| E8 | ergonomics | MINOR | `[HAS_DEVTOOLS]` reads as gating install; it gates drift only | Addressed: section 4 states every mac gets the tap |
+| K1 | risk | MAJOR | Migration deletes packer/vagrant before apt has a replacement | Addressed: removal after that tool's install and hold succeed (R12) |
+| K2 | risk | MINOR | A pin rollback aborts without `--allow-downgrades` | Addressed: flag added (R7) |
+| K3 | risk | MINOR | `--allow-change-held-packages` is transaction-wide (openssl hold) | Addressed: accepted and stated in section 2 |
+| K4 | risk | MINOR | A key rotation fails silently until a bump, then names packer | Addressed: the not-found line names the key file |
+
+**Assumption lines.**
+
+- Goal-fit: HashiCorp keeps publishing new releases to apt promptly. Partly measured: every recent
+  version in the index is `-1`; publish lag is unmeasured. Covered by the documented window.
+- Ergonomics: `brew bundle` hard-fails with core packer installed. Unmeasured; R17 warns either way.
+- Risk: `nala full-upgrade` respects apt holds. Source read on `claude` (`nala/nala.py:316-342`
+  reports held packages separately); V1 now checks it on a live hold.
 
 ## Requirements
 
@@ -172,18 +266,20 @@ Cases:
 - **R4.** `keys/hashicorp.asc` is tracked and its primary fingerprint is `HASHICORP_GPG_FPR`.
 - **R5.** The keyring is built by `_build_pinned_keyring` from the vendored key with `HASHICORP_GPG_FPR`; a key whose primary fingerprint differs makes the step return 1 with no `hashicorp.list` and no keyring left behind and no `apt-get install` of packer or vagrant.
 - **R6.** `hashicorp.list` holds one line: `deb [arch=<dpkg arch> signed-by=<keyring>] https://apt.releases.hashicorp.com <lsb_release -cs> main`.
-- **R7.** Each tool is installed as `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" --allow-change-held-packages <tool>=<VER>-1` followed by `sudo apt-mark hold <tool>`.
-- **R8.** A tool already at `<VER>-1` and held is not reinstalled.
+- **R7.** Each tool is installed as `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" --allow-change-held-packages --allow-downgrades <tool>=<deb version>` followed by `sudo apt-mark hold <tool>`, where `<deb version>` is the highest `apt-cache madison` version matching `^<VER>-`; when none matches, the tool fails with a line naming `<VER>`, the repo and `keys/hashicorp.asc`.
+- **R8.** A tool whose dpkg status is `ii`, whose upstream version is `<VER>`, and which is held is not reinstalled, and the step prints `<tool>: up to date (<deb version>, held)`.
 - **R9.** On a box whose `_LINUX_ARCH` is not `amd64`, vagrant is not installed and the step prints `hashicorp: vagrant: no arm64 build; skipped` without failing.
 - **R10.** One tool's install or hold failure names that tool on stderr and returns 1, and the other tool is still attempted.
 - **R11.** For each of consul, vault, nomad, packer and vagrant with a stamp in `_DL_STAMP_DIR`, the step removes `_DL_BIN_DIR/<tool>` and the stamp; with no stamp, an existing `_DL_BIN_DIR/<tool>` is left in place and a warning names it.
-- **R12.** `.config/.zshrc.d/5_general.zsh` contains no completion line for vault, consul or nomad.
-- **R13.** `Brewfile` has no consul, nomad or vault entry, has `tap "hashicorp/tap"` and `brew "hashicorp/tap/packer"` tagged `# [HAS_DEVTOOLS]`, and has no `brew "packer"` line.
-- **R14.** Both macOS `brew trust` calls (`lib/macos.sh`, `lib/helpers.sh`) include `hashicorp/tap`.
-- **R15.** `run_check_versions` checks packer against `hashicorp/packer` with `PACKER_VER`.
-- **R16.** ADR-0046 carries a dated amendment describing PR B as built, and the README backlog row "HashiCorp tools are installed without a checksum" is gone.
-- **V1.** On `claude` and `workstation`, `./setup_env.sh -t developer` then: `command -v packer vagrant` gives `/usr/bin/packer` and `/usr/bin/vagrant`; `apt-mark showhold` lists both; none of `/usr/local/bin/{consul,vault,nomad,packer,vagrant}` exists; a second run prints the two `up to date` lines and no removal line.
-- **V2.** On the Studio, after `brew uninstall packer consul vault nomad`, `brew bundle` installs `hashicorp/tap/packer` and `packer --version` reports `PACKER_VER`.
+- **R12.** A stamped packer or vagrant copy is removed only after that tool's apt install and hold succeeded (or, for vagrant on non-amd64, at its skip); when the install fails, the copy and its stamp remain.
+- **R13.** `.config/.zshrc.d/5_general.zsh` contains no completion line for vault, consul or nomad.
+- **R14.** `Brewfile` has no consul, nomad or vault entry, has `tap "hashicorp/tap"` and `brew "hashicorp/tap/packer"` tagged `# [HAS_DEVTOOLS]`, and has no `brew "packer"` line.
+- **R15.** Both macOS `brew trust` calls (`lib/macos.sh`, `lib/helpers.sh`) include `hashicorp/tap`.
+- **R16.** `run_check_versions` checks packer (`hashicorp/packer`, `PACKER_VER`) and vagrant (`hashicorp/vagrant`, `VAGRANT_VER`) through `_run_cv_pinned_release`, comparing the pin, not the installed binary, with GitHub latest.
+- **R17.** `install_macos_casks` prints a warning naming `brew uninstall packer` before the main `brew bundle` when `brew list --formula --full-name` contains a bare `packer`, and continues.
+- **R18.** ADR-0046 carries a dated amendment describing PR B as built, and the README backlog row "HashiCorp tools are installed without a checksum" is gone.
+- **V1.** On `claude` and `workstation`, `./setup_env.sh -t developer` then: `command -v packer vagrant` gives `/usr/bin/packer` and `/usr/bin/vagrant`; `apt-mark showhold` lists both; none of `/usr/local/bin/{consul,vault,nomad,packer,vagrant}` exists; a second run prints the two `up to date` lines and no removal line; `./setup_env.sh -t update` leaves `dpkg-query -W packer vagrant` unchanged.
+- **V2.** On the Studio, after `brew uninstall packer consul vault nomad`, `brew bundle` installs `hashicorp/tap/packer`, and `brew list --formula --full-name` shows `hashicorp/tap/packer` with `packer --version` at or above `PACKER_VER`.
 - **V3.** CI green, including `bash-coverage` at or above its floor.
 - **N1.** No code uninstalls a Homebrew formula or cask.
 - **N2.** No code removes a `/usr/local/bin` file that has no matching stamp in `_DL_STAMP_DIR`.
