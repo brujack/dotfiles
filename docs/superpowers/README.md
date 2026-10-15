@@ -183,7 +183,7 @@ Add a new row to the group that matches its priority and type.
 
 | Feature | Notes |
 | ------- | ----- |
-| A third-party apt key rotation stops every OS update | `update_apt_packages` runs `apt update \|\| return 1` before `nala full-upgrade`; a source signed by a key that no longer matches its vendored keyring makes `apt update` exit 100, so `-t update` upgrades nothing, security fixes included, until a PR vendors the new key. Applies to edge, albert, docker and (after PR B) hashicorp. Measured: wrong keyring rc 100, unreachable host rc 0. Detail: `specs/2026-10-15-hashicorp-apt-design.md` round 2, K4'. |
+| A third-party apt key rotation or expiry stops every OS update | `update_apt_packages` runs `apt update \|\| return 1` before `nala full-upgrade`; any persistent third-party source (12 on `claude`, fetched or vendored keys alike, since `-t update` never re-fetches) whose signer changes or whose key copy expires makes `apt update` exit 100, so `-t update` upgrades nothing, security fixes included, until the key is refreshed. Measured: wrong keyring rc 100, unreachable host rc 0. Stopgap per box: `sudo rm /etc/apt/sources.list.d/<src>.list`. Detail: `specs/2026-10-15-hashicorp-apt-design.md` rounds 2-3 (K4', K3''). |
 
 ### P2 — bugs and security
 
