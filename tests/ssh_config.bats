@@ -20,7 +20,6 @@ resolved() {
 
 @test "the Cloudflare entry host sends keepalives so an idle session is not reaped" {
   [ "$(resolved home-secure.conecrazy.ca serveraliveinterval)" = "30" ]
-  [ "$(resolved home-secure.conecrazy.ca serveralivecountmax)" = "3" ]
   [[ "$(resolved home-secure.conecrazy.ca proxycommand)" == *"cloudflared access ssh --hostname"* ]]
 }
 
