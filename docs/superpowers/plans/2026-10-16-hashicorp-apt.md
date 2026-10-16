@@ -1,5 +1,7 @@
 # HashiCorp apt (PR B) Implementation Plan
 
+> **Status: DONE** — merged as #340 (6ae137af).
+
 spec: docs/superpowers/specs/2026-10-15-hashicorp-apt-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
