@@ -151,20 +151,6 @@ if [[ ${UBUNTU} ]]; then
     source '/usr/share/google-cloud-sdk/completion.zsh.inc'
   fi
 fi
-# for hashicorp vault, consul and nomad cli autocompletion
-if [[ ${MACOS} || ${LINUX} ]]; then
-  autoload -U +X bashcompinit && bashcompinit
-  if [[ -f /usr/local/bin/vault ]]; then
-    complete -o nospace -C /usr/local/bin/vault vault
-  fi
-  if [[ -f /usr/local/bin/consul ]]; then
-    complete -o nospace -C /usr/local/bin/consul consul
-  fi
-  if [[ -f /usr/local/bin/nomad ]]; then
-    complete -o nospace -C /usr/local/bin/nomad nomad
-  fi
-fi
-
 # for ibmcloud command completion
 if [[ ${MACOS} ]]; then
   if [[ -d /usr/local/ibmcloud/autocomplete/zsh_autocomplete ]]; then

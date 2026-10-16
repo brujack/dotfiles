@@ -190,6 +190,11 @@ install_make_macos() {
 }
 
 install_macos_casks() {
+  # homebrew-core packer shares a name with hashicorp/tap/packer; bundling over it fails mid-run.
+  if brew list --formula --full-name | grep -qx 'packer'; then
+    log_error "homebrew-core packer conflicts with hashicorp/tap/packer: run 'brew uninstall packer consul vault nomad', then re-run"
+    return 1
+  fi
   brew bundle --file "${BREWFILE_LOC}/Brewfile" || return 1
   if [[ -n ${HAS_GUI} ]]; then
     brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" || return 1
@@ -198,7 +203,7 @@ install_macos_casks() {
     brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools" || return 1
   fi
   # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
 }
 
 install_macos_packages() {
