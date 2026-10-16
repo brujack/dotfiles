@@ -56,7 +56,17 @@ not a compromised release.
 - The pin is only as trustworthy as the release at refresh time (see Trust model).
 - Linux boxes other than claude and workstation keep the retired binaries until they are
   removed by hand: `sudo rm /usr/local/bin/<tool>` and `rm ~/.local/share/dotfiles/installed/<tool>`.
-- The HashiCorp tools remain TLS-only until PR B.
+- The HashiCorp tools remained TLS-only until PR B (see Amendment 2026-10-16).
+
+## Amendment 2026-10-16: HashiCorp tools move to apt (PR B)
+
+PR B retires `--unverified`. packer and vagrant now install from HashiCorp's signed apt
+repository, through a source file kept outside `/etc/apt` that only the install step's own
+`apt-get` commands read, so no other apt run can see it, upgrade from it, or need it held.
+The signing key is vendored and pinned by fingerprint. consul, vault and nomad were removed, not
+moved; their stamped copies are deleted by the install step. On macOS packer comes from
+`hashicorp/tap`, and vagrant stays a cask. `check-versions` now compares the packer and vagrant
+pins with GitHub's latest release, and `--update` writes only `*_VER`.
 
 ## Related
 

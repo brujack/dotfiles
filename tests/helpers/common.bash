@@ -77,6 +77,15 @@ STUB
   # seam would read the live driver version and make results machine-dependent.
   export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-nvidia-version"
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
+  # _install_ubuntu_hashicorp writes a source file and a keyring through
+  # tests/mocks/sudo, which execs real commands; keep both under the test tmpdir
+  # (tdd.md E2). Created here so a test that reads them before the step runs
+  # sees an empty directory, not a missing one.
+  export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
+  export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    mkdir -p "${_HASHICORP_SOURCE_DIR}" "${_APT_KEYRINGS_DIR}"
+  fi
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
   # of the fixture under BATS_TEST_TMPDIR, never the tracked file itself.

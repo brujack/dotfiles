@@ -1,0 +1,6 @@
+Get:1 https://apt.releases.hashicorp.com resolute InRelease [12.9 kB]
+Err:1 https://apt.releases.hashicorp.com resolute InRelease
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY FC9CA96ACA026560
+Reading package lists...
+W: OpenPGP signature verification failed: https://apt.releases.hashicorp.com resolute InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY FC9CA96ACA026560
+E: The repository 'https://apt.releases.hashicorp.com resolute InRelease' is not signed.

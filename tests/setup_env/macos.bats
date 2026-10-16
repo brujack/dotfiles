@@ -295,6 +295,47 @@ _stub_bats_present() {
   _assert_trust_covers_brewfile
 }
 
+@test "install_macos_casks: refuses on homebrew-core packer, no bundle run" {
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  export MOCK_BREW_LIST_FORMULA="git packer vault"
+  run install_macos_casks
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"homebrew-core packer conflicts with hashicorp/tap/packer: run 'brew uninstall packer consul vault nomad', then re-run"* ]]
+  run ! grep -q "^brew bundle" "${MOCK_CALLS_FILE}"
+  grep -q "^brew list --formula --full-name" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks: hashicorp/tap/packer alone does not trip the guard" {
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  export MOCK_BREW_LIST_FORMULA="git hashicorp/tap/packer"
+  run install_macos_casks
+  [ "$status" -eq 0 ]
+  grep -q "^brew bundle" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_macos_casks: brew trust names hashicorp/tap" {
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  run install_macos_casks
+  [ "$status" -eq 0 ]
+  grep '^brew trust ' "${MOCK_CALLS_FILE}" | grep -q "hashicorp/tap"
+}
+
+@test "update brew trust list in lib/helpers.sh names hashicorp/tap" {
+  grep -E '^[[:space:]]*brew trust ' "${REPO_ROOT}/lib/helpers.sh" | grep -q "hashicorp/tap"
+}
+
 # ── install_homebrew (xcodebuild license failure) ────────────────────────────
 
 @test "install_homebrew: xcodebuild fails after xcode install - returns 1 with license error" {

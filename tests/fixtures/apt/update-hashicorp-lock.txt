@@ -1,0 +1,3 @@
+Reading package lists...
+E: Could not get lock /var/lib/apt/lists/lock. It is held by process 1234 (python3)
+E: Unable to lock directory /var/lib/apt/lists/

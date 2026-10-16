@@ -1,5 +1,6 @@
 tap "cloudflare/cloudflare"                  # [HAS_DEVTOOLS]
 tap "getagentseal/codeburn"                  # [HAS_DEVTOOLS]
+tap "hashicorp/tap", trusted: true           # [HAS_DEVTOOLS]
 tap "oven-sh/bun"                            # [HAS_DEVTOOLS]
 tap "redpanda-data/tap"                      # [HAS_DEVTOOLS]
 tap "snyk/tap"                               # [HAS_DEVTOOLS]
@@ -17,7 +18,6 @@ brew "bzip2"
 brew "chruby"                                # [HAS_DEVTOOLS]
 brew "getagentseal/codeburn/codeburn"        # [HAS_DEVTOOLS]
 brew "cloudflared"                           # [HAS_DEVTOOLS]
-brew "consul"                                # [HAS_DEVTOOLS]
 brew "coreutils"
 brew "ctags"                                 # [HAS_DEVTOOLS]
 brew "driftctl"                              # [HAS_DEVTOOLS]
@@ -38,6 +38,7 @@ brew "gnupg"                                 # [HAS_DEVTOOLS]
 brew "go"                                    # [HAS_DEVTOOLS]
 brew "go-task"                               # [HAS_DEVTOOLS]
 brew "hadolint"                              # [HAS_DOCKER]
+brew "hashicorp/tap/packer"                  # [HAS_DEVTOOLS]
 brew "helm"                                  # [HAS_K8S]
 brew "htop"
 brew "httpie"                                # [HAS_DEVTOOLS]
@@ -76,10 +77,8 @@ brew "mysql"                                 # [HAS_DEVTOOLS]
 brew "ncdu"
 brew "neovim"                                # [HAS_DEVTOOLS]
 brew "node"                                  # [HAS_DEVTOOLS]
-brew "nomad"                                 # [HAS_DEVTOOLS]
 brew "ntfy"                                  # [HAS_DEVTOOLS]
 brew "openssl@3"
-brew "packer"                                # [HAS_DEVTOOLS]
 brew "parallel"                              # [HAS_DEVTOOLS]
 brew "pcre"
 brew "perl"                                  # [HAS_DEVTOOLS]
@@ -124,8 +123,6 @@ brew "the_silver_searcher"                   # [HAS_DEVTOOLS]
 brew "tmux"
 brew "tree"
 brew "uv"                                    # [HAS_DEVTOOLS]
-#brew "vault", args: ["--with-ui"]
-brew "vault"                                 # [HAS_DEVTOOLS]
 brew "vim"
 brew "wget"
 brew "wireshark"                             # [HAS_DEVTOOLS]
