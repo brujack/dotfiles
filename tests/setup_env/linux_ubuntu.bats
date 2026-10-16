@@ -3417,6 +3417,256 @@ SHIM
   [ ! -e "${_DL_STAMP_DIR}/packer" ]
 }
 
+# ── _install_ubuntu_hashicorp: failure diagnostics ──────────────────────────
+
+# Make `rm` fail when its arguments contain $1; everything else goes to the mock.
+_hc_rm_fails_on() {
+  cat > "${SHIM_DIR}/rm" << SHIM
+#!/usr/bin/env bash
+if [[ "\$*" == *"$1"* ]]; then exit 1; fi
+exec "${REPO_ROOT}/tests/mocks/rm" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/rm"
+}
+
+# Index of the first line of the array named $1 that contains $2; -1 when none.
+_hc_line_index() {
+  local -n _arr="$1"
+  local _i
+  for _i in "${!_arr[@]}"; do
+    [[ ${_arr[${_i}]} == *"$2"* ]] && { printf '%s' "${_i}"; return 0; }
+  done
+  printf -- '-1'
+}
+
+_hc_refresh_fixture() {
+  export MOCK_APT_GET_UPDATE_OUTPUT="${REPO_ROOT}/tests/fixtures/apt/update-hashicorp-$1.txt" MOCK_APT_FAIL_SUBCMD=update
+}
+
+@test "_install_ubuntu_hashicorp: a never-fetched refresh prints apt's output, the failure line, then the rotation hint, and installs nothing" {
+  _hc_env
+  _hc_refresh_fixture never-fetched
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  local _o _f _h
+  _o="$(_hc_line_index stderr_lines "is not signed")"
+  _f="$(_hc_line_index stderr_lines "hashicorp: apt-get update failed for apt.releases.hashicorp.com (rc 100)")"
+  _h="$(_hc_line_index stderr_lines "is not verified by keys/hashicorp.asc")"
+  [ "${_o}" -ge 0 ]
+  [ "${_f}" -gt "${_o}" ]
+  [ "${_h}" -eq $((_f + 1)) ]
+  [[ "${stderr_lines[${_f}]}" == *"; see the next line" ]]
+  [[ "${stderr_lines[${_f}]}" != *"re-run"* ]]
+  [[ "${stderr_lines[${_h}]}" == *"re-vendor keys/hashicorp.asc from https://apt.releases.hashicorp.com/gpg"* ]]
+  [[ "${stderr_lines[${_h}]}" == *"also edit HASHICORP_GPG_FPR in lib/constants.sh"* ]]
+  [ -s "$(_hc_ring)" ]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a stale-rotated refresh whose only rotation token is NO_PUBKEY still prints the hint" {
+  _hc_env
+  _hc_refresh_fixture stale-rotated
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" != *"is not signed"* ]]
+  [[ "$stderr" == *"is not verified by keys/hashicorp.asc"* ]]
+  [[ "$stderr" == *"; see the next line"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: an unserved codename says the repo returned 404 and prints no rotation hint" {
+  _hc_env
+  _hc_refresh_fixture no-release
+  export MOCK_LSB_RELEASE_CS=resolute
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"returned 404 for resolute: if resolute is a new release, wait for HashiCorp to publish it; otherwise re-run ./setup_env.sh -t developer"* ]]
+  [[ "$stderr" != *"is not verified by keys/hashicorp.asc"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a held apt lock names the lock and ends with the re-run line, no rotation hint" {
+  _hc_env
+  _hc_refresh_fixture lock
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"Could not get lock"* ]]
+  [[ "$stderr" == *"packer and vagrant not installed (installed copies, if any, untouched); re-run ./setup_env.sh -t developer"* ]]
+  [[ "$stderr" != *"is not verified by keys/hashicorp.asc"* ]]
+  [[ "$stderr" != *"returned 404"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a clean refresh prints neither the failure line nor the rotation hint" {
+  _hc_env
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"apt-get update failed"* ]]
+  [[ "$stderr" != *"is not verified by keys/hashicorp.asc"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an empty refresh output prints no blank line on success" {
+  _hc_env
+  : > "${BATS_TEST_TMPDIR}/empty.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/empty.txt"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'hashicorp: refreshing apt.releases.hashicorp.com\nhashicorp: installing packer'* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an empty refresh output prints no blank line before the failure line" {
+  _hc_env
+  : > "${BATS_TEST_TMPDIR}/empty.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/empty.txt" MOCK_APT_FAIL_SUBCMD=update
+  # bats trims leading blank lines from $stderr, so read the raw stream.
+  local _rc=0
+  _install_ubuntu_hashicorp > /dev/null 2> "${BATS_TEST_TMPDIR}/err.txt" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [[ "$(head -n 1 "${BATS_TEST_TMPDIR}/err.txt")" == *"hashicorp: apt-get update failed"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a version apt does not list gets the not-published hint" {
+  _hc_env
+  export VAGRANT_VER=9.9.9 MOCK_APT_FAIL_SUBCMD=install
+  export MOCK_APT_GET_INSTALL_OUTPUT="${REPO_ROOT}/tests/fixtures/apt/install-version-not-found.txt"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: vagrant: install failed"* ]]
+  [[ "$stderr" == *"9.9.9 not found in apt.releases.hashicorp.com: HashiCorp has probably not published 9.9.9 to apt yet (check-versions can pin a release first), so wait and re-run ./setup_env.sh -t developer; if apt.releases.hashicorp.com already lists 9.9.9, re-run now, since apt-daily may have deleted this source's lists mid-run)"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a Signed-By conflict gets the other-source hint" {
+  _hc_env
+  printf "E: Conflicting values set for option Signed-By regarding source https://apt.releases.hashicorp.com/ noble: /a != /b\n" > "${BATS_TEST_TMPDIR}/inst.txt"
+  export MOCK_APT_GET_INSTALL_OUTPUT="${BATS_TEST_TMPDIR}/inst.txt" MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: packer: install failed (another source for apt.releases.hashicorp.com names a different signed-by keyring; remove it, this step supplies the source)"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a held package gets the unhold hint" {
+  _hc_env
+  printf "E: Held packages were changed and -y was used without --allow-change-held-packages.\n" > "${BATS_TEST_TMPDIR}/inst.txt"
+  export MOCK_APT_GET_INSTALL_OUTPUT="${BATS_TEST_TMPDIR}/inst.txt" MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: packer: install failed (packer is held: run sudo apt-mark unhold packer, then re-run)"* ]]
+  [[ "$stderr" == *"hashicorp: vagrant: install failed (vagrant is held: run sudo apt-mark unhold vagrant, then re-run)"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an install failure matching no hint ends with the re-run default" {
+  _hc_env
+  printf "E: Failed to fetch https://apt.releases.hashicorp.com/pool/main/v/vagrant/vagrant_2.4.9-1_amd64.deb  Connection timed out\n" > "${BATS_TEST_TMPDIR}/inst.txt"
+  export MOCK_APT_GET_INSTALL_OUTPUT="${BATS_TEST_TMPDIR}/inst.txt" MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: vagrant: install failed; re-run ./setup_env.sh -t developer"* ]]
+  [[ "$stderr" != *"not found in apt.releases.hashicorp.com"* ]]
+  [[ "$stderr" != *"is held"* ]]
+}
+
+# ── _install_ubuntu_hashicorp: hand-written source warning ──────────────────
+
+_HC_HOST_LINE='deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com noble main'
+
+@test "_install_ubuntu_hashicorp: a live hashicorp.list in sources.list.d is named, and the step still installs with rc 0" {
+  _hc_env
+  printf '%s\n' "${_HC_HOST_LINE}" > "${_APT_SOURCES_DIR}/hashicorp.list"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"hashicorp: ${_APT_SOURCES_DIR}/hashicorp.list also configures apt.releases.hashicorp.com; -t update will move packer and vagrant off their pins until it is removed (this step supplies the source)"* ]]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a live entry in the main sources.list is named" {
+  _hc_env
+  printf '  %s\n' "${_HC_HOST_LINE}" > "${_APT_SOURCES_LIST}"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"hashicorp: ${_APT_SOURCES_LIST} also configures apt.releases.hashicorp.com"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a hashicorp.sources stanza with URIs and no Enabled line is named" {
+  _hc_env
+  printf 'Types: deb\nURIs: https://apt.releases.hashicorp.com\nSuites: noble\nComponents: main\n' > "${_APT_SOURCES_DIR}/hashicorp.sources"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"hashicorp: ${_APT_SOURCES_DIR}/hashicorp.sources also configures apt.releases.hashicorp.com"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a lowercase uris: field and enabled: yes are read as apt reads them" {
+  _hc_env
+  printf 'Types: deb\nuris: https://apt.releases.hashicorp.com\nenabled: yes\n' > "${_APT_SOURCES_DIR}/hashicorp.sources"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"hashicorp: ${_APT_SOURCES_DIR}/hashicorp.sources also configures apt.releases.hashicorp.com"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: commented-out, disabled, and non-apt-read files raise no warning" {
+  _hc_env
+  printf '# %s\n' "${_HC_HOST_LINE}" > "${_APT_SOURCES_DIR}/commented.list"
+  printf 'Types: deb\nURIs: https://apt.releases.hashicorp.com\nEnabled: no\n' > "${_APT_SOURCES_DIR}/off.sources"
+  printf '%s\n' "${_HC_HOST_LINE}" > "${_APT_SOURCES_DIR}/hashicorp.list.save"
+  printf '%s\n' "${_HC_HOST_LINE}" > "${_APT_SOURCES_DIR}/hashicorp.list.distUpgrade"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"also configures"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: no source file anywhere raises no warning" {
+  _hc_env
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"also configures"* ]]
+}
+
+# ── _install_ubuntu_hashicorp: review fixes ─────────────────────────────────
+
+@test "_install_ubuntu_hashicorp: a failed vagrant removal on arm64 returns 1 with no apt-get update when packer is up to date" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64 MOCK_DPKG_STATUS_packer="ii  ${PACKER_VER}-1"
+  _hc_stamped vagrant
+  _hc_rm_fails_on "${_DL_BIN_DIR}/vagrant"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: vagrant: remove failed"* ]]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a failed keyring removal for a wrong key is named, and the step still returns 1" {
+  _hc_env
+  export _HASHICORP_KEY_PATH="${REPO_ROOT}/tests/fixtures/albert-obs.asc"
+  printf 'previous' > "$(_hc_ring)"
+  _hc_rm_fails_on "$(_hc_ring)"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: could not remove $(_hc_ring)"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an unstamped vagrant on arm64 is not said to shadow /usr/bin/vagrant" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64
+  printf 'mine' > "${_DL_BIN_DIR}/vagrant"
+  /bin/chmod 0755 "${_DL_BIN_DIR}/vagrant"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ -e "${_DL_BIN_DIR}/vagrant" ]
+  [[ "$stderr" == *"sudo rm ${_DL_BIN_DIR}/vagrant"* ]]
+  [[ "$stderr" != *"shadows"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a stamp whose binary is already gone is removed without a removed-binary line" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64
+  _hc_stamped vagrant
+  /bin/rm -f "${_DL_BIN_DIR}/vagrant"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ ! -e "${_DL_STAMP_DIR}/vagrant" ]
+  [[ "$output" != *"hashicorp: removed"* ]]
+}
+
 # telepresence, cf-terraforming and docker-compose are retired (R6): docker compose
 # comes from docker-compose-plugin and the other two have no caller. kind and yq
 # are the positive control that the three steps really fetched something.

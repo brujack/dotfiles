@@ -957,6 +957,8 @@ _hashicorp_retire_stamped() {
   local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_tool}"
   local _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_tool}"
   if [[ -e ${_stamp} ]]; then
+    local _had_bin=0
+    [[ -e ${_bin} ]] && _had_bin=1
     if ! sudo rm -f "${_bin}"; then
       log_warn "hashicorp: ${_tool}: remove failed (${_bin}; stamp kept so the next run retries)"
       return 1
@@ -965,7 +967,7 @@ _hashicorp_retire_stamped() {
       log_warn "hashicorp: ${_tool}: remove failed (stamp ${_stamp})"
       return 1
     fi
-    printf 'hashicorp: removed %s (installed by dotfiles)\n' "${_bin}"
+    ((_had_bin == 0)) || printf 'hashicorp: removed %s (installed by dotfiles)\n' "${_bin}"
   elif [[ -e ${_bin} ]]; then
     if [[ -n ${_shadows} ]]; then
       log_warn "hashicorp: ${_bin} was not installed by dotfiles and shadows /usr/bin/${_tool} on PATH; left in place (remove it with: sudo rm ${_bin})"
@@ -976,20 +978,79 @@ _hashicorp_retire_stamped() {
   return 0
 }
 
+# apt's own reason for a failed refresh: the first E: line, else the last line.
+# Usage: _hashicorp_refresh_why <apt output>
+_hashicorp_refresh_why() {
+  local _out="$1"
+  printf '%s\n' "${_out}" | grep -m1 '^E:' || printf '%s\n' "${_out}" | tail -n 1
+}
+
 # The refresh-failed line, without its trailing next action.
 # Usage: _hashicorp_refresh_failed_line <rc> <apt output> <install set, joined>
 _hashicorp_refresh_failed_line() {
-  local _rc="$1" _out="$2" _set="$3" _why
-  _why="$(printf '%s\n' "${_out}" | grep -m1 '^E:')" || _why="$(printf '%s\n' "${_out}" | tail -n 1)"
+  local _rc="$1" _out="$2" _set="$3"
   printf 'hashicorp: apt-get update failed for apt.releases.hashicorp.com (rc %s): %s; %s not installed (installed copies, if any, untouched)' \
-    "${_rc}" "${_why}" "${_set}"
+    "${_rc}" "$(_hashicorp_refresh_why "${_out}")" "${_set}"
 }
 
-# What follows "hashicorp: <tool>: install failed". Only the default next action
-# exists so far.
+# rc 0 when a W: or E: line of the refresh output names the host together with a
+# signature-verification token: the signer is not the one keys/hashicorp.asc holds.
+# Usage: _hashicorp_rotation_hint_fires <apt output>
+_hashicorp_rotation_hint_fires() {
+  printf '%s\n' "$1" | grep -E '^[WE]:' | grep -F 'apt.releases.hashicorp.com' \
+    | grep -qE 'NO_PUBKEY|EXPKEYSIG|EXPSIG|KEYEXPIRED|REVKEYSIG|is not signed|is no longer signed'
+}
+
+# The one next action that ends the refresh-failed line.
+# Usage: _hashicorp_refresh_next_action <apt output> <codename> <hint fires: 0|1>
+_hashicorp_refresh_next_action() {
+  local _out="$1" _codename="$2" _hint="$3"
+  if ((_hint == 1)); then
+    printf '; see the next line'
+  elif [[ $(_hashicorp_refresh_why "${_out}") == *"does not have a Release file"* ]]; then
+    printf '; the repo returned 404 for %s: if %s is a new release, wait for HashiCorp to publish it; otherwise re-run ./setup_env.sh -t developer' \
+      "${_codename}" "${_codename}"
+  else
+    printf '; re-run ./setup_env.sh -t developer'
+  fi
+}
+
+# What follows "hashicorp: <tool>: install failed", chosen from apt's stderr.
 # Usage: _hashicorp_install_hint <tool> <version> <apt stderr>
 _hashicorp_install_hint() {
-  printf '; re-run ./setup_env.sh -t developer'
+  local _tool="$1" _ver="$2" _err="$3"
+  if [[ ${_err} == *"Version '${_ver}-*' for '${_tool}' was not found"* ]]; then
+    printf ' (%s not found in apt.releases.hashicorp.com: HashiCorp has probably not published %s to apt yet (check-versions can pin a release first), so wait and re-run ./setup_env.sh -t developer; if apt.releases.hashicorp.com already lists %s, re-run now, since apt-daily may have deleted this source'"'"'s lists mid-run)' \
+      "${_ver}" "${_ver}" "${_ver}"
+  elif [[ ${_err} == *"Conflicting values set for option Signed-By"* ]]; then
+    printf ' (another source for apt.releases.hashicorp.com names a different signed-by keyring; remove it, this step supplies the source)'
+  elif [[ ${_err} == *"Held packages were changed"* ]]; then
+    printf ' (%s is held: run sudo apt-mark unhold %s, then re-run)' "${_tool}" "${_tool}"
+  else
+    printf '; re-run ./setup_env.sh -t developer'
+  fi
+}
+
+# Name every file apt reads that has a live entry for HashiCorp's repo: such a
+# file puts packer and vagrant in apt's configured set, so -t update would move
+# them off their pins. Warning only. A one-line file is live on a non-comment
+# deb/deb-src line naming the host; a .sources file on a URIs: line naming it
+# with every Enabled: line affirmative (field names case-insensitive, as apt
+# reads them; a URI on a continuation line is missed, which costs only this warning).
+_hashicorp_warn_handwritten_source() {
+  local _f
+  for _f in "${_APT_SOURCES_LIST:-/etc/apt/sources.list}" \
+    "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"/*.list \
+    "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"/*.sources; do
+    [[ -f ${_f} ]] || continue
+    if [[ ${_f} == *.sources ]]; then
+      grep -iE '^[[:space:]]*URIs:' "${_f}" | grep -qF 'apt.releases.hashicorp.com' || continue
+      ! grep -iE '^[[:space:]]*Enabled:' "${_f}" | grep -qviE '^[[:space:]]*Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$' || continue
+    else
+      grep -E '^[[:space:]]*deb(-src)?[[:space:]]' "${_f}" | grep -qF 'apt.releases.hashicorp.com' || continue
+    fi
+    log_warn "hashicorp: ${_f} also configures apt.releases.hashicorp.com; -t update will move packer and vagrant off their pins until it is removed (this step supplies the source)"
+  done
 }
 
 # packer and vagrant come from HashiCorp's apt repo through a source file that
@@ -1017,7 +1078,7 @@ _install_ubuntu_hashicorp() {
   for _tool in packer vagrant; do
     if [[ ${_tool} == "vagrant" && ${_LINUX_ARCH} != "amd64" ]]; then
       printf 'hashicorp: vagrant: no %s build; skipped\n' "${_LINUX_ARCH}"
-      _hashicorp_retire_stamped vagrant shadows || _hc_rc=1
+      _hashicorp_retire_stamped vagrant || _hc_rc=1
       continue
     fi
     _var="${_tool^^}_VER"
@@ -1044,7 +1105,7 @@ _install_ubuntu_hashicorp() {
     0) ;;
     1)
       log_warn "hashicorp: ${_key} is not the pinned key (HASHICORP_GPG_FPR ${HASHICORP_GPG_FPR}: not exactly one primary key, or a different fingerprint); removing ${_ring}, nothing installed"
-      sudo rm -f "${_ring}"
+      sudo rm -f "${_ring}" || log_warn "hashicorp: could not remove ${_ring}"
       return 1
       ;;
     *)
@@ -1076,6 +1137,7 @@ _install_ubuntu_hashicorp() {
 
   local _out _rc _joined="${_set[0]}"
   [[ ${#_set[@]} -gt 1 ]] && _joined="${_set[0]} and ${_set[1]}"
+  _hashicorp_warn_handwritten_source
   printf 'hashicorp: refreshing apt.releases.hashicorp.com\n'
   # --error-on=any: without it an unreachable host exits 0 with only W: lines.
   # List-Cleanup=0: without it a single-source update deletes every other source's lists.
@@ -1083,11 +1145,14 @@ _install_ubuntu_hashicorp() {
     -o "Dir::Etc::sourcelist=${_list}" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 2>&1)
   _rc=$?
   if ((_rc != 0)); then
-    printf '%s\n' "${_out}" >&2
-    log_warn "$(_hashicorp_refresh_failed_line "${_rc}" "${_out}" "${_joined}")$(_hashicorp_install_hint "" "" "")"
+    local _hint=0
+    _hashicorp_rotation_hint_fires "${_out}" && _hint=1
+    [[ -n ${_out} ]] && printf '%s\n' "${_out}" >&2
+    log_warn "$(_hashicorp_refresh_failed_line "${_rc}" "${_out}" "${_joined}")$(_hashicorp_refresh_next_action "${_out}" "${_codename}" "${_hint}")"
+    ((_hint == 0)) || log_warn "hashicorp: apt.releases.hashicorp.com is not verified by keys/hashicorp.asc (key rotated or expired, or the host served unsigned data); re-vendor keys/hashicorp.asc from https://apt.releases.hashicorp.com/gpg after verifying it out of band, and if its primary fingerprint changed also edit HASHICORP_GPG_FPR in lib/constants.sh"
     return 1
   fi
-  printf '%s\n' "${_out}"
+  [[ -n ${_out} ]] && printf '%s\n' "${_out}"
 
   local _err _irc
   for _tool in "${_set[@]}"; do
