@@ -3667,6 +3667,82 @@ _HC_HOST_LINE='deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
   [[ "$output" != *"hashicorp: removed"* ]]
 }
 
+# ── _install_ubuntu_hashicorp: pinning the diagnostics' filters ─────────────
+
+@test "_hashicorp_rotation_hint_fires: each rotation token on a W: line naming the host fires" {
+  local _tok
+  for _tok in NO_PUBKEY EXPKEYSIG EXPSIG KEYEXPIRED REVKEYSIG "is not signed" "is no longer signed"; do
+    run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: ${_tok}"
+    [ "$status" -eq 0 ] || { printf 'token not recognised: %s\n' "${_tok}" >&3; return 1; }
+  done
+}
+
+@test "_hashicorp_rotation_hint_fires: a token off a W:/E: line, or on another host's line, does not fire" {
+  run _hashicorp_rotation_hint_fires "Err:1 https://apt.releases.hashicorp.com noble InRelease NO_PUBKEY FC9CA96ACA026560"
+  [ "$status" -eq 1 ]
+  run _hashicorp_rotation_hint_fires "  https://apt.releases.hashicorp.com noble InRelease: NO_PUBKEY FC9CA96ACA026560"
+  [ "$status" -eq 1 ]
+  run _hashicorp_rotation_hint_fires "W: https://example.invalid/repo noble InRelease: NO_PUBKEY ABCDEF"
+  [ "$status" -eq 1 ]
+  run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: connection reset"
+  [ "$status" -eq 1 ]
+}
+
+@test "_install_ubuntu_hashicorp: a lowercase enabled: no stanza raises no warning" {
+  _hc_env
+  printf 'Types: deb\nuris: https://apt.releases.hashicorp.com\nenabled: no\n' > "${_APT_SOURCES_DIR}/hashicorp.sources"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"also configures"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: the failure line carries the first E: line, not the last line" {
+  _hc_env
+  printf 'E: first problem\nE: second problem\nReading package lists... Done\n' > "${BATS_TEST_TMPDIR}/upd.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/upd.txt" MOCK_APT_FAIL_SUBCMD=update
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  local _f
+  _f="$(_hc_line_index stderr_lines "hashicorp: apt-get update failed")"
+  [ "${_f}" -ge 0 ]
+  [[ "${stderr_lines[${_f}]}" == *"(rc 100): E: first problem; "* ]]
+}
+
+@test "_install_ubuntu_hashicorp: with no E: line the failure line carries the last line" {
+  _hc_env
+  printf 'W: something odd\nlast line here\n' > "${BATS_TEST_TMPDIR}/upd.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/upd.txt" MOCK_APT_FAIL_SUBCMD=update
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  local _f
+  _f="$(_hc_line_index stderr_lines "hashicorp: apt-get update failed")"
+  [[ "${stderr_lines[${_f}]}" == *"(rc 100): last line here; "* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a Release-file complaint on a non-first E: line gives no 404 text" {
+  _hc_env
+  printf "E: Failed to fetch https://apt.releases.hashicorp.com/x\nE: The repository 'y' does not have a Release file.\n" > "${BATS_TEST_TMPDIR}/upd.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/upd.txt" MOCK_APT_FAIL_SUBCMD=update
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  local _f
+  _f="$(_hc_line_index stderr_lines "hashicorp: apt-get update failed")"
+  [[ "${stderr_lines[${_f}]}" == *"; re-run ./setup_env.sh -t developer" ]]
+  [[ "$stderr" != *"returned 404"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a stamped dangling symlink at the binary path is removed and reported" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64
+  _hc_stamped vagrant
+  /bin/rm -f "${_DL_BIN_DIR}/vagrant"
+  ln -s "${BATS_TEST_TMPDIR}/nowhere" "${_DL_BIN_DIR}/vagrant"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ ! -L "${_DL_BIN_DIR}/vagrant" ]
+  [[ "$output" == *"hashicorp: removed ${_DL_BIN_DIR}/vagrant"* ]]
+}
+
 # telepresence, cf-terraforming and docker-compose are retired (R6): docker compose
 # comes from docker-compose-plugin and the other two have no caller. kind and yq
 # are the positive control that the three steps really fetched something.

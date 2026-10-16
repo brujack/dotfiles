@@ -958,7 +958,7 @@ _hashicorp_retire_stamped() {
   local _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_tool}"
   if [[ -e ${_stamp} ]]; then
     local _had_bin=0
-    [[ -e ${_bin} ]] && _had_bin=1
+    [[ -e ${_bin} || -L ${_bin} ]] && _had_bin=1
     if ! sudo rm -f "${_bin}"; then
       log_warn "hashicorp: ${_tool}: remove failed (${_bin}; stamp kept so the next run retries)"
       return 1
