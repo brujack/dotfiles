@@ -1,7 +1,8 @@
 # HashiCorp tools: remove consul, vault and nomad; install packer and vagrant from HashiCorp's signed apt repo (PR B)
 
 Date: 2026-10-15
-Status: Draft
+Status: Approved
+- **Approved:** 2026-10-16 at `fd118bea`, operator: "approved, go to plan and get er done"
 Related: ADR-0046 (release asset pins, PR A), `docs/superpowers/specs/2026-10-13-release-asset-sha256-design.md`
 
 ## Problem
