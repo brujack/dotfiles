@@ -1154,3 +1154,37 @@ the hint in the stated order (now required). Risk: noble's apt 2.7 matches 3.2.0
 - **N4.** No new doctor check (for key expiry, signer mismatch or anything else).
 - **N5.** The HashiCorp key is never fetched over the network at install time.
 - **N6.** No code writes a HashiCorp apt source under `/etc/apt`.
+
+## Amendments
+
+- finding R19 (2026-10-16, reviewer A): DIFFERS — The refresh command and capture match, but the rotation check and its 'is not verified by keys/hashicorp.asc' line run only inside 'if ((_rc != 0))' (lib/linux_ubuntu.sh:1149), so a W:/E: signature line in a refresh that exits 0 prints nothing and does not return 1, where R19 states the condition as the output content alone.
+- R19 -> The step refreshes with `sudo -H apt-get update --error-on=any -o Dir::Etc::sourcelist=<_HASHICORP_SOURCE_DIR>/hashicorp.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 2>&1`, output captured in a variable and exit status kept; when that refresh exits non-zero and the output has a `W:` or `E:` line containing `apt.releases.hashicorp.com` and one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed` or `is no longer signed`, the step prints a line containing `is not verified by keys/hashicorp.asc`, both causes (key rotated or expired, host served unsigned data) and `HASHICORP_GPG_FPR` on stderr and returns 1. — `--error-on=any` turns every W: line into a non-zero exit, so a signature line with rc 0 cannot occur (round-17 risk lens measured a dual-signed InRelease with one trusted key: rc 0 and no W: line); checking only on failure is the same behaviour stated precisely.
+- finding R27 (2026-10-16, reviewer both): DIFFERS — _update_apt_version_pin (lib/workflows.sh:1700) refuses non-X.Y.Z, edits only *_VER, reads back and prints 'Updated <VAR> → <version>', but the next-step text is two lines: one names ./setup_env.sh -t developer without the publish lag, the other names the lag without ./setup_env.sh -t developer, so no single line names both as R27 states.
+- R27 -> `check-versions --update` for packer or vagrant refuses a latest that is not `X.Y.Z` and returns 1, edits only that tool's `*_VER` line, reads it back, returns 1 without a next-step line when the read-back fails, and otherwise prints `Updated <VAR> → <version>`, a line naming `./setup_env.sh -t developer`, and a line naming the apt publish lag. — section 4 already specifies the two next-step lines; R27 compressed them into one.
+- finding R30 (2026-10-16, reviewer both): DIFFERS — _hashicorp_warn_handwritten_source (lib/linux_ubuntu.sh:1052) treats an uncommented deb-src line as live via '^[[:space:]]*deb(-src)?[[:space:]]', so a file with only a deb-src entry for the host gets the 'move packer and vagrant off their pins' warning, where R30 counts only uncommented deb lines; the rest (files scanned, .sources rule, message, no rc change, before the refresh at :1142) matches.
+- R30 -> Before the R19 refresh, for each of `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and the `*.list` and `*.sources` files in `_APT_SOURCES_DIR` that has a live entry for `apt.releases.hashicorp.com` (an uncommented `deb` or `deb-src` line; for `.sources`, a `URIs:` line with the host and only affirmative `Enabled:` lines, field names matched case-insensitively in column 0), the step prints a warning naming that file and saying `-t update` will move packer and vagrant off their pins until it is removed; the warning does not change the step's return. — section 2 step 6 already gives the live-line regex as `deb(-src)?`; R30 said only `deb`. Column 0 is the deb822 field rule fixed in Phase 3 review.
+
+## Spec alignment (2026-10-16)
+
+- spec: docs/superpowers/specs/2026-10-15-hashicorp-apt-design.md
+- anchor: 1a47ff6d6f0a6fb8c1e5ef95154c76d0efbef67d
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R19 | A | DIFFERS | The refresh command and capture match, but the rotation check and its 'is not verified by keys/hashicorp.asc' line run only inside 'if ((_rc != 0))' (lib/linux_ubuntu.sh:1149), so a W:/E: signature line in a refresh that exits 0 prints nothing and does not return 1, where R19 states the condition as the output content alone. | - R19 -> The step refreshes with `sudo -H apt-get update --error-on=any -o Dir::Etc::sourcelist=<_HASHICORP_SOURCE_DIR>/hashicorp.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 2>&1`, output captured in a variable and exit status kept; when that refresh exits non-zero and the output has a `W:` or `E:` line containing `apt.releases.hashicorp.com` and one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed` or `is no longer signed`, the step prints a line containing `is not verified by keys/hashicorp.asc`, both causes (key rotated or expired, host served unsigned data) and `HASHICORP_GPG_FPR` on stderr and returns 1. — `--error-on=any` turns every W: line into a non-zero exit, so a signature line with rc 0 cannot occur (round-17 risk lens measured a dual-signed InRelease with one trusted key: rc 0 and no W: line); checking only on failure is the same behaviour stated precisely. |
+| R27 | both | DIFFERS | _update_apt_version_pin (lib/workflows.sh:1700) refuses non-X.Y.Z, edits only *_VER, reads back and prints 'Updated <VAR> → <version>', but the next-step text is two lines: one names ./setup_env.sh -t developer without the publish lag, the other names the lag without ./setup_env.sh -t developer, so no single line names both as R27 states. | - R27 -> `check-versions --update` for packer or vagrant refuses a latest that is not `X.Y.Z` and returns 1, edits only that tool's `*_VER` line, reads it back, returns 1 without a next-step line when the read-back fails, and otherwise prints `Updated <VAR> → <version>`, a line naming `./setup_env.sh -t developer`, and a line naming the apt publish lag. — section 4 already specifies the two next-step lines; R27 compressed them into one. |
+| R30 | both | DIFFERS | _hashicorp_warn_handwritten_source (lib/linux_ubuntu.sh:1052) treats an uncommented deb-src line as live via '^[[:space:]]*deb(-src)?[[:space:]]', so a file with only a deb-src entry for the host gets the 'move packer and vagrant off their pins' warning, where R30 counts only uncommented deb lines; the rest (files scanned, .sources rule, message, no rc change, before the refresh at :1142) matches. | - R30 -> Before the R19 refresh, for each of `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and the `*.list` and `*.sources` files in `_APT_SOURCES_DIR` that has a live entry for `apt.releases.hashicorp.com` (an uncommented `deb` or `deb-src` line; for `.sources`, a `URIs:` line with the host and only affirmative `Enabled:` lines, field names matched case-insensitively in column 0), the step prints a warning naming that file and saying `-t update` will move packer and vagrant off their pins until it is removed; the warning does not change the step's return. — section 2 step 6 already gives the live-line regex as `deb(-src)?`; R30 said only `deb`. Column 0 is the deb822 field rule fixed in Phase 3 review. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: post-merge operator step
+- V2: post-merge operator step
+- V3: local make test rc 0 at 0d28976b; CI pending at PR time
