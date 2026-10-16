@@ -1692,6 +1692,40 @@ _update_release_pin() {
     "${_tool}" "${_latest}"
 }
 
+# _update_apt_version_pin <tool> <var> <latest> -- moves a packer/vagrant pin.
+# The installer takes the version from apt, so only the *_VER line changes and
+# there is no sha256 to refresh. Reads the file back because a sed that matches
+# nothing exits 0 and would otherwise report a pin it never wrote. rc 0 written
+# and verified, 1 refused or failed (nothing printed as success).
+_update_apt_version_pin() {
+  local _tool="$1" _var="$2" _latest="$3"
+  local _constants
+  _constants="$(_release_pin_constants_path)"
+
+  if [[ ! "${_latest}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf "  %s: refusing pin update: latest version \"%s\" is not X.Y.Z\n" "${_tool}" "${_latest}"
+    return 1
+  fi
+  if [[ -L "${_constants}" ]]; then
+    printf "  %s: refusing pin update: %s is a symlink\n" "${_tool}" "${_constants}"
+    return 1
+  fi
+  sed -i.bak "s|^${_var}=\"[^\"]*\"|${_var}=\"${_latest}\"|" "${_constants}" || {
+    rm -f "${_constants}.bak"
+    printf "  %s: pin update failed: could not edit %s\n" "${_tool}" "${_constants}"
+    return 1
+  }
+  rm -f "${_constants}.bak"
+  if ! grep -Fqx "${_var}=\"${_latest}\"" "${_constants}"; then
+    printf "  %s: pin update failed: %s is not %s in %s\n" "${_tool}" "${_var}" "${_latest}" "${_constants}"
+    return 1
+  fi
+  printf "  Updated %s → %s\n" "${_var}" "${_latest}"
+  printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
+    "${_tool}" "${_latest}"
+  printf "  if it reports %s not found in apt.releases.hashicorp.com, HashiCorp has not published it to apt yet: wait and re-run\n" "${_latest}"
+}
+
 _prompt_version_update() {
   local _tool="$1" _var="$2" _pinned="$3" _latest="$4"
   local _reply
@@ -1716,6 +1750,9 @@ _prompt_version_update() {
         ;;
       kind|yq)
         _update_release_pin "${_tool}" "${_var}" "${_latest}" || return 1
+        ;;
+      packer|vagrant)
+        _update_apt_version_pin "${_tool}" "${_var}" "${_latest}" || return 1
         ;;
       *)
         _update_version_pin "${_tool}" "${_var}" "${_pinned}" "${_latest}"
@@ -1954,7 +1991,8 @@ run_check_versions() {
   # version, and _doctor_check_tools still checks zsh is present at all.
   _run_cv_pinned_release "yq"         "${YQ_VER}"         "mikefarah/yq"        "YQ_VER"
   _run_cv_pinned_release "shellcheck" "${SHELLCHECK_VER}" "koalaman/shellcheck" "SHELLCHECK_VER"
-  _run_cv_check "vagrant"    "${VAGRANT_VER}"     "hashicorp/vagrant"   "vagrant --version"    "[0-9]+\.[0-9]+\.[0-9]+"    "VAGRANT_VER"
+  _run_cv_pinned_release "vagrant"    "${VAGRANT_VER}"    "hashicorp/vagrant"   "VAGRANT_VER"
+  _run_cv_pinned_release "packer"     "${PACKER_VER}"     "hashicorp/packer"    "PACKER_VER"
   _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
   _run_cv_pinned_release "kind"       "${KIND_VER}"       "kubernetes-sigs/kind" "KIND_VER"
   _check_cv_homebrew_install

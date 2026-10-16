@@ -1909,13 +1909,59 @@ _stub_refresher_fail() {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
   _stub_refresher_fail
-  run _prompt_version_update "vagrant" "VAGRANT_VER" "2.4.9" "2.5.0" <<< "y"
+  run _prompt_version_update "gitleaks" "GITLEAKS_VER" "8.30.1" "8.31.0" <<< "y"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Updated VAGRANT_VER → 2.5.0"* ]]
-  grep -Fqx 'VAGRANT_VER="2.5.0"' "${_TEST_CONSTANTS_PATH}"
+  [[ "$output" == *"Updated GITLEAKS_VER → 8.31.0"* ]]
+  grep -Fqx 'GITLEAKS_VER="8.31.0"' "${_TEST_CONSTANTS_PATH}"
   # the refresher belongs to kind/yq only: this arm must never call it
   [[ "$output" != *"refresh sha256 pins"* ]]
   [ "$(diff "${REPO_ROOT}/lib/constants.sh" "${_TEST_CONSTANTS_PATH}" | grep -c '^>')" -eq 1 ]
+}
+
+@test "_prompt_version_update on y for packer and vagrant writes, reads back and names both next steps" {
+  local _tool _var _old
+  for _tool in packer vagrant; do
+    setup_constants_copy
+    export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+    _stub_refresher_fail
+    _var="${_tool^^}_VER"
+    _old="$(sed -n "s/^${_var}=\"\(.*\)\"/\1/p" "${_TEST_CONSTANTS_PATH}")"
+    run _prompt_version_update "${_tool}" "${_var}" "${_old}" "9.8.7" <<< "y"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Updated ${_var} → 9.8.7"* ]]
+    [[ "$output" == *"${_tool}: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install 9.8.7"* ]]
+    [[ "$output" == *"  if it reports 9.8.7 not found in apt.releases.hashicorp.com, HashiCorp has not published it to apt yet: wait and re-run"* ]]
+    [[ "$output" != *"refresh sha256 pins"* ]]
+    grep -Fqx "${_var}=\"9.8.7\"" "${_TEST_CONSTANTS_PATH}"
+    [ "$(diff "${REPO_ROOT}/lib/constants.sh" "${_TEST_CONSTANTS_PATH}" | grep -c '^>')" -eq 1 ]
+  done
+}
+
+@test "_prompt_version_update packer with no PACKER_VER line fails the read-back and prints no next step" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  sed -i.bak '/^PACKER_VER=/d' "${_TEST_CONSTANTS_PATH}"
+  rm -f "${_TEST_CONSTANTS_PATH}.bak"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/before.sh"
+  run _prompt_version_update "packer" "PACKER_VER" "1.16.1" "1.17.0" <<< "y"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"packer: "*"PACKER_VER"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [[ "$output" != *"commit lib/constants.sh"* ]]
+  [[ "$output" != *"HashiCorp has not published"* ]]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/before.sh"
+}
+
+@test "_prompt_version_update packer refuses a latest that is not X.Y.Z, no write, no next step" {
+  setup_constants_copy
+  export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/before.sh"
+  run _prompt_version_update "packer" "PACKER_VER" "1.16.1" "1.17" <<< "y"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"packer: refusing pin update: latest version \"1.17\" is not X.Y.Z"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [[ "$output" != *"commit lib/constants.sh"* ]]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/before.sh"
 }
 
 @test "_refresh_pins_bin default resolves to an executable file regardless of cwd" {
@@ -4031,8 +4077,8 @@ _stub_cv_callees() {
   [ "$(grep -c '^_check_cv_oh_my_zsh$' "${BATS_TEST_TMPDIR}/rec")" -eq 0 ]
   [ "$(grep -c '^_check_cv_homebrew_install$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
   [ "$(grep -c '^_check_one_cargo_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
-  [[ "$output" == *"6 not checked"* ]]
-  [[ "$output" == *"the 6 checks that send it were not run"* ]]
+  [[ "$output" == *"7 not checked"* ]]
+  [[ "$output" == *"the 7 checks that send it were not run"* ]]
   [ "$(printf '%s\n' "$output" | grep -c 'GITHUB_TOKEN')" -eq 1 ]
   # WARN sits after the last check line and before the summary line.
   local _warn_ln _last_check_ln _summary_ln
@@ -4043,13 +4089,13 @@ _stub_cv_callees() {
   [ "${_warn_ln}" -lt "${_summary_ln}" ]
 }
 
-@test "run_check_versions runs three version checks, three pinned-release checks and two feed checks with a valid token" {
+@test "run_check_versions runs two version checks, five pinned-release checks and two feed checks with a valid token" {
   _stub_cv_callees
   export GITHUB_TOKEN="ok-tok"
   run run_check_versions
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 3 ]
-  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 3 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
+  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 5 ]
   [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [[ "$output" != *"not checked"* ]]
 }
@@ -4110,16 +4156,17 @@ _stub_cv_callees() {
   _check_one_version() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
   _check_one_pinned_release() { printf "  [SKIP]     %-12s not installed\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"6 skipped"* ]]
+  [[ "$output" == *"7 skipped"* ]]
 }
 
 @test "run_check_versions counts warned tools in summary" {
-  # 3 GitHub tools via _check_one_version and 3 via _check_one_pinned_release
+  # 2 GitHub tools via _check_one_version and 5 via _check_one_pinned_release
   # (both stubbed here) plus go and python3 via the real _check_one_pin_version,
-  # which also WARNs (the curl mock returns no feed body) = 8, + 1 more function
+  # which also WARNs (the curl mock returns no feed body) = 9, + 1 more function
   # (_check_cv_homebrew_install) also emits [WARN] when curl fails in test env,
   # plus the 8 CARGO_TOOLS pins via the real (unstubbed) _check_one_cargo_version,
-  # whose curl call also fails in test env = 17 total. Was 16 until kind joined
+  # whose curl call also fails in test env = 18 total. Was 17 until packer joined the
+  # pinned-release checks and vagrant moved to them. Was 16 until kind joined
   # the pinned-release checks. Was 17 until _check_cv_oh_my_zsh was deleted on
   # 2026-10-08 (oh-my-zsh has no releases; the endpoint returned 404 every run).
   # Was 9 until the cargo loop was added to run_check_versions on 2026-09-17.
@@ -4127,7 +4174,7 @@ _stub_cv_callees() {
   _check_one_version() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   _check_one_pinned_release() { printf "  [WARN]     %-12s could not fetch latest version\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"17 warnings"* ]]
+  [[ "$output" == *"18 warnings"* ]]
 }
 
 @test "run_check_versions counts OK tools in summary" {
@@ -4135,7 +4182,7 @@ _stub_cv_callees() {
   _check_one_pinned_release() { printf "  [OK]       %-12s\n" "$1"; }
   _check_one_pin_version() { printf "  [OK]       %-12s\n" "$1"; }
   run run_check_versions
-  [[ "$output" == *"8 OK"* ]]
+  [[ "$output" == *"9 OK"* ]]
 }
 
 @test "run_check_versions counts outdated tools and returns non-zero" {
@@ -4143,7 +4190,7 @@ _stub_cv_callees() {
   _check_one_pinned_release() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   _check_one_pin_version() { printf "  [OUTDATED] %-12s\n" "$1"; return 1; }
   run run_check_versions
-  [[ "$output" == *"8 outdated"* ]]
+  [[ "$output" == *"9 outdated"* ]]
   [ "$status" -ne 0 ]
 }
 
