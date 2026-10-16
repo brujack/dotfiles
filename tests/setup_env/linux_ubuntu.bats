@@ -3696,6 +3696,24 @@ _HC_HOST_LINE='deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
   [[ "$stderr" != *"also configures"* ]]
 }
 
+@test "_install_ubuntu_hashicorp: an indented Enabled: no is a continuation line, so the stanza still warns" {
+  _hc_env
+  # deb822: a line starting with whitespace continues the previous field, so
+  # "  Enabled: no" belongs to URIs: and does not disable the stanza.
+  printf 'Types: deb\nURIs: https://apt.releases.hashicorp.com\n  Enabled: no\n' > "${_APT_SOURCES_DIR}/hashicorp.sources"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"${_APT_SOURCES_DIR}/hashicorp.sources also configures apt.releases.hashicorp.com"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an indented URIs: line is a continuation line, so the file is not a source" {
+  _hc_env
+  printf 'Types: deb\n  URIs: https://apt.releases.hashicorp.com\n' > "${_APT_SOURCES_DIR}/hashicorp.sources"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$stderr" != *"also configures"* ]]
+}
+
 @test "_install_ubuntu_hashicorp: the failure line carries the first E: line, not the last line" {
   _hc_env
   printf 'E: first problem\nE: second problem\nReading package lists... Done\n' > "${BATS_TEST_TMPDIR}/upd.txt"

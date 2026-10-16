@@ -1044,8 +1044,10 @@ _hashicorp_warn_handwritten_source() {
     "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"/*.sources; do
     [[ -f ${_f} ]] || continue
     if [[ ${_f} == *.sources ]]; then
-      grep -iE '^[[:space:]]*URIs:' "${_f}" | grep -qF 'apt.releases.hashicorp.com' || continue
-      ! grep -iE '^[[:space:]]*Enabled:' "${_f}" | grep -qviE '^[[:space:]]*Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$' || continue
+      # deb822 field names start in column 0; an indented line continues the
+      # previous field, so it is neither a URIs: nor an Enabled: field.
+      grep -iE '^URIs:' "${_f}" | grep -qF 'apt.releases.hashicorp.com' || continue
+      ! grep -iE '^Enabled:' "${_f}" | grep -qviE '^Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$' || continue
     else
       grep -E '^[[:space:]]*deb(-src)?[[:space:]]' "${_f}" | grep -qF 'apt.releases.hashicorp.com' || continue
     fi
