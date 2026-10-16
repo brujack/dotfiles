@@ -1887,6 +1887,20 @@ _stub_refresher_fail() {
   cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
 }
 
+@test "_prompt_version_update refuses a symlinked constants file for packer" {
+  setup_constants_copy
+  ln -s "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/link.sh"
+  export _OVERRIDE_CONSTANTS_PATH="${BATS_TEST_TMPDIR}/link.sh"
+  cp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+  run _prompt_version_update "packer" "PACKER_VER" "1.16.1" "1.17.0" <<< "y"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"packer: refusing pin update: ${BATS_TEST_TMPDIR}/link.sh is a symlink"* ]]
+  [[ "$output" != *"Updated"* ]]
+  [[ "$output" != *"commit lib/constants.sh"* ]]
+  [ -L "${BATS_TEST_TMPDIR}/link.sh" ]
+  cmp "${_TEST_CONSTANTS_PATH}" "${BATS_TEST_TMPDIR}/constants_before.sh"
+}
+
 @test "_prompt_version_update refuses precisely when the final rename fails, and leaves no temp file" {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
