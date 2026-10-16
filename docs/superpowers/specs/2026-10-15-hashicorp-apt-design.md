@@ -65,7 +65,7 @@ Each line names the population the command covered.
 packer` still lists `1.16.1-1`. An unreachable host: rc 0, warnings only. The first case was
   measured by the round-2 risk lens; the fetched case by the round-4 ergonomics lens and again by
   the orchestrator, unprivileged with every `Dir::` path in a sandbox, on `claude` (apt 3.x) and
-  `workstation` (apt 3.2.0), both resolute. noble's apt 2.7 is unmeasured. Round 2 measured only
+  `workstation` (apt 3.2.0), both resolute; noble's apt 2.8.3 in the noble table below. Round 2 measured only
   the never-fetched case and generalised it (K4').
 - **Single-source refresh.** `apt-get update -o Dir::Etc::sourcelist=<one .list> -o
   Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0` refreshes only that source and its rc is
@@ -80,7 +80,7 @@ packer` still lists `1.16.1-1`. An unreachable host: rc 0, warnings only. The fi
   Against a sandbox copy of `claude`'s 15 sources, the single-source refresh shrank `pkgcache.bin`
   from 60 MB to 3.7 MB, the next madison rebuilt it, madison still listed `packer 1.16.1-1`,
   `apt-get -s install packer=1.16.1-1` resolved `openssl` from Ubuntu, and no other source's lists
-  were lost (round-9 risk lens). All on apt 3.2.0; noble's apt 2.7 unmeasured.
+  were lost (round-9 risk lens). All on apt 3.2.0; noble's apt 2.8.3 in the noble table below.
 - **Lists of a removed source.** A full `apt-get update` with the default `APT::Get::List-Cleanup`
   deletes the list files of every source not in the configured set. Measured three times on
   apt 3.2.0: the round-8 Microsoft test (3 files to 0), the round-10 goal-fit lens (two pre-seeded
@@ -120,7 +120,7 @@ packer` still lists `1.16.1-1`. An unreachable host: rc 0, warnings only. The fi
 - **Fetch failures under `--error-on=any`.** A never-fetched source on an unresolvable host gives
   rc 0 and only `W: Failed to fetch … Could not resolve` and `W: Some index files failed to
   download` by default; with `--error-on=any`, rc 100 and the same lines as `E:`. Round-10 risk
-  lens, sandbox, apt 3.2.0. noble's apt 2.7 carries the option per its changelog; unmeasured.
+  lens, sandbox, apt 3.2.0; noble's apt 2.8.3 in the noble table below.
 - **Version glob.** `apt-get -s install 'vagrant=2.4.9-*'` selects `2.4.9-1`;
   `'vagrant=2.2.10-*'` selects `2.2.10-4`; `'vagrant=9.9.9-*'` gives
   `E: Version '9.9.9-*' for 'vagrant' was not found`. Round-10 goal-fit lens, sandbox, apt 3.2.0.
@@ -133,6 +133,29 @@ packer` still lists `1.16.1-1`. An unreachable host: rc 0, warnings only. The fi
   `Err:` line's `NO_PUBKEY` continuation is on its own indented line without the host. The round-4
   "three `W:` lines" were `apt-get` output. Measured on `claude` (sandbox, update) by the
   orchestrator and all three round-5 lenses, and on `workstation` (install path).
+- **noble (apt 2.8.3).** A noble box with updates runs apt 2.8.3, not the 2.7.14 of noble's
+  release pocket (Launchpad: `2.8.3 Updates`, `2.7.14build2 Release`). The operator's
+  architectural reviewer ran the step's commands on Ubuntu 24.04.5 against two local signed repos,
+  and every result matches the 3.2.0 measurements above:
+
+  | Behaviour                                                              | apt 2.8.3                                                                                       |
+  | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+  | Single-source refresh without `List-Cleanup=0`                         | the other source's lists deleted (2 to 0)                                                       |
+  | Same, with `List-Cleanup=0`                                            | other lists kept (2 to 2)                                                                       |
+  | `-o Dir::Etc::sourcelist=` after the verb, default `sourceparts`       | `Inst packer (1.16.1-1 …)`; without the `-o`, `Unable to locate package packer`                 |
+  | `packer=1.16.1-*` beside `1.6.1-2` in one index                        | picks `1.16.1-1`                                                                                |
+  | `vagrant=2.2.10-*`                                                     | picks `2.2.10-4`                                                                                |
+  | `vagrant=9.9.9-*`                                                      | `E: Version '9.9.9-*' for 'vagrant' was not found`, rc 100                                      |
+  | Fetched once, keyring swapped, no `--error-on`                         | rc 0, `W:` lines only, old index used                                                           |
+  | Same, `--error-on=any`                                                 | rc 100; `E: Failed to fetch <uri> … NO_PUBKEY …` (host and token on one line)                   |
+  | Never fetched, wrong key                                               | rc 100; `W: GPG error: <uri> …`, then `E: The repository '<uri> …' is not signed`               |
+  | Unreachable host                                                       | rc 0 by default; rc 100 with `--error-on=any`, `E: Failed to fetch …`                           |
+  | Two lines, different `signed-by=`                                      | `E: Conflicting values set for option Signed-By …`, `E: The list of sources could not be read.`, rc 100 |
+  | Two lines, same `signed-by=`, `update --error-on=any`                  | rc 0, `W: Target … configured multiple times` only                                              |
+
+  Limits: `file:` repos and a loopback port, not HashiCorp's host; run as root with
+  `APT::Sandbox::User=root`, so the `_apt` privilege drop was not exercised. The 2.8.3 version was
+  confirmed against Launchpad; the table itself is the reviewer's, not re-run here.
 - **macOS.** On the Studio: core `packer` 1.9.4 installed, `vagrant` cask 2.4.9 installed, and
   `consul`, `vault`, `nomad` formulae installed. Measured on the Studio only.
 
@@ -147,6 +170,18 @@ packer` still lists `1.16.1-1`. An unreachable host: rc 0, warnings only. The fi
   on these boxes already uses, and removing the three server tools removed the deb side effects
   that had made apt costly. Cost the apt route carries that the zips do not: when HashiCorp's
   signer changes, installs fail until a new key is vendored (section 2, "Key rotation").
+- **Per-arch sha256 pins through `_install_fetched_binary`'s pinned mode.** The route PR A built
+  for kind, yq and shellcheck: `<TOOL>_SHA256_AMD64`/`_ARM64`/`_FOR_VER` in `lib/constants.sh`,
+  refreshed by `scripts/refresh-sha256-pins.sh`. It keeps packer and vagrant in `/usr/local/bin`
+  with their stamps (no migration for them), needs no key, keyring, source file, refresh or
+  rotation hint, and extends the refresher to two more tools. About 14 requirements (R5-R7,
+  R19-R24, R26, R28-R30) and N5/N6 exist only because of apt, as does most of section 5's new mock
+  surface. Not chosen because of the trust model. With pinned digests, the version and its hash
+  come from one fetch at pin time, the model accepted for go: a host compromised when the pin is
+  taken gets its bytes pinned. With apt, every install is checked against a key vendored once, so
+  a later compromise of the host without HashiCorp's signing key cannot get bytes installed. That
+  is the stronger guarantee, and the one ADR-0046 named for PR B. This entry was added after
+  round 17 at the architectural reviewer's request; the route was not weighed during the rounds.
 - **Persistent apt source with holds.** Keep `hashicorp.list` installed between runs and
   `apt-mark hold` both packages so `-t update` cannot move them past the pin. This was the design
   through round 9. Superseded by the operator on 2026-10-16 after round 9: from round 4 on, every
