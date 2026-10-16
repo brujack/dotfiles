@@ -1,0 +1,5 @@
+Ign:1 https://apt.releases.hashicorp.com bogus InRelease
+Err:2 https://apt.releases.hashicorp.com bogus Release
+  404  Not Found [IP: 143.204.204.26 443]
+Reading package lists...
+E: The repository 'https://apt.releases.hashicorp.com bogus Release' does not have a Release file.
