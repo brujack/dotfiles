@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Mock lsb_release for testing
+# Mock lsb_release for testing. -cs (codename) and -rs (release) are told apart:
+# the unset default of -cs is noble, while a set-but-empty value stays empty so
+# an empty-codename case is reachable.
 printf "lsb_release %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-printf "%s\n" "${MOCK_LSB_RELEASE_RS:-24.04}"
+case "$*" in
+  *-cs*) printf "%s\n" "${MOCK_LSB_RELEASE_CS-noble}" ;;
+  *) printf "%s\n" "${MOCK_LSB_RELEASE_RS:-24.04}" ;;
+esac
 exit 0

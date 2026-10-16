@@ -6,19 +6,56 @@
 # ${*//pat/} applies the pattern to each argument separately.)
 _all="$*"
 printf "apt-get %s\n" "${_all//-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold /}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-# MOCK_APT_FAIL_SUBCMD: fail only the named subcommand (first argument that
-# does not start with "-"), so one step of a multi-step install can break.
-# Only "-o <value>" consumes a following value, so APT_CONFFILE_OPTS never
-# reads as one; other value-taking options (e.g. "-t <release>") before the
-# verb are not handled.
+# The verb is the first argument that does not start with "-". Only
+# "-o <value>" consumes a following value, so APT_CONFFILE_OPTS never reads as
+# one; other value-taking options (e.g. "-t <release>") are not handled.
+# Print a canned-output file: W:/E: lines to stderr, everything else to stdout,
+# as real apt does. A caller that captures stdout only must go red.
+_apt_print_split() {
+  local _line
+  while IFS= read -r _line || [[ -n "${_line}" ]]; do
+    if [[ "${_line}" == W:* || "${_line}" == E:* ]]; then
+      printf '%s\n' "${_line}" >&2
+    else
+      printf '%s\n' "${_line}"
+    fi
+  done < "$1"
+}
 _skip=0
+_verb=""
+_pkgs=()
+_sourcelist=""
 for _a in "$@"; do
-  if [[ "${_skip}" -eq 1 ]]; then _skip=0; continue; fi
+  if [[ "${_skip}" -eq 1 ]]; then
+    _skip=0
+    [[ "${_a}" == Dir::Etc::sourcelist=* ]] && _sourcelist="${_a#Dir::Etc::sourcelist=}"
+    continue
+  fi
   if [[ "${_a}" == "-o" ]]; then _skip=1; continue; fi
   [[ "${_a}" == -* ]] && continue
-  if [[ -n "${MOCK_APT_FAIL_SUBCMD:-}" ]] && [[ "${_a}" == "${MOCK_APT_FAIL_SUBCMD}" ]]; then
-    exit 100
-  fi
-  break
+  if [[ -z "${_verb}" ]]; then _verb="${_a}"; continue; fi
+  _pkgs+=("${_a}")
 done
+case "${_verb}" in
+  update)
+    if [[ -n "${MOCK_APT_GET_SOURCELIST_COPY:-}" && -n "${_sourcelist}" ]]; then
+      cp "${_sourcelist}" "${MOCK_APT_GET_SOURCELIST_COPY}"
+    fi
+    if [[ -n "${MOCK_APT_GET_UPDATE_OUTPUT:-}" ]]; then
+      _apt_print_split "${MOCK_APT_GET_UPDATE_OUTPUT}"
+    else
+      printf 'Reading package lists...\n'
+    fi
+    ;;
+  install)
+    [[ -n "${MOCK_APT_GET_INSTALL_OUTPUT:-}" ]] && _apt_print_split "${MOCK_APT_GET_INSTALL_OUTPUT}"
+    [[ -n "${MOCK_APT_GET_INSTALL_MARK:-}" ]] && printf '%s %s\n' "${MOCK_APT_GET_INSTALL_MARK}" "${_pkgs[*]}"
+    ;;
+esac
+# MOCK_APT_FAIL_SUBCMD: fail only the named subcommand, so one step of a
+# multi-step install can break. Applied after the output above so a failing
+# call still shows its canned output.
+if [[ -n "${MOCK_APT_FAIL_SUBCMD:-}" && "${_verb}" == "${MOCK_APT_FAIL_SUBCMD}" ]]; then
+  exit 100
+fi
 exit "${MOCK_APT_EXIT:-0}"

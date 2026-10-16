@@ -112,8 +112,9 @@ setup() {
   printf '#!/usr/bin/env bash\nprintf "usermod %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit "${SHIM_USERMOD_EXIT:-0}"\n' > "${SHIM_DIR}/usermod"
   cat > "${SHIM_DIR}/apt" << SHIM
 #!/usr/bin/env bash
+read -ra _fail_pkgs <<< "\${SHIM_APT_FAIL_PKGS:-}"
 for _a in "\$@"; do
-  for _p in \${SHIM_APT_FAIL_PKGS:-}; do
+  for _p in "\${_fail_pkgs[@]}"; do
     if [[ "\${_a}" == "\${_p}" ]]; then
       printf 'apt %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
       exit 100
@@ -5768,4 +5769,16 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"kernel-keys maxkeys: apply failed"* ]]
   [[ "$stderr" != *"_SYSCTL_BIN"* ]]
   [[ "$stderr" != *inotify* ]]
+}
+
+@test "apt-get shim: SHIM_APT_FAIL_PKGS with a glob character matches literally even with a decoy file in cwd" {
+  cd "${BATS_TEST_TMPDIR}"
+  : > 'packer=1.16.1-x'
+  export SHIM_APT_FAIL_PKGS='packer=1.16.1-*'
+  run apt-get install -y 'packer=1.16.1-*'
+  [ "$status" -eq 100 ]
+  run apt-get install -y 'vagrant=2.4.9-*'
+  [ "$status" -eq 0 ]
+  run apt-get install -y 'packer=1.16.1-x'
+  [ "$status" -eq 0 ]
 }
