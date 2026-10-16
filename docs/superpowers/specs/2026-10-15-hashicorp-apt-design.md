@@ -241,11 +241,19 @@ vagrant. `_install_ubuntu_hashicorp` then:
    reads the source file; only the keyring is read by apt's unprivileged `_apt` child (`gpgv`),
    and `_build_pinned_keyring` already installs it 0644 (Measurements).
 6. **Refresh this source only.** First, a hand-written source for the same repo is named: for
-   each file among `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and `<_APT_SOURCES_DIR>/*`
-   (default `/etc/apt/sources.list.d`) that contains `apt.releases.hashicorp.com` (`grep -lsF`),
-   the step prints
+   each file apt actually reads that has a live entry for `apt.releases.hashicorp.com`, the step
+   prints
    `hashicorp: <file> also configures apt.releases.hashicorp.com; -t update will move packer and vagrant off their pins until it is removed (this step supplies the source)`
-   on stderr. This is a warning: it does not change the step's return. Such a file puts both
+   on stderr. The files are `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and
+   `<_APT_SOURCES_DIR>/*.list` and `*.sources` (default `/etc/apt/sources.list.d`); apt ignores
+   every other name there (`.orig`, `.save`, `.distUpgrade`, `.dpkg-*`; `claude` has a
+   `ubuntu.sources.curtin.orig`). A one-line file is live when it has a line matching
+   `^[[:space:]]*deb(-src)?[[:space:]]` that contains the host; a commented-out line is not, which
+   is how `do-release-upgrade` disables third-party entries. A `.sources` file is live when it has a
+   `URIs:` line containing the host and every `Enabled:` line in it is affirmative, the rule
+   `_install_ubuntu_edge_source` already applies (a multi-stanza file with one disabled stanza is
+   then treated as inert; the miss costs only this warning). This is a warning: it does not change
+   the step's return. Such a file puts both
    tools in apt's configured set, so `-t update`'s nala upgrades them past the pins and the next
    install run downgrades them again; with the shared keyring path (step 4) apt itself says only
    `W: Target … is configured multiple times`, exit 0 (Measurements). Neither `claude` nor
@@ -307,9 +315,10 @@ vagrant. `_install_ubuntu_hashicorp` then:
    - stdout streams to the terminal (packer is 34 MB and vagrant 90 MB); only stderr is captured:
      `{ _err=$(sudo -H … 2>&1 1>&3 3>&-); _irc=$?; } 3>&1`, then `_err` is printed to stderr.
    - A failed install prints `hashicorp: <tool>: install failed`, followed by
-     `(<VER> not found: HashiCorp may not have published it to apt yet, since check-versions can
-     pin a release first, so wait; or this source's lists were deleted between refresh and
-     install, e.g. by apt-daily, so re-run ./setup_env.sh -t developer)` when `_err` contains
+     `(<VER> not found in apt.releases.hashicorp.com: re-run ./setup_env.sh -t developer, since
+     apt-daily may have deleted this source's lists mid-run; if it fails again, HashiCorp has not
+     published <VER> to apt yet (check-versions can pin a release first), so wait)` when `_err`
+     contains
      `Version '<VER>-*' for '<tool>' was not found`, and by
      `(another source for apt.releases.hashicorp.com names a different signed-by keyring; remove
      it, this step supplies the source)` when `_err` contains
@@ -414,8 +423,8 @@ macOS are not removed by any code: `brew bundle` installs and never uninstalls.
   `--update` for both writes only the `*_VER` line (no digests). Both stay in the token-gated set
   the CLAUDE.md `check-versions` paragraph derives its count from. Known window, both tools:
   GitHub can publish a release before the apt repo carries it; a `--update` in that window writes
-  a pin apt cannot install yet, and the next install fails with the section 2 "not in
-  apt.releases.hashicorp.com yet" hint. Accepted and documented rather than solved. `--update`
+  a pin apt cannot install yet, and the next install fails with the section 2
+  "not found in apt.releases.hashicorp.com" hint. Accepted and documented rather than solved. `--update`
   for either tool goes through a new `packer|vagrant)` arm of `_prompt_version_update`, not
   `_update_release_pin` (whose refresher, `scripts/refresh-sha256-pins.sh`, accepts only kind, yq
   and shellcheck) and not the fallthrough `_update_version_pin` (whose `sed` exits 0 when it
@@ -424,8 +433,8 @@ macOS are not removed by any code: `brew bundle` installs and never uninstalls.
   as not yet published. It then edits only the `*_VER` line of `_release_pin_constants_path`, reads it
   back with `grep -Fqx`, returns 1 with a read-back failure line when the line is not there, and
   otherwise prints the usual `Updated <VAR> → <version>` line, then `<tool>: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t
-  developer on each Linux box to install <version>` followed by `  if it reports <version> not in
-  apt.releases.hashicorp.com yet, wait for HashiCorp to publish it and re-run`.
+  developer on each Linux box to install <version>` followed by `  if it reports <version> not found
+  in apt.releases.hashicorp.com twice, HashiCorp has not published it to apt yet: wait and re-run`.
 - **ADR-0046** gets a dated amendment: PR B moved packer and vagrant to HashiCorp's signed apt
   repo through a source file outside `/etc/apt` that only the install step's own commands read,
   and consul, vault and nomad were
@@ -460,7 +469,8 @@ bats in `tests/setup_env/linux_ubuntu.bats`, against existing seams: `_APT_KEYRI
   `sources.list` names HashiCorp cannot change a test's output.
 
 `load_mocks` (`tests/helpers/common.bash`) exports `_HASHICORP_SOURCE_DIR` and `_APT_KEYRINGS_DIR`
-to directories under `BATS_TEST_TMPDIR` by default. `tests/mocks/sudo` execs the real `install`
+to directories under `BATS_TEST_TMPDIR` by default, creating both (`install` does not create the
+parent of the keyring's `.new` file). `tests/mocks/sudo` execs the real `install`
 and `tee`, and `tests/setup_env/workflows.bats` runs the real `install_ubuntu_packages` in four
 tests that set neither seam (tdd.md E2). Today those tests stop at step 4 only because the gpg
 mock emits nothing; the default makes the isolation deliberate.
@@ -561,16 +571,19 @@ Cases:
 - install-version-not-found fixture with `MOCK_APT_FAIL_SUBCMD=install` and `VAGRANT_VER=9.9.9`
   exported (the step reads the pin by indirect expansion and `lib/constants.sh` assigns it
   plainly, so the export reaches it): rc 1, `hashicorp: vagrant: install failed` and the
-  `not in apt.releases.hashicorp.com yet` hint;
+  hint containing `9.9.9 not found in apt.releases.hashicorp.com` (the R7 token);
 - install output, under `run --separate-stderr`: with `MOCK_APT_GET_INSTALL_OUTPUT` holding a
   stdout line and an `E:` line, the stdout line is in `$output` and the `E:` line in `$stderr`.
   This catches the likely wrong copy of step 6 (both streams into one variable, which would put
   the `E:` line on stdout); it cannot tell streaming from capture-then-print, and does not try;
 - install stderr `Conflicting values set for option Signed-By`: the hint ending `remove it, this
   step supplies the source`;
-- hand-written source: a file under `_APT_SOURCES_DIR` containing `apt.releases.hashicorp.com`:
-  the warning names that file, the step still refreshes and installs, and its return is
-  unchanged (rc 0 with clean fixtures); with no such file, no warning;
+- hand-written source: a `hashicorp.list` under `_APT_SOURCES_DIR` with a live `deb` line for the
+  host: the warning names that file, the step still refreshes and installs, and its return is
+  unchanged (rc 0 with clean fixtures); the same with `_APT_SOURCES_LIST` pointing at a file with
+  that line; the same with a `hashicorp.sources` stanza (`URIs:` the host, no `Enabled:`). No
+  warning for: the line commented out; a `.sources` stanza with `Enabled: no`; the live line in
+  `hashicorp.list.save` or `hashicorp.list.distUpgrade`; no file at all;
 - stale source file: `<source dir>/hashicorp.list` pre-seeded with a `noble` line,
   `MOCK_LSB_RELEASE_CS=resolute`: the copy the apt-get mock saved during the refresh is the
   `resolute` line;
@@ -595,8 +608,11 @@ Cases:
 - installed `rc  1.16.1-1`: install runs;
 - installed at an older version: install runs;
 - arm64: vagrant skip line, stamped vagrant removed, packer installed;
-- arm64 with the vagrant removal failing: rc 1, the removal named, and the vagrant stamp still
-  present;
+- arm64 with the vagrant removal failing, through a per-test `SHIM_DIR` `rm` that fails only when
+  its arguments contain `<_DL_BIN_DIR>/vagrant` and otherwise execs `tests/mocks/rm` (the sudo
+  mock resolves `rm` through `PATH`, which has `SHIM_DIR` first; `MOCK_RM_EXIT` is global and
+  would also fail the stamp's own `rm`, so the case could not fail): rc 1, the removal named, and
+  the vagrant stamp still present;
 - a wrong key, with a keyring pre-seeded: rc 1, keyring removed, no source file, no install call;
 - packer install fails: rc 1, packer named, stamped `/usr/local/bin/packer` and its stamp still
   present, vagrant still installed and its stamped copy removed;
@@ -612,8 +628,9 @@ Cases:
   installed `packer --version` equals latest; `--update` for packer, with
   `_OVERRIDE_CONSTANTS_PATH` on a copy, writes the new `PACKER_VER`, reads it back, and prints the
   next-step line naming `./setup_env.sh -t developer`; a copy with no `PACKER_VER` line prints a
-  read-back failure, no next-step line, and returns 1; a mocked latest of `1.17` (two parts) is
-  refused: no write, no next-step line, rc 1.
+  read-back failure and no next-step line; a mocked latest of `1.17` (two parts) is refused: no
+  write, no next-step line. These two assert on the arm's output and on the file, not on
+  `run_check_versions`'s exit, which is 1 for any outdated pin whatever the arm returns.
 
 **The dispatcher test changes too.**
 `tests/setup_env/linux_ubuntu.bats`'s "install_ubuntu_packages: a clean run reaches every step,
@@ -622,8 +639,8 @@ and a second run re-fetches nothing" today asserts a `releases.hashicorp.com` wg
 `*releases.hashicorp.com*` arm of its wget shim. Under this design it goes red (with no
 `MOCK_DPKG_PRINT_ARCH`, step 5 refuses to write the source). It must keep running the real
 hashicorp step, never a stub: it sets `_LINUX_ARCH=amd64` and `MOCK_DPKG_PRINT_ARCH=amd64` before
-`_k8s_env` and the other env helpers, sets `MOCK_DPKG_QUERY_EXIT=1` on the first run and `ii`
-statuses on the second, and points `_HASHICORP_KEY_PATH` at the vendored key. Its first run asserts
+`_k8s_env` and the other env helpers, sets `MOCK_DPKG_QUERY_EXIT=1` on the first run and, on the second, unsets it and sets
+`ii` statuses (the mock exits before printing a status while it is set), and points `_HASHICORP_KEY_PATH` at the vendored key. Its first run asserts
 `apt-get install` calls carrying `packer=1.16.1-*` and `vagrant=2.4.9-*`; its second asserts both
 `up to date (` lines and no new `apt-get update` call (count before and after, as the existing
 test does, since the call log keeps the first run's calls) carrying
@@ -951,6 +968,25 @@ literally. Ergonomics: noble's apt 2.7 also reports "version not found" for a kn
 HashiCorp lists (resolute measured only). Risk: noble's apt 2.7 matches 3.2.0 on the duplicate-
 target warning and `--error-on=any` (unmeasured).
 
+### Round 14 — spec at `c974dcb8`
+
+Same three lenses, fresh. Adversarial gate not triggered. No MAJOR; all three called the design
+right once the round-13 text was fixed. The operator asked for round 15.
+
+| #     | Lens                       | Sev   | Finding                                                                                                                                     | Disposition                                                                                     |
+| ----- | -------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| E1¹³  | ergonomics                 | MINOR | Step 7's version-not-found text changed, but section 4, the check-versions next-step line and the test still quote the old phrase           | Addressed: one token, `<VER> not found in apt.releases.hashicorp.com`, named in R7 and used in all four |
+| G1¹³ / E2¹³ / K2¹³ | all three   | MINOR | R30 matches files apt ignores (`.orig`, `.save`, `.distUpgrade`), commented lines and `Enabled: no` stanzas, then states a false consequence | Addressed: `*.list`/`*.sources` only, live-entry rule reused from the edge source (R30)          |
+| G2¹³ / K2¹³ | goal-fit, risk        | MINOR | R30's `sources.list` half has no case                                                                                                       | Addressed: `_APT_SOURCES_LIST` case, plus inert-file and commented-line cases                   |
+| K1¹³  | risk                       | MINOR | The stamp-ordering case cannot fail: `MOCK_RM_EXIT` is global and also fails the stamp's `rm`                                               | Addressed: per-test `SHIM_DIR` `rm` that fails only on the binary path                          |
+| E3¹³  | ergonomics                 | nit   | The hint says wait before re-run; a re-run tells the two causes apart                                                                      | Addressed: re-run first, wait if it fails again                                                 |
+| K3¹³  | risk                       | nit   | check-versions exits 1 for any outdated pin, so the arm's rc assertions discriminate nothing; the dispatcher's second run must unset `MOCK_DPKG_QUERY_EXIT`; `load_mocks` must create the keyring dir | Addressed                                                   |
+
+**Assumption lines.** Goal-fit: the R30 warning is read as the cause of the drift it reports,
+which holds only if it is accurate (now addressed). Ergonomics: apt 2.7's first `E:` line for an
+unserved codename is the `does not have a Release file` line (apt 3.2.0 measured only). Risk: the
+sudo mock resolves a per-test `SHIM_DIR` binary through `PATH` (read from the code, not run).
+
 ## Requirements
 
 - **R1.** `_install_ubuntu_hashicorp` installs exactly packer and vagrant; no code path installs consul, vault or nomad.
@@ -959,7 +995,7 @@ target warning and `--error-on=any` (unmeasured).
 - **R4.** `keys/hashicorp.asc` is tracked and its primary fingerprint is `HASHICORP_GPG_FPR`.
 - **R5.** The keyring is built by `_build_pinned_keyring` from the vendored key with `HASHICORP_GPG_FPR`; a key whose primary fingerprint differs makes the step return 1 with no keyring left behind, no `hashicorp.list` written and no `apt-get install` of packer or vagrant.
 - **R6.** After step 5, `<_HASHICORP_SOURCE_DIR>/hashicorp.list` (default `/var/lib/dotfiles/hashicorp.list`) holds exactly one line: `deb [arch=<dpkg arch> signed-by=<keyring>] https://apt.releases.hashicorp.com <lsb_release -cs> main`, whatever the file held before.
-- **R7.** Each tool in the install set is installed as `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" -o Dir::Etc::sourcelist=<_HASHICORP_SOURCE_DIR>/hashicorp.list --allow-downgrades "<tool>=<VER>-*"`; when that fails and its stderr says the version was not found, the failure line names `<VER>`, both causes (not yet published to apt; lists deleted between refresh and install) and re-running `./setup_env.sh -t developer`; when its stderr names a Signed-By conflict, the line says to remove the other source.
+- **R7.** Each tool in the install set is installed as `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" -o Dir::Etc::sourcelist=<_HASHICORP_SOURCE_DIR>/hashicorp.list --allow-downgrades "<tool>=<VER>-*"`; when that fails and its stderr says the version was not found, the failure line contains `<VER> not found in apt.releases.hashicorp.com`, says to re-run `./setup_env.sh -t developer` first (lists deleted mid-run) and to wait if it fails again (not yet published); when its stderr names a Signed-By conflict, the line says to remove the other source.
 - **R8.** A tool whose `dpkg-query -W -f='${db:Status-Abbrev} ${Version}'` output (stderr discarded) shows status `ii` and upstream version `<VER>` is not reinstalled, and the step prints `<tool>: up to date (<deb version>)`.
 - **R9.** On a box whose `_LINUX_ARCH` is not `amd64`, vagrant is not installed and the step prints `hashicorp: vagrant: no arm64 build; skipped`; the skip itself does not fail the step, but a failed removal of a stamped vagrant at that point does, and the skip and its removal run whatever the refresh does.
 - **R10.** One tool's install failure names that tool on stderr and returns 1, and the other tool is still attempted.
@@ -982,7 +1018,7 @@ target warning and `--error-on=any` (unmeasured).
 - **R27.** `check-versions --update` for packer or vagrant refuses a latest that is not `X.Y.Z`, edits only that tool's `*_VER` line, reads it back, returns 1 without a next-step line when the read-back fails, and otherwise prints `Updated <VAR> → <version>` and a line naming `./setup_env.sh -t developer` and the apt publish lag.
 - **R28.** `_HASHICORP_SOURCE_DIR`, `_HASHICORP_KEY_PATH` and, for this step, `_APT_KEYRINGS_DIR` are honoured only when `BATS_TEST_TMPDIR` is non-empty, and `load_mocks` exports `_HASHICORP_SOURCE_DIR` and `_APT_KEYRINGS_DIR` under `BATS_TEST_TMPDIR`.
 - **R29.** The keyring is `<_APT_KEYRINGS_DIR>/hashicorp-archive-keyring.gpg` with `_APT_KEYRINGS_DIR` defaulting to `/usr/share/keyrings`.
-- **R30.** Before the R19 refresh, for each of `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and the files in `_APT_SOURCES_DIR` that contain `apt.releases.hashicorp.com`, the step prints a warning naming that file and saying `-t update` will move packer and vagrant off their pins until it is removed; the warning does not change the step's return.
+- **R30.** Before the R19 refresh, for each of `${_APT_SOURCES_LIST:-/etc/apt/sources.list}` and the `*.list` and `*.sources` files in `_APT_SOURCES_DIR` that has a live entry for `apt.releases.hashicorp.com` (an uncommented `deb` line; for `.sources`, a `URIs:` line with the host and only affirmative `Enabled:` lines), the step prints a warning naming that file and saying `-t update` will move packer and vagrant off their pins until it is removed; the warning does not change the step's return.
 - **V1.** On `claude` and `workstation`, `./setup_env.sh -t developer` then: `command -v packer vagrant` gives `/usr/bin/packer` and `/usr/bin/vagrant`; `/etc/apt/sources.list.d/hashicorp.list` does not exist; none of `/usr/local/bin/{consul,vault,nomad,packer,vagrant}` exists; a second run prints the two `up to date` lines and no removal line; `./setup_env.sh -t update` then reports the `apt` section OK and `dpkg-query -W packer vagrant` is unchanged.
 - **V2.** On the Studio, after `brew uninstall packer consul vault nomad`, `brew untap hashicorp/tap` (if tapped) and `brew untrust hashicorp/tap`, and with `! grep -q hashicorp/tap ~/.homebrew/trust.json` and `HOMEBREW_NO_REQUIRE_TAP_TRUST` unset checked immediately before the run, the main `brew bundle` in `install_macos_casks` exits 0 and installs `hashicorp/tap/packer` (the gui and devtools bundles are reported separately, not asserted), and `brew list --formula --full-name` shows `hashicorp/tap/packer` with `packer --version` at or above `PACKER_VER`.
 - **V3.** CI green, including `bash-coverage` at or above its floor.
