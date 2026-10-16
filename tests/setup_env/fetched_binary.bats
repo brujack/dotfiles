@@ -2,9 +2,8 @@
 
 bats_require_minimum_version 1.5.0
 
-# _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>] (pinned) and
-# --unverified <name> <url> ...: fetch into a throwaway dir, verify, install
-# last, stamp only on success. A
+# _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>]: fetch into a
+# throwaway dir, verify against the pin, install last, stamp only on success. A
 # failure at any stage must leave the destination untouched, no stamp, and no
 # throwaway directory behind.
 # The chmod-based tests (read-only dirs) assume a non-root runner; root ignores
@@ -538,63 +537,6 @@ _assert_refused_before_download() {
   grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   [[ "${output}" == *"kind: sha256 mismatch: KIND_SHA256_AMD64 expects $(printf 'c%.0s' {1..64}), download is ${KIND_FIXTURE_SHA} from ${KIND_URL_EXPECTED}"* ]]
   run ! grep -qF "example.invalid/seam" "${MOCK_CALLS_FILE}"
-}
-
-# ── --unverified ─────────────────────────────────────────────────────────────
-
-@test "_install_fetched_binary: --unverified installs each HashiCorp name with a URL-only stamp and the not-verified line" {
-  local _n
-  for _n in consul vault nomad packer vagrant; do
-    : > "${MOCK_CALLS_FILE}"
-    printf 'old' > "${_DL_BIN_DIR}/${_n}"
-    chmod 0755 "${_DL_BIN_DIR}/${_n}"
-    run _install_fetched_binary --unverified "${_n}" "https://example.invalid/${_n}.zip" bin ""
-    [ "$status" -eq 0 ]
-    [ "$(_wget_count)" -eq 1 ]
-    [ "$(cat "${_DL_BIN_DIR}/${_n}")" = "new" ]
-    [ "$(cat "${_DL_STAMP_DIR}/${_n}")" = "https://example.invalid/${_n}.zip" ]
-    [[ "${output}" == *"${_n}: not verified (pending HashiCorp apt, PR B)"* ]]
-    [[ "${output}" != *"sha256 verified"* ]]
-  done
-}
-
-@test "_install_fetched_binary: --unverified skips a URL-only stamp match without the not-verified line" {
-  mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "https://example.invalid/consul.zip" > "${_DL_STAMP_DIR}/consul"
-  printf 'old' > "${_DL_BIN_DIR}/consul"
-  chmod 0755 "${_DL_BIN_DIR}/consul"
-  run _install_fetched_binary --unverified consul "https://example.invalid/consul.zip" bin ""
-  [ "$status" -eq 0 ]
-  [ "$(_wget_count)" -eq 0 ]
-  [[ "${output}" == *"consul: up to date"* ]]
-  [[ "${output}" != *"not verified"* ]]
-}
-
-@test "_install_fetched_binary: --unverified is refused for any other name" {
-  run _install_fetched_binary --unverified kind "https://example.invalid/kind" bin ""
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"kind: --unverified is only for the HashiCorp tools"* ]]
-  [ "$(_wget_count)" -eq 0 ]
-  [ ! -e "${_DL_STAMP_DIR}/kind" ]
-}
-
-@test "_install_fetched_binary: --unverified rejects missing and surplus arguments" {
-  run _install_fetched_binary --unverified consul "https://example.invalid/c" bin
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul https://example.invalid/c bin"* ]]
-  run _install_fetched_binary --unverified consul "https://example.invalid/c" bin "" one two
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
-  run _install_fetched_binary --unverified consul "" bin ""
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul  bin"* ]]
-  run _install_fetched_binary --unverified "" "https://example.invalid/c" bin ""
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified  https://example.invalid/c bin"* ]]
-  run _install_fetched_binary --unverified consul "https://example.invalid/c" bogus ""
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"_install_fetched_binary: bad arguments: --unverified consul"* ]]
-  [ "$(_wget_count)" -eq 0 ]
 }
 
 @test "_install_fetched_binary: --resolve is no longer an option" {

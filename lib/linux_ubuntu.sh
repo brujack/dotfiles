@@ -945,22 +945,164 @@ _install_ubuntu_k8s_tools() {
   return 0
 }
 
+# Remove a binary dotfiles used to install into ${_DL_BIN_DIR}, once the apt copy
+# (or the decision not to have one) makes it redundant. The stamp is the proof
+# dotfiles wrote that path: binary first, then stamp, because a stamp removed
+# after a failed binary removal would leave the binary unstamped and so never
+# removable again. An unstamped binary is not ours: left alone and named.
+# Usage: _hashicorp_retire_stamped <tool> [shadows]   ("shadows" for tools apt now ships)
+# Returns 0 nothing to do, removed, or kept; 1 when a removal failed (named).
+_hashicorp_retire_stamped() {
+  local _tool="$1" _shadows="${2:-}"
+  local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_tool}"
+  local _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_tool}"
+  if [[ -e ${_stamp} ]]; then
+    if ! sudo rm -f "${_bin}"; then
+      log_warn "hashicorp: ${_tool}: remove failed (${_bin}; stamp kept so the next run retries)"
+      return 1
+    fi
+    if ! rm -f "${_stamp}"; then
+      log_warn "hashicorp: ${_tool}: remove failed (stamp ${_stamp})"
+      return 1
+    fi
+    printf 'hashicorp: removed %s (installed by dotfiles)\n' "${_bin}"
+  elif [[ -e ${_bin} ]]; then
+    if [[ -n ${_shadows} ]]; then
+      log_warn "hashicorp: ${_bin} was not installed by dotfiles and shadows /usr/bin/${_tool} on PATH; left in place (remove it with: sudo rm ${_bin})"
+    else
+      log_warn "hashicorp: ${_bin} was not installed by dotfiles; left in place (remove it with: sudo rm ${_bin})"
+    fi
+  fi
+  return 0
+}
+
+# The refresh-failed line, without its trailing next action.
+# Usage: _hashicorp_refresh_failed_line <rc> <apt output> <install set, joined>
+_hashicorp_refresh_failed_line() {
+  local _rc="$1" _out="$2" _set="$3" _why
+  _why="$(printf '%s\n' "${_out}" | grep -m1 '^E:')" || _why="$(printf '%s\n' "${_out}" | tail -n 1)"
+  printf 'hashicorp: apt-get update failed for apt.releases.hashicorp.com (rc %s): %s; %s not installed (installed copies, if any, untouched)' \
+    "${_rc}" "${_why}" "${_set}"
+}
+
+# What follows "hashicorp: <tool>: install failed". Only the default next action
+# exists so far.
+# Usage: _hashicorp_install_hint <tool> <version> <apt stderr>
+_hashicorp_install_hint() {
+  printf '; re-run ./setup_env.sh -t developer'
+}
+
+# packer and vagrant come from HashiCorp's apt repo through a source file that
+# only this step's own two apt-get commands read (-o Dir::Etc::sourcelist=), so
+# no other apt run can see it, upgrade from it, or need it held. consul, vault
+# and nomad are no longer installed; their stamped copies are removed.
+# Seams (honoured only under bats, because root apt trusts what they name):
+# _HASHICORP_SOURCE_DIR, _HASHICORP_KEY_PATH, _APT_KEYRINGS_DIR.
+# rc 0 when every tool installed or was up to date, else 1 (each failure named).
 _install_ubuntu_hashicorp() {
-  # rc 1 when any tool failed; the helper names the failing stage and each
-  # failure is named here. Every tool is attempted regardless.
-  local _hc_rc=0 _tool _ver _var _arch
-  for _tool in consul vault nomad packer vagrant; do
-    printf "Installing Hashicorp %s Ubuntu\\n" "${_tool}"
+  local _hc_rc=0 _tool _var _ver _dv _status
+  local -a _set=()
+  local _sdir="/var/lib/dotfiles" _kdir="/usr/share/keyrings" _key="${HASHICORP_KEY_PATH}"
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    _sdir="${_HASHICORP_SOURCE_DIR:-${_sdir}}"
+    _kdir="${_APT_KEYRINGS_DIR:-${_kdir}}"
+    _key="${_HASHICORP_KEY_PATH:-${_key}}"
+  fi
+  local _ring="${_kdir}/hashicorp-archive-keyring.gpg" _list="${_sdir}/hashicorp.list"
+
+  for _tool in consul vault nomad; do
+    _hashicorp_retire_stamped "${_tool}" || _hc_rc=1
+  done
+
+  for _tool in packer vagrant; do
+    if [[ ${_tool} == "vagrant" && ${_LINUX_ARCH} != "amd64" ]]; then
+      printf 'hashicorp: vagrant: no %s build; skipped\n' "${_LINUX_ARCH}"
+      _hashicorp_retire_stamped vagrant shadows || _hc_rc=1
+      continue
+    fi
     _var="${_tool^^}_VER"
     _ver="${!_var}"
-    _arch="${_LINUX_ARCH}"
-    # vagrant has no ARM64 Linux build — amd64 only
-    [[ ${_tool} == "vagrant" ]] && _arch="amd64"
-    _install_fetched_binary --unverified "${_tool}" \
-      "${HASHICORP_URL}/${_tool}/${_ver}/${_tool}_${_ver}_linux_${_arch}.zip" zip "${_tool}" || {
-      log_warn "hashicorp: ${_tool}: install failed"
+    # rc 1 and no output is the normal first-install answer, not a failure.
+    # shellcheck disable=SC2016 # dpkg-query's own ${...} format syntax, not a shell expansion
+    _status="$(dpkg-query -W -f='${db:Status-Abbrev} ${Version}' "${_tool}" 2> /dev/null)" || _status=""
+    _dv="${_status##* }"
+    if [[ ${_status} == "ii "* && ${_dv} == "${_ver}"-* ]]; then
+      printf '%s: up to date (%s)\n' "${_tool}" "${_dv}"
+      _hashicorp_retire_stamped "${_tool}" shadows || _hc_rc=1
+    else
+      _set+=("${_tool}")
+    fi
+  done
+
+  # Nothing to install: no keyring, no source file, no network.
+  ((${#_set[@]} > 0)) || return "${_hc_rc}"
+
+  local _brc
+  _build_pinned_keyring "${_key}" "${_ring}" "${HASHICORP_GPG_FPR}"
+  _brc=$?
+  case ${_brc} in
+    0) ;;
+    1)
+      log_warn "hashicorp: ${_key} is not the pinned key (HASHICORP_GPG_FPR ${HASHICORP_GPG_FPR}: not exactly one primary key, or a different fingerprint); removing ${_ring}, nothing installed"
+      sudo rm -f "${_ring}"
+      return 1
+      ;;
+    *)
+      log_warn "hashicorp: could not build ${_ring} from ${_key} (rc ${_brc}); nothing installed"
+      return 1
+      ;;
+  esac
+
+  local _arch _codename
+  _arch="$(dpkg --print-architecture 2> /dev/null)"
+  if [[ -z ${_arch} ]]; then
+    log_warn "hashicorp: cannot determine arch; source not written"
+    return 1
+  fi
+  _codename="$(lsb_release -cs 2> /dev/null)"
+  if [[ -z ${_codename} ]]; then
+    log_warn "hashicorp: cannot determine codename; source not written"
+    return 1
+  fi
+  sudo install -d -m 0755 "${_sdir}" || {
+    log_warn "hashicorp: could not create ${_sdir}"
+    return 1
+  }
+  printf 'deb [arch=%s signed-by=%s] https://apt.releases.hashicorp.com %s main\n' "${_arch}" "${_ring}" "${_codename}" \
+    | sudo tee "${_list}" > /dev/null || {
+    log_warn "hashicorp: could not write ${_list}"
+    return 1
+  }
+
+  local _out _rc _joined="${_set[0]}"
+  [[ ${#_set[@]} -gt 1 ]] && _joined="${_set[0]} and ${_set[1]}"
+  printf 'hashicorp: refreshing apt.releases.hashicorp.com\n'
+  # --error-on=any: without it an unreachable host exits 0 with only W: lines.
+  # List-Cleanup=0: without it a single-source update deletes every other source's lists.
+  _out=$(sudo -H apt-get update --error-on=any \
+    -o "Dir::Etc::sourcelist=${_list}" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 2>&1)
+  _rc=$?
+  if ((_rc != 0)); then
+    printf '%s\n' "${_out}" >&2
+    log_warn "$(_hashicorp_refresh_failed_line "${_rc}" "${_out}" "${_joined}")$(_hashicorp_install_hint "" "" "")"
+    return 1
+  fi
+  printf '%s\n' "${_out}"
+
+  local _err _irc
+  for _tool in "${_set[@]}"; do
+    _var="${_tool^^}_VER"
+    _ver="${!_var}"
+    printf 'hashicorp: installing %s %s\n' "${_tool}" "${_ver}"
+    { _err=$(sudo -H DEBIAN_FRONTEND=noninteractive apt-get install -y "${APT_CONFFILE_OPTS[@]}" \
+      -o "Dir::Etc::sourcelist=${_list}" --allow-downgrades "${_tool}=${_ver}-*" 2>&1 1>&3 3>&-); _irc=$?; } 3>&1
+    [[ -n ${_err} ]] && printf '%s\n' "${_err}" >&2
+    if ((_irc != 0)); then
+      log_warn "hashicorp: ${_tool}: install failed$(_hashicorp_install_hint "${_tool}" "${_ver}" "${_err}")"
       _hc_rc=1
-    }
+      continue
+    fi
+    _hashicorp_retire_stamped "${_tool}" shadows || _hc_rc=1
   done
   ((_hc_rc == 0)) || return 1
   return 0
@@ -1345,19 +1487,15 @@ _release_asset_sha() {
 # only after the install succeeds, so an interrupted run leaves the destination
 # untouched and the next run fetches again. The stamp is the idempotency check:
 # a stamp equal to the expected text plus an executable destination is a skip.
-# Usage (pinned):     _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>]
-#        (unverified): _install_fetched_binary --unverified <name> <url> <bin|zip|tar> <member> [<dest-name>]
+# Usage: _install_fetched_binary <name> <bin|zip|tar> <member> [<dest-name>]
 # <member> is the path inside a zip/tar (ignored for bin); <dest-name> defaults
 # to <name>.
-# Pinned: URL and sha256 come from _release_asset_url/_release_asset_sha for
+# URL and sha256 come from _release_asset_url/_release_asset_sha for
 # ${_LINUX_ARCH}. An unknown tool, an unknown arch, a pin recorded for another
 # version than <NAME>_VER, or a malformed pin is refused (rc 1) before the stamp
 # check and any download, so no network call is made on inconsistent constants.
 # The download is checked against the pin before extraction; the stamp holds
 # "<url> <sha256>", so a refreshed pin forces a reinstall.
-# --unverified exists only until the HashiCorp tools move to their apt repo
-# (PR B): accepted for those five names, URL-only stamp, no check, and a
-# "not verified" line so the gap stays visible.
 # Returns 0 installed, up to date, or kept; 1 on bad arguments, a refusal or a
 # failed stage (named in a warning). A stamp that cannot be written warns and
 # still returns 0.
@@ -1368,101 +1506,72 @@ _release_asset_sha() {
 # EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path below
 # reaches an explicit rm -rf.
 _install_fetched_binary() {
-  local _unverified=0 _name _url="" _kind _member _dest_name=""
+  local _name _url="" _kind _member _dest_name=""
   local _stamp _bin _tmp _src _stage="" _stamp_text _sha="" _shavar="" _pin_line
   local _upper _forvar _verivar _arch="${_LINUX_ARCH:-}" _rc
   local _args="$*"
-  if [[ ${1:-} == "--unverified" ]]; then
-    _unverified=1
-    shift
-    if ! [[ $# -ge 4 && $# -le 5 ]]; then
-      log_warn "_install_fetched_binary: bad arguments: ${_args}"
-      return 1
-    fi
-    _name="$1" _url="$2" _kind="$3" _member="$4" _dest_name="${5:-}"
-    if [[ -z ${_name} ]]; then
-      log_warn "_install_fetched_binary: bad arguments: ${_args}"
-      return 1
-    fi
-    case "${_name}" in
-      consul | vault | nomad | packer | vagrant) ;;
-      *)
-        log_warn "${_name}: --unverified is only for the HashiCorp tools"
-        return 1
-        ;;
-    esac
-    if [[ -z ${_url} ]]; then
-      log_warn "_install_fetched_binary: bad arguments: ${_args}"
-      return 1
-    fi
-  else
-    if ! [[ $# -ge 3 && $# -le 4 ]]; then
-      log_warn "_install_fetched_binary: bad arguments: ${_args}"
-      return 1
-    fi
-    _name="$1" _kind="$2" _member="$3" _dest_name="${4:-}"
+  if ! [[ $# -ge 3 && $# -le 4 ]]; then
+    log_warn "_install_fetched_binary: bad arguments: ${_args}"
+    return 1
   fi
+  _name="$1" _kind="$2" _member="$3" _dest_name="${4:-}"
   if [[ -z ${_name} ]] || ! [[ ${_kind} == "bin" || ${_kind} == "zip" || ${_kind} == "tar" ]]; then
     log_warn "_install_fetched_binary: bad arguments: ${_args}"
     return 1
   fi
   _dest_name="${_dest_name:-${_name}}"
 
-  if [[ ${_unverified} -eq 0 ]]; then
-    if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_URL:-} ]]; then
-      _url="${_FETCHED_URL}"
-    else
-      _url="$(_release_asset_url "${_name}" "${_arch}")"
-      _rc=$?
-      case "${_rc}" in
-        0) ;;
-        2)
-          log_warn "${_name}: unknown tool"
-          return 1
-          ;;
-        3)
-          log_warn "${_name}: no pin for arch '${_arch}'"
-          return 1
-          ;;
-        *) return 1 ;;
-      esac
-    fi
-    if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_SHA256:-} ]]; then
-      _shavar="_FETCHED_SHA256"
-      _sha="${_FETCHED_SHA256}"
-    else
-      _pin_line="$(_release_asset_sha "${_name}" "${_arch}")"
-      _rc=$?
-      case "${_rc}" in
-        0) ;;
-        2)
-          log_warn "${_name}: unknown tool"
-          return 1
-          ;;
-        3)
-          log_warn "${_name}: no pin for arch '${_arch}'"
-          return 1
-          ;;
-        *) return 1 ;;
-      esac
-      _shavar="${_pin_line%% *}"
-      _sha="${_pin_line#* }"
-      _upper="${_name^^}"
-      _forvar="${_upper}_SHA256_FOR_VER"
-      _verivar="${_upper}_VER"
-      if [[ ${!_forvar:-} != "${!_verivar:-}" ]]; then
-        log_warn "${_name}: repo constants are inconsistent: pins are for ${!_forvar:-}, ${_verivar} is ${!_verivar:-}; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh ${_name})"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_URL:-} ]]; then
+    _url="${_FETCHED_URL}"
+  else
+    _url="$(_release_asset_url "${_name}" "${_arch}")"
+    _rc=$?
+    case "${_rc}" in
+      0) ;;
+      2)
+        log_warn "${_name}: unknown tool"
         return 1
-      fi
-    fi
-    if ! _sha256_pin_ok "${_sha}"; then
-      log_warn "${_name}: ${_shavar} is not a 64-hex sha256; refusing to download"
+        ;;
+      3)
+        log_warn "${_name}: no pin for arch '${_arch}'"
+        return 1
+        ;;
+      *) return 1 ;;
+    esac
+  fi
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_FETCHED_SHA256:-} ]]; then
+    _shavar="_FETCHED_SHA256"
+    _sha="${_FETCHED_SHA256}"
+  else
+    _pin_line="$(_release_asset_sha "${_name}" "${_arch}")"
+    _rc=$?
+    case "${_rc}" in
+      0) ;;
+      2)
+        log_warn "${_name}: unknown tool"
+        return 1
+        ;;
+      3)
+        log_warn "${_name}: no pin for arch '${_arch}'"
+        return 1
+        ;;
+      *) return 1 ;;
+    esac
+    _shavar="${_pin_line%% *}"
+    _sha="${_pin_line#* }"
+    _upper="${_name^^}"
+    _forvar="${_upper}_SHA256_FOR_VER"
+    _verivar="${_upper}_VER"
+    if [[ ${!_forvar:-} != "${!_verivar:-}" ]]; then
+      log_warn "${_name}: repo constants are inconsistent: pins are for ${!_forvar:-}, ${_verivar} is ${!_verivar:-}; fix lib/constants.sh in the repo (scripts/refresh-sha256-pins.sh ${_name})"
       return 1
     fi
-    _stamp_text="${_url} ${_sha}"
-  else
-    _stamp_text="${_url}"
   fi
+  if ! _sha256_pin_ok "${_sha}"; then
+    log_warn "${_name}: ${_shavar} is not a 64-hex sha256; refusing to download"
+    return 1
+  fi
+  _stamp_text="${_url} ${_sha}"
   _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_name}"
   _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
 
@@ -1482,7 +1591,7 @@ _install_fetched_binary() {
 
   if ! wget -O "${_tmp}/dl" "${_url}"; then
     _stage="download"
-  elif [[ ${_unverified} -eq 0 ]] && ! _sha256_check "${_name}" "${_tmp}/dl" "${_shavar}" "${_sha}" "${_url}" \
+  elif ! _sha256_check "${_name}" "${_tmp}/dl" "${_shavar}" "${_sha}" "${_url}" \
     "nothing installed, existing binary kept. Re-run; if it repeats at an unchanged version, upstream changed the asset: investigate before scripts/refresh-sha256-pins.sh --accept-changed ${_name}"; then
     _stage="verify"
   elif [[ ${_kind} == "bin" ]]; then
@@ -1496,7 +1605,7 @@ _install_fetched_binary() {
     fi
     _src="${_tmp}/x/${_member}"
   fi
-  if [[ -z ${_stage} && ${_unverified} -eq 0 ]]; then
+  if [[ -z ${_stage} ]]; then
     printf '%s: sha256 verified\n' "${_name}"
   fi
   # -s alone passes a directory and follows a symlink to any non-empty file.
@@ -1517,9 +1626,6 @@ _install_fetched_binary() {
 
   if ! { mkdir -p "$(dirname "${_stamp}")" && printf '%s\n' "${_stamp_text}" > "${_stamp}"; } 2> /dev/null; then
     log_warn "${_name}: could not write stamp ${_stamp}; it will be re-installed next run"
-  fi
-  if [[ ${_unverified} -eq 1 ]]; then
-    printf '%s: not verified (pending HashiCorp apt, PR B)\n' "${_name}"
   fi
   return 0
 }

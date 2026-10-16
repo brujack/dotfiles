@@ -16,8 +16,6 @@
 BATS_VER="1.14.0"
 # read by lib/workflows.sh:run_check_versions (_run_cv_check)
 GITLEAKS_VER="8.30.1"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-CONSUL_VER="2.0.4"
 # npm global packages — pinned by exact version at both lib/workflows.sh call sites.
 # Unlike the GitHub-release pins above, these are NOT covered by
 # `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching
@@ -100,9 +98,7 @@ KIND_SHA256_AMD64="aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8
 KIND_SHA256_ARM64="20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2"
 # read by scripts/refresh-sha256-pins.sh and lib/linux_ubuntu.sh:_install_fetched_binary
 KIND_SHA256_FOR_VER="0.33.0"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-NOMAD_VER="2.0.7"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
+# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp, lib/workflows.sh:run_check_versions
 PACKER_VER="1.16.1"
 # read by lib/developer.sh:_ensure_pyenv_python, lib/developer.sh:setup_ansible, lib/developer.sh:recreate_python_venv, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 PYTHON_VER="3.14.8"
@@ -142,8 +138,6 @@ TFSEC_SHA256_ARM64="7b872b0e8f398abebc21ab78f6c0535029ff649f0d18f0f3454a01bece30
 TERRAFORM_VER="1.16.5"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp, lib/workflows.sh:run_check_versions
 VAGRANT_VER="2.4.9"
-# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-VAULT_VER="2.1.2"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_gui_tools
 VIRTUALBOX_VER="virtualbox-7.2"
 YQ_VER="4.54.1"
@@ -180,8 +174,10 @@ ALBERT_GPG_FPR="A4B83CD05FDF5C5178482D4A1488EB46E192A257"
 # read by lib/developer.sh:_aws_verify_pkg and tests/setup_env/developer.bats
 AWSCLI_APPLE_TEAM_ID="94KV3E626L"
 
+# HashiCorp Security (HashiCorp Package Signing), primary key of keys/hashicorp.asc (the file
+# as served at https://apt.releases.hashicorp.com/gpg). Never fetched at install time.
 # read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
-HASHICORP_URL="https://releases.hashicorp.com"
+HASHICORP_GPG_FPR="D55C0D1AC78A8D8126CB631CFC9CA96ACA026560"
 
 # locations of directories
 # read by lib/macos.sh:install_macos_casks/install_macos_packages, lib/workflows.sh:run_brew_install, lib/helpers.sh:run_doctor
@@ -234,6 +230,12 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 # precisely the failure this constant exists to prevent.
 DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly DOTFILES_REPO_ROOT
+
+# Vendored HashiCorp apt signing key. A plain assignment resolved at source time, for
+# the reason given above DOTFILES_REPO_ROOT: the key decides which signer root apt trusts,
+# so no ${VAR:-} guard makes its location env-settable.
+# read by lib/linux_ubuntu.sh:_install_ubuntu_hashicorp
+HASHICORP_KEY_PATH="${DOTFILES_REPO_ROOT}/keys/hashicorp.asc"
 
 HOSTNAME=$(hostname -s)
 

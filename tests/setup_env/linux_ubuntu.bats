@@ -45,6 +45,10 @@ setup() {
   export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR}/albert-trusted"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR}/albert-keyrings"
   mkdir -p "${_APT_SOURCES_DIR}" "${_APT_TRUSTED_DIR}" "${_APT_KEYRINGS_DIR}"
+  # _install_ubuntu_hashicorp's hand-written-source check reads this file; point
+  # it at a path nothing creates so a box whose real sources.list names HashiCorp
+  # cannot change a test's output.
+  export _APT_SOURCES_LIST="${BATS_TEST_TMPDIR}/no-sources.list"
   # _install_ubuntu_powershell verifies packages-microsoft-prod.deb before
   # installing it. tests/mocks/gpg cannot verify anything, so point the seam at
   # the real gpg, and have the wget mock hand back the real signed .deb. The
@@ -87,8 +91,9 @@ setup() {
   _GO_CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
   _DL_TAR_BIN="$(PATH="${_GO_CLEAN_PATH}" command -v tar)"
   export _DL_TAR_BIN="${_DL_TAR_BIN:-/nonexistent/tar}"
-  # k8s_tools and hashicorp install through _install_fetched_binary, which
-  # writes under _DL_BIN_DIR (default /usr/local/bin) via the exec-ing sudo mock.
+  # k8s_tools installs through _install_fetched_binary, which writes under
+  # _DL_BIN_DIR (default /usr/local/bin) via the exec-ing sudo mock, and
+  # hashicorp's migration removes stamped copies from the same directory.
   # unzip and zip are the real ones: the mocks only record.
   export _DL_BIN_DIR="${BATS_TEST_TMPDIR}/dl-bin"
   mkdir -p "${_DL_BIN_DIR}"
@@ -3016,105 +3021,400 @@ _k8s_env() {
 
 # ── _install_ubuntu_hashicorp ────────────────────────────────────────────────
 
-# One real zip holding all five members serves every download.
+# Every case that expects vagrant to install sets _LINUX_ARCH and
+# MOCK_DPKG_PRINT_ARCH itself: this file also runs on the arm64 test-macos
+# runner, so no case may inherit either. MOCK_DPKG_QUERY_EXIT=1 is real
+# dpkg-query's answer for a package that is not installed.
 _hc_env() {
-  export CONSUL_VER="1.17.0"
-  export VAULT_VER="1.15.0"
-  export NOMAD_VER="1.7.0"
-  export PACKER_VER="1.10.0"
-  export VAGRANT_VER="2.4.0"
-  export HASHICORP_URL="https://releases.hashicorp.com"
-  local _src="${BATS_TEST_TMPDIR}/hc-src" _t
-  mkdir -p "${_src}"
-  for _t in consul vault nomad packer vagrant; do
-    printf '%s-body' "${_t}" > "${_src}/${_t}"
-  done
-  (cd "${_src}" && "${_ZIP_BIN}" -q "${BATS_TEST_TMPDIR}/hc.zip" consul vault nomad packer vagrant)
-  export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip"
+  export _LINUX_ARCH=amd64 MOCK_DPKG_PRINT_ARCH=amd64 MOCK_DPKG_QUERY_EXIT=1
+  export _HASHICORP_KEY_PATH="${REPO_ROOT}/keys/hashicorp.asc"
+  export MOCK_APT_GET_SOURCELIST_COPY="${BATS_TEST_TMPDIR}/source-copy"
 }
 
-@test "_install_ubuntu_hashicorp: clean run returns 0 and installs all five tools" {
-  _hc_env
-  run _install_ubuntu_hashicorp
-  [ "$status" -eq 0 ]
-  local _t
-  for _t in consul vault nomad packer vagrant; do
-    [ -x "${_DL_BIN_DIR}/${_t}" ]
-    [ -f "${_DL_STAMP_DIR}/${_t}" ]
-  done
-}
+_hc_ring() { printf '%s/hashicorp-archive-keyring.gpg' "${_APT_KEYRINGS_DIR}"; }
+_hc_list() { printf '%s/hashicorp.list' "${_HASHICORP_SOURCE_DIR}"; }
 
-@test "_install_ubuntu_hashicorp: calls wget for consul when not stamped" {
-  _hc_env
-  run _install_ubuntu_hashicorp
-  [ "$status" -eq 0 ]
-  grep -q "wget.*consul" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_hashicorp: all five tools install through the unverified form with the not-verified line" {
-  _hc_env
-  run _install_ubuntu_hashicorp
-  [ "$status" -eq 0 ]
-  local _t
-  for _t in consul vault nomad packer vagrant; do
-    [[ "$output" == *"${_t}: not verified (pending HashiCorp apt, PR B)"* ]]
-    [ -x "${_DL_BIN_DIR}/${_t}" ]
-  done
-}
-
-@test "_install_ubuntu_hashicorp: a stamped, installed consul is not fetched again" {
-  _hc_env
+# A binary dotfiles installed: the file plus its stamp.
+_hc_stamped() {
   mkdir -p "${_DL_STAMP_DIR}"
-  printf '%s\n' "${HASHICORP_URL}/consul/1.17.0/consul_1.17.0_linux_${_LINUX_ARCH}.zip" > "${_DL_STAMP_DIR}/consul"
-  printf 'old' > "${_DL_BIN_DIR}/consul"
-  chmod 0755 "${_DL_BIN_DIR}/consul"
-  run _install_ubuntu_hashicorp
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"consul: up to date"* ]]
-  refute_grep "wget .*consul_1.17.0" "${MOCK_CALLS_FILE}"
-  grep -q "wget .*vault" "${MOCK_CALLS_FILE}"
+  printf 'https://example.invalid/%s.zip sha\n' "$1" > "${_DL_STAMP_DIR}/$1"
+  printf 'old' > "${_DL_BIN_DIR}/$1"
+  /bin/chmod 0755 "${_DL_BIN_DIR}/$1"
 }
 
-@test "_install_ubuntu_hashicorp: a failed consul download returns 1, names consul and still installs vault" {
+# Offset of the first occurrence of $2 in $1, so one output can be checked for
+# ordering. Prints -1 when absent.
+_hc_pos() {
+  local _pre
+  [[ $1 == *"$2"* ]] || { printf -- '-1'; return 0; }
+  _pre="${1%%"$2"*}"
+  printf '%s' "${#_pre}"
+}
+
+_HC_CONFFILE='[-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold]'
+
+@test "_install_ubuntu_hashicorp: the shipped HashiCorp key is the single key HASHICORP_GPG_FPR pins" {
+  local _colons
+  _colons="$("${_MS_GPG_BIN}" --show-keys --with-colons "${REPO_ROOT}/keys/hashicorp.asc" 2> /dev/null)"
+  [ "$(printf '%s\n' "${_colons}" | grep -c '^pub:')" -eq 1 ]
+  [ "$(printf '%s\n' "${_colons}" | awk -F: '/^fpr:/{print $10; exit}')" = "${HASHICORP_GPG_FPR}" ]
+}
+
+@test "_install_ubuntu_hashicorp: a clean first run installs packer and vagrant with the exact apt-get argv" {
   _hc_env
-  export MOCK_WGET_FAIL_URL="consul/"
-  printf 'old' > "${_DL_BIN_DIR}/consul"
-  chmod 0755 "${_DL_BIN_DIR}/consul"
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path apt-get)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _src="Dir::Etc::sourcelist=${_HASHICORP_SOURCE_DIR}/hashicorp.list"
+  grep -qxF "argv: apt-get [install][-y]${_HC_CONFFILE}[-o][${_src}][--allow-downgrades][packer=${PACKER_VER}-*]" "${MOCK_CALLS_FILE}"
+  grep -qxF "argv: apt-get [install][-y]${_HC_CONFFILE}[-o][${_src}][--allow-downgrades][vagrant=${VAGRANT_VER}-*]" "${MOCK_CALLS_FILE}"
+  refute_grep 'apt-mark' "${MOCK_CALLS_FILE}"
+  refute_grep 'allow-change-held-packages' "${MOCK_CALLS_FILE}"
+  [ -s "$(_hc_ring)" ]
+}
+
+@test "_install_ubuntu_hashicorp: each phase prints before its apt-get call returns" {
+  _hc_env
+  printf 'REFRESH-MARK\n' > "${BATS_TEST_TMPDIR}/upd.txt"
+  export MOCK_APT_GET_UPDATE_OUTPUT="${BATS_TEST_TMPDIR}/upd.txt" MOCK_APT_GET_INSTALL_MARK=MARK
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  local _a _b _c _d _e _f
+  _a="$(_hc_pos "$output" 'hashicorp: refreshing')"
+  _b="$(_hc_pos "$output" 'REFRESH-MARK')"
+  _c="$(_hc_pos "$output" "hashicorp: installing packer ${PACKER_VER}")"
+  _d="$(_hc_pos "$output" "MARK packer=${PACKER_VER}-*")"
+  _e="$(_hc_pos "$output" "hashicorp: installing vagrant ${VAGRANT_VER}")"
+  _f="$(_hc_pos "$output" "MARK vagrant=${VAGRANT_VER}-*")"
+  [ "${_a}" -ge 0 ] && [ "${_a}" -lt "${_b}" ] && [ "${_b}" -lt "${_c}" ]
+  [ "${_c}" -lt "${_d}" ] && [ "${_d}" -lt "${_e}" ] && [ "${_e}" -lt "${_f}" ]
+}
+
+@test "_install_ubuntu_hashicorp: the source line is arch, keyring and codename from dpkg and lsb_release, and lives outside /etc/apt" {
+  _hc_env
+  export MOCK_LSB_RELEASE_CS=resolute MOCK_LSB_RELEASE_RS=26.04 MOCK_DPKG_PRINT_ARCH=armhf
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ "$(cat "${MOCK_APT_GET_SOURCELIST_COPY}")" = "deb [arch=armhf signed-by=$(_hc_ring)] https://apt.releases.hashicorp.com resolute main" ]
+  [ -z "$(ls -A "${_APT_SOURCES_DIR}")" ]
+  refute_grep -E '^(sudo )?(tee|install) .*/etc/apt' "${MOCK_CALLS_FILE}"
+  grep -q "^lsb_release -cs$" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a stale source file is replaced, not appended to" {
+  _hc_env
+  export MOCK_LSB_RELEASE_CS=resolute
+  printf 'deb [arch=amd64 signed-by=/x] https://apt.releases.hashicorp.com noble main\n' > "$(_hc_list)"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ "$(cat "${MOCK_APT_GET_SOURCELIST_COPY}")" = "deb [arch=amd64 signed-by=$(_hc_ring)] https://apt.releases.hashicorp.com resolute main" ]
+}
+
+@test "_install_ubuntu_hashicorp: the refresh fetches only this source and does not clean other lists" {
+  _hc_env
+  local _stub_dir
+  _stub_dir="$(argv_probe_stub_path apt-get)"
+  PATH="${_stub_dir}:${PATH}" run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -qxF "argv: apt-get [update][--error-on=any][-o][Dir::Etc::sourcelist=${_HASHICORP_SOURCE_DIR}/hashicorp.list][-o][Dir::Etc::sourceparts=-][-o][APT::Get::List-Cleanup=0]" "${MOCK_CALLS_FILE}"
+  grep -q '^sudo -H apt-get update ' "${MOCK_CALLS_FILE}"
+  refute_grep -E '(^| )apt update' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: both tools installed prints two up-to-date lines and touches no apt state" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="ii  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"packer: up to date (${PACKER_VER}-1)"* ]]
+  [[ "$output" == *"vagrant: up to date (${VAGRANT_VER}-1)"* ]]
+  [[ "$output" != *"hashicorp: refreshing"* ]]
+  refute_grep -E 'apt-get (update|install)' "${MOCK_CALLS_FILE}"
+  refute_grep 'install -d' "${MOCK_CALLS_FILE}"
+  [ ! -e "$(_hc_ring)" ]
+  [ ! -e "$(_hc_list)" ]
+}
+
+@test "_install_ubuntu_hashicorp: a package in rc state is not done" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="rc  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+  refute_grep -F "vagrant=${VAGRANT_VER}-*" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"vagrant: up to date"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an older installed version is installed again" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="ii  1.0.0-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"packer: up to date"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: the version match is a prefix on the dotted version, not a regex" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  # 1x16y1 would match the regex 1.16.1; it must not match the literal.
+  export MOCK_DPKG_STATUS_packer="ii  1x16x1-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: on arm64 vagrant is skipped and its stamped amd64 copy removed, packer installs" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64
+  _hc_stamped vagrant
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hashicorp: vagrant: no arm64 build; skipped"* ]]
+  [ ! -e "${_DL_BIN_DIR}/vagrant" ]
+  [ ! -e "${_DL_STAMP_DIR}/vagrant" ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+  refute_grep -F "vagrant=" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: the arm64 vagrant skip and removal run even when the refresh fails" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64 MOCK_APT_FAIL_SUBCMD=update
+  _hc_stamped vagrant
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"hashicorp: vagrant: no arm64 build; skipped"* ]]
+  [ ! -e "${_DL_BIN_DIR}/vagrant" ]
+  [ ! -e "${_DL_STAMP_DIR}/vagrant" ]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: on arm64 a failed vagrant removal fails the step and keeps the stamp" {
+  _hc_env
+  export _LINUX_ARCH=arm64 MOCK_DPKG_PRINT_ARCH=arm64
+  _hc_stamped vagrant
+  cat > "${SHIM_DIR}/rm" << SHIM
+#!/usr/bin/env bash
+if [[ "\$*" == *"${_DL_BIN_DIR}/vagrant"* ]]; then exit 1; fi
+exec "${REPO_ROOT}/tests/mocks/rm" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/rm"
   run --separate-stderr _install_ubuntu_hashicorp
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"hashicorp: consul:"* ]]
-  grep -q "wget .*consul/" "${MOCK_CALLS_FILE}"
-  [ "$(cat "${_DL_BIN_DIR}/consul")" = "old" ]
-  [ -z "$(find "${_DL_TMP_ROOT}" -mindepth 1)" ]
-  [ ! -e "${_DL_STAMP_DIR}/consul" ]
-  [ -x "${_DL_BIN_DIR}/vault" ]
-  [ -f "${_DL_STAMP_DIR}/vault" ]
+  [[ "$stderr" == *"hashicorp: vagrant: remove failed"* ]]
+  [ -e "${_DL_STAMP_DIR}/vagrant" ]
+  [ -e "${_DL_BIN_DIR}/vagrant" ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_hashicorp: uses _LINUX_ARCH in consul URL (arm64)" {
+@test "_install_ubuntu_hashicorp: an empty codename writes no source and refreshes nothing" {
   _hc_env
-  export CONSUL_VER="2.0.0"
-  export VAULT_VER="2.0.2"
-  export NOMAD_VER="2.0.3"
-  export PACKER_VER="1.15.4"
-  export VAGRANT_VER="2.4.9"
-  export _LINUX_ARCH="arm64"
-  run _install_ubuntu_hashicorp
-  [ "$status" -eq 0 ]
-  grep -q "consul.*arm64" "${MOCK_CALLS_FILE}"
+  export MOCK_LSB_RELEASE_CS=""
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: cannot determine codename; source not written"* ]]
+  [ ! -e "$(_hc_list)" ]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_hashicorp: vagrant always uses amd64 regardless of _LINUX_ARCH" {
+@test "_install_ubuntu_hashicorp: an empty architecture writes no source and refreshes nothing" {
   _hc_env
-  export CONSUL_VER="2.0.0"
-  export VAULT_VER="2.0.2"
-  export NOMAD_VER="2.0.3"
-  export PACKER_VER="1.15.4"
-  export VAGRANT_VER="2.4.9"
-  export _LINUX_ARCH="arm64"
+  export MOCK_DPKG_PRINT_ARCH=""
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: cannot determine arch; source not written"* ]]
+  [ ! -e "$(_hc_list)" ]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a failed source directory creation returns 1 before any apt call" {
+  _hc_env
+  local _real_install
+  _real_install="$(PATH="${_GO_CLEAN_PATH}" command -v install)"
+  cat > "${SHIM_DIR}/install" << SHIM
+#!/usr/bin/env bash
+if [[ "\$1" == "-d" && "\$*" == *"${_HASHICORP_SOURCE_DIR}"* ]]; then exit 1; fi
+exec "${_real_install}" "\$@"
+SHIM
+  /bin/chmod +x "${SHIM_DIR}/install"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a failed source write returns 1 before any apt call" {
+  _hc_env
+  SHIM_TEE_FAIL_ARGS="$(_hc_list)"
+  export SHIM_TEE_FAIL_ARGS
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a key that is not the pinned one removes the keyring and installs nothing" {
+  _hc_env
+  export _HASHICORP_KEY_PATH="${REPO_ROOT}/tests/fixtures/albert-obs.asc"
+  printf 'previous' > "$(_hc_ring)"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [ ! -e "$(_hc_ring)" ]
+  [ ! -e "$(_hc_list)" ]
+  refute_grep 'apt-get update' "${MOCK_CALLS_FILE}"
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: the key, keyring and source-directory seams are ignored outside bats" {
+  _hc_env
+  local _t="${BATS_TEST_TMPDIR}"
+  # With BATS_TEST_TMPDIR empty the step must fall back to the production
+  # paths; stub every write so the fallback is observable and harmless. The
+  # stubs log to a file because the tee call redirects the stub's stdout.
+  sudo() {
+    printf 'SUDO %s\n' "$*" >> "${_t}/stub.log"
+    [[ $1 == tee ]] && cat > /dev/null
+    return 0
+  }
+  _build_pinned_keyring() { printf 'KEY %s\n' "$*" >> "${_t}/stub.log"; return 0; }
+  _hc_without_bats() {
+    local BATS_TEST_TMPDIR=""
+    _install_ubuntu_hashicorp
+  }
+  run _hc_without_bats
+  [ "$status" -eq 0 ]
+  grep -qxF "KEY ${DOTFILES_REPO_ROOT}/keys/hashicorp.asc /usr/share/keyrings/hashicorp-archive-keyring.gpg ${HASHICORP_GPG_FPR}" "${_t}/stub.log"
+  grep -qxF "SUDO install -d -m 0755 /var/lib/dotfiles" "${_t}/stub.log"
+  grep -qxF "SUDO tee /var/lib/dotfiles/hashicorp.list" "${_t}/stub.log"
+  refute_grep -F "${_t}/hashicorp-source" "${_t}/stub.log"
+}
+
+@test "_install_ubuntu_hashicorp: a failed packer install returns 1, keeps packer's stamped copy, and still handles vagrant" {
+  _hc_env
+  export SHIM_APT_FAIL_PKGS="packer=${PACKER_VER}-*"
+  _hc_stamped packer
+  _hc_stamped vagrant
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: packer: install failed"* ]]
+  [ -e "${_DL_BIN_DIR}/packer" ]
+  [ -e "${_DL_STAMP_DIR}/packer" ]
+  grep -qF "vagrant=${VAGRANT_VER}-*" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/vagrant" ]
+  [ ! -e "${_DL_STAMP_DIR}/vagrant" ]
+}
+
+@test "_install_ubuntu_hashicorp: a failed refresh installs nothing, leaves installed copies, and ends with the re-run line" {
+  _hc_env
+  export MOCK_APT_FAIL_SUBCMD=update
+  _hc_stamped packer
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: apt-get update failed for apt.releases.hashicorp.com (rc 100): "* ]]
+  [[ "$stderr" == *"packer and vagrant not installed (installed copies, if any, untouched); re-run ./setup_env.sh -t developer"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+  [ -e "${_DL_BIN_DIR}/packer" ]
+  [ -s "$(_hc_ring)" ]
+}
+
+@test "_install_ubuntu_hashicorp: install stdout reaches stdout and its E: lines reach stderr" {
+  _hc_env
+  printf 'Setting up packer\nE: boom\n' > "${BATS_TEST_TMPDIR}/inst.txt"
+  export MOCK_APT_GET_INSTALL_OUTPUT="${BATS_TEST_TMPDIR}/inst.txt"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Setting up packer"* ]]
+  [[ "$output" != *"E: boom"* ]]
+  [[ "$stderr" == *"E: boom"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: a failed install names the tool and prints apt's stderr" {
+  _hc_env
+  printf 'E: Unable to fetch\n' > "${BATS_TEST_TMPDIR}/inst.txt"
+  export MOCK_APT_GET_INSTALL_OUTPUT="${BATS_TEST_TMPDIR}/inst.txt" MOCK_APT_FAIL_SUBCMD=install
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"E: Unable to fetch"* ]]
+  [[ "$stderr" == *"hashicorp: packer: install failed"* ]]
+  [[ "$stderr" == *"hashicorp: vagrant: install failed"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: stamped consul, vault and nomad are removed with a line each" {
+  _hc_env
+  local _t
+  for _t in consul vault nomad; do _hc_stamped "${_t}"; done
   run _install_ubuntu_hashicorp
   [ "$status" -eq 0 ]
-  grep -q "vagrant.*amd64" "${MOCK_CALLS_FILE}"
+  for _t in consul vault nomad; do
+    [ ! -e "${_DL_BIN_DIR}/${_t}" ]
+    [ ! -e "${_DL_STAMP_DIR}/${_t}" ]
+    [[ "$output" == *"hashicorp: removed ${_DL_BIN_DIR}/${_t} (installed by dotfiles)"* ]]
+  done
+}
+
+@test "_install_ubuntu_hashicorp: an unstamped consul is kept and named, with the command to remove it" {
+  _hc_env
+  printf 'mine' > "${_DL_BIN_DIR}/consul"
+  /bin/chmod 0755 "${_DL_BIN_DIR}/consul"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DL_BIN_DIR}/consul")" = "mine" ]
+  [[ "$stderr" == *"${_DL_BIN_DIR}/consul"* ]]
+  [[ "$stderr" == *"sudo rm ${_DL_BIN_DIR}/consul"* ]]
+  [[ "$stderr" != *"shadows /usr/bin/consul"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an unstamped packer is kept and the warning says it shadows /usr/bin/packer" {
+  _hc_env
+  printf 'mine' > "${_DL_BIN_DIR}/packer"
+  /bin/chmod 0755 "${_DL_BIN_DIR}/packer"
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DL_BIN_DIR}/packer")" = "mine" ]
+  [[ "$stderr" == *"sudo rm ${_DL_BIN_DIR}/packer"* ]]
+  [[ "$stderr" == *"shadows /usr/bin/packer"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: the stamped copy is removed only after the apt install succeeds" {
+  _hc_env
+  export MOCK_APT_FAIL_SUBCMD=install
+  _hc_stamped packer
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [ -e "${_DL_BIN_DIR}/packer" ]
+  [ -e "${_DL_STAMP_DIR}/packer" ]
+}
+
+@test "_install_ubuntu_hashicorp: a second run after migration prints two up-to-date lines and removes nothing" {
+  _hc_env
+  _hc_stamped packer
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="ii  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"packer: up to date"* ]]
+  [[ "$output" == *"vagrant: up to date"* ]]
+  [[ "$output" != *"hashicorp: removed"* ]]
+}
+
+@test "_install_ubuntu_hashicorp: an already-installed tool still has its stamped copy removed" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="ii  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  _hc_stamped packer
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"packer: up to date (${PACKER_VER}-1)"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+  [ ! -e "${_DL_BIN_DIR}/packer" ]
+  [ ! -e "${_DL_STAMP_DIR}/packer" ]
 }
 
 # telepresence, cf-terraforming and docker-compose are retired (R6): docker compose
@@ -4752,15 +5052,14 @@ _albert_assert_last_good_untouched() {
 
 # ── install_ubuntu_packages: clean run, every step real ──────────────────────
 
-# wget shim that hands back the right fixture per URL: the Go tarball, the
-# HashiCorp zip, or a plain body. tests/mocks/wget
+# wget shim that hands back the right fixture per URL: the Go tarball or a plain
+# body. tests/mocks/wget
 # serves one MOCK_WGET_FILE for every call, which cannot satisfy a dispatcher run.
 _dispatch_wget_shim() {
   cat > "${SHIM_DIR}/wget" << SHIM
 #!/usr/bin/env bash
 case "\$*" in
   *"${GO_DOWNLOAD_URL}"*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/go.tgz" ;;
-  *releases.hashicorp.com*) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/hc.zip" ;;
   *) export MOCK_WGET_FILE="${BATS_TEST_TMPDIR}/blob" ;;
 esac
 exec "${REPO_ROOT}/tests/mocks/wget" "\$@"
@@ -4779,6 +5078,8 @@ SHIM
   _install_ubuntu_rust() { :; }
   _ws_dir
   cd "${REPO_ROOT}"
+  # amd64 before any env helper: _k8s_env derives KIND_URL_EXPECTED from
+  # _LINUX_ARCH, and this file also runs on the arm64 test-macos runner.
   _hc_env
   _cloud_env
   _misc_env
@@ -4793,10 +5094,9 @@ SHIM
   # The albert key is the one fixture with a pinned fingerprint, so it is the curl
   # body for every fetch.
   _albert_good_key
-  # _make_go_tarball writes go.tgz where the shim reads it;
-  # _hc_env wrote hc.zip and _k8s_env wrote blob.
+  # _make_go_tarball writes go.tgz where the shim reads it; _k8s_env wrote blob.
   _make_go_tarball
-  [ -s "${BATS_TEST_TMPDIR}/hc.zip" ] && [ -s "${BATS_TEST_TMPDIR}/blob" ]
+  [ -s "${BATS_TEST_TMPDIR}/blob" ]
   _dispatch_wget_shim
 
   run --separate-stderr install_ubuntu_packages
@@ -4808,10 +5108,8 @@ SHIM
   grep -q "^wget .*${GO_DOWNLOAD_URL}" "${MOCK_CALLS_FILE}"
   grep -q "apt install docker-ce" "${MOCK_CALLS_FILE}"
   grep -q "apt install kubectl" "${MOCK_CALLS_FILE}"
-  local _t
-  for _t in consul vault nomad packer vagrant; do
-    grep -q "^wget .*releases.hashicorp.com/${_t}/" "${MOCK_CALLS_FILE}"
-  done
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+  grep -qF "vagrant=${VAGRANT_VER}-*" "${MOCK_CALLS_FILE}"
   grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
@@ -4823,18 +5121,28 @@ SHIM
   grep -q "flatpak install flathub" "${MOCK_CALLS_FILE}"
   grep -q "apt-get install.* tofu" "${MOCK_CALLS_FILE}"
 
-  local _before _after
+  local _before _after _hc_before _hc_after _hc_pat
+  _hc_pat="apt-get update.*Dir::Etc::sourcelist=${_HASHICORP_SOURCE_DIR}/hashicorp.list"
   _before="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
+  _hc_before="$(grep -c -- "${_hc_pat}" "${MOCK_CALLS_FILE}")"
+  # The first run installed both tools: dpkg-query now reports them installed.
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="ii  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 0 ]
   [[ "$stderr" != *"ubuntu packages: failed"* ]]
   _after="$(grep -c '^wget ' "${MOCK_CALLS_FILE}")"
   # Go is stamped too, so the only wget the second run may add is none.
   [ "${_after}" -eq "${_before}" ]
+  # Other steps issue their own apt-get update every run; only this source's is counted.
+  _hc_after="$(grep -c -- "${_hc_pat}" "${MOCK_CALLS_FILE}")"
+  [ "${_hc_after}" -eq "${_hc_before}" ]
   local _t
-  for _t in go consul vault nomad packer vagrant kind yq; do
+  for _t in go kind yq; do
     [[ "$output$stderr" == *"${_t}: up to date (stamp"* ]]
   done
+  [[ "$output" == *"packer: up to date (${PACKER_VER}-1)"* ]]
+  [[ "$output" == *"vagrant: up to date (${VAGRANT_VER}-1)"* ]]
 }
 
 # ── _install_ubuntu_inotify ──────────────────────────────────────────────────
