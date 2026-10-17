@@ -373,3 +373,7 @@ not triggered. No finding breaks the design.
 (mock knobs, an argv assertion, flag order) or are wording-level. Every round-1 correction
 removed surface: the second capture, the apt-get switch, the tmp seam and the rc-2 contract.
 Phase 2's first red test is the next instrument, not a third lens round.
+
+## Amendments
+
+- R2 -> `_apt_stale_signer_hosts` reads stdin and prints one `host<TAB>token` line per distinct host, in first-appearance order, for lines starting `W:`, `E:`, `Warning:` or `Error:` (case-sensitive) that contain one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`, taking the host of every `http://` or `https://` URL on the line (authority lowercased, with any userinfo and port removed) and ignoring token lines without a URL. — Phase 2 Task 2 code review: a raw authority made `_hashicorp_rotation_hint_fires` stop matching a source written with a port or in mixed case, which the old substring grep matched, contradicting Design §2's "does not narrow".
