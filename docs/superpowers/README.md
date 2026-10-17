@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| 2026-10-17 | — | [apt stale-signer detection in `-t update`](specs/2026-10-17-apt-stale-signer-detection-design.md) | In Progress — spec review |
+| 2026-10-17 | [apt stale-signer detection](plans/2026-10-17-apt-stale-signer-detection.md) | [apt stale-signer detection in `-t update`](specs/2026-10-17-apt-stale-signer-detection-design.md) | In Progress |
 | 2026-10-16 | [HashiCorp apt (PR B)](plans/2026-10-16-hashicorp-apt.md) | [HashiCorp apt: packer and vagrant (PR B)](specs/2026-10-15-hashicorp-apt-design.md) | Done — #340 |
 | 2026-10-13 | [release asset sha256 pins (PR A)](plans/2026-10-13-release-asset-sha256.md) | [release asset sha256 pins](specs/2026-10-13-release-asset-sha256-design.md) | Done — #338 |
 | 2026-10-13 | [go tarball sha256](plans/2026-10-13-go-tarball-sha256.md) | [go tarball sha256 verification](specs/2026-10-13-go-tarball-sha256-design.md) | Done — #337 |
