@@ -1,7 +1,7 @@
 # Bash coverage: exclude multi-line single-quoted program bodies
 
 - **Date:** 2026-10-17
-- **Status:** Draft (Phase 1), revised after Step 8 round 1
+- **Status:** Retired 2026-10-17, descoped by the operator after Step 8 round 2 (see "Round 2" below). Not implemented.
 - **Trigger:** PR #343 (apt stale-signer detection). CI `bash-coverage` read
   `TOTAL 5798 6372 90%` against the 91% gate. The same job's first attempt was cancelled at its
   25-minute cap.
@@ -243,3 +243,31 @@ Disposition: **Addressed (operator, 2026-10-17).**
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 — spec at `c79f549c`
+
+Same three lenses, fresh. Each was told round 1 was history. The ergonomics and risk lenses each
+simulated the specified lexer over the real instrumented set and over constructed fixtures.
+
+| # | Lens | Sev | Finding |
+|---|------|-----|---------|
+| E1 | ergonomics | HIGH | Continuation-swallowed lines are never lexed, so a quote opened on one inverts the lexer's state. False regions: `whats-new-anthropic.sh` 77–147, `whats-new-claude-code.sh` 50–117, `developer.sh` 578–874. About 430 real lines leave the denominator, a fail-green result. |
+| E2 | ergonomics | MED | M3 is incomplete. The true population is 11 regions with 138 body lines; it misses `update_summary.sh:463,527` (`printf -v … '{`) and `workflows.sh:127,141` (`python3 -c 'import json,sys`). |
+| E3 | ergonomics | LOW | A closer that ends in `\` must still set continuation state. |
+| K1 | risk | HIGH | The stack reset that runs when an array, heredoc or continuation region closes inside an SQ body drops the live `SQ`, so the real closer opens a false region. Fixture: a `python3 -c '` body containing `pairs=(`. |
+| K2 | risk | HIGH | `)` over-pops on `$((…))` and on case patterns. Inside `"$(…)"` this opens a false region. The fixture passes `bash -n`. |
+| K3 | risk | LOW | "Word-initial `#`" needs `; & \| ( )` as boundaries. |
+| G1 | goal-fit | MED | Excluding about 139 lines lifts the figure to about 93% against a fixed 91% floor, so the gate silently gains about 2 points of slack. Re-baseline the floor, or state the slack is accepted. |
+| G2 | goal-fit | MED | #343 is one line short: `5798*100/6371` is 91 and `5798*100/6372` is 90. Moving its awk program to a `.awk` file unblocks it without this spec. |
+
+**Disposition: retired (operator, 2026-10-17).** Both stop signals pointed to continuing. The
+findings were still design-level, and every correction was adding mechanism: a parity rule, then a
+lexer, then the continuation feed, a `$((` context and a parser oracle. The operator descoped
+instead:
+
+- #343 moves its awk program to a `.awk` file.
+- The 60-minute cap ships as its own PR.
+- The tracer change goes to the backlog with these measurements and the stronger idea from K2's
+  lens: use bash's own parser as the region detector, where `bash -n` on the file prefix through
+  the opener reports `unexpected EOF while looking for matching `''` only for a genuine opener.
+
