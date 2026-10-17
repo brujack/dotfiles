@@ -12,7 +12,7 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 dotfiles/
 ├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
 ├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
-├── lib/               # Shell libraries — all 13 tracked: constants, detect_env, developer,
+├── lib/               # Shell libraries — 13 tracked .sh files plus apt_stale_signer_hosts.awk: constants, detect_env, developer,
 │                      #   git_hooks, git_sync, helpers, launch_agents, legacy_rsync,
 │                      #   linux_shared, linux_ubuntu, macos,
 │                      #   update_summary, workflows

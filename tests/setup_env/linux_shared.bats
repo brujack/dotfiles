@@ -355,6 +355,23 @@ EOF
   [ "$output" == "$(printf 'download.docker.com\tNO_PUBKEY')" ]
 }
 
+@test "_apt_stale_signer_hosts: fails closed when its awk program is missing" {
+  # The copied root has the libs but not lib/apt_stale_signer_hosts.awk, and
+  # DOTFILES_REPO_ROOT resolves from constants.sh's own location, so the real
+  # repo's awk file is unreachable and nothing outside BATS_TEST_TMPDIR is read.
+  local _root="${BATS_TEST_TMPDIR}/noawk"
+  mkdir -p "${_root}/lib"
+  cp "${REPO_ROOT}/lib/constants.sh" "${REPO_ROOT}/lib/linux_shared.sh" "${_root}/lib/"
+  run bash -c '
+    source "$1/lib/constants.sh"
+    source "$1/lib/linux_shared.sh"
+    log_error() { printf "ERR: %s\n" "$*" >&2; }
+    _apt_stale_signer_hosts < "$2"
+  ' _ "${_root}" "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"${_root}/lib/apt_stale_signer_hosts.awk"* ]]
+}
+
 @test "_apt_stale_signer_hosts: clean fixture yields no output" {
   run _apt_stale_signer_hosts < "${REPO_ROOT}/tests/fixtures/apt/update-clean-resolute.txt"
   [ "$status" -eq 0 ]

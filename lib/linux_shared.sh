@@ -180,42 +180,15 @@ _apt_signer_awk_list() {
 # (lowercased, no userinfo or port) named on a signature-failure line, so
 # callers need not re-parse apt's wording.
 _apt_stale_signer_hosts() {
-  local _prefixes _tokens
+  local _prefixes _tokens _awk_file="${DOTFILES_REPO_ROOT}/lib/apt_stale_signer_hosts.awk"
   # Empty lists would skip every line and read as "no stale signer"; refuse instead.
   ((${#APT_SIGNER_PREFIXES[@]} && ${#APT_SIGNER_TOKENS[@]})) \
     || { log_error "_apt_stale_signer_hosts: signer lists undefined (lib/constants.sh not sourced)"; return 1; }
+  [[ -r "${_awk_file}" ]] \
+    || { log_error "_apt_stale_signer_hosts: awk program not readable: ${_awk_file}"; return 1; }
   _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
   _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
-  awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" '
-    BEGIN {
-      np = split(prefixes, pre, "|")
-      nt = split(tokens, tok, "|")
-    }
-    {
-      sub(/\r$/, "")
-      ok = 0
-      for (i = 1; i <= np; i++) {
-        if (substr($0, 1, length(pre[i])) == pre[i]) { ok = 1; break }
-      }
-      if (!ok) next
-      found = ""
-      for (i = 1; i <= nt; i++) {
-        if (index($0, tok[i]) > 0) { found = tok[i]; break }
-      }
-      if (found == "") next
-      rest = $0
-      # authority = text after the scheme up to the first / quote or space
-      while (match(rest, /https?:\/\/[^\/\047 ]+/)) {
-        url = substr(rest, RSTART, RLENGTH)
-        rest = substr(rest, RSTART + RLENGTH)
-        sub(/^https?:\/\//, "", url)
-        sub(/^[^@]*@/, "", url)
-        sub(/:[0-9]*$/, "", url)
-        url = tolower(url)
-        if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
-      }
-    }
-  '
+  awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" -f "${_awk_file}"
 }
 
 # Maps a host named by a signature failure to its one-line remedy, so the
