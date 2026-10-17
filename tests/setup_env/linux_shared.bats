@@ -434,3 +434,10 @@ _stale_fixture_line() {
   [ "${#lines[@]}" -eq 2 ]
   [ "${lines[1]}" == "$(printf 'second.example\tNO_PUBKEY')" ]
 }
+
+@test "_apt_stale_signer_hosts: fails closed when the signer lists are undefined" {
+  # Sources only linux_shared.sh, so lib/constants.sh's arrays are absent.
+  run bash -c 'log_error() { printf "%s\n" "$*" >&2; }; source "$1/lib/linux_shared.sh"; _apt_stale_signer_hosts < "$1/tests/fixtures/apt/update-stale-rotated-resolute.txt"' _ "${REPO_ROOT}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"constants.sh"* ]]
+}

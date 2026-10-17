@@ -180,6 +180,9 @@ _apt_signer_awk_list() {
 # callers need not re-parse apt's wording.
 _apt_stale_signer_hosts() {
   local _prefixes _tokens
+  # Empty lists would skip every line and read as "no stale signer"; refuse instead.
+  ((${#APT_SIGNER_PREFIXES[@]} && ${#APT_SIGNER_TOKENS[@]})) \
+    || { log_error "_apt_stale_signer_hosts: signer lists undefined (lib/constants.sh not sourced)"; return 1; }
   _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
   _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
   awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" '
@@ -206,7 +209,7 @@ _apt_stale_signer_hosts() {
         rest = substr(rest, RSTART + RLENGTH)
         sub(/^https?:\/\//, "", url)
         sub(/^[^@]*@/, "", url)
-        sub(/:[0-9]+$/, "", url)
+        sub(/:[0-9]*$/, "", url)
         url = tolower(url)
         if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
       }
