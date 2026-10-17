@@ -94,15 +94,15 @@ path: `-t update` never re-fetches and never reports, and `-t developer` is run 
 
 A `case` on the host apt prints (M4), returning one remedy string:
 
-| Host(s)                                                                                                                                                                | Class                  | Remedy text (substance)                                                                                                                                                                                                                                                                                                                                         |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `download.docker.com`, `pkgs.k8s.io`, `prod-cdn.packages.k8s.io`, `deb.releases.teleport.dev`, `pkg.cloudflareclient.com`, `download.virtualbox.org`, `cli.github.com` | re-fetched every run   | re-run `./setup_env.sh -t developer` (it re-fetches this key)                                                                                                                                                                                                                                                                                                   |
-| `nvidia.github.io`                                                                                                                                                     | re-fetched when absent | `sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                   |
-| `packages.cloud.google.com`                                                                                                                                            | re-fetched when absent | `sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                              |
-| `packages.opentofu.org`                                                                                                                                                | re-fetched when absent | `curl -fsSL -o /tmp/opentofu.gpgkey https://packages.opentofu.org/opentofu/tofu/gpgkey && [ -s /tmp/opentofu.gpgkey ] && sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg /tmp/opentofu.gpgkey` (the install step re-fetches only when `tofu` is absent; a failed or empty download stops before the live keyring is touched) |
-| `packages.microsoft.com`                                                                                                                                               | pinned                 | verify Microsoft's new key, replace `keys/microsoft.asc` and bump `MS_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                            |
-| `download.opensuse.org`                                                                                                                                                | pinned                 | verify the albert OBS key's new fingerprint and bump `ALBERT_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                                     |
-| anything else                                                                                                                                                          | unknown                | dotfiles has no remedy for this host; refresh its key by hand                                                                                                                                                                                                                                                                                                   |
+| Host(s)                                                                                                                                                                | Class                  | Remedy text (substance)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `download.docker.com`, `pkgs.k8s.io`, `prod-cdn.packages.k8s.io`, `deb.releases.teleport.dev`, `pkg.cloudflareclient.com`, `download.virtualbox.org`, `cli.github.com` | re-fetched every run   | re-run `./setup_env.sh -t developer` (it re-fetches this key); if this line persists after that run, the publisher's own key is at fault, so refresh it by hand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `nvidia.github.io`                                                                                                                                                     | re-fetched when absent | `sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `packages.cloud.google.com`                                                                                                                                            | re-fetched when absent | `sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `packages.opentofu.org`                                                                                                                                                | re-fetched when absent | two steps, because the install step re-fetches only when `tofu` is absent. **Stage and show:** `d=$(mktemp -d) && curl -fsSL -o "$d/key" https://packages.opentofu.org/opentofu/tofu/gpgkey && gpg --batch --dearmor -o "$d/ring" "$d/key" && gpg --show-keys "$d/ring" && echo "$d"`. Compare the printed fingerprint with OpenTofu's published key. **Then install:** `sudo install -m 0644 "$d/ring" /etc/apt/keyrings/opentofu-archive-keyring.gpg.new && sudo mv -f /etc/apt/keyrings/opentofu-archive-keyring.gpg.new /etc/apt/keyrings/opentofu-archive-keyring.gpg && rm -rf "$d"`. A failed download, or a body that is not a key (captive portal, HTML error), stops at the dearmor and never reaches the live keyring, the same stage-then-move shape as `_install_apt_keyring` |
+| `packages.microsoft.com`                                                                                                                                               | pinned                 | verify Microsoft's new key, replace `keys/microsoft.asc` and bump `MS_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `download.opensuse.org`                                                                                                                                                | pinned                 | verify the albert OBS key's new fingerprint and bump `ALBERT_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| anything else                                                                                                                                                          | unknown                | dotfiles has no remedy for this host; refresh its key by hand                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 - `apt.releases.hashicorp.com` is deliberately absent, because its source is never present
   when `-t update` runs. If it ever appears, it takes the unknown branch, which still WARNs.
@@ -114,8 +114,11 @@ A `case` on the host apt prints (M4), returning one remedy string:
 
 - After `update_apt_packages 2>&1 | tee err_apt`, `run_update` runs `_apt_stale_signer_hosts`
   over `err_apt`. That file is the only input.
-- **rc 0 and at least one stale host.** `_update_record_end "apt" 0`, then
-  `_update_warn "apt" "signer check failed for <host>[, <host>…] — see detail"`. Then
+- **rc 0 and at least one stale host.** `_update_record_end "apt" 0`, then the section is
+  marked WARN with a result that **keeps** what `_update_record_end` wrote and appends to it:
+  `<existing result>; signer check failed for <host>[, <host>…] — see detail`. `_update_warn`
+  overwrites `result_apt`, so the existing text is read first and passed back in. The upgraded
+  package list stays visible for as long as a source stays stale. Then
   `detail_apt` is written with one line per host:
   `<host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
   The detail holds only these lines, never a `tail` of `err_apt`, so no budget can push them out.
@@ -128,16 +131,22 @@ A `case` on the host apt prints (M4), returning one remedy string:
 
 ### 5. Coverage bound (stated, not hidden)
 
-A signer **rotation** produces a new `InRelease` signed by a key the box lacks. apt fetches it,
-fails verification, and warns on every run until it is fixed. So detection fires on the first
-`-t update` after the rotation.
+**Rotation is measured.** Step 8 round 2's goal-fit lens used an unprivileged sandbox apt, with
+`Dir::State::Lists`, `Dir::Cache` and `sourcelist` moved to a scratch directory. It fetched docker
+once, then pointed `signed-by` at an unrelated keyring:
 
-**Expiry** is less certain. If upstream re-publishes `InRelease` after the box's copy of the key
-has expired, apt fetches it, gets `EXPKEYSIG`, and warns. If upstream does not re-publish, apt
-may get `304 Not Modified`, skip verification, and print nothing until the next publication. In
-that case detection is bounded by the publisher's cadence, not the expiry date. V1 measures this.
-If V1 shows silence, this section is amended to state the bound plainly, and a backlog row
-records the predictive doctor check this spec declines (Alternatives).
+- `apt update` printed `Hit:1 …InRelease`, then `Err:1 …InRelease`, then
+  `Warning: … NO_PUBKEY 7EA0A9C3F273FCD8`, with rc 0.
+- A third run gave the same result.
+
+apt re-verifies a cached `InRelease` even on a `Hit`. The warning repeats on every run until the
+key is fixed, and detection fires on the first `-t update` after a rotation. The earlier guess
+that a `304` skips verification was wrong for this case.
+
+**Expiry is not measured.** gpgv checks expiry at the current time, so the same re-verification
+probably yields `EXPKEYSIG`/`KEYEXPIRED` on every run once the key expires. V1 measures that in
+the same sandbox. If V1 shows silence, this section is amended to state the bound plainly, and a
+backlog row records the predictive doctor check this spec declines (Alternatives).
 
 ## Alternatives
 
@@ -155,8 +164,8 @@ records the predictive doctor check this spec declines (Alternatives).
 - **A drift guard deriving the host table from the code.** It was in the approved outline and is
   dropped here. The hosts cannot be derived statically: nvidia's `.list` comes from upstream, and
   k8s is printed under a redirect host (M4). The cost of drift is bounded, because an unmapped host
-  still WARNs, only with the unknown remedy. **This needs the operator's confirmation at spec
-  review.**
+  still WARNs, only with the unknown remedy. **Dropped with the operator's confirmation,
+  2026-10-17.**
 
 ## Testing
 
@@ -179,25 +188,36 @@ Cases:
 5. `_apt_signer_remedy`: one case per class, plus the unknown branch, each asserting the
    substance from the table (host, path or constant name).
 6. Through `run_update`, with the apt mock printing the stale fixture and nala exiting 0:
-   - the summary row is `WARN` and names the host,
+   - the summary row is `WARN`,
+   - its result keeps the package-count text and also names the host,
    - `detail_apt` contains the `… is not updating …` line and the remedy,
    - the run exits 0.
 7. The same with a failing nala: the row is FAIL, and `detail_apt` holds the error tail
    followed by the stale line.
-8. The nala call carries `--no-update` (mock call log).
+8. The nala argv in the mock call log matches `^nala full-upgrade .*--no-update`. Placement
+   matters: nala's root callback accepts only `--version` and `--license`, so
+   `nala --no-update full-upgrade` would be rejected on every run, and a check for presence
+   alone would pass it.
 9. The existing `_hashicorp_rotation_hint_fires` tests pass unchanged.
+
+**Harness changes these cases need. They are planned edits, not gate-cheating:**
+
+- `tests/mocks/apt` gains `MOCK_APT_STDOUT_FILE`. When it is set, the mock prints that file to
+  stdout. Today the mock prints nothing.
+- `tests/setup_env/linux_shared.bats:127` asserts nala's exact argv with `grep -qxF`. It gains
+  `[--no-update]` in the position R1 places it. This is the only existing assertion that changes.
 
 ## Requirements
 
-- **R1.** `update_apt_packages` passes `--no-update` to `nala full-upgrade` and is otherwise unchanged, including its return codes.
+- **R1.** `update_apt_packages` passes `--no-update` to `nala full-upgrade` after the `full-upgrade` verb, and is otherwise unchanged, including its return codes.
 - **R2.** `_apt_stale_signer_hosts` reads stdin and prints one `host<TAB>token` line per distinct host, in first-appearance order, for lines starting `W:`, `E:`, `Warning:` or `Error:` (case-sensitive) that contain one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`, taking the authority of every `http://` or `https://` URL on the line and ignoring token lines without a URL.
 - **R3.** The prefix set and the token list are each defined once, and `_hashicorp_rotation_hint_fires` decides by checking whether `_apt_stale_signer_hosts` lists `apt.releases.hashicorp.com`.
 - **R4.** `_apt_signer_remedy <host>` returns the remedy for each host and class in Design section 3's table, and the unknown-host text for any other host.
-- **R5.** When `update_apt_packages` returns 0 and `_apt_stale_signer_hosts` over `err_apt` lists at least one host, `run_update` records the `apt` section with `_update_record_end "apt" 0` and `_update_warn "apt" "signer check failed for <hosts, comma-joined> — see detail"`, and writes `detail_apt` containing, per host, `<host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
+- **R5.** When `update_apt_packages` returns 0 and `_apt_stale_signer_hosts` over `err_apt` lists at least one host, `run_update` records the `apt` section with `_update_record_end "apt" 0` and then marks it WARN with the result `<the result _update_record_end wrote>; signer check failed for <hosts, comma-joined> — see detail`, and writes `detail_apt` containing, per host, `<host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
 - **R6.** When `update_apt_packages` returns non-zero, the `apt` section FAILs as today and any stale-host lines are appended to `detail_apt` after the error tail.
 - **R7.** A run whose only non-OK section is the `apt` stale-signer WARN exits 0.
 - **R8.** Tests 1-9 in the Testing section exist and pass, with fixtures captured from real output and committed with their command, tool versions and rc.
-- **V1.** In an unprivileged sandbox, measure whether `apt update` warns for a source whose key has expired (key built with `--faked-system-time`) when upstream `InRelease` is unchanged since the last fetch, and when it is re-published. Record both results in this spec. If the first is silent, amend Design section 5 to state the bound and add a P2 backlog row for the doctor expiry check.
+- **V1.** In the unprivileged sandbox of Design section 5, point a fetched source's `signed-by` at a keyring whose key is expired at run time (built with `gpg --faked-system-time`), run `apt update` twice, and record whether each run prints a considered line carrying `EXPKEYSIG` or `KEYEXPIRED` and the URL. Record the result in this spec. If the first is silent, amend Design section 5 to state the bound and add a P2 backlog row for the doctor expiry check.
 - **V2.** In a sandbox holding the full sources set of `claude` (and again on noble, in an `ubuntu:24.04` container), fetch once, swap one source's keyring, then record the output and rc of `apt update 2>&1` and of `nala full-upgrade --no-update -y` and `nala full-upgrade -y`. Commit the captures as the Testing fixtures, and confirm both `apt update` and nala exit 0.
 - **V3.** After merge, run `./setup_env.sh -t update` on `claude`; the `apt` row reads OK and `detail_apt` carries no stale-host line, because no source is stale today (M1).
 - **N1.** `-t update` does not write, fetch or delete any keyring, source file or apt trust setting.
@@ -302,3 +322,31 @@ Disposition: **Addressed (operator, 2026-10-17).**
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 — spec at `6f8c72e9`
+
+Same three lenses, fresh. Each was told the round-1 section is history. The adversarial gate was
+not triggered. No finding breaks the design.
+
+| # | Lens | Sev | Finding | Disposition |
+|---|------|-----|---------|-------------|
+| G1 | goal-fit | MAJOR | §5's 304-silence mechanism is contradicted by measurement. In a sandbox, apt re-verifies a cached `InRelease` on a `Hit` and warns `NO_PUBKEY` at rc 0 on every run | Addressed: §5 rewritten with the measurement; V1 narrowed to expiry |
+| G2 / K2 / K3 | goal-fit, risk | MINOR | `tests/mocks/apt` prints nothing, and `linux_shared.bats:127`'s exact-argv assertion breaks under R1. Neither is named | Addressed: Testing names `MOCK_APT_STDOUT_FILE` and the one assertion edit |
+| G3 | goal-fit | LOW | `err_apt` now also holds nala and dpkg output, so a false positive is possible, at worst a WARN | Accepted (operator, 2026-10-17): the worst case is a spurious WARN, and no matching line exists in a real `~/.dotfiles-update.log` |
+| E1 / K4 | ergonomics, risk | MEDIUM | `_update_warn` overwrites `result_apt`, so the upgraded-package list disappears while a source is stale | Addressed: the WARN result keeps the existing text and appends to it (§4, R5, test 6) |
+| E2 | ergonomics | MINOR | The re-fetch remedy nags forever when the publisher itself ships a bad key | Addressed: the remedy says that if the line persists after `-t developer`, the publisher's key is at fault |
+| E3 | ergonomics | MEDIUM | The opentofu remedy's `[ -s ]` check passes a captive-portal or HTML body into the live keyring | Addressed: two-step stage, show the fingerprint, then `install` to `.new` and `mv` |
+| K1 | risk | MAJOR | `--no-update` placed before the verb is rejected by nala's root callback, and a presence-only test 8 would pass it | Addressed: R1 places the flag after the verb; test 8 asserts the order |
+
+**Assumption lines.**
+
+- **Goal-fit:** expiry yields a token line on a `Hit`. Unmeasured; V1 settles it.
+- **Ergonomics and risk:** the piped `apt` front end puts the token and the URL on one
+  `Warning:` line. Confirmed by goal-fit's sandbox run (`apt update`: rc 0, one `Warning:` line
+  with the URL and `NO_PUBKEY`; `apt-get`: the same with `W:`). V2 re-captures it on the full
+  sources set and on noble.
+
+**Stop.** Review ends here (operator, 2026-10-17). Round 2's findings sit in the test apparatus
+(mock knobs, an argv assertion, flag order) or are wording-level. Every round-1 correction
+removed surface: the second capture, the apt-get switch, the tmp seam and the rc-2 contract.
+Phase 2's first red test is the next instrument, not a third lens round.
