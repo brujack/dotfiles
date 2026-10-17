@@ -227,6 +227,28 @@ Cases:
 - **N4.** The base step's `apt update` call and message (`lib/linux_ubuntu.sh:223`) are unchanged; its stale `E:/W:` wording stays with its own P3 row.
 - **N5.** A stale signer alone never turns the `apt` section into FAIL or the run's exit code non-zero.
 
+## Verification results
+
+Measured 2026-10-17 by plan Task 1. Fixtures and full detail are in `tests/fixtures/apt/README.md`
+on `feat/apt-stale-signer`.
+
+- **V1, expiry: detected, not silent.** apt 3.2.0, unprivileged sandbox, local repo signed by a
+  key with a 120-second expiry. Fetched once while the key was valid. Both runs after expiry gave
+  rc 0 and printed
+  `Warning: Failed to fetch http://127.0.0.1:18765/dists/test/InRelease  The following signatures were invalid: EXPKEYSIG …`.
+  The token is `EXPKEYSIG`, not `KEYEXPIRED`. The URL is on the same line. Design §5's expiry
+  bound is therefore resolved in favour of detection on every run. No doctor-check backlog row is
+  added.
+- **V2, exit codes over a stale source: all 0.** The same holds for noble (apt 2.8.3, nala 0.15.1)
+  and resolute (apt 3.2.0, nala 0.16.0, in a container), for these runs:
+  - `apt update`: clean, stale #1 and stale #2;
+  - `nala full-upgrade -y`;
+  - `nala full-upgrade --no-update -y`.
+
+  The resolute host's unprivileged `apt update` runs also exited 0. Prefixes: apt 2.8 prints `W:`
+  and apt 3.2 prints `Warning:`. nala's own refresh prints `Warning: W:… NO_PUBKEY …`, which is the
+  duplicate copy `--no-update` removes. With `--no-update`, nala prints no signer information.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `ed61410d` (Step 7 self-review commit, before Step 8 dispatch)
