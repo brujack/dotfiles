@@ -695,6 +695,45 @@ _update_trap_sigint() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
 }
 
+# _update_apt_signer_check APT_RC
+# Reads err_apt for sources whose signature check failed and says so on the apt row.
+# The package result is kept because the upgrade itself may have worked; the stale
+# source is a separate fact. A parser that cannot run is reported, never read as clean.
+_update_apt_signer_check() {
+  local _apt_rc="$1" _err="${_DOTFILES_RUN_TMPDIR}/err_apt"
+  local _detail="${_DOTFILES_RUN_TMPDIR}/detail_apt" _result _hosts _parse_err _parse_rc=0
+  local _host _token _remedy _lines="" _names=""
+
+  _parse_err="${_DOTFILES_RUN_TMPDIR}/err_apt_signer"
+  _hosts="$(_apt_stale_signer_hosts < "${_err}" 2> "${_parse_err}")" || _parse_rc=$?
+  _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt" 2> /dev/null)"
+
+  if [[ ${_parse_rc} -ne 0 ]]; then
+    if [[ ${_apt_rc} -eq 0 ]]; then
+      _update_warn "apt" "${_result}; signer check did not run — see detail"
+      cat "${_parse_err}" > "${_detail}"
+    else
+      cat "${_parse_err}" >> "${_detail}"
+    fi
+    return 0
+  fi
+  [[ -n ${_hosts} ]] || return 0
+
+  while IFS=$'\t' read -r _host _token; do
+    [[ -n ${_host} ]] || continue
+    _remedy="$(_apt_signer_remedy "${_host}")"
+    _names="${_names:+${_names}, }${_host}"
+    _lines+="${_host} is not updating: signature check failed (${_token}): signer rotated or expired, or a proxy served unsigned data; ${_remedy}"$'\n'
+  done <<< "${_hosts}"
+
+  if [[ ${_apt_rc} -eq 0 ]]; then
+    _update_warn "apt" "${_result}; signer check failed for ${_names} — see detail"
+    printf '%s' "${_lines}" > "${_detail}"
+  else
+    printf '%s' "${_lines}" >> "${_detail}"
+  fi
+}
+
 run_update() {
   local _run_all=0
   _any_update_flag || _run_all=1
@@ -921,7 +960,9 @@ run_update() {
     if [[ -n ${LINUX} ]]; then
       _update_record_start "apt"
       update_apt_packages 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_apt"
-      _update_record_end "apt" "${PIPESTATUS[0]}"
+      local _apt_rc="${PIPESTATUS[0]}"
+      _update_record_end "apt" "${_apt_rc}"
+      _update_apt_signer_check "${_apt_rc}"
 
       if _snap_available; then
         _update_record_start "snap"

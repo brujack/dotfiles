@@ -213,3 +213,18 @@ _assert_trust_covers_brewfile() {
   done < <(_brewfile_required_taps)
   [[ " ${_trust} " != *" go-task/tap "* ]]
 }
+
+# setup_run_update_linux -- environment for run_update tests that exercise the Linux
+# package sections (apt, snap, flatpak) against mocks and a scratch HOME-less tree.
+setup_run_update_linux() {
+  unset MACOS HAS_AWS PYENV_ROOT
+  export LINUX=1 UBUNTU=1 NOBLE=1 UPDATE_PKGS=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export _OVERRIDE_PYENV_ROOT="${BATS_TEST_TMPDIR}/pyenv"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export DOTFILES="dotfiles"
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
+  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
+  export TMPDIR="${BATS_TEST_TMPDIR}"
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+}

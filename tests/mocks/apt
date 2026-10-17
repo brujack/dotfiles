@@ -21,4 +21,7 @@ for _a in "$@"; do
   fi
   break
 done
+# MOCK_APT_STDOUT_FILE: emit this file on stdout (captured real apt output), so callers that
+# parse apt output see it. The failing-subcommand exit above deliberately skips it.
+[[ -n "${MOCK_APT_STDOUT_FILE:-}" ]] && cat "${MOCK_APT_STDOUT_FILE}"
 exit "${MOCK_APT_ONLY_EXIT:-${MOCK_APT_EXIT:-0}}"
