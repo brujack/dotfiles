@@ -190,7 +190,6 @@ cask "vlc"
 cask "warp"                                  # [HAS_DEVTOOLS]
 cask "zed"                                   # [HAS_DEVTOOLS]
 cask "zoom"
-mas "Better Rename 9", id: 414209656
 mas "Blackmagic Disk Speed Test", id: 425264550
 mas "Brother iPrint&Scan", id: 1193539993
 mas "Flycut", id: 442160987
