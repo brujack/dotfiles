@@ -441,3 +441,73 @@ _stale_fixture_line() {
   [ "$status" -ne 0 ]
   [[ "$output" == *"constants.sh"* ]]
 }
+
+# --- _apt_signer_remedy ---
+
+# Asserts the remedy for $1 is exactly one line, rc 0, and leaves it in ${output}.
+_remedy_one_line() {
+  run _apt_signer_remedy "$1"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+}
+
+@test "_apt_signer_remedy: download.docker.com says re-run -t developer and blames the publisher on persistence" {
+  _remedy_one_line download.docker.com
+  [[ "$output" == *"-t developer"* ]]
+  [[ "$output" == *"publisher's own key"* ]]
+}
+
+@test "_apt_signer_remedy: both k8s hosts share the docker re-fetch remedy" {
+  local _h _docker
+  _remedy_one_line download.docker.com
+  _docker="${output}"
+  for _h in pkgs.k8s.io prod-cdn.packages.k8s.io deb.releases.teleport.dev pkg.cloudflareclient.com download.virtualbox.org cli.github.com; do
+    _remedy_one_line "${_h}"
+    [[ "$output" == *"-t developer"* ]]
+    [ "$output" == "${_docker}" ]
+  done
+}
+
+@test "_apt_signer_remedy: nvidia.github.io names the keyring file to remove" {
+  _remedy_one_line nvidia.github.io
+  [[ "$output" == *"/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"* ]]
+  [[ "$output" == *"-t developer"* ]]
+}
+
+@test "_apt_signer_remedy: packages.cloud.google.com names the source list to remove" {
+  _remedy_one_line packages.cloud.google.com
+  [[ "$output" == *"/etc/apt/sources.list.d/google-cloud-sdk.list"* ]]
+  [[ "$output" == *"-t developer"* ]]
+}
+
+@test "_apt_signer_remedy: packages.opentofu.org stages, shows the fingerprint, then moves into place" {
+  _remedy_one_line packages.opentofu.org
+  [[ "$output" == *"mktemp -d"* ]]
+  [[ "$output" == *"gpg --show-keys"* ]]
+  [[ "$output" == *".gpg.new"* ]]
+  [[ "$output" == *"/etc/apt/keyrings/opentofu-archive-keyring.gpg"* ]]
+}
+
+@test "_apt_signer_remedy: packages.microsoft.com points at MS_GPG_FPR" {
+  _remedy_one_line packages.microsoft.com
+  [[ "$output" == *"MS_GPG_FPR"* ]]
+  [[ "$output" == *"keys/microsoft.asc"* ]]
+}
+
+@test "_apt_signer_remedy: download.opensuse.org points at ALBERT_GPG_FPR" {
+  _remedy_one_line download.opensuse.org
+  [[ "$output" == *"ALBERT_GPG_FPR"* ]]
+}
+
+@test "_apt_signer_remedy: an unknown host gets the no-remedy text" {
+  _remedy_one_line example.invalid
+  [[ "$output" == *"no remedy for this host"* ]]
+}
+
+@test "_apt_signer_remedy: apt.releases.hashicorp.com has no arm and falls to the unknown text" {
+  local _unknown
+  _remedy_one_line example.invalid
+  _unknown="${output}"
+  _remedy_one_line apt.releases.hashicorp.com
+  [ "$output" == "${_unknown}" ]
+}

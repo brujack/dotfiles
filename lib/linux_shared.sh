@@ -217,4 +217,39 @@ _apt_stale_signer_hosts() {
   '
 }
 
+# Maps a host named by a signature failure to its one-line remedy, so the
+# update summary can tell the operator what to do instead of just that it broke.
+# Each arm depends on the install-time key-fetch guard that decides whether a key
+# is re-fetched: _install_ubuntu_nvidia (keyring absent), _install_ubuntu_cloud_tools
+# (gcloud source list absent) and _install_ubuntu_misc (opentofu, only when tofu is
+# absent). Change a guard and its arm must change with it.
+_apt_signer_remedy() {
+  case "$1" in
+    download.docker.com | pkgs.k8s.io | prod-cdn.packages.k8s.io | deb.releases.teleport.dev | pkg.cloudflareclient.com | download.virtualbox.org | cli.github.com)
+      printf '%s\n' "re-run ./setup_env.sh -t developer (it re-fetches this key); if this line persists after that run, the publisher's own key is at fault, so refresh it by hand"
+      ;;
+    nvidia.github.io)
+      printf '%s\n' 'sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg, then re-run ./setup_env.sh -t developer'
+      ;;
+    packages.cloud.google.com)
+      printf '%s\n' 'sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list, then re-run ./setup_env.sh -t developer'
+      ;;
+    packages.opentofu.org)
+      # Two steps because the installer re-fetches only when tofu is absent; staging
+      # keeps a failed or non-key download away from the live keyring.
+      # shellcheck disable=SC2016 # the text is shown to the operator to paste; $d must stay literal
+      printf '%s\n' 'stage and show: d=$(mktemp -d) && curl -fsSL -o "$d/key" https://packages.opentofu.org/opentofu/tofu/gpgkey && gpg --batch --dearmor -o "$d/ring" "$d/key" && gpg --show-keys "$d/ring" && echo "$d"; compare the printed fingerprint with OpenTofu'"'"'s published key, then install: sudo install -m 0644 "$d/ring" /etc/apt/keyrings/opentofu-archive-keyring.gpg.new && sudo mv -f /etc/apt/keyrings/opentofu-archive-keyring.gpg.new /etc/apt/keyrings/opentofu-archive-keyring.gpg && rm -rf "$d"'
+      ;;
+    packages.microsoft.com)
+      printf '%s\n' "verify Microsoft's new key, replace keys/microsoft.asc and bump MS_GPG_FPR in lib/constants.sh"
+      ;;
+    download.opensuse.org)
+      printf '%s\n' "verify the albert OBS key's new fingerprint and bump ALBERT_GPG_FPR in lib/constants.sh"
+      ;;
+    *)
+      printf '%s\n' 'dotfiles has no remedy for this host; refresh its key by hand'
+      ;;
+  esac
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
