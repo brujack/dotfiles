@@ -1,7 +1,8 @@
 # apt stale-signer detection in `-t update`
 
 - **Date:** 2026-10-17
-- **Status:** Draft (Phase 1), revised after Step 8 round 1
+- **Status:** Approved (Phase 1 complete)
+- **Approved:** 2026-10-17
 - **Backlog row:** P2 bugs and security, "A rotated or expired third-party apt key goes stale silently"
 - **Prior work:** `2026-10-15-hashicorp-apt-design.md` (round 4 E1''', round 5 G1⁗/E1⁗)
 
