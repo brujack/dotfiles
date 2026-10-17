@@ -383,3 +383,54 @@ EOF
   [[ "$output" != *$'\n'* ]]
   [[ "$output" == "NO_PUBKEY|"*"|is no longer signed" ]]
 }
+
+# Real considered line from the stale fixture; the cases below derive from it with sed.
+_stale_fixture_line() {
+  command grep -m1 -E '^(W|E|Warning|Error):.*NO_PUBKEY' "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+}
+
+@test "_apt_stale_signer_hosts: line without a considered prefix yields nothing" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/^[A-Za-z]*: *//')"
+  [[ "${_line}" == *"https://"* && "${_line}" == *NO_PUBKEY* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: prefix match is case-sensitive" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/^Warning:/WARNING:/')"
+  [[ "${_line}" == "WARNING:"* && "${_line}" == *"https://"* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: considered line without a token yields nothing" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/NO_PUBKEY [0-9A-F]*//')"
+  [[ "${_line}" == "Warning:"* && "${_line}" == *"https://"* && "${_line}" != *NO_PUBKEY* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: host is lowercased with userinfo and port removed" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's#https://download.docker.com#https://user@DOWNLOAD.Docker.com:443#')"
+  [[ "${_line}" == *"user@DOWNLOAD.Docker.com:443"* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ "$output" == "$(printf 'download.docker.com\tNO_PUBKEY')" ]
+}
+
+@test "_apt_stale_signer_hosts: CRLF line leaves no CR in a line-final host" {
+  local _in="${BATS_TEST_TMPDIR}/crlf.txt"
+  # The appended URL ends the line, so an unstripped CR would land in its host.
+  printf '%s https://second.example\r\n' "$(_stale_fixture_line)" > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[1]}" == "$(printf 'second.example\tNO_PUBKEY')" ]
+}

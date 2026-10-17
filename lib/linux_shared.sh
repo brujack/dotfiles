@@ -168,12 +168,6 @@ update_system_packages() {
   return "${_rc}"
 }
 
-# apt output prefixes and signature-failure tokens that mark a stale signer;
-# defined once here so every consumer agrees on what counts (not readonly: the
-# lib may be re-sourced, and readonly would error on the second source).
-APT_SIGNER_PREFIXES=("W:" "E:" "Warning:" "Error:")
-APT_SIGNER_TOKENS=("NO_PUBKEY" "EXPKEYSIG" "EXPSIG" "KEYEXPIRED" "REVKEYSIG" "is not signed" "is no longer signed")
-
 # Joins its arguments with "|" for an awk -v value: BWK awk (macOS) rejects a
 # literal newline in -v, and no prefix or token contains "|".
 _apt_signer_awk_list() {
@@ -182,7 +176,8 @@ _apt_signer_awk_list() {
 }
 
 # Reads apt output on stdin; prints "host<TAB>token" once per distinct host
-# named on a signature-failure line, so callers need not re-parse apt's wording.
+# (lowercased, no userinfo or port) named on a signature-failure line, so
+# callers need not re-parse apt's wording.
 _apt_stale_signer_hosts() {
   local _prefixes _tokens
   _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
@@ -193,6 +188,7 @@ _apt_stale_signer_hosts() {
       nt = split(tokens, tok, "|")
     }
     {
+      sub(/\r$/, "")
       ok = 0
       for (i = 1; i <= np; i++) {
         if (substr($0, 1, length(pre[i])) == pre[i]) { ok = 1; break }
@@ -209,6 +205,9 @@ _apt_stale_signer_hosts() {
         url = substr(rest, RSTART, RLENGTH)
         rest = substr(rest, RSTART + RLENGTH)
         sub(/^https?:\/\//, "", url)
+        sub(/^[^@]*@/, "", url)
+        sub(/:[0-9]+$/, "", url)
+        url = tolower(url)
         if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
       }
     }
