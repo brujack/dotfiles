@@ -67,7 +67,8 @@ update_apt_packages() {
   # DEBIAN_FRONTEND is set as well, for a different hang: apt's needrestart
   # Post-Invoke hook raises a debconf dialog when stdout is not a tty, and sudo
   # does not pass the caller's value through, so it must sit on this command line.
-  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade "${APT_CONFFILE_OPTS[@]}" -y \
+  # --no-update after the verb: apt update has just refreshed the lists, and nala's own refresh would print a second copy of every signer error.
+  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade --no-update "${APT_CONFFILE_OPTS[@]}" -y \
     < /dev/null || { log_error "nala full-upgrade failed"; return 1; }
   sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || { log_error "nala autoremove failed"; return 1; }
   log_info "Updated apt packages"
@@ -166,6 +167,64 @@ update_system_packages() {
     log_info "snap not installed on this host — skipping snap refresh"
   fi
   return "${_rc}"
+}
+
+# Joins its arguments with "|" for an awk -v value: BWK awk (macOS) rejects a
+# literal newline in -v, and no prefix or token contains "|".
+_apt_signer_awk_list() {
+  local IFS='|'
+  printf '%s' "$*"
+}
+
+# Reads apt output on stdin; prints "host<TAB>token" once per distinct host
+# (lowercased, no userinfo or port) named on a signature-failure line, so
+# callers need not re-parse apt's wording.
+_apt_stale_signer_hosts() {
+  local _prefixes _tokens _awk_file="${DOTFILES_REPO_ROOT}/lib/apt_stale_signer_hosts.awk"
+  # Empty lists would skip every line and read as "no stale signer"; refuse instead.
+  ((${#APT_SIGNER_PREFIXES[@]} && ${#APT_SIGNER_TOKENS[@]})) \
+    || { log_error "_apt_stale_signer_hosts: signer lists undefined (lib/constants.sh not sourced)"; return 1; }
+  [[ -r "${_awk_file}" ]] \
+    || { log_error "_apt_stale_signer_hosts: awk program not readable: ${_awk_file}"; return 1; }
+  _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
+  _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
+  awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" -f "${_awk_file}"
+}
+
+# Maps a host named by a signature failure to its one-line remedy, so the
+# update summary can tell the operator what to do instead of just that it broke.
+# The nvidia, gcloud and opentofu arms track their install-time key-fetch guards in
+# _install_ubuntu_nvidia, _install_ubuntu_cloud_tools and _install_ubuntu_misc. The
+# first arm (re-run -t developer) assumes those fetches stay unconditional. The
+# microsoft and albert arms depend on the MS_GPG_FPR and ALBERT_GPG_FPR pins. Change
+# any of those and the matching arm changes with it.
+_apt_signer_remedy() {
+  case "$1" in
+    download.docker.com | pkgs.k8s.io | prod-cdn.packages.k8s.io | deb.releases.teleport.dev | pkg.cloudflareclient.com | download.virtualbox.org | cli.github.com)
+      printf '%s\n' "re-run ./setup_env.sh -t developer (it re-fetches this key); if this line persists after that run, the publisher's own key is at fault, so refresh it by hand"
+      ;;
+    nvidia.github.io)
+      printf '%s\n' 'sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg, then re-run ./setup_env.sh -t developer'
+      ;;
+    packages.cloud.google.com)
+      printf '%s\n' 'sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list, then re-run ./setup_env.sh -t developer'
+      ;;
+    packages.opentofu.org)
+      # Two steps because the installer re-fetches only when tofu is absent; staging
+      # keeps a failed or non-key download away from the live keyring.
+      # shellcheck disable=SC2016 # the text is shown to the operator to paste; $d must stay literal
+      printf '%s\n' 'Stage and show: `d=$(mktemp -d) && curl -fsSL -o "$d/key" https://packages.opentofu.org/opentofu/tofu/gpgkey && gpg --batch --dearmor -o "$d/ring" "$d/key" && gpg --show-keys "$d/ring" && echo "$d"`. Compare the printed fingerprint with OpenTofu'"'"'s published key. Then install: `sudo install -m 0644 "$d/ring" /etc/apt/keyrings/opentofu-archive-keyring.gpg.new && sudo mv -f /etc/apt/keyrings/opentofu-archive-keyring.gpg.new /etc/apt/keyrings/opentofu-archive-keyring.gpg && rm -rf "$d"`'
+      ;;
+    packages.microsoft.com)
+      printf '%s\n' "verify Microsoft's new key, replace keys/microsoft.asc and bump MS_GPG_FPR in lib/constants.sh"
+      ;;
+    download.opensuse.org)
+      printf '%s\n' "verify the albert OBS key's new fingerprint and bump ALBERT_GPG_FPR in lib/constants.sh"
+      ;;
+    *)
+      printf '%s\n' 'dotfiles has no remedy for this host; refresh its key by hand'
+      ;;
+  esac
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

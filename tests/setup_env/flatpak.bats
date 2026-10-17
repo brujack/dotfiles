@@ -278,28 +278,15 @@ _with_driver() {
 
 # ── run_update flatpak section ───────────────────────────────────────────────
 
-_setup_run_update() {
-  unset MACOS HAS_AWS PYENV_ROOT
-  export LINUX=1 UBUNTU=1 NOBLE=1 UPDATE_PKGS=1
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
-  export _OVERRIDE_PYENV_ROOT="${BATS_TEST_TMPDIR}/pyenv"
-  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
-  export DOTFILES="dotfiles"
-  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brew"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
-  export TMPDIR="${BATS_TEST_TMPDIR}"
-  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-}
-
 @test "run_update flatpak section: OK when update_flatpak_packages succeeds" {
-  _setup_run_update
+  setup_run_update_linux
   update_flatpak_packages() { printf 'Updated flatpak runtimes\n'; return 0; }
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "OK" ]
 }
 
 @test "run_update flatpak section: rc 2 is WARN with reason and detail, not FAIL" {
-  _setup_run_update
+  setup_run_update_linux
   update_flatpak_packages() {
     printf 'flatpak: no GL.nvidia-615-71-09 installed for loaded driver 615.71.09\n'
     return 2
@@ -312,14 +299,14 @@ _setup_run_update() {
 }
 
 @test "run_update flatpak section: rc 2 does not make run_update fail" {
-  _setup_run_update
+  setup_run_update_linux
   update_flatpak_packages() { return 2; }
   run run_update
   [ "$status" -eq 0 ]
 }
 
 @test "run_update flatpak section: rc 1 is FAIL" {
-  _setup_run_update
+  setup_run_update_linux
   update_flatpak_packages() { return 1; }
   local _rc=0
   run_update || _rc=$?
@@ -328,7 +315,7 @@ _setup_run_update() {
 }
 
 @test "run_update flatpak section: SKIP when flatpak is not installed" {
-  _setup_run_update
+  setup_run_update_linux
   _flatpak_available() { return 1; }
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_flatpak")" = "SKIP" ]
@@ -337,7 +324,7 @@ _setup_run_update() {
 }
 
 @test "run_update flatpak section: SKIP not applicable off Linux" {
-  _setup_run_update
+  setup_run_update_linux
   unset LINUX UBUNTU NOBLE
   export MACOS=1
   run_update
@@ -345,7 +332,7 @@ _setup_run_update() {
 }
 
 @test "run_update flatpak section: SKIP flag not set" {
-  _setup_run_update
+  setup_run_update_linux
   unset UPDATE_PKGS
   export UPDATE_CLAUDE=1
   run_update

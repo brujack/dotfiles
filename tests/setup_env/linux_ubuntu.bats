@@ -3684,6 +3684,9 @@ _HC_HOST_LINE='deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
   [ "$status" -eq 1 ]
   run _hashicorp_rotation_hint_fires "W: https://example.invalid/repo noble InRelease: NO_PUBKEY ABCDEF"
   [ "$status" -eq 1 ]
+  # A host that merely contains the name is another source, so the match must be whole-host.
+  run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com.mirror.example noble InRelease: NO_PUBKEY ABCDEF"
+  [ "$status" -eq 1 ]
   run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: connection reset"
   [ "$status" -eq 1 ]
 }

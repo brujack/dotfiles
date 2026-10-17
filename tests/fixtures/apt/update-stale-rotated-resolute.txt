@@ -1,0 +1,28 @@
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Hit:1 http://download.virtualbox.org/virtualbox/debian resolute InRelease
+Hit:2 https://cli.github.com/packages stable InRelease
+Hit:3 https://download.docker.com/linux/ubuntu resolute InRelease
+Hit:4 https://nvidia.github.io/libnvidia-container/stable/deb/amd64  InRelease
+Err:3 https://download.docker.com/linux/ubuntu resolute InRelease
+  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
+Hit:5 http://security.ubuntu.com/ubuntu resolute-security InRelease
+Hit:7 https://packages.microsoft.com/repos/edge-stable stable InRelease
+Hit:8 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease
+Hit:9 https://deb.releases.teleport.dev stable InRelease
+Hit:6 https://prod-cdn.packages.k8s.io/repositories/isv:/kubernetes:/core:/stable:/v1.37/deb  InRelease
+Hit:10 http://archive.ubuntu.com/ubuntu resolute InRelease
+Hit:11 https://pkg.cloudflareclient.com noble InRelease
+Hit:12 http://archive.ubuntu.com/ubuntu resolute-updates InRelease
+Hit:13 http://archive.ubuntu.com/ubuntu resolute-backports InRelease
+Hit:15 https://download.opensuse.org/repositories/home:/manuelschneid3r/xUbuntu_26.04  InRelease
+Hit:16 https://packages.cloud.google.com/apt cloud-sdk InRelease
+Hit:14 https://packages.opentofu.org/opentofu/tofu/any any InRelease
+Reading package lists...
+Building dependency tree...
+Reading state information...
+All packages are up to date.
+Warning: An error occurred during the signature verification. The repository is not updated and the previous index files will be used. OpenPGP signature verification failed: https://download.docker.com/linux/ubuntu resolute InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
+Warning: Failed to fetch https://download.docker.com/linux/ubuntu/dists/resolute/InRelease  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 7EA0A9C3F273FCD8
+Warning: Some index files failed to download. They have been ignored, or old ones used instead.

@@ -191,6 +191,9 @@ PERSONAL_GITREPOS="${GITREPOS}/personal"
 # it after the verb of every configuring apt/apt-get/nala call (ai-config
 # docs/knowledge/dotfiles-apt-upgrade-hazards.md section 2).
 readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+# Consumed by _apt_stale_signer_hosts (lib/linux_shared.sh): what marks an apt line as a signature failure.
+readonly -a APT_SIGNER_PREFIXES=("W:" "E:" "Warning:" "Error:")
+readonly -a APT_SIGNER_TOKENS=("NO_PUBKEY" "EXPKEYSIG" "EXPSIG" "KEYEXPIRED" "REVKEYSIG" "is not signed" "is no longer signed")
 # docker-host floor for fs.inotify.max_user_instances; see
 # docs/superpowers/specs/2026-10-08-molecule-host-tuning-design.md
 readonly INOTIFY_MAX_USER_INSTANCES=1024

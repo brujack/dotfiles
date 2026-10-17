@@ -124,7 +124,17 @@ EOF
   _stub_dir="$(argv_probe_stub_path nala)"
   PATH="${_stub_dir}:${PATH}" run update_apt_packages
   [ "$status" -eq 0 ]
-  grep -qxF 'argv: nala [full-upgrade][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]' "${MOCK_CALLS_FILE}"
+  grep -qxF 'argv: nala [full-upgrade][--no-update][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]' "${MOCK_CALLS_FILE}"
+}
+
+# nala's root callback accepts only --version/--license, so the flag must follow
+# the verb. Without it nala refreshes the lists itself and prints a second copy of
+# every signer error (tests/fixtures/apt/README.md, V2).
+@test "update_apt_packages: nala full-upgrade passes --no-update right after the verb" {
+  export UBUNTU=1
+  run update_apt_packages
+  [ "$status" -eq 0 ]
+  command grep -qE '^nala full-upgrade --no-update( |$)' "${MOCK_CALLS_FILE}"
 }
 
 # needrestart's apt Post-Invoke hook raises a debconf dialog when stdout is not a
@@ -335,4 +345,203 @@ EOF
   # guard satisfies the absence assertion on its own.
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
   refute_grep "dist-upgrade" "${MOCK_CALLS_FILE}"
+}
+
+# --- _apt_stale_signer_hosts ---
+
+@test "_apt_stale_signer_hosts: resolute stale fixture yields docker host and NO_PUBKEY" {
+  run _apt_stale_signer_hosts < "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" == "$(printf 'download.docker.com\tNO_PUBKEY')" ]
+}
+
+@test "_apt_stale_signer_hosts: fails closed when its awk program is missing" {
+  # The copied root has the libs but not lib/apt_stale_signer_hosts.awk, and
+  # DOTFILES_REPO_ROOT resolves from constants.sh's own location, so the real
+  # repo's awk file is unreachable and nothing outside BATS_TEST_TMPDIR is read.
+  local _root="${BATS_TEST_TMPDIR}/noawk"
+  mkdir -p "${_root}/lib"
+  cp "${REPO_ROOT}/lib/constants.sh" "${REPO_ROOT}/lib/linux_shared.sh" "${_root}/lib/"
+  run bash -c '
+    source "$1/lib/constants.sh"
+    source "$1/lib/linux_shared.sh"
+    log_error() { printf "ERR: %s\n" "$*" >&2; }
+    _apt_stale_signer_hosts < "$2"
+  ' _ "${_root}" "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"${_root}/lib/apt_stale_signer_hosts.awk"* ]]
+}
+
+@test "_apt_stale_signer_hosts: clean fixture yields no output" {
+  run _apt_stale_signer_hosts < "${REPO_ROOT}/tests/fixtures/apt/update-clean-resolute.txt"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: two stale hosts print in first-appearance order" {
+  local _in="${BATS_TEST_TMPDIR}/two.txt"
+  cat "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-noble.txt" \
+    "${REPO_ROOT}/tests/fixtures/apt/update-hashicorp-stale-rotated.txt" > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "${lines[0]}" == "download.docker.com"$'\t'* ]]
+  [[ "${lines[1]}" == "apt.releases.hashicorp.com"$'\t'* ]]
+}
+
+@test "_apt_stale_signer_hosts: every URL on a considered line contributes a host" {
+  local _line _in="${BATS_TEST_TMPDIR}/line.txt"
+  _line="$(command grep -m1 -E '^(W|E|Warning|Error):.*NO_PUBKEY' "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt")"
+  [ -n "${_line}" ]
+  printf '%s\n' "${_line}" | sed -E 's#(https?://[^ ]+)#\1 https://second.example/x#' > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "$output" == *"download.docker.com"* ]]
+  [[ "$output" == *"second.example"* ]]
+}
+
+@test "_apt_signer_awk_list: joined value has no newline (BWK awk rejects one in -v)" {
+  run _apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *$'\n'* ]]
+  [ "$output" == "W:|E:|Warning:|Error:" ]
+  run _apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}"
+  [[ "$output" != *$'\n'* ]]
+  [[ "$output" == "NO_PUBKEY|"*"|is no longer signed" ]]
+}
+
+# Real considered line from the stale fixture; the cases below derive from it with sed.
+_stale_fixture_line() {
+  command grep -m1 -E '^(W|E|Warning|Error):.*NO_PUBKEY' "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+}
+
+@test "_apt_stale_signer_hosts: line without a considered prefix yields nothing" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/^[A-Za-z]*: *//')"
+  [[ "${_line}" == *"https://"* && "${_line}" == *NO_PUBKEY* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: prefix match is case-sensitive" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/^Warning:/WARNING:/')"
+  [[ "${_line}" == "WARNING:"* && "${_line}" == *"https://"* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: considered line without a token yields nothing" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's/NO_PUBKEY [0-9A-F]*//')"
+  [[ "${_line}" == "Warning:"* && "${_line}" == *"https://"* && "${_line}" != *NO_PUBKEY* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: host is lowercased with userinfo and port removed" {
+  local _line
+  _line="$(_stale_fixture_line | sed 's#https://download.docker.com#https://user@DOWNLOAD.Docker.com:443#')"
+  [[ "${_line}" == *"user@DOWNLOAD.Docker.com:443"* ]]
+  run _apt_stale_signer_hosts <<< "${_line}"
+  [ "$status" -eq 0 ]
+  [ "$output" == "$(printf 'download.docker.com\tNO_PUBKEY')" ]
+}
+
+@test "_apt_stale_signer_hosts: CRLF line leaves no CR in a line-final host" {
+  local _in="${BATS_TEST_TMPDIR}/crlf.txt"
+  # The appended URL ends the line, so an unstripped CR would land in its host.
+  printf '%s https://second.example\r\n' "$(_stale_fixture_line)" > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[1]}" == "$(printf 'second.example\tNO_PUBKEY')" ]
+}
+
+@test "_apt_stale_signer_hosts: fails closed when the signer lists are undefined" {
+  # Sources only linux_shared.sh, so lib/constants.sh's arrays are absent.
+  run bash -c 'log_error() { printf "%s\n" "$*" >&2; }; source "$1/lib/linux_shared.sh"; _apt_stale_signer_hosts < "$1/tests/fixtures/apt/update-stale-rotated-resolute.txt"' _ "${REPO_ROOT}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"constants.sh"* ]]
+}
+
+# --- _apt_signer_remedy ---
+
+# Asserts the remedy for $1 is exactly one line, rc 0, and leaves it in ${output}.
+_remedy_one_line() {
+  run _apt_signer_remedy "$1"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  # bats' lines drops empty lines, so also reject any embedded newline.
+  [[ "$output" != *$'\n'* ]]
+}
+
+@test "_apt_signer_remedy: download.docker.com says re-run -t developer and blames the publisher on persistence" {
+  _remedy_one_line download.docker.com
+  [[ "$output" == *"-t developer"* ]]
+  [[ "$output" == *"publisher's own key"* ]]
+}
+
+@test "_apt_signer_remedy: every re-fetch host shares the docker remedy" {
+  local _h _docker
+  _remedy_one_line download.docker.com
+  _docker="${output}"
+  for _h in pkgs.k8s.io prod-cdn.packages.k8s.io deb.releases.teleport.dev pkg.cloudflareclient.com download.virtualbox.org cli.github.com; do
+    _remedy_one_line "${_h}"
+    [[ "$output" == *"-t developer"* ]]
+    [ "$output" == "${_docker}" ]
+  done
+}
+
+@test "_apt_signer_remedy: nvidia.github.io names the keyring file to remove" {
+  _remedy_one_line nvidia.github.io
+  [[ "$output" == *"/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"* ]]
+  [[ "$output" == *"-t developer"* ]]
+}
+
+@test "_apt_signer_remedy: packages.cloud.google.com names the source list to remove" {
+  _remedy_one_line packages.cloud.google.com
+  [[ "$output" == *"/etc/apt/sources.list.d/google-cloud-sdk.list"* ]]
+  [[ "$output" == *"-t developer"* ]]
+}
+
+@test "_apt_signer_remedy: packages.opentofu.org stages, shows the fingerprint, then moves into place" {
+  _remedy_one_line packages.opentofu.org
+  [[ "$output" == *"mktemp -d"* ]]
+  [[ "$output" == *"gpg --show-keys"* ]]
+  [[ "$output" == *".gpg.new"* ]]
+  [[ "$output" == *"/etc/apt/keyrings/opentofu-archive-keyring.gpg"* ]]
+  # Quoted "$d/ring" proves $d stayed literal in the printed text.
+  [[ "$output" == *'"$d/ring"'* ]]
+  [[ "$output" == *"OpenTofu's"* ]]
+  [[ "$output" == *"--dearmor"* ]]
+  [[ "$output" == *"packages.opentofu.org/opentofu/tofu/gpgkey"* ]]
+}
+
+@test "_apt_signer_remedy: packages.microsoft.com points at MS_GPG_FPR" {
+  _remedy_one_line packages.microsoft.com
+  [[ "$output" == *"MS_GPG_FPR"* ]]
+  [[ "$output" == *"keys/microsoft.asc"* ]]
+}
+
+@test "_apt_signer_remedy: download.opensuse.org points at ALBERT_GPG_FPR" {
+  _remedy_one_line download.opensuse.org
+  [[ "$output" == *"ALBERT_GPG_FPR"* ]]
+}
+
+@test "_apt_signer_remedy: an unknown host gets the no-remedy text" {
+  _remedy_one_line example.invalid
+  [[ "$output" == *"no remedy for this host"* ]]
+}
+
+@test "_apt_signer_remedy: apt.releases.hashicorp.com has no arm and falls to the unknown text" {
+  local _unknown
+  _remedy_one_line example.invalid
+  _unknown="${output}"
+  _remedy_one_line apt.releases.hashicorp.com
+  [ "$output" == "${_unknown}" ]
 }

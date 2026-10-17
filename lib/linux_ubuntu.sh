@@ -997,8 +997,7 @@ _hashicorp_refresh_failed_line() {
 # signature-verification token: the signer is not the one keys/hashicorp.asc holds.
 # Usage: _hashicorp_rotation_hint_fires <apt output>
 _hashicorp_rotation_hint_fires() {
-  printf '%s\n' "$1" | grep -E '^[WE]:' | grep -F 'apt.releases.hashicorp.com' \
-    | grep -qE 'NO_PUBKEY|EXPKEYSIG|EXPSIG|KEYEXPIRED|REVKEYSIG|is not signed|is no longer signed'
+  printf '%s\n' "$1" | _apt_stale_signer_hosts | cut -f1 | command grep -qxF apt.releases.hashicorp.com
 }
 
 # The one next action that ends the refresh-failed line.
