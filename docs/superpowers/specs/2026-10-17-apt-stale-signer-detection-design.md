@@ -377,3 +377,28 @@ Phase 2's first red test is the next instrument, not a third lens round.
 ## Amendments
 
 - R2 -> `_apt_stale_signer_hosts` reads stdin and prints one `host<TAB>token` line per distinct host, in first-appearance order, for lines starting `W:`, `E:`, `Warning:` or `Error:` (case-sensitive) that contain one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`, taking the host of every `http://` or `https://` URL on the line (authority lowercased, with any userinfo and port removed) and ignoring token lines without a URL. — Phase 2 Task 2 code review: a raw authority made `_hashicorp_rotation_hint_fires` stop matching a source written with a port or in mixed case, which the old substring grep matched, contradicting Design §2's "does not narrow".
+- finding R8 (2026-10-17, reviewer A): DIFFERS — Two new tests (linux_shared.bats:640 and update_apt.bats:897) consume tests/fixtures/apt/update-hashicorp-stale-rotated.txt. That fixture is not added in this diff, and the new tests/fixtures/apt/README.md, the only provenance record in the diff, gives no command, tool versions or rc for it; the three fixtures the diff does add are recorded. Separately, the Testing section's tests 1-9 are not in my inputs, so I could not map them one to one, and a diff cannot show that they pass.
+- R8 reviewed: update-hashicorp-stale-rotated.txt is not new here; it was captured and committed by #340 (6ae137af) with its provenance in specs/2026-10-15-hashicorp-apt-design.md, and the missing tests/fixtures/apt/README.md row is already a backlog row on master — this branch reuses it unchanged.
+
+## Spec alignment (2026-10-17)
+
+- spec: docs/superpowers/specs/2026-10-17-apt-stale-signer-detection-design.md
+- anchor: 56723d461d8a98deb993e244fb6117ebcfa8a72d
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R8 | A | DIFFERS | Two new tests (linux_shared.bats:640 and update_apt.bats:897) consume tests/fixtures/apt/update-hashicorp-stale-rotated.txt. That fixture is not added in this diff, and the new tests/fixtures/apt/README.md, the only provenance record in the diff, gives no command, tool versions or rc for it; the three fixtures the diff does add are recorded. Separately, the Testing section's tests 1-9 are not in my inputs, so I could not map them one to one, and a diff cannot show that they pass. | - R8 reviewed: update-hashicorp-stale-rotated.txt is not new here; it was captured and committed by #340 (6ae137af) with its provenance in specs/2026-10-15-hashicorp-apt-design.md, and the missing tests/fixtures/apt/README.md row is already a backlog row on master — this branch reuses it unchanged. |
+
+### Reviewed
+
+- R8 reviewed: update-hashicorp-stale-rotated.txt is not new here; it was captured and committed by #340 (6ae137af) with its provenance in specs/2026-10-15-hashicorp-apt-design.md, and the missing tests/fixtures/apt/README.md row is already a backlog row on master — this branch reuses it unchanged.
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
