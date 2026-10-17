@@ -171,3 +171,82 @@ Cases:
 - **N3.** The install-time key-fetch conditions in `_install_ubuntu_nvidia`, `_install_ubuntu_cloud_tools` and `_install_ubuntu_misc` are unchanged.
 - **N4.** The base step's `apt update` call and message (`lib/linux_ubuntu.sh:223`) are unchanged; its stale `E:/W:` wording stays with its own P3 row.
 - **N5.** A stale signer alone never turns the `apt` section into FAIL or the run's exit code non-zero.
+
+## Multi-Lens Review
+
+Reviewed at commit: `ed61410d` (Step 7 self-review commit, before Step 8 dispatch)
+
+**Orchestrator checks made after the reports, before dispositions:**
+
+- **nala exit status.** Settled by reading the installed nala 0.16.0 source, not by a run.
+  `setup_cache()` (`nala/install.py`) refreshes on `full-upgrade`. A `FetchFailedException` goes
+  to `apt_error(err, update=False)`, because the command is not `update`. Under sudo, `apt_error`
+  prints and returns (`nala/error.py`), and nala continues. So nala exits 0 over a stale source,
+  but it prints a second, differently formatted copy of the errors into `err_apt`.
+- **Fixture provenance.** M3 is wrong. `update-hashicorp-stale-rotated.txt` was captured with
+  `apt-get update --error-on=any` (rc 100), the form `lib/linux_ubuntu.sh:1146` uses, not with
+  plain `apt-get update`. Per the HashiCorp spec's measurements table, the production form without
+  `--error-on` gives "rc 0, `W:` lines only". The ergonomics lens read the two rows of that table as
+  contradicting each other. They do not: each row is a different command.
+
+### Goal-Fit
+
+Finding:
+
+1. **HIGH:** nala's built-in refresh (`--update` is the default for upgrade) is not modelled. It
+   writes a second copy of the errors into `err_apt`, so two host lists can be parsed from two
+   different inputs.
+2. **MEDIUM:** a simpler path exists. Parse `err_apt` in `run_update` with
+   `^(W|E|Warning|Error):`. That drops R1's `mktemp` capture, the `apt`→`apt-get` switch (test 7)
+   and the tmp-root seam (test 8), and moves the remedy lines into `detail_apt`, which ends the
+   dependence on the `tail -10` budget.
+3. **LOW:** the k8s expiry case, the motivating example, depends on V1.
+
+Reads-it test passes: the consumer is the summary WARN row and `detail_apt`, persisted in
+`~/.dotfiles-update.log`.
+
+Assumption: nala exits 0 over a signature failure. It is now settled by reading the source
+(above), not by a run.
+
+Disposition:
+
+### Ergonomics
+
+Finding:
+
+1. **MAJOR:** the same nala refresh. Fix: pass `--no-update`, or measure nala.
+2. **MEDIUM:** the opentofu remedy pipes `curl` into `gpg --yes`. A failed curl writes an empty or
+   truncated live keyring.
+3. **MINOR:** the "re-fetched every run" remedy is a full `-t developer` run for one key.
+   `install_github_cli_linux` sits last in an `|| return 1` chain (`lib/workflows.sh:620-628`), and
+   its own `wget | sudo tee` (`lib/developer.sh:512`) writes an empty keyring on a failed fetch,
+   which is a pre-existing defect.
+
+Every guard the remedy table cites matches the code. No false positive was found on a healthy box.
+
+Assumption: `apt-get update` and nala both exit 0 when the **full** sources set is refreshed over a
+source whose signer changed. M2 measured a single source with `List-Cleanup=0`.
+
+Disposition:
+
+### Risk
+
+Finding:
+
+1. **MAJOR:** the same nala refresh. Fix: `--no-update`, or measure it.
+2. **MAJOR:** M3's fixture provenance is false (confirmed above). Test 5 runs an rc-100 capture
+   behind a mock that exits 0.
+3. **MINOR:** `update_system_packages` (`lib/linux_shared.sh:160-163`) maps rc 2 to 1. It has no
+   production caller, but `tests/setup_env/linux_shared.bats:44` uses it.
+4. **MINOR:** the HashiCorp refactor narrows what fires, from "host anywhere on a token line" to
+   "first URL on the line". R3 does not state this.
+5. **MINOR:** the second capture is over-engineered, because `err_apt` already tees the stream.
+   The nested pipe needs `PIPESTATUS[0]`. Adding `</dev/null` would cost nothing.
+
+Assumption: nala exits 0. Settled by reading the source (above).
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
