@@ -196,7 +196,7 @@ jobs:
 
   bash-coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 25 # p90 492s, measured 2026-08-27
+    timeout-minutes: 60 # runs 14-24 min measured 2026-10-17 (p90 492s on 2026-08-27; slowdown backlogged)
     permissions:
       contents: write
     steps:
