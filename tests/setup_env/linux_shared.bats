@@ -124,7 +124,17 @@ EOF
   _stub_dir="$(argv_probe_stub_path nala)"
   PATH="${_stub_dir}:${PATH}" run update_apt_packages
   [ "$status" -eq 0 ]
-  grep -qxF 'argv: nala [full-upgrade][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]' "${MOCK_CALLS_FILE}"
+  grep -qxF 'argv: nala [full-upgrade][--no-update][-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-confold][-y]' "${MOCK_CALLS_FILE}"
+}
+
+# nala's root callback accepts only --version/--license, so the flag must follow
+# the verb. Without it nala refreshes the lists itself and prints a second copy of
+# every signer error (tests/fixtures/apt/README.md, V2).
+@test "update_apt_packages: nala full-upgrade passes --no-update right after the verb" {
+  export UBUNTU=1
+  run update_apt_packages
+  [ "$status" -eq 0 ]
+  command grep -qE '^nala full-upgrade --no-update( |$)' "${MOCK_CALLS_FILE}"
 }
 
 # needrestart's apt Post-Invoke hook raises a debconf dialog when stdout is not a

@@ -67,7 +67,8 @@ update_apt_packages() {
   # DEBIAN_FRONTEND is set as well, for a different hang: apt's needrestart
   # Post-Invoke hook raises a debconf dialog when stdout is not a tty, and sudo
   # does not pass the caller's value through, so it must sit on this command line.
-  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade "${APT_CONFFILE_OPTS[@]}" -y \
+  # --no-update after the verb: apt update has just refreshed the lists, and nala's own refresh would print a second copy of every signer error.
+  sudo -H DEBIAN_FRONTEND=noninteractive nala full-upgrade --no-update "${APT_CONFFILE_OPTS[@]}" -y \
     < /dev/null || { log_error "nala full-upgrade failed"; return 1; }
   sudo -H DEBIAN_FRONTEND=noninteractive nala autoremove -y < /dev/null || { log_error "nala autoremove failed"; return 1; }
   log_info "Updated apt packages"
