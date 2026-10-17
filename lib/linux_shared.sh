@@ -174,16 +174,23 @@ update_system_packages() {
 APT_SIGNER_PREFIXES=("W:" "E:" "Warning:" "Error:")
 APT_SIGNER_TOKENS=("NO_PUBKEY" "EXPKEYSIG" "EXPSIG" "KEYEXPIRED" "REVKEYSIG" "is not signed" "is no longer signed")
 
+# Joins its arguments with "|" for an awk -v value: BWK awk (macOS) rejects a
+# literal newline in -v, and no prefix or token contains "|".
+_apt_signer_awk_list() {
+  local IFS='|'
+  printf '%s' "$*"
+}
+
 # Reads apt output on stdin; prints "host<TAB>token" once per distinct host
 # named on a signature-failure line, so callers need not re-parse apt's wording.
 _apt_stale_signer_hosts() {
   local _prefixes _tokens
-  _prefixes="$(printf '%s\n' "${APT_SIGNER_PREFIXES[@]}")" || return 1
-  _tokens="$(printf '%s\n' "${APT_SIGNER_TOKENS[@]}")" || return 1
+  _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
+  _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
   awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" '
     BEGIN {
-      np = split(prefixes, pre, "\n")
-      nt = split(tokens, tok, "\n")
+      np = split(prefixes, pre, "|")
+      nt = split(tokens, tok, "|")
     }
     {
       ok = 0

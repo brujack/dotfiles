@@ -373,3 +373,13 @@ EOF
   [[ "$output" == *"download.docker.com"* ]]
   [[ "$output" == *"second.example"* ]]
 }
+
+@test "_apt_signer_awk_list: joined value has no newline (BWK awk rejects one in -v)" {
+  run _apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *$'\n'* ]]
+  [ "$output" == "W:|E:|Warning:|Error:" ]
+  run _apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}"
+  [[ "$output" != *$'\n'* ]]
+  [[ "$output" == "NO_PUBKEY|"*"|is no longer signed" ]]
+}
