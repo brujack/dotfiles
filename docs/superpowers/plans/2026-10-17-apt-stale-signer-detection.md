@@ -1,5 +1,7 @@
 # apt Stale-Signer Detection Implementation Plan
 
+> **Status: DONE** — merged in #343 (f4e14d26), 2026-10-17. V3 (a live `./setup_env.sh -t update` on `claude`) is still to run.
+
 spec: docs/superpowers/specs/2026-10-17-apt-stale-signer-detection-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
