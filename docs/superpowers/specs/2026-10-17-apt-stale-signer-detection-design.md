@@ -1,99 +1,132 @@
 # apt stale-signer detection in `-t update`
 
 - **Date:** 2026-10-17
-- **Status:** Draft (Phase 1)
+- **Status:** Draft (Phase 1), revised after Step 8 round 1
 - **Backlog row:** P2 bugs and security, "A rotated or expired third-party apt key goes stale silently"
 - **Prior work:** `2026-10-15-hashicorp-apt-design.md` (round 4 E1''', round 5 G1⁗/E1⁗)
 
 ## Problem
 
 A box that has already fetched a third-party apt source keeps its old index files when the
-source's signer changes. `apt-get update` exits 0 and prints `W:`/`E:` lines naming the source
-and a signature token, and nothing else happens. The source stops updating. `-t update`'s `apt`
-section still shows `[OK]`, and the run exits 0. The warnings scroll past mid-stream in the
-terminal and survive only in `err_apt`, which nothing reads unless the section fails.
+source's signer changes. The refresh exits 0, prints warning lines that name the source and a
+signature token, and does nothing else. The source stops updating. `-t update`'s `apt` section
+still shows `[OK]`, and the run exits 0. The warnings scroll past mid-stream and survive only in
+`err_apt`, which nothing reads unless the section fails.
 
-Today only HashiCorp has a detector, `_hashicorp_rotation_hint_fires`
-(`lib/linux_ubuntu.sh`). It runs during `-t setup`/`-t developer` for that one host. HashiCorp's
-source is transient (it exists only while its install step runs), so `-t update` never sees it.
+The `[OK]` depends on `nala full-upgrade` also exiting 0. nala refreshes the lists itself
+(`--update` is the default for upgrade), but that refresh does not fail the command. The installed
+nala 0.16.0 source shows this: `setup_cache()` sends a `FetchFailedException` to
+`apt_error(err, update=False)`, which under sudo prints and returns. That was established by
+reading the source, not by a run. V2 measures it.
+
+Today only HashiCorp has a detector, `_hashicorp_rotation_hint_fires` (`lib/linux_ubuntu.sh`). It
+runs during `-t setup`/`-t developer`, for that one host, against the output of
+`apt-get update --error-on=any`. HashiCorp's source is transient (it exists only while its install
+step runs), so `-t update` never sees it.
 
 ## Measurements
 
 All measured 2026-10-17 unless stated otherwise.
 
-| #   | What                               | Command                                                                                               | Population measured                                               | Result                                                                                                                                                                                                                                                                                                                                          |
-| --- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1  | Current state                      | `sudo -n apt-get update 2>&1`, then `grep -E '^(W\|E\|Warning\|Error):'`                              | `claude` and `workstation`, both resolute, apt 3.2.0, as of today | rc 0 on both, 0 matching lines. No source is stale on either box today.                                                                                                                                                                                                                                                                         |
-| M2  | Silent rc 0 after a signer change  | reproduced in HashiCorp round 4 (E1''')                                                               | `claude` and `workstation`, resolute, HashiCorp source only       | rc 0, old lists kept, `W:` and `E:` lines printed. Not measured on noble. Not measured for expiry, only for a key mismatch.                                                                                                                                                                                                                     |
-| M3  | Line shape                         | `tests/fixtures/apt/update-hashicorp-stale-rotated.txt` (captured in #340 with `apt-get update 2>&1`) | `claude`, resolute, one host                                      | Five token-bearing lines, each with `https://apt.releases.hashicorp.com`. Includes `W: OpenPGP signature verification failed: <url> …NO_PUBKEY…` and `E: The repository '<url> … InRelease' is not signed.`                                                                                                                                     |
-| M4  | Host apt prints                    | clean `apt-get update` capture                                                                        | `claude`, 13 sources                                              | `pkgs.k8s.io` is printed as `prod-cdn.packages.k8s.io` (a redirect). Every other source prints the host its `.list`/`.sources` file names. `download.virtualbox.org` is `http://`.                                                                                                                                                              |
-| M5  | Key expiry horizon                 | `gpg --with-colons --list-keys` over each `signed-by` keyring                                         | `claude` only                                                     | `kubernetes-apt-keyring.gpg` primary `9A296436` expires **2026-12-28**. `githubcli-archive-keyring.gpg` holds `75716059` (expired 2026-09-05) and `62313325` (no expiry), so it still verifies.                                                                                                                                                 |
-| M6  | Which install paths re-fetch a key | read `lib/linux_ubuntu.sh`, `lib/developer.sh`                                                        | code, all Linux boxes                                             | Every `-t developer` run re-fetches docker, k8s, teleport, cloudflare, virtualbox and github-cli. The others re-fetch only on a condition: nvidia when its keyring is absent, gcloud when its `.list` is absent, opentofu when `tofu` is absent. edge, microsoft-prod and albert are fingerprint-pinned, and nothing re-fetches them by design. |
+- **M1, current state.** Ran `sudo -n apt-get update 2>&1`, then
+  `grep -E '^(W|E|Warning|Error):'`, on `claude` and `workstation` (both resolute, apt 3.2.0).
+  Both gave rc 0 and 0 matching lines. No source is stale on either box today.
+- **M2, silent rc 0 after a signer change.** From the HashiCorp spec's measurements table, a
+  single source with `List-Cleanup=0` on `claude`/`workstation`, resolute. "Fetched once, keyring
+  swapped, no `--error-on`" gave rc 0, `W:` lines only, and the old index was used. With
+  `--error-on=any` the same case gave rc 100 and `E: Failed to fetch …`.
+  - Not measured: the full sources set, the `apt` front end, noble, expiry.
+- **M3, existing fixture.** `tests/fixtures/apt/update-hashicorp-stale-rotated.txt` was captured
+  with `apt-get update --error-on=any` (rc 100), not with the production form. Its `E:` lines are
+  that flag's output. It is a valid input for the HashiCorp install step, which runs that form, and
+  not a valid input for `-t update`. (The first draft of this spec claimed otherwise. Step 8 round 1
+  caught it.)
+- **M4, host apt prints.** From a clean `apt-get update` capture on `claude` (13 sources):
+  `pkgs.k8s.io` is printed as `prod-cdn.packages.k8s.io`, a redirect. Every other source prints
+  the host its `.list`/`.sources` file names. `download.virtualbox.org` is `http://`.
+- **M5, key expiry horizon.** `gpg --with-colons --list-keys` over each `signed-by` keyring on
+  `claude` only. `kubernetes-apt-keyring.gpg` primary `9A296436` expires **2026-12-28**.
+  `githubcli-archive-keyring.gpg` holds `75716059` (expired 2026-09-05) and `62313325` (no
+  expiry), so it still verifies.
+- **M6, which install paths re-fetch a key.** From reading `lib/linux_ubuntu.sh` and
+  `lib/developer.sh`, which applies to all Linux boxes:
+  - Every `-t developer` run re-fetches docker, k8s, teleport, cloudflare, virtualbox and
+    github-cli.
+  - nvidia re-fetches only when its keyring is absent, gcloud only when its `.list` is absent,
+    and opentofu only when `tofu` is absent.
+  - edge, microsoft-prod and albert are fingerprint-pinned, and nothing re-fetches them by design.
+  - All three Step 8 lenses confirmed the guards against the code.
 
-**Premise correction.** The backlog row says "nothing re-fetches a key". M6 shows that is false
-for six hosts under `-t developer` and conditionally true for three more. The real gap is the
-routine path: `-t update` never re-fetches and never reports, and `-t developer` is run rarely.
+**Premise correction.** The backlog row says "nothing re-fetches a key". M6 shows that is false for
+six hosts under `-t developer` and conditionally true for three more. The real gap is the routine
+path: `-t update` never re-fetches and never reports, and `-t developer` is run rarely.
 
 ## Design
 
-### 1. Detection — `lib/linux_shared.sh`
+### 1. One refresh — `update_apt_packages` (`lib/linux_shared.sh`)
 
-- `update_apt_packages` refreshes with `sudo -H apt-get update`, not `apt update`. On apt 3.x,
-  `apt` prints `Warning:`/`Error:` and `apt-get` prints `W:`/`E:` (round 5 G1⁗). The output is
-  shown live and also captured into a temp file. Only `apt-get`'s exit status decides failure,
-  as it does today. The temp file sits in a `mktemp -d` directory and is removed on every path
-  (`shell.md` subshell-EXIT-trap rule). It is never left in `$TMPDIR`.
-- New `_apt_stale_signer_hosts` reads `apt-get update` output on stdin. For every line that
-  starts with `W:` or `E:` and contains one of the tokens `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`,
-  `KEYEXPIRED`, `REVKEYSIG`, `is not signed` or `is no longer signed`, it takes the authority of
-  the first `https?://` URL on the line. It prints `host<TAB>token`, once per distinct host, in
-  order of first appearance, with the token from that first line. A line with a token but no
-  URL is ignored (for example `E: Some index files failed to download`).
-- The token list exists once. `_hashicorp_rotation_hint_fires` becomes a call to
-  `_apt_stale_signer_hosts` that checks whether `apt.releases.hashicorp.com` is among the hosts.
+- The refresh stays `sudo -H apt update`. Its output already reaches `err_apt` through
+  `run_update`'s `2>&1 | tee` (`lib/workflows.sh`).
+- `nala full-upgrade` gains `--no-update`, so the lists are fetched once per run, by the
+  `apt update` that has just succeeded. This removes nala's second copy of the errors from
+  `err_apt`, and the second network round trip.
+- Nothing else in the function changes: its return codes, its other flags, and its stdin
+  redirect stay as they are.
 
-### 2. Remedy routing — `_apt_signer_remedy <host>`
+### 2. Parser — `_apt_stale_signer_hosts` (`lib/linux_shared.sh`)
+
+- Reads apt output on stdin.
+- Considers only lines that start with `W:`, `E:`, `Warning:` or `Error:`. This is
+  case-sensitive, so apt's `WARNING: apt does not have a stable CLI interface` is excluded.
+- A considered line must contain one of these tokens: `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`,
+  `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`.
+- For every `http://` or `https://` URL on such a line, it takes the URL's authority. It prints
+  `host<TAB>token` once per distinct host, in order of first appearance, with the token from the
+  first line that named that host. A token line with no URL is ignored.
+- The prefixes and the token list each exist once.
+- `_hashicorp_rotation_hint_fires` becomes a call to `_apt_stale_signer_hosts` that checks for
+  `apt.releases.hashicorp.com` among the hosts. Because every URL on a line is taken, it still
+  fires whenever the host appears anywhere on a token line, so its behaviour does not narrow.
+  Widening the prefixes changes nothing for it, because its input comes from `apt-get`, which
+  prints only `W:`/`E:`.
+
+### 3. Remedy routing — `_apt_signer_remedy <host>`
 
 A `case` on the host apt prints (M4), returning one remedy string:
 
-| Host(s)                                                                                                                                                                | Class                  | Remedy text (substance)                                                                                                                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `download.docker.com`, `pkgs.k8s.io`, `prod-cdn.packages.k8s.io`, `deb.releases.teleport.dev`, `pkg.cloudflareclient.com`, `download.virtualbox.org`, `cli.github.com` | re-fetched every run   | re-run `./setup_env.sh -t developer` (it re-fetches this key)                                                                                                                                                  |
-| `nvidia.github.io`                                                                                                                                                     | re-fetched when absent | `sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`, then re-run `./setup_env.sh -t developer`                                                                                                  |
-| `packages.cloud.google.com`                                                                                                                                            | re-fetched when absent | `sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list`, then re-run `./setup_env.sh -t developer`                                                                                                             |
-| `packages.opentofu.org`                                                                                                                                                | re-fetched when absent | `curl -fsSL https://packages.opentofu.org/opentofu/tofu/gpgkey \| sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg` (the install step re-fetches only when `tofu` is absent) |
-| `packages.microsoft.com`                                                                                                                                               | pinned                 | verify Microsoft's new key, replace `keys/microsoft.asc` and bump `MS_GPG_FPR` in `lib/constants.sh`                                                                                                           |
-| `download.opensuse.org`                                                                                                                                                | pinned                 | verify the albert OBS key's new fingerprint and bump `ALBERT_GPG_FPR` in `lib/constants.sh`                                                                                                                    |
-| anything else                                                                                                                                                          | unknown                | dotfiles has no remedy for this host; refresh its key by hand                                                                                                                                                  |
+| Host(s)                                                                                                                                                                | Class                  | Remedy text (substance)                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `download.docker.com`, `pkgs.k8s.io`, `prod-cdn.packages.k8s.io`, `deb.releases.teleport.dev`, `pkg.cloudflareclient.com`, `download.virtualbox.org`, `cli.github.com` | re-fetched every run   | re-run `./setup_env.sh -t developer` (it re-fetches this key)                                                                                                                                                                                                                                                                                                   |
+| `nvidia.github.io`                                                                                                                                                     | re-fetched when absent | `sudo rm /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                   |
+| `packages.cloud.google.com`                                                                                                                                            | re-fetched when absent | `sudo rm /etc/apt/sources.list.d/google-cloud-sdk.list`, then re-run `./setup_env.sh -t developer`                                                                                                                                                                                                                                                              |
+| `packages.opentofu.org`                                                                                                                                                | re-fetched when absent | `curl -fsSL -o /tmp/opentofu.gpgkey https://packages.opentofu.org/opentofu/tofu/gpgkey && [ -s /tmp/opentofu.gpgkey ] && sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/opentofu-archive-keyring.gpg /tmp/opentofu.gpgkey` (the install step re-fetches only when `tofu` is absent; a failed or empty download stops before the live keyring is touched) |
+| `packages.microsoft.com`                                                                                                                                               | pinned                 | verify Microsoft's new key, replace `keys/microsoft.asc` and bump `MS_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                            |
+| `download.opensuse.org`                                                                                                                                                | pinned                 | verify the albert OBS key's new fingerprint and bump `ALBERT_GPG_FPR` in `lib/constants.sh`                                                                                                                                                                                                                                                                     |
+| anything else                                                                                                                                                          | unknown                | dotfiles has no remedy for this host; refresh its key by hand                                                                                                                                                                                                                                                                                                   |
 
-`apt.releases.hashicorp.com` is deliberately absent, because its source is never present when
-`-t update` runs. If it ever appears, it takes the unknown branch, which still WARNs.
+- `apt.releases.hashicorp.com` is deliberately absent, because its source is never present
+  when `-t update` runs. If it ever appears, it takes the unknown branch, which still WARNs.
+- A comment above the `case` names the guarded install functions (`_install_ubuntu_nvidia`,
+  `_install_ubuntu_cloud_tools`, `_install_ubuntu_misc`). A change to one of those guards
+  updates its row in the same change.
 
-Each remedy names a function or path. When an install guard changes, the matching row is
-updated in the same change. A comment above the `case` says so and names the functions:
-`_install_ubuntu_nvidia`, `_install_ubuntu_cloud_tools`, `_install_ubuntu_misc`.
+### 4. Reporting and verdict — `run_update` (`lib/workflows.sh`)
 
-### 3. Reporting and verdict
+- After `update_apt_packages 2>&1 | tee err_apt`, `run_update` runs `_apt_stale_signer_hosts`
+  over `err_apt`. That file is the only input.
+- **rc 0 and at least one stale host.** `_update_record_end "apt" 0`, then
+  `_update_warn "apt" "signer check failed for <host>[, <host>…] — see detail"`. Then
+  `detail_apt` is written with one line per host:
+  `<host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
+  The detail holds only these lines, never a `tail` of `err_apt`, so no budget can push them out.
+  The run exits 0.
+- **rc ≠ 0.** The section FAILs as today, and `_update_record_end`'s FAIL path writes the
+  `err_apt` tail into `detail_apt`. If any host is stale, its lines are appended after that tail.
+- **rc 0 and no stale host.** OK, as today.
+- `update_apt_packages`' contract does not change, so `update_system_packages` and its test are
+  unaffected.
 
-- For each stale host, `update_apt_packages` emits one `log_warn` line:
-  `apt: <host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
-  The lines are emitted **after** the upgrade and autoremove steps. That puts them last in
-  `err_apt`, inside the `tail -10` budget of `_update_write_detail_from_err`.
-- Return codes:
-  - **0:** clean.
-  - **1:** any step failed, as today.
-  - **2:** at least one stale host, and every step succeeded.
-  - If a step fails, the stale lines are still emitted before returning 1. That covers both
-    `apt-get update` failing and a later step failing.
-- `run_update` maps rc 2 the way the flatpak section does. It records `_update_record_end "apt" 0`,
-  then `_update_warn "apt" "signer check failed for <host>[, <host>…] — see detail"`, then
-  `_update_write_detail_from_err "apt" "update output"`. The host list in the summary comes from
-  running `_apt_stale_signer_hosts` over `err_apt`, so the parser has one definition. A
-  WARN-only run exits 0.
-- The upgrade still runs when a host is stale. Updates from every other source must not stop
-  because one source went stale.
-
-### 4. Coverage bound (stated, not hidden)
+### 5. Coverage bound (stated, not hidden)
 
 A signer **rotation** produces a new `InRelease` signed by a key the box lacks. apt fetches it,
 fails verification, and warns on every run until it is fixed. So detection fires on the first
@@ -108,64 +141,65 @@ records the predictive doctor check this spec declines (Alternatives).
 
 ## Alternatives
 
-- **Predictive doctor expiry check** (read each `signed-by` keyring, WARN when no signing key
-  outlives N days). It would have flagged k8s's 2026-12-28 expiry today. Declined by the operator
-  2026-10-17 in favour of `-t update` only. It costs more surface: armored and binary keyrings,
-  inline `Signed-By` blocks in `.sources` files, and subkey semantics. It also catches only
-  expiry, not rotation. Revisit if V1 shows expiry is silent.
-- **Auto re-fetch in `-t update`** for the re-fetchable hosts. Declined by the operator: trust
-  would change without the operator seeing it, and `-t update` would gain a write path into
-  `/etc/apt`.
-- **Generic WARN with no remedy routing.** Declined by the operator: the operator would have to
-  work out which of four routes applies.
-- **A drift guard deriving the host table from the code.** It was in the outline the operator
-  approved, and this spec drops it. The hosts cannot be derived statically: nvidia's
-  `.list` comes from upstream (`nvidia.github.io` never appears as a literal in a source line),
-  and k8s is printed under a redirect host (M4). A guard derived from the code would be wrong
-  in exactly the cases that matter. The cost of drift is bounded: an unmapped host still WARNs,
-  only with the unknown remedy. **This is a change from the approved outline and needs the
-  operator's confirmation at spec review.**
+- **Predictive doctor expiry check.** Declined by the operator 2026-10-17. Revisit if V1 shows
+  expiry is silent.
+- **Auto re-fetch in `-t update`.** Declined by the operator: trust would change without the
+  operator seeing it, and `-t update` would gain a write path into `/etc/apt`.
+- **Generic WARN with no remedy routing.** Declined by the operator.
+- **A second capture inside `update_apt_packages`, with an `apt-get` refresh, `mktemp` and a
+  tmp-root seam.** This was the first draft. It was replaced (Step 8 round 1, goal-fit and risk),
+  because `err_apt` already holds the stream, and because a second capture meant two parser
+  inputs once nala's own refresh was counted.
+- **Measuring nala instead of passing `--no-update`.** Rejected: two copies of every error would
+  stay in `err_apt`, and the second refresh is redundant work.
+- **A drift guard deriving the host table from the code.** It was in the approved outline and is
+  dropped here. The hosts cannot be derived statically: nvidia's `.list` comes from upstream, and
+  k8s is printed under a redirect host (M4). The cost of drift is bounded, because an unmapped host
+  still WARNs, only with the unknown remedy. **This needs the operator's confirmation at spec
+  review.**
 
 ## Testing
 
-Fixtures are captured from real `apt-get update 2>&1` output, never hand-typed. A multi-host
-fixture is built by concatenating captured files, so every line is still real.
+Fixtures are captured from real output, never hand-typed, and each is committed with its command,
+tool versions and rc. A multi-host fixture is built by concatenating captured files, so every line
+is still real. The fixtures come from V2:
 
-- `tests/fixtures/apt/update-clean-claude.txt`: the M4 capture.
-- `tests/fixtures/apt/update-hashicorp-stale-rotated.txt`: the existing M3 fixture.
-- A k8s-redirect stale capture and a noble capture, both from V2.
+- **stale-rotated:** a fetched source with its keyring swapped, full sources set, production
+  `apt update 2>&1`, rc 0.
+- **the same case on noble.**
+- **clean:** the M1 capture, re-taken with `apt update`.
 
 Cases:
 
-1. **Positive control (pins a specific derived value):** the stale-rotated fixture produces
-   exactly `apt.releases.hashicorp.com<TAB>NO_PUBKEY` and nothing else.
-2. The clean fixture produces empty output, and `update_apt_packages` returns 0.
-3. The two-host concatenation produces two lines in first-appearance order.
-4. `_apt_signer_remedy`: one case per class, plus the unknown branch, each asserting the
+1. **Positive control.** The stale-rotated fixture yields exactly `<host><TAB><token>` for the
+   source V2 staled, and nothing else.
+2. The clean fixture yields empty output.
+3. A two-host concatenation yields two lines in first-appearance order.
+4. A token line carrying two URLs yields both hosts.
+5. `_apt_signer_remedy`: one case per class, plus the unknown branch, each asserting the
    substance from the table (host, path or constant name).
-5. Through `run_update`, with the `apt-get` mock printing the stale fixture on stderr and
-   exiting 0: the summary row is `WARN` and names the host, the detail file contains the
-   `apt: … is not updating` line, and the run exits 0.
-6. The stale fixture plus a failing `nala full-upgrade`: rc 1, and the stale line is still
-   emitted.
-7. The mock records that the refresh is `apt-get update`, not `apt update`.
-8. The temp directory is gone after both a successful run and a failing one. The test uses its
-   own tmp-root seam, because BSD `mktemp -d` with a template ignores `TMPDIR`.
+6. Through `run_update`, with the apt mock printing the stale fixture and nala exiting 0:
+   - the summary row is `WARN` and names the host,
+   - `detail_apt` contains the `… is not updating …` line and the remedy,
+   - the run exits 0.
+7. The same with a failing nala: the row is FAIL, and `detail_apt` holds the error tail
+   followed by the stale line.
+8. The nala call carries `--no-update` (mock call log).
 9. The existing `_hashicorp_rotation_hint_fires` tests pass unchanged.
 
 ## Requirements
 
-- **R1.** `update_apt_packages` refreshes with `sudo -H apt-get update`, shows its output live, captures it to a file inside a `mktemp -d` directory that is removed on every return path, and treats only `apt-get`'s exit status as refresh failure.
-- **R2.** `_apt_stale_signer_hosts` reads stdin and prints one `host<TAB>token` line per distinct host, in first-appearance order, for lines starting `W:` or `E:` that contain one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`, taking the authority of the first `https?://` URL on the line and ignoring token lines without a URL.
-- **R3.** The token list is defined once, and `_hashicorp_rotation_hint_fires` decides by calling `_apt_stale_signer_hosts`.
-- **R4.** `_apt_signer_remedy <host>` returns the remedy for each host and class in Design section 2's table, and the unknown-host text for any other host.
-- **R5.** For each stale host, `update_apt_packages` emits one `log_warn` line of the form `apt: <host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`, after the upgrade and autoremove steps, or before returning 1 when a step failed.
-- **R6.** `update_apt_packages` returns 0 with no stale host, 2 with at least one stale host when every step succeeded, and 1 when any step failed.
-- **R7.** `run_update` records `apt` rc 2 as WARN via `_update_record_end "apt" 0` then `_update_warn "apt" "signer check failed for <hosts, comma-joined> — see detail"` and `_update_write_detail_from_err`, and a run whose only non-OK section is that WARN exits 0.
-- **R8.** Tests 1-9 in the Testing section exist and pass, with fixtures captured from real `apt-get update 2>&1` output.
-- **V1.** In an unprivileged sandbox, measure whether `apt-get update` warns for a source whose key has expired (key built with `--faked-system-time`) when upstream `InRelease` is unchanged since the last fetch, and when it is re-published. Record both results in this spec. If the first is silent, amend Design section 4 to state the bound and add a P2 backlog row for the doctor expiry check.
-- **V2.** Capture a stale-signer `apt-get update 2>&1` for a redirected source (k8s or equivalent) and on noble (an `ubuntu:24.04` container on `claude`). Confirm `_apt_stale_signer_hosts` returns the host apt actually printed, and commit both captures as fixtures.
-- **V3.** After merge, run `./setup_env.sh -t update` on `claude`. The `apt` row reads OK, and no `apt: … is not updating` line appears, because no source is stale today (M1).
+- **R1.** `update_apt_packages` passes `--no-update` to `nala full-upgrade` and is otherwise unchanged, including its return codes.
+- **R2.** `_apt_stale_signer_hosts` reads stdin and prints one `host<TAB>token` line per distinct host, in first-appearance order, for lines starting `W:`, `E:`, `Warning:` or `Error:` (case-sensitive) that contain one of `NO_PUBKEY`, `EXPKEYSIG`, `EXPSIG`, `KEYEXPIRED`, `REVKEYSIG`, `is not signed`, `is no longer signed`, taking the authority of every `http://` or `https://` URL on the line and ignoring token lines without a URL.
+- **R3.** The prefix set and the token list are each defined once, and `_hashicorp_rotation_hint_fires` decides by checking whether `_apt_stale_signer_hosts` lists `apt.releases.hashicorp.com`.
+- **R4.** `_apt_signer_remedy <host>` returns the remedy for each host and class in Design section 3's table, and the unknown-host text for any other host.
+- **R5.** When `update_apt_packages` returns 0 and `_apt_stale_signer_hosts` over `err_apt` lists at least one host, `run_update` records the `apt` section with `_update_record_end "apt" 0` and `_update_warn "apt" "signer check failed for <hosts, comma-joined> — see detail"`, and writes `detail_apt` containing, per host, `<host> is not updating: signature check failed (<token>): signer rotated or expired, or a proxy served unsigned data; <remedy>`.
+- **R6.** When `update_apt_packages` returns non-zero, the `apt` section FAILs as today and any stale-host lines are appended to `detail_apt` after the error tail.
+- **R7.** A run whose only non-OK section is the `apt` stale-signer WARN exits 0.
+- **R8.** Tests 1-9 in the Testing section exist and pass, with fixtures captured from real output and committed with their command, tool versions and rc.
+- **V1.** In an unprivileged sandbox, measure whether `apt update` warns for a source whose key has expired (key built with `--faked-system-time`) when upstream `InRelease` is unchanged since the last fetch, and when it is re-published. Record both results in this spec. If the first is silent, amend Design section 5 to state the bound and add a P2 backlog row for the doctor expiry check.
+- **V2.** In a sandbox holding the full sources set of `claude` (and again on noble, in an `ubuntu:24.04` container), fetch once, swap one source's keyring, then record the output and rc of `apt update 2>&1` and of `nala full-upgrade --no-update -y` and `nala full-upgrade -y`. Commit the captures as the Testing fixtures, and confirm both `apt update` and nala exit 0.
+- **V3.** After merge, run `./setup_env.sh -t update` on `claude`; the `apt` row reads OK and `detail_apt` carries no stale-host line, because no source is stale today (M1).
 - **N1.** `-t update` does not write, fetch or delete any keyring, source file or apt trust setting.
 - **N2.** No doctor check and no keyring-expiry parsing are added.
 - **N3.** The install-time key-fetch conditions in `_install_ubuntu_nvidia`, `_install_ubuntu_cloud_tools` and `_install_ubuntu_misc` are unchanged.
@@ -183,7 +217,7 @@ Reviewed at commit: `ed61410d` (Step 7 self-review commit, before Step 8 dispatc
   to `apt_error(err, update=False)`, because the command is not `update`. Under sudo, `apt_error`
   prints and returns (`nala/error.py`), and nala continues. So nala exits 0 over a stale source,
   but it prints a second, differently formatted copy of the errors into `err_apt`.
-- **Fixture provenance.** M3 is wrong. `update-hashicorp-stale-rotated.txt` was captured with
+- **Fixture provenance.** M3 was wrong. `update-hashicorp-stale-rotated.txt` was captured with
   `apt-get update --error-on=any` (rc 100), the form `lib/linux_ubuntu.sh:1146` uses, not with
   plain `apt-get update`. Per the HashiCorp spec's measurements table, the production form without
   `--error-on` gives "rc 0, `W:` lines only". The ergonomics lens read the two rows of that table as
@@ -208,7 +242,13 @@ Reads-it test passes: the consumer is the summary WARN row and `detail_apt`, per
 Assumption: nala exits 0 over a signature failure. It is now settled by reading the source
 (above), not by a run.
 
-Disposition:
+Disposition: **Addressed (operator, 2026-10-17).**
+
+- Finding 1: `nala --no-update` (R1).
+- Finding 2: adopted wholesale. The parse moved to `run_update` over `err_apt`, and the second
+  capture, the `apt-get` switch and the tmp seam were deleted (Design sections 1 and 4; R5, R6).
+- Finding 3: stands as stated in Design section 5.
+- Assumption: V2 now measures nala's rc as well.
 
 ### Ergonomics
 
@@ -227,7 +267,13 @@ Every guard the remedy table cites matches the code. No false positive was found
 Assumption: `apt-get update` and nala both exit 0 when the **full** sources set is refreshed over a
 source whose signer changed. M2 measured a single source with `List-Cleanup=0`.
 
-Disposition:
+Disposition: **Addressed (operator, 2026-10-17).**
+
+- Finding 1: `--no-update` (R1).
+- Finding 2: the opentofu remedy now downloads to a file, checks it is non-empty, then dearmors.
+- Finding 3: the heavy remedy is accepted as is (rare event). The gh empty-keyring defect becomes
+  a P2 backlog row.
+- Assumption: V2 measures the full sources set, for both `apt update` and nala.
 
 ### Risk
 
@@ -245,7 +291,13 @@ Finding:
 
 Assumption: nala exits 0. Settled by reading the source (above).
 
-Disposition:
+Disposition: **Addressed (operator, 2026-10-17).**
+
+- Finding 1: `--no-update`.
+- Finding 2: M3 corrected, fixtures recaptured in production form by V2.
+- Finding 3: moot, since `update_apt_packages`' rc contract no longer changes.
+- Finding 4: the parser takes every URL on a line (R2), so nothing narrows.
+- Finding 5: moot, since the second capture was removed.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
