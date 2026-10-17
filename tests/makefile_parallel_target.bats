@@ -96,7 +96,7 @@ _run_make_dry() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"running bats serially: HAVE_PARALLEL is not yes"* ]]
   local serial_line
-  serial_line="$(printf '%s\n' "$output" | grep -E '^bats tests/')"
+  serial_line="$(printf '%s\n' "$output" | grep -E '^bats --print-output-on-failure tests/')"
   [ -n "$serial_line" ]
   [[ "$serial_line" != *"--jobs"* ]]
   [[ "$serial_line" == *"tests/setup_env/unit.bats"* ]]
@@ -196,7 +196,7 @@ _run_make_dry() {
     printf 'carved-out file is still in the parallel pool: %s\n' "$jobs_line" >&2
     return 1
   fi
-  printf '%s\n' "$output" | grep -qx 'bats tests/setup_env/git_hooks.bats'
+  printf '%s\n' "$output" | grep -qx 'bats --print-output-on-failure tests/setup_env/git_hooks.bats'
 }
 
 @test "serial path plus a carve-out does not run the carved-out file twice" {
@@ -237,4 +237,38 @@ _run_make_dry() {
   local n
   n="$(printf '%s\n' "$output" | grep -c '^bats ')"
   [ "$n" -eq 1 ]
+}
+
+# _bats_lines_all_print_output -- every `bats` recipe line in $output carries
+# --print-output-on-failure, and there is at least one. bats 1.10 (CI) prints
+# a failing test's $output only with that flag; without it a one-off CI flake
+# (update_signals.bats, PR #340) leaves no record of what the test saw.
+_bats_lines_all_print_output() {
+  local lines
+  lines="$(printf '%s\n' "$output" | grep -E '^bats ')"
+  [ -n "$lines" ] || { printf 'no bats recipe line in output\n' >&2; return 1; }
+  if printf '%s\n' "$lines" | grep -v -- '--print-output-on-failure'; then
+    printf 'bats line(s) above lack --print-output-on-failure\n' >&2
+    return 1
+  fi
+}
+
+@test "every bats recipe line prints a failing test's output: parallel, serial, carve-out" {
+  _enable_parallel
+  _run_make_dry JOBS=12 BATS_SERIAL_FILES=tests/setup_env/git_hooks.bats
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -cE '^bats ')" -eq 2 ]
+  _bats_lines_all_print_output
+
+  _disable_parallel
+  _run_make_dry JOBS=12
+  [ "$status" -eq 0 ]
+  _bats_lines_all_print_output
+}
+
+@test "test-unit prints a failing test's output" {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory -C "${REPO_ROOT}" -n test-unit
+  [ "$status" -eq 0 ]
+  _bats_lines_all_print_output
 }

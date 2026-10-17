@@ -22,6 +22,10 @@ $(error JOBS must be a positive integer, got '$(JOBS)' (from $(origin JOBS)))
 endif
 
 BATS := $(shell command -v bats 2>/dev/null)
+# bats 1.10 (what CI installs) prints a failing test's $output only with
+# this flag, so without it a one-off CI flake leaves no record of what the
+# test saw (update_signals.bats on PR #340).
+BATS_FLAGS := --print-output-on-failure
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 UV := $(shell command -v uv 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
@@ -163,16 +167,16 @@ ifeq ($(strip $(BATS_ALL_FILES)),)
 # parse-time $(error): that would abort `make help` too.
 	@printf "no .bats files found under tests/ (BATS_ALL_FILES is empty) -- refusing to report a pass over zero tests\n" >&2; exit 1
 else ifeq ($(HAVE_PARALLEL),yes)
-	bats --jobs $(JOBS) $(BATS_PARALLEL_FILES)
+	bats --jobs $(JOBS) $(BATS_FLAGS) $(BATS_PARALLEL_FILES)
 else
 	@printf "running bats serially: HAVE_PARALLEL is not yes -- GNU parallel absent, or overridden on the command line (install: brew install parallel / sudo apt-get install parallel; force with make test HAVE_PARALLEL=)\n"
 # BATS_PARALLEL_FILES, not BATS_ALL_FILES: a carved-out file is run by the
 # phase below, so the unfiltered list would run it twice. Both runs pass, so
 # no assertion about outcomes would have caught it.
-	bats $(BATS_PARALLEL_FILES)
+	bats $(BATS_FLAGS) $(BATS_PARALLEL_FILES)
 endif
 ifneq ($(strip $(BATS_SERIAL_FILES)),)
-	bats $(BATS_SERIAL_FILES)
+	bats $(BATS_FLAGS) $(BATS_SERIAL_FILES)
 endif
 
 # Python here is .claude/scripts/triage_log.py, vendored from ai-config so
@@ -218,7 +222,7 @@ test-unit:
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
-	bats tests/setup_env/unit.bats tests/setup_env/profiles.bats tests/zshrc.d/unit.bats
+	bats $(BATS_FLAGS) tests/setup_env/unit.bats tests/setup_env/profiles.bats tests/zshrc.d/unit.bats
 
 changelog:
 	git-cliff -o CHANGELOG.md
