@@ -168,4 +168,44 @@ update_system_packages() {
   return "${_rc}"
 }
 
+# apt output prefixes and signature-failure tokens that mark a stale signer;
+# defined once here so every consumer agrees on what counts (not readonly: the
+# lib may be re-sourced, and readonly would error on the second source).
+APT_SIGNER_PREFIXES=("W:" "E:" "Warning:" "Error:")
+APT_SIGNER_TOKENS=("NO_PUBKEY" "EXPKEYSIG" "EXPSIG" "KEYEXPIRED" "REVKEYSIG" "is not signed" "is no longer signed")
+
+# Reads apt output on stdin; prints "host<TAB>token" once per distinct host
+# named on a signature-failure line, so callers need not re-parse apt's wording.
+_apt_stale_signer_hosts() {
+  local _prefixes _tokens
+  _prefixes="$(printf '%s\n' "${APT_SIGNER_PREFIXES[@]}")" || return 1
+  _tokens="$(printf '%s\n' "${APT_SIGNER_TOKENS[@]}")" || return 1
+  awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" '
+    BEGIN {
+      np = split(prefixes, pre, "\n")
+      nt = split(tokens, tok, "\n")
+    }
+    {
+      ok = 0
+      for (i = 1; i <= np; i++) {
+        if (substr($0, 1, length(pre[i])) == pre[i]) { ok = 1; break }
+      }
+      if (!ok) next
+      found = ""
+      for (i = 1; i <= nt; i++) {
+        if (index($0, tok[i]) > 0) { found = tok[i]; break }
+      }
+      if (found == "") next
+      rest = $0
+      # authority = text after the scheme up to the first / quote or space
+      while (match(rest, /https?:\/\/[^\/\047 ]+/)) {
+        url = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+        sub(/^https?:\/\//, "", url)
+        if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
+      }
+    }
+  '
+}
+
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

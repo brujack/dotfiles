@@ -336,3 +336,40 @@ EOF
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
   refute_grep "dist-upgrade" "${MOCK_CALLS_FILE}"
 }
+
+# --- _apt_stale_signer_hosts ---
+
+@test "_apt_stale_signer_hosts: resolute stale fixture yields docker host and NO_PUBKEY" {
+  run _apt_stale_signer_hosts < "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt"
+  [ "$status" -eq 0 ]
+  [ "$output" == "$(printf 'download.docker.com\tNO_PUBKEY')" ]
+}
+
+@test "_apt_stale_signer_hosts: clean fixture yields no output" {
+  run _apt_stale_signer_hosts < "${REPO_ROOT}/tests/fixtures/apt/update-clean-resolute.txt"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_apt_stale_signer_hosts: two stale hosts print in first-appearance order" {
+  local _in="${BATS_TEST_TMPDIR}/two.txt"
+  cat "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-noble.txt" \
+    "${REPO_ROOT}/tests/fixtures/apt/update-hashicorp-stale-rotated.txt" > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "${lines[0]}" == "download.docker.com"$'\t'* ]]
+  [[ "${lines[1]}" == "apt.releases.hashicorp.com"$'\t'* ]]
+}
+
+@test "_apt_stale_signer_hosts: every URL on a considered line contributes a host" {
+  local _line _in="${BATS_TEST_TMPDIR}/line.txt"
+  _line="$(command grep -m1 -E '^(W|E|Warning|Error):.*NO_PUBKEY' "${REPO_ROOT}/tests/fixtures/apt/update-stale-rotated-resolute.txt")"
+  [ -n "${_line}" ]
+  printf '%s\n' "${_line}" | sed -E 's#(https?://[^ ]+)#\1 https://second.example/x#' > "${_in}"
+  run _apt_stale_signer_hosts < "${_in}"
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [[ "$output" == *"download.docker.com"* ]]
+  [[ "$output" == *"second.example"* ]]
+}
