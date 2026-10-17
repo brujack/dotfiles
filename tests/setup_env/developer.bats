@@ -1121,20 +1121,28 @@ _gpg_only_path() {
 # pinentry is enabled so --batch can generate/sign without a real prompt),
 # signs a fixed payload written to $2, and writes the detached signature to
 # $3 plus the exported ASCII-armored public key to $4. $5 is gpg's own
-# expire syntax ("1d", "seconds=2", ...). Echoes the new key's fingerprint.
+# expire syntax ("1d", "never", ...). $6, if set, is a gpg --faked-system-time
+# value at which the key is generated and the payload signed; an expired key is
+# made with "1d" at "${_DEV_PAST}". A short real expiry ("seconds=2" plus a
+# sleep) raced key generation under parallel load: gpg refuses to sign with a
+# key that expired before the sign step, so no signature was written.
+# Echoes the new key's fingerprint.
 # Caller must already have PATH pointed at real gpg via _gpg_only_path.
+_DEV_PAST='20200101T000000!'
 _dev_make_signing_key() {
   local _homedir="$1" _payload="$2" _sig="$3" _pubkey="$4" _expire="$5"
+  local -a _when=()
+  [[ -n "${6:-}" ]] && _when=(--faked-system-time "$6")
   mkdir -p "${_homedir}"
   chmod 700 "${_homedir}"
   printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
   printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
   gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
-    --quick-generate-key "Test Signer <t@example.com>" default default "${_expire}" \
+    "${_when[@]}" --quick-generate-key "Test Signer <t@example.com>" default default "${_expire}" \
     >/dev/null 2>&1
   printf 'awscli test payload\n' > "${_payload}"
   gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
-    --yes --detach-sign --output "${_sig}" "${_payload}" >/dev/null 2>&1
+    "${_when[@]}" --yes --detach-sign --output "${_sig}" "${_payload}" >/dev/null 2>&1
   gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
     >"${_pubkey}" 2>/dev/null
   gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
@@ -1202,9 +1210,8 @@ _dev_probe_gpg_status() {
   fi
   local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
   local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
-  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "seconds=2")"
+  _fpr="$(_dev_make_signing_key "${_homedir}" "${_payload}" "${_sig}" "${_pub}" "1d" "${_DEV_PAST}")"
   [[ -n "${_fpr}" ]]
-  sleep 3
 
   local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
   _dev_probe_gpg_status "${_pub}" "${_sig}" "${_payload}" "${_probe_status}"
@@ -1229,28 +1236,29 @@ _dev_probe_gpg_status() {
   local _homedir="${BATS_TEST_TMPDIR}/signer" _payload="${BATS_TEST_TMPDIR}/p.txt"
   local _sig="${BATS_TEST_TMPDIR}/p.sig" _pub="${BATS_TEST_TMPDIR}/pub.asc" _fpr
 
-  # The KEY stays live (1d) -- EXPSIG is signature expiry, DETAILS:484:
-  # "the signature with the keyid is good, but the SIGNATURE is expired".
-  # Reusing _dev_make_signing_key's key-expire argument would produce
+  # The KEY stays live (never expires) -- EXPSIG is signature expiry,
+  # DETAILS:484: "the signature with the keyid is good, but the SIGNATURE is
+  # expired". Reusing _dev_make_signing_key's key-expire argument would produce
   # EXPKEYSIG (the sibling test above), not EXPSIG. The signature's OWN
-  # expiry is set separately, via --default-sig-expire on detach-sign.
+  # expiry is set separately, via --default-sig-expire on detach-sign, and
+  # it is signed at "${_DEV_PAST}" so it is already expired.
   mkdir -p "${_homedir}"
   chmod 700 "${_homedir}"
   printf 'allow-loopback-pinentry\n' > "${_homedir}/gpg-agent.conf"
   printf '%s\n' "${_homedir}" >> "${BATS_TEST_TMPDIR}/_gpg_homedirs"
   gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
-    --quick-generate-key "Test Signer <t@example.com>" default default "1d" \
+    --faked-system-time "${_DEV_PAST}" \
+    --quick-generate-key "Test Signer <t@example.com>" default default never \
     >/dev/null 2>&1
   printf 'awscli test payload\n' > "${_payload}"
   gpg --homedir "${_homedir}" --batch --pinentry-mode loopback --passphrase '' \
-    --default-sig-expire seconds=2 --yes --detach-sign --output "${_sig}" "${_payload}" \
+    --faked-system-time "${_DEV_PAST}" --default-sig-expire 1d --yes --detach-sign --output "${_sig}" "${_payload}" \
     >/dev/null 2>&1
   gpg --homedir "${_homedir}" --batch --armor --export "Test Signer <t@example.com>" \
     >"${_pub}" 2>/dev/null
   _fpr="$(gpg --homedir "${_homedir}" --batch --with-colons --list-keys 2>/dev/null \
     | awk -F: '/^fpr/{print $10; exit}')"
   [[ -n "${_fpr}" ]]
-  sleep 3
 
   local _probe_status="${BATS_TEST_TMPDIR}/probe_status" _probe_rc
   # Unlike the EXPKEYSIG/REVKEYSIG siblings, this probe genuinely returns
@@ -1318,8 +1326,7 @@ _dev_probe_gpg_status() {
 
   local _fpr_exp
   _fpr_exp="$(_dev_make_signing_key "${BATS_TEST_TMPDIR}/exp" "${BATS_TEST_TMPDIR}/exp.txt" \
-    "${BATS_TEST_TMPDIR}/exp.sig" "${BATS_TEST_TMPDIR}/exp.pub" "seconds=2")"
-  sleep 3
+    "${BATS_TEST_TMPDIR}/exp.sig" "${BATS_TEST_TMPDIR}/exp.pub" "1d" "${_DEV_PAST}")"
   local _AWS_KEY_PATH="${BATS_TEST_TMPDIR}/exp.pub"
   AWSCLI_GPG_FPR="${_fpr_exp}"
   run _aws_verify_zip "${BATS_TEST_TMPDIR}/exp.txt" "${BATS_TEST_TMPDIR}/exp.sig"
