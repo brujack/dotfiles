@@ -704,6 +704,9 @@ _update_apt_signer_check() {
   local _detail="${_DOTFILES_RUN_TMPDIR}/detail_apt" _result _hosts _parse_err _parse_rc=0
   local _host _token _remedy _lines="" _names=""
 
+  # _update_record_start wrote SKIP (non-Ubuntu): nothing ran, so nothing to report.
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt" 2> /dev/null)" == "SKIP" ]] && return 0
+
   _parse_err="${_DOTFILES_RUN_TMPDIR}/err_apt_signer"
   _hosts="$(_apt_stale_signer_hosts < "${_err}" 2> "${_parse_err}")" || _parse_rc=$?
   _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt" 2> /dev/null)"
@@ -711,9 +714,9 @@ _update_apt_signer_check() {
   if [[ ${_parse_rc} -ne 0 ]]; then
     if [[ ${_apt_rc} -eq 0 ]]; then
       _update_warn "apt" "${_result}; signer check did not run — see detail"
-      cat "${_parse_err}" > "${_detail}"
+      sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" > "${_detail}"
     else
-      cat "${_parse_err}" >> "${_detail}"
+      sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" >> "${_detail}"
     fi
     return 0
   fi
