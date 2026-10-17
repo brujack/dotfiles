@@ -449,6 +449,8 @@ _remedy_one_line() {
   run _apt_signer_remedy "$1"
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" -eq 1 ]
+  # bats' lines drops empty lines, so also reject any embedded newline.
+  [[ "$output" != *$'\n'* ]]
 }
 
 @test "_apt_signer_remedy: download.docker.com says re-run -t developer and blames the publisher on persistence" {
@@ -457,7 +459,7 @@ _remedy_one_line() {
   [[ "$output" == *"publisher's own key"* ]]
 }
 
-@test "_apt_signer_remedy: both k8s hosts share the docker re-fetch remedy" {
+@test "_apt_signer_remedy: every re-fetch host shares the docker remedy" {
   local _h _docker
   _remedy_one_line download.docker.com
   _docker="${output}"
@@ -486,6 +488,11 @@ _remedy_one_line() {
   [[ "$output" == *"gpg --show-keys"* ]]
   [[ "$output" == *".gpg.new"* ]]
   [[ "$output" == *"/etc/apt/keyrings/opentofu-archive-keyring.gpg"* ]]
+  # Quoted "$d/ring" proves $d stayed literal in the printed text.
+  [[ "$output" == *'"$d/ring"'* ]]
+  [[ "$output" == *"OpenTofu's"* ]]
+  [[ "$output" == *"--dearmor"* ]]
+  [[ "$output" == *"packages.opentofu.org/opentofu/tofu/gpgkey"* ]]
 }
 
 @test "_apt_signer_remedy: packages.microsoft.com points at MS_GPG_FPR" {
