@@ -60,4 +60,36 @@ MOVE | - `_CLAUDE_GUARD_GIT` (`lib/workflows.sh:_claude_settings_gi | dotfiles-t
 MOVE | - `MOCK_CLAUDE_*` (`tests/mocks/claude`)   - Use `MOCK_CLAUD | dotfiles-test-seams.md | CLAUDE.md relocation: tests/mocks/claude modes
 MOVE | - Every `claude` call inside a `while read` loop in `setup_c | dotfiles-test-seams.md | CLAUDE.md relocation: claude loop stdin and IFS tab rules
 MOVE | **`_OVERRIDE_CLAUDE_PLUGIN_CACHE` (`_claude_plugin_cache_dir | dotfiles-test-seams.md | CLAUDE.md relocation: claude plugin cache override seam
+MOVE | - Detect GNU parallel by version string (`parallel --version | dotfiles-bats-test-infrastructure.md | Testing: make test parallelism and lint targets
+MOVE | **Run unit tests only:** `make test-unit` (runs `unit.bats`, | dotfiles-bats-test-infrastructure.md | Testing: make test parallelism and lint targets
+MOVE | - Keep `config/profiles.sh` in both `SHELL_FILES` (`bash -n` | dotfiles-bats-test-infrastructure.md | Testing: make test parallelism and lint targets
+MOVE | - The venv is snapshotted (`pip freeze`) before every sync,  | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | - `UV_BIN` (`resolve_uv`, `lib/helpers.sh`) is the operator  | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | - `make sync-requirements-ci` renders all five CI requiremen | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | | file                           | group         | pins | co | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | - Scope CI requirements groups by purpose, not by pruning un | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | - The drift gate only verifies a rendering is faithful to it | dotfiles-bats-test-infrastructure.md | Testing: requirements CI renderings and venv rollback
+MOVE | - The pre-commit hook is required: run `make lint` (blocks o | dotfiles-bats-test-infrastructure.md | Testing: pre-commit and pre-push hooks
+MOVE | - The pre-push hook is permanent — it runs `make test` (lint | dotfiles-bats-test-infrastructure.md | Testing: pre-commit and pre-push hooks
+MOVE | - `scripts/pre-push` must resolve repo root with `git rev-pa | dotfiles-bats-test-infrastructure.md | Testing: pre-commit and pre-push hooks
+MOVE | - Refuse any push to `refs/heads/master` whose range carries | dotfiles-bats-test-infrastructure.md | Testing: pre-commit and pre-push hooks
+MOVE | `.shellcheckrc` at the repo root carries **one** suppression | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | **This reverses the previous convention, deliberately.** Unt | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | The blanket was not free. One of the four `SC2181` sites it  | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | - **Every `# shellcheck disable=` carries a reason on the sa | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | `make lint`'s scope comes from `scripts/list-shell-files.sh` | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | **It now covers `tests/mocks/`, which it did not until this  | dotfiles-bats-test-infrastructure.md | Testing: shellcheck conventions and lint scope
+MOVE | - `test` job: installs a pinned, checksum-verified shellchec | dotfiles-bats-test-infrastructure.md | Testing: CI workflow jobs
+MOVE |     `/opt/homebrew/bin` on a provisioned mac holds more than | dotfiles-bats-test-infrastructure.md | Testing: CI workflow jobs
+MOVE | - **`load_setup_env()` does NOT set OS vars, and this bullet | dotfiles-bats-test-infrastructure.md | Testing: Testing Rules detail
+MOVE | - Floor: 90%. `make test` and CI both fail on any drop below | dotfiles-bash-coverage.md | Testing: PowerShell coverage scope
+MOVE | - Derive the instrumented set from `git ls-files`, never a g | dotfiles-bash-coverage.md | Testing: bash coverage rules
+MOVE | - Publish CI's bash coverage figure in the PR body once CI h | dotfiles-bash-coverage.md | Testing: bash coverage rules
+MOVE | - `tests/mocks/ln`, `chmod`, `mv`, `cp` and `tee` pass throu | dotfiles-bats-test-infrastructure.md | Testing: mock pattern detail
+MOVE | - Recognize any `-[a-zA-Z]+` short-option cluster in `tests/ | dotfiles-bats-test-infrastructure.md | Testing: mock pattern detail
+MOVE | - `tests/mocks/curl`'s `-o` write is deferred until **after* | dotfiles-bats-test-infrastructure.md | Testing: mock pattern detail
+MOVE | - `Makefile:1`'s `MAKEFLAGS += --no-print-directory` suppres | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
+MOVE | - `MAKEFLAGS` is an exported env var every spawned `make` in | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
+MOVE | - `tests/scripts/makefile_lint_scope.bats` enforces the part | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
+MOVE | - The partition scanner sees only the invoking line, so it i | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
 ```
