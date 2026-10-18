@@ -1189,9 +1189,11 @@ _clean_shell_files() {
 }
 
 @test "Makefile runs both shellcheck passes through xargs -n 4 -P \$(JOBS)" {
-  local _line
+  local _line _pat
+  # Comment lines are dropped first: a comment carrying the xargs string must
+  # not satisfy the pin while the real recipe line is serial.
   for _pat in 'SHELL_FILES.*shellcheck &&' 'BATS_FILES.*shellcheck --severity=warning'; do
-    _line="$(command grep -E "${_pat}" "${REPO_ROOT}/Makefile" | head -1)"
+    _line="$(command grep -v '^[[:space:]]*#' "${REPO_ROOT}/Makefile" | command grep -E "${_pat}" | head -1)"
     [[ "${_line}" == *'xargs -n 4 -P $(JOBS)'* ]]
   done
 }
