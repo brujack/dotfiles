@@ -8,7 +8,7 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 
 ## Layout
 
-Tracked top-level dirs: `lib/` (shell libraries), `config/` (`profiles.sh`, git-ignored `local.sh`, `hook_repos.sh`), `scripts/`, `tests/`, `docs/`, `.config/` (`.zshrc.d/`), `.github/` (workflows), `.claude/`, `powershell/`, `LaunchAgents/`, `keys/`, `manifests/`, `pyenv.d/`, `.ssh/`, `.vscode/`, `.warp/`; regenerate with `git ls-files | awk -F/ 'NF>1{print $1}' | sort -u`, never from memory. → `dotfiles-conventions.md` § `CLAUDE.md budget: Layout directory tree`
+Tracked top-level dirs: `lib/` (shell libraries), `config/` (`profiles.sh`, git-ignored `local.sh`, `hook_repos.sh`), `scripts/`, `tests/`, `docs/`, `.config/` (`.zshrc.d/`), `.github/` (workflows), `.claude/`, `powershell/`, `LaunchAgents/`, `keys/`, `manifests/`, `pyenv.d/`, `.ssh/`, `.vscode/`, `.warp/`; `pyenv.d/rehash/*.bash` is installed as a copy into `${PYENV_ROOT}/pyenv.d/rehash/`, never symlinked, so edits need a reinstall; regenerate with `git ls-files | awk -F/ 'NF>1{print $1}' | sort -u`, never from memory. → `dotfiles-conventions.md` § `CLAUDE.md budget: Layout directory tree`
 
 ## 10-80-10 Execution Cycle
 
@@ -50,7 +50,8 @@ When web research (web-research skill) or context-mode fetches produce findings 
 
 **Options:**
 
-- `--dry-run` guarantees no outbound write (no `git push`, `rsync --delete`, state-ledger entry write) but is not offline: fetches, `pull --ff-only`, package and registry installs still run; `DRY_RUN=0`/`false`/`no`/empty/unset mean off, any other value on, and an explicit flag wins. → `dotfiles-conventions.md` § `CLAUDE.md relocation: --dry-run option semantics`
+- `--dry-run` guarantees no outbound write (no `git push`, `rsync --delete`, state-ledger entry write) but is not offline: fetches, `pull --ff-only`, package and registry installs still run; even `--dry-run` runs `ensure_state_ledger` ungated (may `git pull --ff-only`/`git clone` the state-ledger checkout, run `ledger.py init`, and `rm -rf` it if it exists but is not a valid repo); `DRY_RUN=0`/`false`/`no`/empty/unset mean off, any other value on, and an explicit flag wins. → `dotfiles-conventions.md` § `CLAUDE.md relocation: --dry-run option semantics`
+
 ## Symlink Strategy
 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
@@ -99,7 +100,7 @@ See `~/.claude/standards/shell.md` for the full shell coding standards. Dotfiles
 - In `-t doctor`/`-t check-versions` prereq-bypass tests assert `[[ "$output" != *"Homebrew not found"* ]]`, never `[ "$status" -eq 0 ]` (exit varies with the mock environment). → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
 - No `set -euo pipefail` at top level; conditional installs need non-zero exits to continue. → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
 - Every `sudo` dpkg call in `lib/`, `setup_env.sh` and `scripts/` carries `DEBIAN_FRONTEND=noninteractive` on the sudo line (`sudo -H DEBIAN_FRONTEND=noninteractive apt install …`); the caller's environment does nothing. → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
-- Every configuring `sudo apt|apt-get|nala` call carries the quoted `"${APT_CONFFILE_OPTS[@]}"`, never unquoted; `--force-confmiss` only at the `packages-microsoft-prod.deb` install. → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
+- Every `sudo apt|apt-get|nala install|reinstall|upgrade|full-upgrade|dist-upgrade|build-dep` carries the quoted `"${APT_CONFFILE_OPTS[@]}"` (never unquoted before the verb; the gate cannot see through it); `--force-confmiss` only at the `packages-microsoft-prod.deb` install. → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
 - Put a lib file's `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` guard on its last line, after all function definitions; not every lib file has one. → `dotfiles-conventions.md` § `CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)`
 
 ### Platform Detection Pattern
@@ -134,7 +135,7 @@ brew "rustup"         # [HAS_RUST]
 
 Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
 
-- A `# [HAS_*]` Brewfile tag selects drift expectations only and never gates installation; every mac installs every main-Brewfile entry. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Brewfile HAS_ tag selects drift only`
+- A `# [HAS_*]` Brewfile tag selects drift expectations only and never gates installation; every mac installs every main-Brewfile entry; to gate installation put the entry in `Brewfile.gui`/`Brewfile.devtools` (wrapped by `HAS_GUI`/`HAS_DEVTOOLS` in `install_macos_casks`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Brewfile HAS_ tag selects drift only`
 
 - Tagging a Brewfile entry never keeps it off a machine; an uninstalled entry yields one advisory `Missing` line on every machine whose profile has the capability (6 of 8 hostnames for `devtools`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Brewfile HAS_ tag consequences`
 
@@ -145,8 +146,6 @@ Untagged entries are expected on all macs. When adding a new Brewfile entry that
 See `~/.claude/standards/powershell.md` for the full PowerShell coding and testing standards.
 
 ### Windows AI Config Setup
-
-`setup_windows.ps1 -setup` links ai-config into native Windows alongside WSL2:
 
 - `setup_windows.ps1 -setup` links ai-config into `~/.claude/`, `~/.cursor/` and `$env:APPDATA\Cursor\User\`; set `GITHUB_PAT` in the system environment first (it fills `mcp.json`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Windows AI config link targets`
 
@@ -170,6 +169,7 @@ When a constant is updated, update all other references to that constant across 
 ### Ruby Version Manager Split
 
 Ruby managers are not interchangeable: rbenv on Linux (`lib/linux_ubuntu.sh`), chruby on macOS; `install_ruby()` handles it, and the Linux build pins `RUBY_CONFIGURE_OPTS="--with-openssl-dir=/usr"`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Ruby version manager split`
+
 ## Language Standards
 
 Language-specific standards for this repo. These supplement the universal standards loaded
@@ -352,7 +352,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Drive `_OVERRIDE_HOMEBREW_PREFIX_ARM`/`_OVERRIDE_HOMEBREW_PREFIX_INTEL` present and absent through the override, never the real filesystem (`/opt/homebrew` and `/usr/local/opt` exist on a provisioned mac, so an unset override asserts nothing). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: homebrew prefix override seams`
 
-- Test keychain absence through `_OVERRIDE_KEYCHAIN_BIN` (the real path is absolute, not mockable via `PATH`); keep the block inside `[[ -o interactive ]]` (non-interactive source starts a daemonizing `ssh-agent` that hangs `make test`), keep `"${_keychain}" --eval` quoted, keep `setopt shwordsplit` in `tests/zshrc.d/unit.bats`, and keep the non-interactive and interactive tests as a pair. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: keychain override seam and interactive guard`
+- Test keychain absence through `_OVERRIDE_KEYCHAIN_BIN` (the real path is absolute, not mockable via `PATH`); keep the block inside `[[ -o interactive ]]` (non-interactive source starts a daemonizing `ssh-agent` that hangs `make test`), keep `"${_keychain}" --eval` quoted, keep `setopt shwordsplit` in `tests/zshrc.d/unit.bats` (else the `--eval` quoting assertion is vacuous), leave `[[ ${VAR} ]]` tests in `5_general.zsh` unquoted (`[[ ]]` never word-splits; quoting is churn), and keep the non-interactive and interactive tests as a pair. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: keychain override seam and interactive guard`
 
 - Set `_OVERRIDE_CURRENT_LOGIN_SHELL` in every login-shell test (else the pass is machine-dependent); derive the login shell from `getent passwd`/`dscl UserShell`, never `${SHELL}`; check both `chsh` and `sudo -n chsh` exit codes; stub `_doctor_check_login_shell` in end-to-end `run_doctor` tests. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: login shell override seam and chsh guard`
 
@@ -376,11 +376,11 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Resolve `_AWS_GPG_BIN`/`_AWS_PKGUTIL_BIN` via `command -v`, never by stripping `PATH`; keep `_AWS_KEY_PATH` a plain source-time assignment from `DOTFILES_REPO_ROOT` in `lib/constants.sh` (no `${VAR:-}` self-guard, no inline `dirname BASH_SOURCE`); test its cwd-sensitivity by sourcing relatively, `cd`-ing away and asserting the post-import failure message. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: AWS verification seams and key path`
 
-- Point `_MS_GPG_BIN` (also the gpg for `_build_pinned_keyring`, `_keyring_has_pinned_fpr` and albert) at the real gpg at setup scope in `tests/setup_env/linux_ubuntu.bats` with `MOCK_WGET_FILE` set to `tests/fixtures/packages-microsoft-prod.deb` (`tests/mocks/gpg` verifies nothing); `_MS_AR_BIN` needs GNU `ar` (skip on macOS without it, fail elsewhere); never sha256-pin that deb. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: Microsoft deb verification seams`
+- Point `_MS_GPG_BIN` (also the gpg for `_build_pinned_keyring`, `_keyring_has_pinned_fpr` and albert) at the real gpg at setup scope in `tests/setup_env/linux_ubuntu.bats` with `MOCK_WGET_FILE` set to `tests/fixtures/packages-microsoft-prod.deb` (`tests/mocks/gpg` verifies nothing); `_MS_AR_BIN` needs GNU `ar` (skip on macOS without it, fail elsewhere); never sha256-pin that deb; `_ms_verify_deb` must refuse any archive not listing exactly `debian-binary control.tar.gz data.tar.gz _gpgorigin` in order (dpkg reads the first member, `ar x` the last). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: Microsoft deb verification seams`
 
 - Set `_AWS_BIN` in every `install_aws_tools` test (a real `/usr/local/bin/aws` makes the already-installed guard always taken). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: aws bin seam`
 
-- Set `_EDGE_SOURCES_DIR`/`_EDGE_BOOTSTRAP_KEYRING` at setup scope in `tests/setup_env/linux_ubuntu.bats` (`tests/mocks/sudo` execs real commands; unset writes the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`); the bootstrap fails closed on any unverifiable key. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: edge source seams`
+- Set `_EDGE_SOURCES_DIR`/`_EDGE_BOOTSTRAP_KEYRING` at setup scope in `tests/setup_env/linux_ubuntu.bats` (`tests/mocks/sudo` execs real commands; unset writes the real `/etc/apt/sources.list.d` and `/usr/share/keyrings`); the bootstrap fails closed on any unverifiable key, and a gpg or local failure (rc 2/3) keeps the last verified keyring and `.list` (only rc 1 or no non-empty keyring removes them). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: edge source seams`
 
 - Set `_APT_SOURCES_DIR`/`_APT_TRUSTED_DIR`/`_APT_KEYRINGS_DIR` at setup scope in `tests/setup_env/linux_ubuntu.bats` (unset: albert and azure cleanup write and `rm -f` under real `/etc/apt` and `/usr/share/keyrings`).
 - `_HASHICORP_SOURCE_DIR`/`_HASHICORP_KEY_PATH` are honoured only when `BATS_TEST_TMPDIR` is non-empty; `_APT_SOURCES_LIST` points the hand-written-source warning at a fixture. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: apt directory and hashicorp seams`
@@ -421,6 +421,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - Set `_DL_STAMP_DIR`/`_DL_TMP_ROOT`/`_DL_BIN_DIR`/`_DL_UNZIP_BIN`/`_DL_TAR_BIN` all at setup scope (`tests/mocks/sudo` execs real commands; unset writes the real `/usr/local/bin`); `rm` the stamp file to force a re-install. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: fetched binary install seams`
 
 - Release asset pins (kind, yq, shellcheck; ADR-0046) are `<TOOL>_SHA256_AMD64`/`_ARM64`/`_FOR_VER` in `lib/constants.sh`: bump `*_VER`, run `scripts/refresh-sha256-pins.sh [tool...]`, commit both; tests of callers set the real pin and `_FOR_VER` variables, never `_FETCHED_URL`/`_FETCHED_SHA256`/`_REFRESH_ASSET_URL`/`_OVERRIDE_REFRESH_PINS`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: release asset sha256 pins`
+- packer and vagrant install via `_install_ubuntu_hashicorp`, never the pinned-release route; after the migration, run `brew uninstall packer consul vault nomad` on each mac before the first `-t setup`/`-t developer`/`--brew-install` (`install_macos_casks` refuses while homebrew-core `packer` is present) and hand-remove unstamped `/usr/local/bin` leftovers. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: release asset sha256 pins`
 
 - Set `_GO_INSTALL_ROOT` at setup scope (default `/usr/local`; unset, a go test replaces the real `/usr/local/go`) and pair it with a per-test `_GO_BIN` stub; `_GO_SHA256` replaces the per-arch pin and `sha256sum` is never mocked. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: go install seams`
 
@@ -439,14 +440,15 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - Drive all three pwsh states through `_PWSH_BIN` and the timeout through `_PWSH_PROBE_TIMEOUT`; test the `timeout`-absent fallback with a scoped `PATH` and a `#!/bin/bash` stub, in both directions. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pwsh probe seams`
 
 - `load_mocks` exports `_NVIDIA_MODULE_VERSION_FILE` to a nonexistent path (a real one exists on `claude`/`workstation`); redefine `_flatpak_available` in tests, never strip `tests/mocks` from `PATH` (exposes the real `/usr/bin/flatpak`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: nvidia module version and flatpak mock rules`
+- Drive `tests/mocks/flatpak` with `MOCK_FLATPAK_LIST_RUNTIME` (a file; exit 99 if missing)/`MOCK_FLATPAK_LIST_APP`/`MOCK_FLATPAK_FAIL_SUBCMD`/`MOCK_FLATPAK_FAIL_ARGS`; `tests/fixtures/flatpak/runtime-list.tsv` is captured real output, never hand-typed. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: nvidia module version and flatpak mock rules`
 
 - Drive the doctor probe timeout with a sleeping stub under `_DOCTOR_PROBE_TIMEOUT=1`, never the real 10 s default. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: doctor probe timeout seam`
 
 - Override `_CRATES_API` for any `CARGO_TOOLS` staleness test that needs an unreachable crates.io. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: crates api seam`
 
-- Set the sysctl seams (`_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC`, `_SYSTEMD_RUN_DIR` and the `_KEYS_MAXKEYS_*`/`_KEYS_MAXBYTES_*` CONF/PROC pairs) under `BATS_TEST_TMPDIR` (`load_mocks` does) so `sudo`/`sysctl` never reach the real `/etc/sysctl.d` or kernel; no test runs the step with `_SYSCTL_CONF` unset (`_sysctl_conf_write` is tested behind a recording `sudo` shim). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: sysctl and kernel keys seams`
+- Set the sysctl seams (`_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC`, `_SYSTEMD_RUN_DIR` and the `_KEYS_MAXKEYS_*`/`_KEYS_MAXBYTES_*` CONF/PROC pairs) under `BATS_TEST_TMPDIR` (`load_mocks` does) so `sudo`/`sysctl` never reach the real `/etc/sysctl.d` or kernel; a test reaching the real inotify step sets or unsets `HAS_DOCKER` itself (developer shells export it); no test runs the step with `_SYSCTL_CONF` unset (`_sysctl_conf_write` is tested behind a recording `sudo` shim). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: sysctl and kernel keys seams`
 
-- `_GITHUB_API` accepts only `https://api.github.com` or `http://127.0.0.1:<port>` (else warns and falls back) so a stray export cannot send the token off-host; use `tests/helpers/http_listener.bash` for real-curl header tests and call `stop_http_listener` from `teardown()`; `_github_auth_header` refuses a token containing a line break. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: github api seam and http listener`
+- `_GITHUB_API` accepts only `https://api.github.com` or `http://127.0.0.1:<port>` (else warns and falls back) so a stray export cannot send the token off-host; every token-bearing curl passes `--noproxy 127.0.0.1` and sends the header via `-H @-` (assert with `MOCK_CURL_STDIN_FILE`); use `tests/helpers/http_listener.bash` for real-curl header tests and call `stop_http_listener` from `teardown()`; `_github_auth_header` refuses a token containing a line break. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: github api seam and http listener`
 
 - Isolate Claude provisioning with `_OVERRIDE_CLAUDE_SETTINGS` (`load_mocks` points it at a per-test copy of `tests/fixtures/claude-settings.json`, never the tracked fixture), `_CLAUDE_GUARD_GIT` and `tests/mocks/claude`, so no test touches the real `${HOME}/.claude/settings.json` or the real `claude`/`git`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: claude settings override seam`
 
@@ -499,28 +501,33 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - After any `.zshrc`/`.zshrc.d/` change run `zsh -i -c 'exit'` before committing; in a worktree it only proves the main checkout, so source the branch's own files explicitly. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Never rely on `$0` as a startup file's path in zsh (it is the literal `zsh`); use `${${(%):-%x}:A:h}` for a file's directory. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - A new update section needs `_update_record_start/end` AND its `_UPDATE_SECTION_ORDER` entry together (omitting the entry hides it silently); on removal grep test fixtures for a stray seed of the name. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
-- Never run `scripts/sync_git_repos.sh` (or `sync_git_repos`/`sync_legacy_dirs`) unmocked outside BATS; it does real `git push`/`rsync --delete` over SSH and keys off the real `hostname -s`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- Never run `scripts/sync_git_repos.sh` (or `sync_git_repos`/`sync_legacy_dirs`) unmocked outside BATS; it does real `git push`/`rsync --delete` over SSH and keys off the real `hostname -s`; `-t update` runs it too (`git-repos`/`legacy-rsync` sections), so never run `-t update` unmocked either. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - The `git-hooks` update section has the same `_UPDATE_SECTION_ORDER` trap; `install_git_hooks_all_repos` returns 0/1/2 (clean/hard fail/partial) and `run_update` and `run_setup_user` must branch on all three. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
-- `install_ubuntu_packages` and `_install_ubuntu_brew_packages` are tri-state (rc 1 hard failure or unsupported release, rc 2 partial); callers warn on 2 and continue. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- `install_ubuntu_packages` and `_install_ubuntu_brew_packages` are tri-state (`install_ubuntu_packages` rc 1 only on an unsupported release, rc 2 on any failed step; brew rc 1 and 2 both fold into rc 2); callers warn on 2 and continue, and `-t developer` then exits 0, so read its output, not its exit code, for package failures. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Install Claude plugins with `claude plugins install -s user <plugin@marketplace>`; keep the scope flag. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Guard the zsh-autosuggestions clone with `[[ -e ${_zsh_autosug}/.git ]]`, never `git rev-parse --git-dir` and never `-d`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - A cheat.sh fetch failure (`_cheat_fetch` rc 1) WARNs; an install failure or missing curl (rc 2) FAILs and is never downgraded by a later WARN. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Treat a diff flipping `auto_approve_bypasses_command_denylist` back to `true` in `.warp/settings.toml` as a reversion to re-pin. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - A global/system `core.hooksPath` (even empty) disables every repo's hooks; probe with `git config --includes -z` read via `read -d ''`, and remove an included-file pin with `git config --file <origin> --unset core.hooksPath` (a scope-level `--unset` exits 5). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - `tests/setup_env/git_hooks.bats` `setup()` must neutralize `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`, or the suite fails on any machine with a pin and that developer cannot push. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
-- Reference only (legacy hostname vars, NOBLE/RESOLUTE detection, clone dirs, pyenv, pytest, update-section internals, update summary width, cheat.sh internals, Warp symlink, sync modes, hooks sweep post-condition) → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- Legacy hostname vars derive from `PROFILE_LEGACY`; `WORKSTATION`/`CRUNCHER` are still read (`.zprofile`, `7_final.zsh`), so do not remove them; new code uses `HAS_*`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- The git-hooks sweep checks only hook presence and exec bit, so a stale `cp`-installed hook still passes; re-run `make install-hooks` after editing a hook. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- Print cheat.sh progress banners outside the section subshell so they never land in `err_cheat.sh`/`detail_cheat.sh` (they feed the `tail -10` diagnostic budget); `.warp/settings.toml` is Warp-owned, so an unexplained diff there is usually a materialized default. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- Reference only (NOBLE/RESOLUTE detection, clone dirs, pyenv, pytest, update-section internals, update summary width, cheat.sh internals, Warp symlink, sync modes) → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 
 - Prepend (never `path+=`) the Homebrew `make` gnubin dir to `PATH`; test both prefixes (`/opt/homebrew/opt/make/libexec/gnubin`, `/usr/local/opt/make/libexec/gnubin`) for existence, not `brew --prefix`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Homebrew make gnubin PATH prepend rules`
 
 - Which `make` an actor gets depends on whether it sourced `6_path.zsh` (interactive zsh descendants: GNU 4.4.1; cron, launchd, `ssh host '<cmd>'`, editor-spawned hooks: 3.81); harmless to current gates, do not reopen without re-running the comparison. → `dotfiles-conventions.md` § `CLAUDE.md relocation: which make an actor resolves`
 
 - `setup_env.sh` cannot run non-interactively on the Linux workstation (brew `PATH` is interactive-zsh only); prefix `PATH="/home/linuxbrew/.linuxbrew/bin:${PATH}" ./setup_env.sh -t developer`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
-- Treat a tool path in an interactive-only rc file as gating that actor only; never `PATH`-prepend inside a hook, use `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
+- Treat a tool path in an interactive-only rc file as gating that actor only; a hook `PATH` prepend shadows `tests/scripts/pre_push.bats`'s `make` mock, so route any hook `PATH` edit through `_OVERRIDE_GNUBIN_ARM`/`_OVERRIDE_GNUBIN_INTEL` so tests can point it at a nonexistent path. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
 - The linuxbrew `PATH` prefix causes false `-t doctor` version-drift FAILs; run doctor without it or via `zsh +Z -i -c`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
-- `install_cargo_tools` judges pins by whether the binary runs (`--help`), repairs with `--force`, also runs under `-t update --brew-only`, and refuses cargo below `CARGO_MIN_VER` (rc 2); first runs compile for tens of minutes. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
+- `install_cargo_tools` judges pins by whether the binary runs (`--help`), repairs with `--force`, also runs under `-t update --brew-only`, and refuses cargo below `CARGO_MIN_VER` (rc 2); first runs compile for tens of minutes; raise `CARGO_MIN_VER` in `lib/constants.sh` in the same change as a `CARGO_TOOLS` pin bump that needs a newer cargo. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
 - In `_install_ubuntu_tfenv` the `[[ ! -x "${_root}/bin/tfenv" ]]` guard must return before the symlink loop; the `rm -rf ${_root}` remedy belongs in the WARN, not doctor. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
+- `_install_ubuntu_tfenv` never replaces a regular file or foreign symlink at `/usr/local/bin/{tfenv,terraform}` and installs `TERRAFORM_VER` only when `~/.tfenv/version` is absent; preserve both. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
 - `check-versions` does not check tflint/tfsec; its crates.io requests need `-A "dotfiles check-versions (bjackson@pobox.com)"` or they 403. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
-- Reference only (macOS `/usr/local/bin` symlink limits, `update_rust` resolution, tfenv install rules, `CARGO_MIN_VER` rationale) → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
+- Reference only (macOS `/usr/local/bin` symlink limits, `update_rust` resolution, `CARGO_MIN_VER` rationale) → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
+
 ## Dependency Automation
 
 - Inline the shared Renovate preset into `renovate.json`, never `extends` it (ai-config is private, so `extends` throws `config-validation` and Renovate silently abandons the repo); hand-sync `extends`/`schedule`/`labels`/`packageRules` with `ai-config/renovate-presets/default.json`, since nothing detects drift. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Renovate preset inline`
@@ -538,8 +545,6 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Do not assume Python packages get automated update PRs here: Dependabot auto-PRs are off and Renovate manages no Python, so alerts fire with nothing proposing a fix. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Python no update path`
 
 ## Local-Only State
-
-The following paths are machine-local and must **never** be committed to this repo:
 
 - Never commit machine-local paths: `~/.aws/`, `~/.tf_creds/`, `~/.azure_creds/`, `~/.gcloud_creds/`, `~/.tsh/`, `~/.ssh/` private keys (only `config` and `teleport.cfg` are tracked), `~/.claude/projects/<path>/` (session history and memory drafts; canonical memory is `ai-config/.claude/memory/<repo>-<topic>.md` and a leftover draft fails ai-config `make test`), and `config/local.sh` (git-ignored; copy from `config/local.sh.example`). → `dotfiles-conventions.md` § `CLAUDE.md budget: Local-only state paths`
 
