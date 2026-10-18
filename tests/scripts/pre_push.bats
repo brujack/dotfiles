@@ -1076,3 +1076,101 @@ _pushed_vs_head() {
   _assert_refused
   [[ "$output" == *"docs/a.md"* ]]
 }
+
+# ── CLAUDE.md byte-budget gate (ADR-0047) ───────────────────────────────────
+# The hook runs the checker from the PUSHED commit, so these fixtures commit a
+# copy of the real checker. The over-ceiling case is refused before the
+# inert-path exit, so a CLAUDE.md-only (docs-only) push is covered too.
+
+# _budget_commit <size> [nochecker]: commit CLAUDE.md of exactly <size> bytes
+# (with the real checker committed alongside unless told otherwise); prints sha.
+_budget_commit() {
+  local _size="${1}" _mode="${2:-checker}"
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    cd '${REPO_DIR}'
+    head -c '${_size}' /dev/zero | tr '\\0' 'a' > CLAUDE.md
+    git add CLAUDE.md
+    if [ '${_mode}' = checker ]; then
+      mkdir -p scripts
+      cp '${REPO_ROOT}/scripts/claude_md_budget.py' scripts/claude_md_budget.py
+      git add scripts/claude_md_budget.py
+    fi
+    git commit --quiet -m 'docs: claude md'
+    git rev-parse HEAD
+  "
+}
+
+@test "budget gate refuses a CLAUDE.md-only push of 105001 bytes and names the ceiling" {
+  base_sha=$(_budget_commit 100)
+  local_sha=$(_budget_commit 105001)
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"105,000 bytes"* ]]
+  [[ "$output" == *"refs/heads/feat/x"* ]]
+}
+
+@test "budget gate allows a CLAUDE.md of exactly 105000 bytes" {
+  base_sha=$(_budget_commit 100)
+  local_sha=$(_budget_commit 105000)
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+}
+
+@test "budget gate does not refuse a pushed commit that predates the checker" {
+  base_sha=$(_budget_commit 100 nochecker)
+  local_sha=$(_budget_commit 105001 nochecker)
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"105,000 bytes"* ]]
+}
+
+@test "budget gate runs the committed checker, not the working-tree copy" {
+  base_sha=$(_budget_commit 100)
+  local_sha=$(_budget_commit 105001)
+  printf 'import sys\nsys.exit(0)\n' > "${REPO_DIR}/scripts/claude_md_budget.py"
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"105,000 bytes"* ]]
+}
+
+@test "budget gate refuses a two-ref push whose first ref is over the ceiling" {
+  base_sha=$(_budget_commit 100)
+  bad_sha=$(_budget_commit 105001)
+  _git_clean "checkout --quiet -B good ${base_sha}"
+  good_sha=$(_budget_commit 200)
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/bad ${bad_sha} refs/heads/bad ${base_sha}\nrefs/heads/good ${good_sha} refs/heads/good ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refs/heads/bad"* ]]
+  [[ "$output" != *"refs/heads/good"* ]]
+}
+
+@test "budget gate refuses when git show of the checker fails" {
+  base_sha=$(_budget_commit 100)
+  local_sha=$(_budget_commit 200)
+  real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  shim="${BATS_TEST_TMPDIR}/gitshim"
+  mkdir -p "${shim}"
+  cat > "${shim}/git" <<SHIM
+#!/usr/bin/env bash
+if [[ "\${1}" == "show" && "\${2}" == *":scripts/claude_md_budget.py" ]]; then
+  exit 128
+fi
+exec "${real_git}" "\$@"
+SHIM
+  chmod +x "${shim}/git"
+  _write_make_mock 0
+  export PATH="${shim}:${MAKE_MOCK_DIR}:${CLEAN_PATH}"
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+  cd "${REPO_DIR}"
+  run bash -c "printf 'refs/heads/feat/x %s refs/heads/feat/x %s\n' '${local_sha}' '${base_sha}' | bash '${REPO_ROOT}/scripts/pre-push'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refs/heads/feat/x"* ]]
+}
