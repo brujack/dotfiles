@@ -193,6 +193,40 @@ Mutation controls:
 - **N4.** No test runs the full traced suite or reaches the script's main run.
 - **N5.** The script's `--json` parsing and unknown-option guard are unchanged.
 
+## Addendum: other parallel opportunities (2026-10-17, operator)
+
+After approval the operator asked for the backlog's other parallel items to be pulled into this
+work. Two were brought in and one was left out.
+
+**A1. `make lint`'s shellcheck passes run in parallel.**
+- **Measured on `claude`:**
+  - shellcheck over the 117 `SHELL_FILES` took 27.4s serial and 3.5s with `xargs -n 4 -P 8`.
+  - Over the 78 `.bats` files at `--severity=warning`, it took 28.6s serial and 8.6s parallel.
+  - All four runs exited 0. The whole `make lint` took 56.6s.
+- **Change:** both passes feed their file list to `xargs -n 4 -P $(JOBS)`. The list is unchanged.
+  `xargs -P` exists in both GNU and macOS `xargs`, so this does not need GNU parallel.
+- **Exit status:** the pass fails when any `shellcheck` invocation fails. The `shellcheck OK` and
+  `shellcheck bats OK` lines print only when every invocation passes. GNU `xargs` exits 123 and
+  BSD `xargs` exits 1 for a failed child, so the recipe tests for non-zero, never a specific
+  code.
+- **Unchanged:** the missing-tool guard, the severities, the file lists and the empty-list checks.
+
+**A2. Provision GNU `parallel` on Ubuntu.**
+- **Why:** `make test` silently falls back to serial without GNU parallel (717s against 71s,
+  measured 2026-09-21). After this work, `make bash-coverage` does too. Nothing provisions the
+  tool on Linux: `claude` got it as a Recommends of `bats`, and no repo file names it. macOS
+  already has `brew "parallel"` in the `Brewfile`.
+- **Change:** `install_bats_linux` installs `parallel` when `parallel --version` does not print a
+  `GNU parallel` first line. It uses the same `sudo -H DEBIAN_FRONTEND=noninteractive apt-get
+  install "${APT_CONFFILE_OPTS[@]}" -y` form as the `bats` install.
+- **A non-GNU `parallel`:** if a `parallel` exists that is not GNU's (moreutils ships one), the
+  function warns, naming the conflicting binary, and installs nothing. This is default-deny: it
+  never replaces a tool it does not own.
+- **Return value:** it returns non-zero when either install fails.
+
+**Left out: `make test-python` runs serially.** CI run 39075591428 logged `Ran 180 tests in
+0.228s`, so there is nothing to gain.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `693dc297` (Step 7 self-review commit, before Step 8 dispatch)
@@ -297,3 +331,12 @@ The design shrank, so review stops here.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- adds R9: `make lint` runs both shellcheck passes over the unchanged `SHELL_FILES` and `BATS_FILES` lists through `xargs -n 4 -P $(JOBS)`, fails lint when any invocation exits non-zero, and prints `shellcheck OK` / `shellcheck bats OK` only when every invocation of that pass passed. — operator pulled the parallel-lint backlog item into this work (Addendum A1)
+- adds R10: `install_bats_linux` installs `parallel` with `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y parallel` when `parallel --version` does not print a `GNU parallel` first line and no other `parallel` is on PATH, warns naming the binary and installs nothing when a non-GNU `parallel` is on PATH, and returns non-zero when either the bats or the parallel install fails. — operator pulled the provisioning backlog item into this work (Addendum A2)
+- adds R11: Tests cover R9 (a failing file in each pass fails `make lint` and suppresses its OK line, under `xargs -P`) and R10 (GNU present: no install; absent: install; non-GNU present: warn, no install; install failure: non-zero) and pass. — tests for the pulled-in items
+- adds V4: On `claude`, time `make lint` before and after R9 and record both; both exit 0. — measures the pulled-in speed-up
+- adds N6: The shellcheck severities, the `SHELL_FILES` / `BATS_FILES` definitions and the missing-tool guard in `make lint` are unchanged. — bounds the lint change
+
