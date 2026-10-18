@@ -8,57 +8,15 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 
 ## Layout
 
-```
-dotfiles/
-├── setup_env.sh       # Main entry — sources lib/, dispatches workflows
-├── Brewfile           # Homebrew bundle (100+ formulae/casks; [HAS_*] tags are capability-gated)
-├── lib/               # Shell libraries — 13 tracked .sh files plus apt_stale_signer_hosts.awk: constants, detect_env, developer,
-│                      #   git_hooks, git_sync, helpers, launch_agents, legacy_rsync,
-│                      #   linux_shared, linux_ubuntu, macos,
-│                      #   update_summary, workflows
-├── config/            # profiles.sh (hostname→profile map, bash); profiles.zsh (the zsh-side
-│                      #   derivation of the same table); local.sh (machine overrides,
-│                      #   git-ignored; local.sh.example is tracked);
-│                      #   hook_repos.sh (expected-repos list for the git-hooks sweep)
-├── scripts/           # bootstrap_{mac,linux}.sh, whats-new-*.sh, run-bash-coverage.sh,
-│                      #   bash-tracer.sh, cadence-notify.sh, sync-requirements-ci.sh,
-│                      #   sync-agent-guidance.sh, list-shell-files.sh, phrase_check.py,
-│                      #   check-lib-exit-traps.sh, sync_git_repos.sh, ci-suite-report.sh,
-│                      #   and the extensionless hooks pre-commit-hook.sh/pre-push/commit-msg
-├── LaunchAgents/      # cadence.plist.template — one template, both weekly agents
-├── keys/              # vendored signing keys: aws-cli-team.asc (_AWS_KEY_PATH default),
-│                      #   microsoft.asc (_MS_KEY_PATH default)
-├── manifests/         # manifests/dotfiles/*.yaml — state-ledger entity manifests
-├── powershell/        # Windows bootstrap: setup_windows.ps1, Pester tests, Makefile
-├── pyenv.d/           # rehash/dotfiles-register-all-executables.bash — installed as a
-│                      #   copy into ${PYENV_ROOT}/pyenv.d/rehash/, never symlinked
-├── tests/             # BATS tests: setup_env/, zshrc.d/, scripts/, mocks/, helpers/
-├── docs/              # adr/, knowledge/, superpowers/, cursor/,
-│                      #   claude-code-new-features/, anthropic-new-features/
-├── .config/           # .zshrc.d/{1_init..7_final}.zsh; ccstatusline/settings.json
-├── .github/workflows/ # CI: test, lint-macos, test-macos, bash-coverage, powershell, secret-scan, auto-merge
-├── .claude/           # settings.json, scripts/triage_log.py (the standards live at
-│                      #   ~/.claude/standards/, symlinked from ai-config — not tracked here)
-├── .warp/             # settings.toml (Warp-owned, symlinked live), themes/, launch_configurations/
-├── .vscode/           # settings.json
-├── .ssh/              # config, teleport.cfg only — never private keys
-├── .zshrc, .zprofile, .zshenv, .vimrc, .tmux.conf, .gitconfig_*, starship.toml, bruce.omp.json,
-│                      #   bruce.zsh-theme, profile.ps1, Vagrantfile, etch.yaml, cliff.toml
-├── pyproject.toml, uv.lock, requirements-*.txt   # the five CI renderings; see Testing
-└── ubuntu_*_packages.txt, Brewfile.gui, Brewfile.devtools
-```
-
-The tree is **exhaustive at the top level** — every tracked top-level directory appears — and
-illustrative within a directory except `lib/`, which is complete. Regenerate with
-`git ls-files | awk -F/ 'NF>1{print $1}' | sort -u` rather than by memory.
+Tracked top-level dirs: `lib/` (shell libraries), `config/` (`profiles.sh`, git-ignored `local.sh`, `hook_repos.sh`), `scripts/`, `tests/`, `docs/`, `.config/` (`.zshrc.d/`), `.github/` (workflows), `.claude/`, `powershell/`, `LaunchAgents/`, `keys/`, `manifests/`, `pyenv.d/`, `.ssh/`, `.vscode/`, `.warp/`; regenerate with `git ls-files | awk -F/ 'NF>1{print $1}' | sort -u`, never from memory. → `dotfiles-conventions.md` § `CLAUDE.md budget: Layout directory tree`
 
 ## 10-80-10 Execution Cycle
 
 Sessions in this repo follow the 10-80-10 execution cycle defined in `ai-config` ADR-0009 (with the ADR-0010 wave-dispatch extension):
 
-- **Phase 1 (10%) — Architect.** `brainstorming` → `writing-plans` (emit per-task YAML `yaml-task` blocks with `role`/`model`/`tdd`/`acceptance`/`max_retries`/`files_touched`/`depends_on`/`parallel_group`). Opus role.
-- **Phase 2 (80%) — Execute.** `subagent-driven-development` runs iterate-until-green per task; FORBIDDEN list prevents gate cheating; wave-dispatch when `parallel_group` is declared. Sonnet/Haiku per task per the plan.
-- **Phase 3 (10%) — Review.** `finishing-a-development-branch` runs the twelve-step gate chain in its own Phase 3 table — `perf-regression` first, `pr-review` second-to-last, the merge/PR step last. Read the order there rather than here. Opus role.
+- Phase 1 (10%, Opus): `brainstorming` → `writing-plans`, emitting per-task `yaml-task` blocks.
+- Phase 2 (80%, Sonnet/Haiku per plan): `subagent-driven-development` iterate-until-green; never cheat a gate (FORBIDDEN list); wave-dispatch when `parallel_group` is declared.
+- Phase 3 (10%, Opus): `finishing-a-development-branch` runs its gate chain; read the order in its Phase 3 table, not here. → `dotfiles-conventions.md` § `CLAUDE.md budget: 10-80-10 phase list`
 
 Validate a plan before dispatch:
 
@@ -97,39 +55,12 @@ When web research (web-research skill) or context-mode fetches produce findings 
 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
-- **Repo root** — each dotfile symlinked individually into `$HOME` (e.g. `~/.zshrc → dotfiles/.zshrc`). `.zshenv` is linked the same way: non-interactive zsh on macOS reads it and puts Homebrew's `python@3` `python3` ahead of Apple's 3.9, unless the inherited `PATH` already resolves `python3` elsewhere (pyenv, a venv). An existing regular `~/.zshenv` is adopted as `~/.zshenv.local`, which `.zshenv` sources; if both exist, setup warns and leaves both. Login non-interactive zsh (`zsh -lc`) is not covered, because macOS `/etc/zprofile`'s `path_helper` reorders `PATH`.
-- **`.claude/`** — each item symlinked individually into `~/.claude/` from the ai-config repo, except `rules/`, which is never linked, and `projects/`, which the loop skips and then links explicitly (see below).
-  Exception: `mcp.json.template` is symlinked as `~/.claude/mcp.json.template` (read-only reference).
+- Repo-root dotfiles: symlink each individually into `$HOME`, `.zshenv` included (an existing regular `~/.zshenv` is adopted as `~/.zshenv.local`; if both exist setup warns and leaves both).
+- `.claude/`: symlink each ai-config `.claude/` item individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below); `mcp.json.template` is linked read-only. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
 
-  **The live `~/.claude/mcp.json` is ALSO a symlink, and template generation is unreachable — this line
-  claimed the opposite until 2026-09-14.** The loop above links every item in `ai-config/.claude/` except
-  `projects` and `rules`, and `mcp.json` is tracked there, so it is linked by `setup_dotfile_symlinks`
-  (called from `run_setup_user`, `lib/workflows.sh`). `setup_claude_mcp` runs later in that same function, finds a valid symlink, and returns 0
-  with two WARN lines rather than writing credentials into a tracked file (its `-L` guard). The ordering
-  makes that every run on every machine, not a race. Verified on the Studio 2026-09-14: the live file resolves
-  into `ai-config/.claude/mcp.json`, and that tracked target holds 1 `mcpServers`
-  key, 0 credential-shaped strings and 0 unexpanded `$GITHUB_PAT` placeholders — so the guard is working and
-  nothing has leaked. **`-t doctor` cannot verify this**: `_doctor_check_github_mcp` reports
-  `[PASS] ~/.claude/mcp.json (generated)` (`_doctor_check_github_mcp` in `lib/helpers.sh`) for a path it only tested for existence, so
-  the word "generated" asserts a mechanism that never ran. Read the GitHub MCP section below with that in mind.
-  `rules/` is never linked because a `~/.claude/rules` pointing into ai-config would load ai-config's project rules as user-level rules in every repo: rules without `paths:` load at launch, and how user-level rules with `paths:` behave is unmeasured.
+- `~/.claude/mcp.json` is a symlink into `ai-config/.claude/mcp.json`, never generated: `setup_claude_mcp` finds the symlink and returns 0 with two WARN lines instead of writing credentials into a tracked file (its `-L` guard), and `-t doctor`'s `[PASS] ~/.claude/mcp.json (generated)` only tested existence, so do not read it as proof. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink mcp.json is a symlink`
 
-  **`projects/` IS symlinked, wholesale, and this line said the opposite until 2026-08-25.**
-  The loop skips it — `[[ "$(basename "${_claude_item}")" == "projects" ]] && continue` — and the
-  very next statement is `safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"`.
-  So "each item **except** `projects/`" is true of the _loop_ and false of the _outcome_, and the
-  bullet above is worded for the mechanism while readers take it for the result. Verified on disk,
-  not from the code: `readlink ~/.claude/projects` →
-  `/Users/bruce/git-repos/personal/ai-config/.claude/projects`.
-
-  **The consequence is not local and it has bitten three sessions.** Anything written under
-  `~/.claude/` is physically inside **ai-config's working tree** — including
-  `~/.claude/projects/<encoded-repo>/memory/`, whose name suggests per-repo scratch space. That
-  path is inside ai-config's `make test` scope, where `validate-memory` is a `test` prerequisite,
-  so a draft one session treats as private is a hard-failing gate for every session trying to
-  commit to ai-config. Measured 2026-08-25: three promoted-but-undeleted drafts there blocked
-  commits for two other sessions. Before writing scratch state under `~/.claude/`, note that you
-  are writing into another repo.
+- `projects/` IS symlinked wholesale, so `~/.claude/projects/<encoded-repo>/memory/` is inside ai-config's working tree and `make test` scope: before writing scratch state under `~/.claude/`, know you are writing into another repo, and promote or delete any draft, since a leftover one hard-fails `validate-memory` for every session committing to ai-config. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink projects is linked wholesale`
 
 - **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
 
@@ -137,7 +68,7 @@ Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate sy
 
 ### Cursor ↔ Claude Code Parity
 
-`.cursor/plugins/` and `.cursor/skills-cursor/` are symlinked from this repo alongside `.claude/`. When adding or updating Claude Code plugins, skills, or MCP servers (Context7, Superpowers, Warp, etc.), check whether the same capability should be reflected in the Cursor config. The symlink setup means both tools share the same plugin/skills files on disk — but Cursor rules, model settings, and MCP server registration live in `.cursor/User/` and may need separate updates.
+When adding or updating a Claude Code plugin, skill or MCP server, check whether `.cursor/` needs the same change: plugins and skills are shared by symlink, but Cursor rules, model settings and MCP registration live in `.cursor/User/` and need separate updates. → `dotfiles-conventions.md` § `CLAUDE.md budget: Cursor Claude Code parity`
 
 ## GitHub MCP
 
@@ -592,38 +523,25 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Reference only (macOS `/usr/local/bin` symlink limits, `update_rust` resolution, tfenv install rules, `CARGO_MIN_VER` rationale) → `dotfiles-conventions.md` § `CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv`
 ## Dependency Automation
 
-- Inline the shared Renovate preset into `renovate.json`, don't `extends` it — ai-config is private, dotfiles public, and an unfetchable `extends` throws `config-validation` at `initRepo` and silently abandons the repo (measured: `extends` gave 8 errors/0 extractions; inlined gave 0/1). ADR-0010's "each repo extends the preset" no longer holds.
-- Hand-sync `extends`/`schedule`/`labels`/`packageRules` with canonical `ai-config/renovate-presets/default.json` — nothing detects drift between the copies. → `dotfiles-dependency-automation.md` § `renovate.json inlines the shared preset (private-repo visibility)`
+- Inline the shared Renovate preset into `renovate.json`, never `extends` it (ai-config is private, so `extends` throws `config-validation` and Renovate silently abandons the repo); hand-sync `extends`/`schedule`/`labels`/`packageRules` with `ai-config/renovate-presets/default.json`, since nothing detects drift. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Renovate preset inline`
 
-- Treat Renovate as confirmed running here, not merely configured: #240 pinned every `actions/checkout` ref to a digest and auto-merged, #241 raised a major bump and did not — `packageRules` working as written — and `pinDigests: true` moved this repo from 0-of-6 pinned refs to 6-of-6.
-- Do not cite the `mode=silent` finding as a live constraint without re-reading a current Mend job log — silent mode is no longer in force here (a created branch is the one thing it forbids). → `dotfiles-dependency-automation.md` § `Renovate confirmed working: pinDigests and auto-merge in production`
+- Treat Renovate as running here (`pinDigests` and auto-merge work in production); do not cite the `mode=silent` finding as a live constraint without re-reading a current Mend job log. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Renovate running`
 
-- Never conclude Renovate is inactive from a zero-PR count alone: under `mode=silent` zero was the only reachable value, so every "not running" verdict built on it was unprovable either way.
-- Before concluding anything from what a mechanism has not done, establish what it was even permitted to do — this holds even once silent mode is lifted elsewhere. → `dotfiles-dependency-automation.md` § `The zero-PR oracle was structurally unfalsifiable under silent mode`
+- Never conclude Renovate is inactive from a zero-PR count alone; first establish what it was permitted to do. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency zero-PR count`
 
-- Do not add `pip_requirements` to `renovate.json`'s `enabledManagers` — deliberately absent. Its pattern allows only one suffix after "requirements", so of five generated renderings only `requirements-ci.txt` matches, by luck not design; `tests/setup_env/requirements_ci.bats` pins it since a rename would silently widen scope.
-- All five renderings are generated from `uv.lock`; enabling the manager would raise PRs against generated files `check-requirements-ci` fails. The real declaration is `pyproject.toml`, owned by `pep621`. → `dotfiles-dependency-automation.md` § `pip_requirements deliberately absent from enabledManagers`
+- Do not add `pip_requirements` to `renovate.json`'s `enabledManagers`: the five renderings are generated from `uv.lock` and `pyproject.toml` is owned by `pep621`; `tests/setup_env/requirements_ci.bats` pins the absence. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency pip_requirements absent`
 
-- Keep Dependabot security auto-PRs OFF, vulnerability alerts ON, fleet-wide across all 18 non-archived repos (decided 2026-08-21) — a GitHub repo-Settings toggle no tracked file captures (`dependabot.yml` governs version updates, not security), so absence from any file is not evidence it's unset.
-- Rationale: alerts are the signal, auto-PRs an unreviewed write path — #227 auto-merged an unattended lockfile edit because it passed CI. Don't re-enable auto-PRs without deliberately re-opening that path; 16 of 18 repos had alerts off entirely before this decision. → `dotfiles-dependency-automation.md` § `Dependabot: security auto-PRs off, vulnerability alerts on (fleet-wide)`
+- Keep Dependabot security auto-PRs OFF and vulnerability alerts ON fleet-wide (decided 2026-08-21); it is a repo-Settings toggle no tracked file captures, so a file's silence is not evidence it is unset; do not re-enable auto-PRs. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Dependabot policy`
 
-- `automated-security-fixes` is repo-wide — there is no per-ecosystem toggle, so "turn Dependabot off for Python only" is not expressible.
-- The flag cannot be cleared while alerts are off: `DELETE automated-security-fixes` 422s "Vulnerability alerts must be enabled…" on a repo left inert but latently armed. Always call `PUT vulnerability-alerts` first, then `DELETE automated-security-fixes` — never the reverse. → `dotfiles-dependency-automation.md` § `Dependabot: mechanical details (repo-wide toggle, ordering)`
+- To clear Dependabot's repo-wide `automated-security-fixes`, call `PUT vulnerability-alerts` first, then `DELETE automated-security-fixes`, never the reverse (the DELETE 422s while alerts are off). → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency automated-security-fixes ordering`
 
-- Do not assume Python packages get automated update PRs here: Dependabot's write path is closed (auto-PRs off) and Renovate manages no Python anywhere (`pep621` enabled in no repo), including this one, despite `pyproject.toml`/`uv.lock` living here — vulnerability alerts will fire with nothing proposing a fix. → `dotfiles-dependency-automation.md` § `Consequence: Python has no automated dependency update path`
+- Do not assume Python packages get automated update PRs here: Dependabot auto-PRs are off and Renovate manages no Python, so alerts fire with nothing proposing a fix. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Python no update path`
 
 ## Local-Only State
 
 The following paths are machine-local and must **never** be committed to this repo:
 
-- `~/.aws/` — AWS credentials and config
-- `~/.tf_creds/` — Terraform cloud credentials
-- `~/.ssh/` private keys — only `config` and `teleport.cfg` are tracked in `.ssh/` in the repo
-- `~/.azure_creds/` — Azure credentials
-- `~/.gcloud_creds/` — GCloud credentials
-- `~/.tsh/` — Teleport session tokens
-- `~/.claude/projects/<path>/` — conversation history **and** per-project memory. Nothing here is committed. Per ai-config ADR-0014 the `memory/` subdirectory is a session-local draft location; canonical memory lives at `ai-config/.claude/memory/<repo>-<topic>.md`, and ai-config's `validate_memory.py` fails `make test` on any draft left behind. The one tracked exception is ai-config's own `<encoded>/memory` symlink to the canonical corpus. An earlier version of this line claimed the memory subdirectories were tracked; that was wrong, and it had produced 27 committed drafts before ai-config#138 asserted the invariant
-- `config/local.sh` — machine-local overrides; copy from `config/local.sh.example`, git-ignored
+- Never commit machine-local paths: `~/.aws/`, `~/.tf_creds/`, `~/.azure_creds/`, `~/.gcloud_creds/`, `~/.tsh/`, `~/.ssh/` private keys (only `config` and `teleport.cfg` are tracked), `~/.claude/projects/<path>/` (session history and memory drafts; canonical memory is `ai-config/.claude/memory/<repo>-<topic>.md` and a leftover draft fails ai-config `make test`), and `config/local.sh` (git-ignored; copy from `config/local.sh.example`). → `dotfiles-conventions.md` § `CLAUDE.md budget: Local-only state paths`
 
 The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patterns. If it fires on a legitimate file, add an allowlist entry to `.gitleaks.toml`.
 
@@ -634,18 +552,7 @@ The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patter
 `.config/.zshrc.d/1_init.zsh`). After `detect_env()` (bash) or `config/profiles.zsh` (zsh)
 runs, the following vars are set:
 
-| Var            | Values                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| `PROFILE`      | String: `personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation`, or `unknown` |
-| `HAS_GUI`      | Set for: personal_laptop, mac_workstation, mac_mini, linux_workstation, wsl2_workstation                        |
-| `HAS_DEVTOOLS` | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
-| `HAS_AWS`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
-| `HAS_K8S`      | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
-| `HAS_DOCKER`   | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
-| `HAS_RUST`     | Set for: personal_laptop, mac_workstation, linux_workstation, wsl2_workstation                                  |
-| `HAS_SNAP`     | Set for: linux_workstation only (not wsl2_workstation — snap unavailable in WSL2)                               |
-| `HAS_FLATPAK`  | Set for: linux_workstation only (gates Steam flatpak install in `_install_ubuntu_gui_tools`)                    |
-| `HAS_PRINTING` | Set for: personal_laptop, mac_workstation, mac_mini                                                             |
+- `detect_env()` (bash) and `config/profiles.zsh` (zsh) set `PROFILE` (`personal_laptop`, `mac_workstation`, `mac_mini`, `linux_workstation`, `wsl2_workstation` or `unknown`) and the `HAS_*` flags (GUI, DEVTOOLS, AWS, K8S, DOCKER, RUST, SNAP, FLATPAK, PRINTING); `HAS_SNAP` and `HAS_FLATPAK` are linux_workstation only; the per-profile matrix is reference. → `dotfiles-conventions.md` § `CLAUDE.md budget: Profile var matrix`
 
 `server` is gone — it belonged to a retired mac mini that no hostname has mapped to since,
 and `PROFILE_CAPS[server]` was deleted with it.
@@ -653,14 +560,7 @@ and `PROFILE_CAPS[server]` was deleted with it.
 **A `-1` suffix on a hostname is that machine's wireless-interface name** — `hostname -s`
 returns it whenever the machine is off ethernet — and both spellings resolve to the same `PROFILE`/`HAS_*` set.
 
-`workstation`, `cruncher` and `claude` take a single key because each holds **one** DHCP/DNS
-registration — that is the criterion, not the interface count and not the absence of wireless
-hardware. `workstation` has `wlp14s0` and NetworkManager and still reports `workstation`;
-`claude` has `wlo2`, down and unconfigured, and its wired side is a **bond**, so several
-physical NICs hold one registration between them. A `-1` name is a second registration, so it
-appears only for a machine that actually connects both ways. `home-1` is the one exception to the suffix meaning "wireless": there
-the `-1` is part of the machine's actual name (a naming mistake kept in case a `home-2`
-follows), and it has no separate `home` entry.
+- Give `workstation`, `cruncher` and `claude` one key: the criterion is one DHCP/DNS registration, and a `-1` key belongs only to a machine that connects both wired and wireless; `home-1` is a literal name with no separate `home` entry. → `dotfiles-conventions.md` § `CLAUDE.md budget: Profile single-key hostnames`
 
 An unmapped hostname resolves to `PROFILE=unknown` with zero `HAS_*` — that is a silent,
 well-formed answer, not an error, which is why `run_doctor` now checks for it explicitly
@@ -668,22 +568,9 @@ well-formed answer, not an error, which is why `run_doctor` now checks for it ex
 
 ## Adding a New Machine
 
-Measured directly against `origin/master` (this branch's merge-base): before the
-`PROFILE_LEGACY` consolidation, a new machine's legacy identity variable needed a
-hardcoded case arm in **five** separate files — `config/profiles.sh` (`PROFILE_MAP`),
-`config/profiles.zsh`'s own case statement, `lib/detect_env.sh`'s own case statement, and
-two independently hand-typed oracles duplicated across `tests/setup_env/profiles.bats`
-and `tests/zshrc.d/profiles.bats`. `tests/helpers/legacy_oracle.bash` did not exist at
-that commit. This branch's `PROFILE_LEGACY` table plus one shared test oracle brought that
-down to **three edits across two files** for a host with a wireless twin — a 40%
-reduction, not an addition — or **four edits across three files** for a wired-only host,
-which also needs an entry in `tests/setup_env/profiles.bats`'s `wired_only` set (see the
-note after step 3 below).
+Adding a machine takes three edits across two files for a host with a wireless twin, four across three for a wired-only host (steps below). → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine edit counts`
 
-1. Edit `config/profiles.sh` — add **both** the wired and the wireless-interface hostname to
-   `PROFILE_MAP`, mapped to the same profile. A machine added under only its wired name
-   silently loses every capability the moment it's on wifi — `PROFILE` resolves to `unknown`
-   and no `HAS_*` var is set — which is the defect this table's design exists to prevent:
+1. Edit `config/profiles.sh`: add **both** the wired and the `-1` wireless hostname to `PROFILE_MAP` with the same profile; a wired-only entry leaves `PROFILE=unknown` and no `HAS_*` on wifi. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine step 1`
 
 ```bash
 declare -A PROFILE_MAP=(
@@ -693,43 +580,17 @@ declare -A PROFILE_MAP=(
 )
 ```
 
-2. In the same file, add the identical wired/wireless pair to `PROFILE_LEGACY`, mapping
-   both hostnames to the same legacy identity variable name (`LAPTOP`, `STUDIO`, ...) — the
-   same twin rule `PROFILE_MAP` follows, for the same reason: an entry only under the wired
-   name loses its legacy variable the moment the machine is on wifi. If the machine needs a
-   new profile, also add it to `PROFILE_CAPS`.
+2. In the same file, add the same wired/wireless pair to `PROFILE_LEGACY` with the same legacy variable (`LAPTOP`, `STUDIO`, ...); add a new profile to `PROFILE_CAPS` if needed. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine step 2`
 
-3. Add a case arm to `tests/helpers/legacy_oracle.bash` for the new hostname(s), naming the
-   same legacy variable. This oracle is deliberately hand-typed rather than derived from
-   `PROFILE_LEGACY` — a derived oracle would follow whatever the production table says, so a
-   hostname swapped onto the wrong legacy variable in `PROFILE_LEGACY` itself would agree
-   with the very table it exists to check, and pass silently.
+3. Add a case arm for the new hostname(s) to `tests/helpers/legacy_oracle.bash`, hand-typed and never derived from `PROFILE_LEGACY`. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine step 3`
 
-   Measured directly: skipping either step **fails the suite** — a dedicated test
-   (`every PROFILE_MAP key has a PROFILE_LEGACY entry`) catches a missing `PROFILE_LEGACY`
-   entry, and the per-host oracle comparison catches a missing `legacy_oracle.bash` arm — so
-   the normal push → CI → auto-merge path blocks either mistake before it ships. They differ
-   only in what happens if a mistake reaches a real shell anyway (a bypassed hook, a
-   disabled test): a missing `PROFILE_LEGACY` entry
-   degrades gracefully — `config/profiles.zsh` prints a warning to stderr at login and the
-   shell keeps going, never crashing — while a missing oracle arm has no production
-   consequence at all, because `tests/helpers/legacy_oracle.bash` is read only by the test
-   suite and no login shell ever sources it.
+   Skipping step 2 or step 3 fails the suite, so CI blocks either mistake. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine step 3 failure modes`
 
-   **A wired-only host (no `-1` twin, like `workstation`, `cruncher`, and `claude`) needs a
-   fourth edit, in a third file:** add its key to the `wired_only` set in
-   `tests/setup_env/profiles.bats`, or the test `every wired PROFILE_MAP key has a wireless
--1 twin on the same profile` fails, since that test expects every `PROFILE_MAP` key to
-   have a `-1` twin unless explicitly exempted.
+   A wired-only host (`workstation`, `cruncher`, `claude`) needs a fourth edit: its key in the `wired_only` set in `tests/setup_env/profiles.bats`. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine wired-only fourth edit`
 
 4. Push a feature branch — CI validates → auto-merges to master.
 
-**No other file needs changing** — true for production, since `lib/detect_env.sh` and
-`config/profiles.zsh` both derive `PROFILE`/`HAS_*`/the legacy identity variables from
-`PROFILE_MAP`/`PROFILE_LEGACY` in this one file — but not for tests: `tests/helpers/legacy_oracle.bash`
-(step 3) is a second, deliberately independent copy of the same mapping and needs its own
-edit too, and a wired-only host needs a third test edit besides — its key added to
-`tests/setup_env/profiles.bats`'s `wired_only` set.
+**No other production file needs changing** (`lib/detect_env.sh` and `config/profiles.zsh` derive from `PROFILE_MAP`/`PROFILE_LEGACY`), but tests need `tests/helpers/legacy_oracle.bash` and, for a wired-only host, `wired_only` edited too. → `dotfiles-conventions.md` § `CLAUDE.md budget: New machine no other file`
 
 If a hostname is missing from the table, `run_doctor` fails and names the hostname and
 `config/profiles.sh` in its message — that is the check that catches the omission in step 1

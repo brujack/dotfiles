@@ -104,4 +104,28 @@ MOVE | Two consequences worth holding: tagging an entry does not ke | dotfiles-c
 MOVE | **Formula/cask dedup rule:** never add both a formula and a  | dotfiles-conventions.md | CLAUDE.md relocation: Brewfile formula/cask dedup and tap trust
 MOVE | - `~/.claude/` — `settings.json`, `CLAUDE.md`, `mcp.json.tem | dotfiles-conventions.md | CLAUDE.md relocation: Windows AI config link targets
 MOVE | Ruby version managers: **rbenv on Linux** (`lib/linux_ubuntu | dotfiles-conventions.md | CLAUDE.md relocation: Ruby version manager split
+MOVE | ``` dotfiles/ ├── setup_env.sh       # Main entry — sources  | dotfiles-conventions.md | CLAUDE.md budget: Layout directory tree
+MOVE | - **Phase 1 (10%) — Architect.** `brainstorming` → `writing- | dotfiles-conventions.md | CLAUDE.md budget: 10-80-10 phase list
+MOVE | - **Repo root** — each dotfile symlinked individually into ` | dotfiles-conventions.md | CLAUDE.md budget: Symlink repo-root and .claude rules
+MOVE |   **The live `~/.claude/mcp.json` is ALSO a symlink, and tem | dotfiles-conventions.md | CLAUDE.md budget: Symlink mcp.json is a symlink
+MOVE |   **`projects/` IS symlinked, wholesale, and this line said  | dotfiles-conventions.md | CLAUDE.md budget: Symlink projects is linked wholesale
+MOVE |   **The consequence is not local and it has bitten three ses | dotfiles-conventions.md | CLAUDE.md budget: Symlink projects is linked wholesale
+MOVE | `.cursor/plugins/` and `.cursor/skills-cursor/` are symlinke | dotfiles-conventions.md | CLAUDE.md budget: Cursor Claude Code parity
+MOVE | - Inline the shared Renovate preset into `renovate.json`, do | dotfiles-conventions.md | CLAUDE.md budget: Dependency Renovate preset inline
+MOVE | - Treat Renovate as confirmed running here, not merely confi | dotfiles-conventions.md | CLAUDE.md budget: Dependency Renovate running
+MOVE | - Never conclude Renovate is inactive from a zero-PR count a | dotfiles-conventions.md | CLAUDE.md budget: Dependency zero-PR count
+MOVE | - Do not add `pip_requirements` to `renovate.json`'s `enable | dotfiles-conventions.md | CLAUDE.md budget: Dependency pip_requirements absent
+MOVE | - Keep Dependabot security auto-PRs OFF, vulnerability alert | dotfiles-conventions.md | CLAUDE.md budget: Dependency Dependabot policy
+MOVE | - `automated-security-fixes` is repo-wide — there is no per- | dotfiles-conventions.md | CLAUDE.md budget: Dependency automated-security-fixes ordering
+MOVE | - Do not assume Python packages get automated update PRs her | dotfiles-conventions.md | CLAUDE.md budget: Dependency Python no update path
+MOVE | - `~/.aws/` — AWS credentials and config - `~/.tf_creds/` —  | dotfiles-conventions.md | CLAUDE.md budget: Local-only state paths
+MOVE | | Var            | Values                                    | dotfiles-conventions.md | CLAUDE.md budget: Profile var matrix
+MOVE | `workstation`, `cruncher` and `claude` take a single key bec | dotfiles-conventions.md | CLAUDE.md budget: Profile single-key hostnames
+MOVE | Measured directly against `origin/master` (this branch's mer | dotfiles-conventions.md | CLAUDE.md budget: New machine edit counts
+MOVE | 1. Edit `config/profiles.sh` — add **both** the wired and th | dotfiles-conventions.md | CLAUDE.md budget: New machine step 1
+MOVE | 2. In the same file, add the identical wired/wireless pair t | dotfiles-conventions.md | CLAUDE.md budget: New machine step 2
+MOVE | 3. Add a case arm to `tests/helpers/legacy_oracle.bash` for  | dotfiles-conventions.md | CLAUDE.md budget: New machine step 3
+MOVE |    Measured directly: skipping either step **fails the suite | dotfiles-conventions.md | CLAUDE.md budget: New machine step 3 failure modes
+MOVE |    **A wired-only host (no `-1` twin, like `workstation`, `c | dotfiles-conventions.md | CLAUDE.md budget: New machine wired-only fourth edit
+MOVE | **No other file needs changing** — true for production, sinc | dotfiles-conventions.md | CLAUDE.md budget: New machine no other file
 ```
