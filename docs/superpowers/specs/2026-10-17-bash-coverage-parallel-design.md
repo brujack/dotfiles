@@ -213,9 +213,7 @@ work. Two were brought in and one was left out.
 
 **A2. Provision GNU `parallel` on Ubuntu.**
 - **Why:** `make test` silently falls back to serial without GNU parallel (717s against 71s,
-  measured 2026-09-21). After this work, `make bash-coverage` does too. Nothing provisions the
-  tool on Linux: `claude` got it as a Recommends of `bats`, and no repo file names it. macOS
-  already has `brew "parallel"` in the `Brewfile`.
+  measured 2026-09-21). After this work, `make bash-coverage` does too. Correction (2026-10-17, operator): the tool is already provisioned on both platforms. On Ubuntu, `bats` 1.13.0 lists `parallel` in Recommends and apt installs Recommends by default, so the existing `apt-get install bats` brings GNU parallel (`apt-mark` shows it auto-installed on `claude` and the workstation). On macOS, `brew "parallel"` is in the `Brewfile` (its `[HAS_DEVTOOLS]` tag only affects the drift check). This change is kept as a fallback for a host with Recommends disabled, bats installed without them, or bats already present without GNU parallel.
 - **Change:** `install_bats_linux` installs `parallel` when `parallel --version` does not print a
   `GNU parallel` first line. It uses the same `sudo -H DEBIAN_FRONTEND=noninteractive apt-get
   install "${APT_CONFFILE_OPTS[@]}" -y` form as the `bats` install.
@@ -345,3 +343,29 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - R10 -> `install_bats_linux` checks `"${_PARALLEL_BIN:-parallel}" --version` whether or not bats is already installed; when its first line is not `GNU parallel` it runs `sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y parallel`, re-checks, and warns naming the `parallel` that `command -v` resolves if the result is still not GNU; it returns 1 when the bats install fails, otherwise 2 when the parallel install fails or the re-check is still not GNU, otherwise 0. — operator 2026-10-17: a parallel-only failure must warn and continue, not abort `-t setup_user`; parallel is a speed dependency, a missing bats is not
 - adds R12: `run_setup_user` (`lib/workflows.sh`) treats `install_bats` returning 2 as a warning (logs it and continues) and still returns 1 when `install_bats` returns 1, with tests for both arms. — the caller `install_bats || return 1` would otherwise abort the rest of setup on a parallel-only failure (Task 4 review)
 - R3 -> The main run captures `_coverage_bats_args` as `_out="$(_coverage_bats_args)" || exit 2` before creating `coverage/`, the FIFO or the reader, reads it into the array `_bats_args`, and invokes `"${_bats_bin}" "${_bats_args[@]}"`, where `_bats_bin` is the existing `${_OVERRIDE_BATS_BIN:-bats}` presence-check binary; no literal `bats --recursive` call remains. — the plan prescribed the `"${_bats_bin}"` prefix so the call site honours the existing `_OVERRIDE_BATS_BIN` seam; R3 named the bare `bats` (Task 1 spec review)
+- finding R11 (2026-10-17, reviewer A): DIFFERS — Requirement says tests drive R10 never by editing PATH, but 'becomes GNU after install returns 0' and 'parallel apt failure alone returns 2 even when the re-check passes' run `PATH="${FLIP_SHIM_DIR}:${PATH}" run install_bats_linux` to inject an apt-get shim that flips the parallel stub; the parallel state itself still goes through `_PARALLEL_BIN`, and all other listed cases (GNU present, absent/non-GNU, still non-GNU warn, install failure, bats present + parallel absent, pinned existing skip test, R9 lint failure tests per pass) are present.
+- R11 -> Tests drive R10's parallel detection only through the `_PARALLEL_BIN` seam (stubs printing a GNU or a moreutils first line, or a nonexistent path), never by editing PATH to hide or replace `parallel`; a test may prepend a test-owned directory holding an `apt-get` exit shim to control the install's exit status. They cover GNU present (no parallel install), absent and non-GNU (install, then GNU on re-check), still non-GNU after install (warning, rc 2), parallel install failure (rc 2), bats install failure (rc 1, outranking a parallel failure), and bats present with GNU parallel absent (parallel install still runs); the existing `install_bats_linux` tests pin `_PARALLEL_BIN` to a GNU stub; R9's tests cover a failing file in each pass failing `make lint` and suppressing its OK line under `xargs -P`; all pass. — spec alignment 2026-10-17: two tests prepend an apt-get exit shim to PATH to isolate the install failure from the re-check; parallel detection still goes only through `_PARALLEL_BIN`, and the return codes reflect the R10 amendment
+
+## Spec alignment (2026-10-17)
+
+- spec: docs/superpowers/specs/2026-10-17-bash-coverage-parallel-design.md
+- anchor: 26b46fd3dfd19740f3c55929de8b1bb2fa8b78d6
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R11 | A | DIFFERS | Requirement says tests drive R10 never by editing PATH, but 'becomes GNU after install returns 0' and 'parallel apt failure alone returns 2 even when the re-check passes' run `PATH="${FLIP_SHIM_DIR}:${PATH}" run install_bats_linux` to inject an apt-get shim that flips the parallel stub; the parallel state itself still goes through `_PARALLEL_BIN`, and all other listed cases (GNU present, absent/non-GNU, still non-GNU warn, install failure, bats present + parallel absent, pinned existing skip test, R9 lint failure tests per pass) are present. | - R11 -> Tests drive R10's parallel detection only through the `_PARALLEL_BIN` seam (stubs printing a GNU or a moreutils first line, or a nonexistent path), never by editing PATH to hide or replace `parallel`; a test may prepend a test-owned directory holding an `apt-get` exit shim to control the install's exit status. They cover GNU present (no parallel install), absent and non-GNU (install, then GNU on re-check), still non-GNU after install (warning, rc 2), parallel install failure (rc 2), bats install failure (rc 1, outranking a parallel failure), and bats present with GNU parallel absent (parallel install still runs); the existing `install_bats_linux` tests pin `_PARALLEL_BIN` to a GNU stub; R9's tests cover a failing file in each pass failing `make lint` and suppressing its OK line under `xargs -P`; all pass. — spec alignment 2026-10-17: two tests prepend an apt-get exit shim to PATH to isolate the install failure from the re-check; parallel detection still goes only through `_PARALLEL_BIN`, and the return codes reflect the R10 amendment |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
+- V4: no evidence recorded
