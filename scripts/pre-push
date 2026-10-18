@@ -176,7 +176,7 @@ fi
 if [[ -n "${budget_refs}" ]]; then
     printf 'pre-push: CLAUDE.md budget check failed for:\n' >&2
     printf '%s\n' "${budget_refs}" | grep -v '^$' | sed 's/^/  /' >&2
-    printf 'CLAUDE.md is capped at 105,000 bytes; move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047)\n' >&2
+    printf "The checker's own message is above. The ceiling is 105,000 bytes; move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047).\n" >&2
     exit 1
 fi
 

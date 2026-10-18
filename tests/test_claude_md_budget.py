@@ -89,6 +89,23 @@ class BudgetTest(unittest.TestCase):
         self.commit(b"a")
         self.assertEqual(self.run_script().returncode, 2)
 
+    def test_extra_argument_exits_2(self) -> None:
+        self.commit(b"a")
+        self.assertEqual(self.run_script("HEAD", "extra").returncode, 2)
+
+    def test_unreadable_claude_md_blob_exits_2(self) -> None:
+        # ls-tree lists the dangling gitlink; git show of it then fails.
+        self.commit(None)
+        _git(
+            self.repo,
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            "160000,1111111111111111111111111111111111111111,CLAUDE.md",
+        )
+        _git(self.repo, "commit", "-q", "-m", "gitlink")
+        self.assertEqual(self.run_script("HEAD").returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
