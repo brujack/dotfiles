@@ -1098,7 +1098,7 @@ _budget_commit() {
       cp '${REPO_ROOT}/scripts/claude_md_budget.py' '${REPO_DIR}/scripts/claude_md_budget.py'
       git -C '${REPO_DIR}' add scripts/claude_md_budget.py
     fi
-    git -C '${REPO_DIR}' commit --quiet -m 'docs: claude md'
+    git -C '${REPO_DIR}' commit --quiet -m 'docs: claude md' >&2 || exit 1
     git -C '${REPO_DIR}' rev-parse HEAD
   "
 }
@@ -1111,6 +1111,8 @@ _budget_commit() {
   [ "$status" -eq 1 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
   [[ "$output" == *"105,000 bytes"* ]]
+  # The checker itself refused, not a git step failing first.
+  [[ "$output" == *"bytes, ceiling 105000"* ]]
   [[ "$output" == *"refs/heads/feat/x"* ]]
 }
 
@@ -1139,6 +1141,8 @@ _budget_commit() {
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"105,000 bytes"* ]]
+  # The checker itself refused, not a git step failing first.
+  [[ "$output" == *"bytes, ceiling 105000"* ]]
 }
 
 @test "budget gate refuses a two-ref push whose first ref is over the ceiling" {
@@ -1186,6 +1190,8 @@ SHIM
   run _run_pre_push "refs/heads/bad ${bad_sha} refs/heads/bad ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"105,000 bytes"* ]]
+  # The checker itself refused, not a git step failing first.
+  [[ "$output" == *"bytes, ceiling 105000"* ]]
 }
 
 @test "budget gate detects the pushed commit's checker when HEAD has none" {
@@ -1197,6 +1203,8 @@ SHIM
   run _run_pre_push "refs/heads/bad ${bad_sha} refs/heads/bad ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"105,000 bytes"* ]]
+  # The checker itself refused, not a git step failing first.
+  [[ "$output" == *"bytes, ceiling 105000"* ]]
 }
 
 @test "budget gate refuses when git ls-tree fails on a nonexistent local sha" {
