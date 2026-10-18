@@ -104,7 +104,7 @@ MOVE | Two consequences worth holding: tagging an entry does not ke | dotfiles-c
 MOVE | **Formula/cask dedup rule:** never add both a formula and a  | dotfiles-conventions.md | CLAUDE.md relocation: Brewfile formula/cask dedup and tap trust
 MOVE | - `~/.claude/` — `settings.json`, `CLAUDE.md`, `mcp.json.tem | dotfiles-conventions.md | CLAUDE.md relocation: Windows AI config link targets
 MOVE | Ruby version managers: **rbenv on Linux** (`lib/linux_ubuntu | dotfiles-conventions.md | CLAUDE.md relocation: Ruby version manager split
-MOVE | ``` dotfiles/ ├── setup_env.sh       # Main entry — sources  | dotfiles-conventions.md | CLAUDE.md budget: Layout directory tree
+MOVE | dotfiles/ ├── setup_env.sh       # Main entry — sources  | dotfiles-conventions.md | CLAUDE.md budget: Layout directory tree
 MOVE | - **Phase 1 (10%) — Architect.** `brainstorming` → `writing- | dotfiles-conventions.md | CLAUDE.md budget: 10-80-10 phase list
 MOVE | - **Repo root** — each dotfile symlinked individually into ` | dotfiles-conventions.md | CLAUDE.md budget: Symlink repo-root and .claude rules
 MOVE |   **The live `~/.claude/mcp.json` is ALSO a symlink, and tem | dotfiles-conventions.md | CLAUDE.md budget: Symlink mcp.json is a symlink
