@@ -193,10 +193,17 @@ test-lint = [
 # (hypothesis, sortedcontainers) against the cost of a third group and a third
 # render target. Two packages is cheaper than the machinery. Anything costing
 # materially more gets its own group instead.
+#
+# pytest-xdist is admitted the same way, on a measurement: ai-config's full
+# pytest suite on `claude` pinned to two cores (taskset -c 0,1, a proxy for a
+# 2-vCPU private runner, 2026-10-18) took 124.4 s serial and 72.6 s at -n 2,
+# and its CI `test` job had been running pytest serially for want of it. It
+# costs one package beyond itself (execnet). Same pin as test-lint.
 ci-test = [
   "ruff",
   "pytest",
   "pytest-cov",                    # pulls coverage transitively
+  "pytest-xdist",                  # pulls execnet; lets the test job run pytest -n
   "hypothesis",
   # pyright and mypy were added 2026-08-22 after measuring the fleet's actual
   # CI job layout rather than one consumer's needs. In ai-config's ci.yml and

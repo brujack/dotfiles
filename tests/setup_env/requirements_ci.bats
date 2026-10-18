@@ -193,10 +193,12 @@ setup() {
 @test "ci-test carries the tools the per-PR test job runs" {
   # ci-test is defined as what a per-PR test/lint job runs. Measured across the
   # fleet: ai-config's ci.yml `test` job and every math *-py.yml `test` job run
-  # ruff, pytest, pytest-cov, hypothesis, pyright and mypy together. All six
-  # must be present or the group has drifted from its own definition.
+  # ruff, pytest, pytest-cov, hypothesis, pyright and mypy together, and run
+  # pytest with -n once pytest-xdist is present (ai-config parallel-jobs spec,
+  # 2026-10-18). All seven must be present or the group has drifted from its
+  # own definition.
   local _f="${REPO_ROOT}/requirements-ci-test.txt"
-  for _t in ruff pytest pytest-cov hypothesis pyright mypy; do
+  for _t in ruff pytest pytest-cov pytest-xdist hypothesis pyright mypy; do
     grep -qE "^${_t}==" "${_f}" || { printf 'ci-test lost %s\n' "${_t}" >&2; return 1; }
   done
 }
