@@ -90,3 +90,29 @@ ai-config's gate does not run unchanged here. `python3 ~/.claude/scripts/context
 - **N3.** No rule removed: every compressed block's decision survives in its one line.
 - **N4.** No CI job runs the budget gate.
 - **N5.** No edit to `README.md` or to any dotfiles file other than `CLAUDE.md`, `scripts/pre-push`, its bats tests, the new ADR, `docs/adr/README.md` and `docs/superpowers/**`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `bbb3a96c` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: the gate does not guard the invariant the design creates. `context_budget.py` checks only undeclared net growth; any non-empty `Context-Budget-Growth:` reason clears it and it has no per-block cap. 43 of 48 `CLAUDE.md` commits since 2026-09-25 grew the file, each with a true reason, so the gate turns undeclared growth into declared growth. Simpler path: a per-block length check with no trailer escape, plus routing new seam entries to `dotfiles-test-seams.md`. Also R9 (55,000 bytes, about 22k tokens at the measured 2.5 bytes/token) and V3 (20k tokens) disagree, and the 10,043-byte seam table cannot become one line without risking N3.
+Assumption: that a trailer-clearable refusal makes feature-PR authors relocate detail rather than add a trailer; settled by asking whether a trailer is an acceptable outcome for a legitimately new seam.
+Disposition:
+
+### Ergonomics
+
+Finding: same core finding (growth check taxes relocation, waves through regrowth for one line; 34 of 67 PRs since 2026-09-25 touched `CLAUDE.md`). New: `scripts/pre-push` exits early for `.md`-only pushes (`needs_test=0`), so a gate placed near `make test` never sees a `CLAUDE.md`-only push; it must run before that exit, with tests for a `CLAUDE.md`-only push and a direct-to-master push. Dropping the powershell.md import makes `check-agent-guidance` drift on `.cursor/rules/global-claude-standards.mdc`, which N5 does not allow editing.
+Assumption: that a one-line trailer is enough friction; refuted if the first month of dotfiles PRs after merge are mostly trailered.
+Disposition:
+
+### Risk
+
+Finding: the hook arm as specified breaks the existing suite. `tests/scripts/pre_push.bats` (100 tests, 63 expecting exit 0) and five other bats files run `scripts/pre-push` against fixtures with no `CLAUDE.md`; the real script exits 2 on an empty set (reproduced), and CI has no `~/.claude`, so the absent-script refusal fires. The hook needs an override seam and every existing test a stub. R7's cases are mostly vacuous (4 of 5 pass if the gate does nothing). The gate enforces neither R1 nor R9 after PR1 (ai-config: 7 of 7 growing commits trailered, 3,291 units, compliance not deterrence). dotfiles' push path would run ai-config main-checkout code live, so a `context_budget.py` change alters dotfiles' gate with no dotfiles diff, and PyYAML is untested on the Macs.
+Assumption: same trailer-deterrence assumption; settled now by classifying #306–#344's additions as live-state seams that must stay in `CLAUDE.md`.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
