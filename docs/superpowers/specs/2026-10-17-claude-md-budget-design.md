@@ -135,6 +135,8 @@ seams that must keep their variable names and overrides; the three sampled compr
 ## Amendments
 
 - R5 -> dotfiles `CLAUDE.md` no longer contains `@~/.claude/standards/powershell.md` and names `powershell.md` as required reading before writing or changing PowerShell code or its lint and test configuration. — the Cursor mirror cannot be regenerated: it is gitignored and untracked, and `scripts/sync-agent-guidance.sh` exits 1 (`No standards imports found`) once the last import is gone; fixing the script is outside N5, so it is a backlog row.
+- finding R2 (2026-10-18, reviewer both): NOT-BUILT — The pointer half is there: every changed CLAUDE.md region except the one-line powershell import swap (CLAUDE.md:138) ends in, or is grouped under, a '→ `dotfiles-*.md` § `<heading>`' pointer. The other half is missing from this diff: no ai-config/docs/knowledge/dotfiles-*.md file appears in it, so nothing shows the removed text byte-identical under a unique ### heading.
+- R2 reviewed: the knowledge half is in ai-config, outside this diff, as commits `edb66637`, `b65ce14e`, `ef2ea8af` and `4e6895e0` on ai-config master (append-only: 0 deleted lines); the plan's checker verified every changed block byte-identical in those files at each task, and all 102 distinct pointers in `CLAUDE.md` resolve to exactly one `###` heading on ai-config `origin/master` (checked at `7a1a4037`).
 
 ## Multi-Lens Review
 
@@ -177,3 +179,27 @@ Disposition: Addressed — operator chose "ceiling only plus dry run" and then a
 Finding: the 70,000-byte projection carries the large blocks' ratio onto the 114 smaller unsampled blocks, all under 1,657 bytes, while sampled blocks under 2.5 KB compress to 0.471 against the 0.454 needed, so the file may land at 70–72 KB and the only remaining lever is demoting rules to pointer-only; the inert-premise edit named the wrong list; "skip when the script is absent" could swallow git failures; R9 could not tell the pushed-commit checker from the working-tree one, nor catch a last-ref-only loop.
 Disposition: Addressed (wording, 2026-10-18) — `ALLOWED_TEST_PREREQS` with the `git show` precedent (Design 5, R8); absent versus git failure separated by `git ls-tree` (Design 5, R7); three R9 cases added. Dry run 2 then measured the smaller blocks at 0.747 and the operator chose a 105,000-byte ceiling on 2026-10-18 (Problem, Design 5, R1, R6, R9, R11, V3).
 
+## Spec alignment (2026-10-18)
+
+- spec: docs/superpowers/specs/2026-10-17-claude-md-budget-design.md
+- anchor: b4b60c28846550d6e052a24c516b71122bbe00ec
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R2 | both | NOT-BUILT | The pointer half is there: every changed CLAUDE.md region except the one-line powershell import swap (CLAUDE.md:138) ends in, or is grouped under, a '→ `dotfiles-*.md` § `<heading>`' pointer. The other half is missing from this diff: no ai-config/docs/knowledge/dotfiles-*.md file appears in it, so nothing shows the removed text byte-identical under a unique ### heading. | - R2 reviewed: the knowledge half is in ai-config, outside this diff, as commits `edb66637`, `b65ce14e`, `ef2ea8af` and `4e6895e0` on ai-config master (append-only: 0 deleted lines); the plan's checker verified every changed block byte-identical in those files at each task, and all 102 distinct pointers in `CLAUDE.md` resolve to exactly one `###` heading on ai-config `origin/master` (checked at `7a1a4037`). |
+
+### Reviewed
+
+- R2 reviewed: the knowledge half is in ai-config, outside this diff, as commits `edb66637`, `b65ce14e`, `ef2ea8af` and `4e6895e0` on ai-config master (append-only: 0 deleted lines); the plan's checker verified every changed block byte-identical in those files at each task, and all 102 distinct pointers in `CLAUDE.md` resolve to exactly one `###` heading on ai-config `origin/master` (checked at `7a1a4037`).
+
+### Verifications
+
+- V1: relocation_check.py check: remaining findings are ADR-0036 semantics (shared pointers allowed by this design, the intended powershell swap, 3 anchors it cannot match); budget_check.py verified every changed block byte-identical
+- V2: two rule-by-rule reviewers (249 and 156 rules): 0 missing; 8 weakened and 1 wrong fixed in 6f988da8 and e26b298c, re-reviewed; 2 seam names restored after spec alignment (ebcbab52, 7a1a4037)
+- V3: pending: /context after merge
+- V4: claude_md_budget.py HEAD exits 0 at branch head; re-checked at merge
+- V5: operator approved the compressed CLAUDE.md and pointer-only list 2026-10-18
