@@ -200,7 +200,14 @@ bash-coverage:
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
-	@bash scripts/run-bash-coverage.sh
+# Parse-time conditional so `make -n` shows one arm; env -u keeps an exported
+# value from turning a serial run parallel; a non-empty BATS_SERIAL_FILES
+# sends the whole run serial.
+ifeq ($(HAVE_PARALLEL)|$(strip $(BATS_SERIAL_FILES)),yes|)
+	@COVERAGE_BATS_JOBS=$(JOBS) bash scripts/run-bash-coverage.sh
+else
+	@env -u COVERAGE_BATS_JOBS bash scripts/run-bash-coverage.sh
+endif
 
 ledger-symlink:
 	@mkdir -p "${HOME}/.local/bin"

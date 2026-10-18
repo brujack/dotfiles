@@ -272,3 +272,26 @@ _bats_lines_all_print_output() {
   [ "$status" -eq 0 ]
   _bats_lines_all_print_output
 }
+
+# make -n only prints the recipe; it never runs scripts/run-bash-coverage.sh.
+@test "bash-coverage: parallel and no serial carve-out passes COVERAGE_BATS_JOBS=JOBS" {
+  _strip_make_leak_env
+  run --separate-stderr make --no-print-directory -C "${REPO_ROOT}" -n bash-coverage HAVE_PARALLEL=yes JOBS=6 BATS_SERIAL_FILES=
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"COVERAGE_BATS_JOBS=6"* ]]
+  ! command grep -q 'env -u' <<< "${output}"
+}
+
+@test "bash-coverage: no GNU parallel or a serial carve-out unsets COVERAGE_BATS_JOBS" {
+  _strip_make_leak_env
+  run --separate-stderr make --no-print-directory -C "${REPO_ROOT}" -n bash-coverage HAVE_PARALLEL=
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"env -u COVERAGE_BATS_JOBS"* ]]
+  ! command grep -q 'COVERAGE_BATS_JOBS=' <<< "${output}"
+
+  _strip_make_leak_env
+  run --separate-stderr make --no-print-directory -C "${REPO_ROOT}" -n bash-coverage HAVE_PARALLEL=yes BATS_SERIAL_FILES=tests/x.bats
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"env -u COVERAGE_BATS_JOBS"* ]]
+  ! command grep -q 'COVERAGE_BATS_JOBS=' <<< "${output}"
+}
