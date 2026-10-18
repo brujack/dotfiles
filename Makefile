@@ -96,7 +96,7 @@ BATS_PARALLEL_FILES := $(filter-out $(BATS_SERIAL_FILES),$(BATS_ALL_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance check-claude-md-budget
 
 help:
 	@printf "Available targets:\n"
@@ -158,7 +158,7 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint check-lock check-requirements-ci test-python
+test: lint check-lock check-requirements-ci test-python check-claude-md-budget
 ifndef BATS
 	$(error $(BATS_MISSING))
 endif
@@ -198,6 +198,14 @@ ifndef PYTHON3
 	@printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
 else
 	python3 -m unittest discover -s tests -p 'test_*.py'
+endif
+
+# Reads CLAUDE.md only through `git show HEAD:CLAUDE.md`, never the working tree.
+check-claude-md-budget:
+ifndef PYTHON3
+	@printf "python3 not found, skipping CLAUDE.md budget check (install: brew install python@3 / apt-get install python3)\n"
+else
+	python3 scripts/claude_md_budget.py HEAD
 endif
 
 bash-coverage:

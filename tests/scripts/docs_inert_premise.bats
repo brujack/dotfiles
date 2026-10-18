@@ -8,7 +8,11 @@ bats_require_minimum_version 1.5.0
 
 # Recorded closure of `make test` prerequisites, measured against the real
 # Makefile. Adding a target here is a claim that it reads no tracked .md.
-ALLOWED_TEST_PREREQS=(lint check-lock check-requirements-ci test-python)
+# check-claude-md-budget reads CLAUDE.md only via `git show HEAD:CLAUDE.md`,
+# never the working tree, so its verdict varies with CLAUDE.md. A docs-only push
+# is still covered: the hook runs the check before the inert exit, pinned by
+# pre_push.bats's CLAUDE.md-only refusal case.
+ALLOWED_TEST_PREREQS=(lint check-lock check-requirements-ci test-python check-claude-md-budget)
 
 # "<file>|<reason>" entries for tests allowed to read a tracked .md outside
 # tests/. Empty today. tests/test_relocation_check.py needs no entry: it reads

@@ -76,10 +76,24 @@ _print_recovery() {
     fi
 }
 
+# Run the checker blob from <sha> against <sha>. Both pipeline stages must
+# succeed: a failed git show feeds python an empty program, which exits 0.
+_budget_check_in_pipe() {
+    local _sha="${1}"
+    set -o pipefail
+    git show "${_sha}:scripts/claude_md_budget.py" | python3 -I - "${_sha}"
+}
+
+# Subshell so pipefail does not leak into the rest of the hook.
+_budget_ok() {
+    ( _budget_check_in_pipe "${1}" ) >&2
+}
+
 needs_test=0
 refuse_paths=""
 refuse_local_ref=""
 unresolved_refs=""
+budget_refs=""
 while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
 
@@ -93,6 +107,19 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         range="${base}..${local_sha}"
     else
         range="${remote_sha}..${local_sha}"
+    fi
+
+    # CLAUDE.md byte budget (ADR-0047). The checker is taken from the pushed
+    # commit, not the working tree, so a stale or edited local copy cannot
+    # change the verdict. A commit with no checker predates the gate: skip.
+    # Any failure (ls-tree, show, or the checker itself) refuses the ref;
+    # accumulate rather than exit so the loop still drains every ref line.
+    if ! _budget_listing="$(git ls-tree "${local_sha}" -- scripts/claude_md_budget.py)"; then
+        budget_refs="${budget_refs}${local_ref}"$'\n'
+    elif [[ -n "${_budget_listing}" ]]; then
+        if ! _budget_ok "${local_sha}"; then
+            budget_refs="${budget_refs}${local_ref}"$'\n'
+        fi
     fi
 
     # Fail closed (ADR-0017): trigger unless EVERY changed path is provably
@@ -143,6 +170,13 @@ if [[ -n "${unresolved_refs}" ]]; then
     printf 'pre-push: cannot resolve the diff range for a push to:\n' >&2
     printf '%s\n' "${unresolved_refs}" | grep -v '^$' | sed 's/^/  /' >&2
     printf 'Run git fetch and retry the push.\n' >&2
+    exit 1
+fi
+
+if [[ -n "${budget_refs}" ]]; then
+    printf 'pre-push: CLAUDE.md budget check failed for:\n' >&2
+    printf '%s\n' "${budget_refs}" | grep -v '^$' | sed 's/^/  /' >&2
+    printf "The checker's own message is above. The ceiling is 105,000 bytes; move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047).\n" >&2
     exit 1
 fi
 
