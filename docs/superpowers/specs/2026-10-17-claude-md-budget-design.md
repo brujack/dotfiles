@@ -1,7 +1,7 @@
 # CLAUDE.md budget: one line per rule, and a hard ceiling that stops regrowth
 
 - **Status:** Draft
-- **Revision:** 4 (one line per rule, a single 70,000-byte ceiling, set from a dry run; revisions 2 and 3 had per-block caps)
+- **Revision:** 4 (one line per rule, a single 105,000-byte ceiling set from two dry runs; revisions 2 and 3 had per-block caps)
 - **Follows:** ADR-0036 (CLAUDE.md relocation), ai-config ADR-0077 (CLAUDE.md content homes).
 
 ## Problem
@@ -37,6 +37,14 @@ about 66.7 KB. Population: dotfiles `CLAUDE.md` on master; the 15 blocks are mea
 rest is a projection. Pointers average 84 characters, about a third of a kept line. Working
 files: `ai-config` session scratchpad `dryrun/` (not committed).
 
+**Dry run 2 (2026-10-18).** That projection carried the large blocks' ratio onto smaller
+ones. A stratified sample of 12 of the other 114 blocks (three per size quartile, 8,396
+bytes) compressed to 0.747: each kept line still carries a 90–130 byte pointer, so blocks
+under about 500 bytes barely shrink and two grew. 37 of the 114 (27,428 bytes) are live-state
+seams that must keep their variable names and overrides; the three sampled compressed to
+0.936. Projected file: 93,342 bytes at one ratio, 98,543 bytes with live-state blocks at
+0.936 and the rest at 0.747, so about 37–39k tokens. Working files: scratchpad `dryrun2/`.
+
 ## Design
 
 1. **One line per rule.** A rule is a list item, a table row, or a paragraph stating one
@@ -57,9 +65,10 @@ files: `ai-config` session scratchpad `dryrun/` (not committed).
    naming `powershell.md` as required reading before writing or changing PowerShell code or
    its lint and test configuration; `make sync-agent-guidance` regenerates the Cursor mirror.
 5. **One hard ceiling.** A new `scripts/claude_md_budget.py <rev>` reads `CLAUDE.md` at
-   `<rev>`. It exits 1 naming the size and the ceiling when the file exceeds 70,000 bytes
-   (about 28k tokens at the measured 2.5 bytes per token, with 3–8 KB of headroom over the
-   dry-run projection); exits 0 when within; exits 0 when `git ls-tree` shows `<rev>` has no
+   `<rev>`. It exits 1 naming the size and the ceiling when the file exceeds 105,000 bytes
+   (about 42k tokens at the measured 2.5 bytes per token, with 6–12 KB of headroom over the
+   93–99 KB dry-run projection; new seams arrive as one line of about 250 bytes, not a
+   1–2.6 KB block); exits 0 when within; exits 0 when `git ls-tree` shows `<rev>` has no
    `CLAUDE.md`; and exits 2 when git fails to resolve `<rev>` or read the tree, so a git
    failure never reads as a pass. There is no trailer, flag or environment override.
    - `scripts/pre-push` runs it for each pushed ref with a non-zero local SHA, **before** the
@@ -100,20 +109,20 @@ files: `ai-config` session scratchpad `dryrun/` (not committed).
 
 ## Requirements
 
-- **R1.** `[PR1]` dotfiles `CLAUDE.md` is at most 70,000 bytes.
+- **R1.** `[PR1]` dotfiles `CLAUDE.md` is at most 105,000 bytes.
 - **R2.** `[PR1]` Every block of `CLAUDE.md` at the PR's base (the dotfiles master commit it branches from) that the PR changes has its full text, byte-identical, under a unique `###` heading in an `ai-config/docs/knowledge/dotfiles-*.md` file, and the lines that replace it end in, or are grouped under, an ADR-0036 pointer to that heading.
 - **R3.** `[PR1]` A block the PR does not change is byte-identical to the base.
 - **R4.** `[PR1]` Every kept line for a seam or command whose failing path touches live state contains that seam's variable name and its safe override or command from the original text.
 - **R5.** `[PR1]` dotfiles `CLAUDE.md` no longer contains `@~/.claude/standards/powershell.md`, names `powershell.md` as required reading before writing or changing PowerShell code or its lint and test configuration, and the Cursor mirror is regenerated.
-- **R6.** `[PR1]` `scripts/claude_md_budget.py <rev>` exits 1 and prints the size and the ceiling when `CLAUDE.md` at `<rev>` exceeds 70,000 bytes, exits 0 when within, exits 0 when `<rev>`'s tree has no `CLAUDE.md`, and exits 2 when git cannot resolve `<rev>` or read its tree.
+- **R6.** `[PR1]` `scripts/claude_md_budget.py <rev>` exits 1 and prints the size and the ceiling when `CLAUDE.md` at `<rev>` exceeds 105,000 bytes, exits 0 when within, exits 0 when `<rev>`'s tree has no `CLAUDE.md`, and exits 2 when git cannot resolve `<rev>` or read its tree.
 - **R7.** `[PR1]` `scripts/pre-push` runs the budget check taken from each pushed commit with a non-zero local SHA (via `git show <sha>:scripts/claude_md_budget.py`), before its inert-file early exit; skips only a commit whose `git ls-tree` listing of that path is empty; refuses when `git ls-tree` or `git show` fails; and refuses the push after draining stdin when any check exits non-zero.
 - **R8.** `[PR1]` `make test` runs `claude_md_budget.py HEAD` through a `check-claude-md-budget` prerequisite, the checker reads `CLAUDE.md` only via `git show`, and `tests/scripts/docs_inert_premise.bats` lists the target in `ALLOWED_TEST_PREREQS` with a comment giving that reason.
-- **R9.** `[PR1]` Tests cover: 70,001 bytes refused, 70,000 allowed, no `CLAUDE.md` allowed, an unresolvable revision exiting 2, the size and ceiling named in the output, a `CLAUDE.md`-only push over the ceiling refused by `scripts/pre-push`, a compliant push allowed, a pushed commit without the script skipped, a `git show` failure on a listed path refused, a fixture whose working-tree checker differs from the pushed commit's (the pushed one decides), a two-ref push whose first ref is over the ceiling refused, and the existing `tests/scripts/pre_push.bats` suite passing unchanged.
+- **R9.** `[PR1]` Tests cover: 105,001 bytes refused, 105,000 allowed, no `CLAUDE.md` allowed, an unresolvable revision exiting 2, the size and ceiling named in the output, a `CLAUDE.md`-only push over the ceiling refused by `scripts/pre-push`, a compliant push allowed, a pushed commit without the script skipped, a `git show` failure on a listed path refused, a fixture whose working-tree checker differs from the pushed commit's (the pushed one decides), a two-ref push whose first ref is over the ceiling refused, and the existing `tests/scripts/pre_push.bats` suite passing unchanged.
 - **R10.** `[PR1]` `CLAUDE.md` states that a new test seam's description goes to `ai-config/docs/knowledge/dotfiles-test-seams.md` with a one-line rule and pointer in `CLAUDE.md`.
-- **R11.** `[PR1]` A new dotfiles ADR records the supersession of ADR-0036 decision 4, the 70,000-byte ceiling and that raising it needs an ADR amendment, and `docs/adr/README.md` lists it.
+- **R11.** `[PR1]` A new dotfiles ADR records the supersession of ADR-0036 decision 4, the 105,000-byte ceiling and that raising it needs an ADR amendment, and `docs/adr/README.md` lists it.
 - **V1.** `scripts/relocation_check.py check` passes for every relocated block, with arguments sized for this relocation.
 - **V2.** An independent reviewer records kept, pointer-only, weakened, missing or wrong for every rule of every changed block; none is missing or wrong at merge, and the pointer-only list goes in the PR body.
-- **V3.** `claude -p "/context"` in the dotfiles main checkout after merge shows `CLAUDE.md` at 28k tokens or less, recorded in the PR body with the before figure.
+- **V3.** `claude -p "/context"` in the dotfiles main checkout after merge shows `CLAUDE.md` at 42k tokens or less, recorded in the PR body with the before figure.
 - **V4.** `claude_md_budget.py HEAD` exits 0 at the merge commit.
 - **V5.** The operator reads the compressed `CLAUDE.md` and the pointer-only list and approves before the PR merges.
 - **N1.** No edit to dotfiles `CLAUDE.md` before dotfiles#346 merges.
@@ -161,5 +170,5 @@ Disposition: Addressed — operator chose "ceiling only plus dry run" and then a
 ### Round 3 (revision 4, scoped Risk lens, reviewed at commit `3dd008db`)
 
 Finding: the 70,000-byte projection carries the large blocks' ratio onto the 114 smaller unsampled blocks, all under 1,657 bytes, while sampled blocks under 2.5 KB compress to 0.471 against the 0.454 needed, so the file may land at 70–72 KB and the only remaining lever is demoting rules to pointer-only; the inert-premise edit named the wrong list; "skip when the script is absent" could swallow git failures; R9 could not tell the pushed-commit checker from the working-tree one, nor catch a last-ref-only loop.
-Disposition: Addressed (wording, 2026-10-18) — `ALLOWED_TEST_PREREQS` with the `git show` precedent (Design 5, R8); absent versus git failure separated by `git ls-tree` (Design 5, R7); three R9 cases added. The ceiling value awaits a stratified dry-run sample of the smaller blocks.
+Disposition: Addressed (wording, 2026-10-18) — `ALLOWED_TEST_PREREQS` with the `git show` precedent (Design 5, R8); absent versus git failure separated by `git ls-tree` (Design 5, R7); three R9 cases added. Dry run 2 then measured the smaller blocks at 0.747 and the operator chose a 105,000-byte ceiling on 2026-10-18 (Problem, Design 5, R1, R6, R9, R11, V3).
 
