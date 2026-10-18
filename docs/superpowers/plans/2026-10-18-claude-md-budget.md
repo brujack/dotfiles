@@ -1,3 +1,5 @@
+> **Status: DONE** — merged as dotfiles#347, 2026-10-18. `/context`: CLAUDE.md 61.7k to 33k tokens.
+
 # CLAUDE.md Budget Implementation Plan
 
 spec: docs/superpowers/specs/2026-10-17-claude-md-budget-design.md
