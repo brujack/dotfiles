@@ -8,7 +8,9 @@ MAKEFLAGS += --no-print-directory
 # `env -u MAKEFLAGS`, or it measures this exported variable rather than the
 # Makefile (tests/scripts/makefile_lint_scope.bats; ci.md pitfall G).
 
-# JOBS is the bats worker count for `make test`. Validated here in pure make --
+# JOBS is the parallel worker count for three targets: bats in `make test`,
+# shellcheck's xargs workers in `make lint`, and COVERAGE_BATS_JOBS in
+# `make bash-coverage`. Validated here in pure make --
 # no $(shell), no fork -- and BEFORE every other assignment in this file, so a
 # bad value aborts at parse time rather than after four subprocesses have run.
 # The three terms are: exactly one word, nothing left once the digits are
