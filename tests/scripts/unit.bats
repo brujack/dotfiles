@@ -1117,12 +1117,18 @@ FIXTURE
 
 @test "run-bash-coverage.sh main run captures the bats argv before the FIFO exists" {
   local _script="${REPO_ROOT}/scripts/run-bash-coverage.sh"
-  local _cap _fifo
-  _cap="$(command grep -n '_out="$(_coverage_bats_args)" || exit 2' "${_script}" | head -1 | cut -d: -f1)"
+  local _caps _cap _fifo _mkdir
+  # Two captures exist: the --print-bats-args handler (always early) and the
+  # main run's. Only the last one is the main run, so take that one.
+  _caps="$(command grep -n '_out="$(_coverage_bats_args)" || exit 2' "${_script}" | cut -d: -f1)"
+  [ "$(printf '%s\n' "${_caps}" | wc -l)" -eq 2 ]
+  _cap="$(printf '%s\n' "${_caps}" | tail -1)"
   _fifo="$(command grep -n '^mkfifo' "${_script}" | head -1 | cut -d: -f1)"
-  [ -n "${_cap}" ]
+  _mkdir="$(command grep -nF 'mkdir -p "${OUTPUT_DIR}"' "${_script}" | head -1 | cut -d: -f1)"
   [ -n "${_fifo}" ]
+  [ -n "${_mkdir}" ]
   [ "${_cap}" -lt "${_fifo}" ]
+  [ "${_cap}" -lt "${_mkdir}" ]
   command grep -qF '"${_bats_bin}" "${_bats_args[@]}"' "${_script}"
   ! command grep -qE '^[[:space:]]*bats --recursive' "${_script}"
 }

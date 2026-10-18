@@ -27,12 +27,12 @@ _coverage_bats_args() {
 
 # Mode line from an argument array, shared by --print-bats-args and the main run.
 _coverage_bats_mode() {
-    local _a
-    for _a in "$@"; do
-        if [[ "${_a}" == "--jobs" ]]; then
+    while (( $# )); do
+        if [[ "${1}" == "--jobs" ]]; then
             printf 'bats mode: parallel (--jobs %s)\n' "${2}"
             return 0
         fi
+        shift
     done
     printf 'bats mode: serial\n'
 }
