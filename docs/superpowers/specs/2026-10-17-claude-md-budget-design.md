@@ -64,13 +64,19 @@ files: `ai-config` session scratchpad `dryrun/` (not committed).
    failure never reads as a pass. There is no trailer, flag or environment override.
    - `scripts/pre-push` runs it for each pushed ref with a non-zero local SHA, **before** the
      inert-file early exit, taking the script from the pushed commit itself
-     (`git show <sha>:scripts/claude_md_budget.py`) so a worktree push runs its own
-     branch's checker; when the pushed commit has no such script it skips the check. It
-     accumulates the results and refuses after draining stdin.
-   - `make test` runs it on `HEAD`, so CI enforces the ceiling on every PR. That makes
-     `make test` read a tracked `.md`, so `tests/scripts/docs_inert_premise.bats` gains an
-     allowed-reader entry with its reason: the docs-only push path still runs the check,
-     because the hook runs it before the inert exit.
+     (`git show <sha>:scripts/claude_md_budget.py` piped to `python3 -I -`) so a worktree push
+     runs its own branch's checker. It first runs `git ls-tree <sha> --
+     scripts/claude_md_budget.py`: a non-zero exit, or a `git show` that fails after the
+     path was listed, refuses the push; only an empty listing (the commit has no such
+     script) skips the check. It checks every pushed ref, accumulates the results and
+     refuses after draining stdin.
+   - `make test` runs it on `HEAD` through a new prerequisite target
+     `check-claude-md-budget`, so CI enforces the ceiling on every PR. The checker reads
+     `CLAUDE.md` only through `git show <rev>:CLAUDE.md`, never the working tree, which is the
+     precedent `docs_inert_premise.bats` already records for `tests/test_relocation_check.py`.
+     The target is added to `ALLOWED_TEST_PREREQS` with a comment stating that, and that the
+     docs-only push path still runs the check because the hook runs it before the inert
+     exit.
    - Raising the ceiling is a change to one constant and needs an ADR amendment stating why;
      review, not the tool, enforces that.
    - If master ever exceeds the ceiling (a direct push that skipped the hook, or two PRs that
@@ -100,9 +106,9 @@ files: `ai-config` session scratchpad `dryrun/` (not committed).
 - **R4.** `[PR1]` Every kept line for a seam or command whose failing path touches live state contains that seam's variable name and its safe override or command from the original text.
 - **R5.** `[PR1]` dotfiles `CLAUDE.md` no longer contains `@~/.claude/standards/powershell.md`, names `powershell.md` as required reading before writing or changing PowerShell code or its lint and test configuration, and the Cursor mirror is regenerated.
 - **R6.** `[PR1]` `scripts/claude_md_budget.py <rev>` exits 1 and prints the size and the ceiling when `CLAUDE.md` at `<rev>` exceeds 70,000 bytes, exits 0 when within, exits 0 when `<rev>`'s tree has no `CLAUDE.md`, and exits 2 when git cannot resolve `<rev>` or read its tree.
-- **R7.** `[PR1]` `scripts/pre-push` runs the budget check taken from each pushed commit with a non-zero local SHA, before its inert-file early exit, skips a commit that carries no `scripts/claude_md_budget.py`, and refuses the push after draining stdin when any check exits non-zero.
-- **R8.** `[PR1]` `make test` runs `claude_md_budget.py HEAD`, and `tests/scripts/docs_inert_premise.bats` records that reader with its reason.
-- **R9.** `[PR1]` Tests cover: 70,001 bytes refused, 70,000 allowed, no `CLAUDE.md` allowed, an unresolvable revision exiting 2, the size and ceiling named in the output, a `CLAUDE.md`-only push over the ceiling refused by `scripts/pre-push`, a compliant push allowed, a pushed commit without the script skipped, and the existing `tests/scripts/pre_push.bats` suite passing unchanged.
+- **R7.** `[PR1]` `scripts/pre-push` runs the budget check taken from each pushed commit with a non-zero local SHA (via `git show <sha>:scripts/claude_md_budget.py`), before its inert-file early exit; skips only a commit whose `git ls-tree` listing of that path is empty; refuses when `git ls-tree` or `git show` fails; and refuses the push after draining stdin when any check exits non-zero.
+- **R8.** `[PR1]` `make test` runs `claude_md_budget.py HEAD` through a `check-claude-md-budget` prerequisite, the checker reads `CLAUDE.md` only via `git show`, and `tests/scripts/docs_inert_premise.bats` lists the target in `ALLOWED_TEST_PREREQS` with a comment giving that reason.
+- **R9.** `[PR1]` Tests cover: 70,001 bytes refused, 70,000 allowed, no `CLAUDE.md` allowed, an unresolvable revision exiting 2, the size and ceiling named in the output, a `CLAUDE.md`-only push over the ceiling refused by `scripts/pre-push`, a compliant push allowed, a pushed commit without the script skipped, a `git show` failure on a listed path refused, a fixture whose working-tree checker differs from the pushed commit's (the pushed one decides), a two-ref push whose first ref is over the ceiling refused, and the existing `tests/scripts/pre_push.bats` suite passing unchanged.
 - **R10.** `[PR1]` `CLAUDE.md` states that a new test seam's description goes to `ai-config/docs/knowledge/dotfiles-test-seams.md` with a one-line rule and pointer in `CLAUDE.md`.
 - **R11.** `[PR1]` A new dotfiles ADR records the supersession of ADR-0036 decision 4, the 70,000-byte ceiling and that raising it needs an ADR amendment, and `docs/adr/README.md` lists it.
 - **V1.** `scripts/relocation_check.py check` passes for every relocated block, with arguments sized for this relocation.
@@ -151,3 +157,9 @@ All three lenses re-ran (design substance changed).
 - Risk: block unit mismatched (87 of 129 over-300 blocks are lists); master can go over the ceiling (`strict:false`, direct pushes), blocking every later PR; the hook must run the checker from the pushed commit, and the existing pre-push suite must keep passing.
 
 Disposition: Addressed — operator chose "ceiling only plus dry run" and then a 70,000-byte ceiling on 2026-10-17: per-block caps and `LIVE:` removed, one line per rule, ceiling set from the dry-run projection (Problem, Design 1 and 5, R1, R6–R9), git failure exits 2, checker taken from the pushed commit, docs-inert premise recorded, over-ceiling consequence stated.
+
+### Round 3 (revision 4, scoped Risk lens, reviewed at commit `3dd008db`)
+
+Finding: the 70,000-byte projection carries the large blocks' ratio onto the 114 smaller unsampled blocks, all under 1,657 bytes, while sampled blocks under 2.5 KB compress to 0.471 against the 0.454 needed, so the file may land at 70–72 KB and the only remaining lever is demoting rules to pointer-only; the inert-premise edit named the wrong list; "skip when the script is absent" could swallow git failures; R9 could not tell the pushed-commit checker from the working-tree one, nor catch a last-ref-only loop.
+Disposition: Addressed (wording, 2026-10-18) — `ALLOWED_TEST_PREREQS` with the `git show` precedent (Design 5, R8); absent versus git failure separated by `git ls-tree` (Design 5, R7); three R9 cases added. The ceiling value awaits a stratified dry-run sample of the smaller blocks.
+
