@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.14.*"
 resolution-markers = [
     "sys_platform == 'linux2'",
@@ -1201,6 +1201,7 @@ ci-test = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
 ]
 runtime = [
@@ -1260,6 +1261,7 @@ ci-test = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-xdist" },
     { name = "ruff" },
 ]
 runtime = [
