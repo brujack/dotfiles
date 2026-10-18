@@ -111,6 +111,10 @@ help:
 	@printf "  make check-requirements-ci Fail if either rendering has drifted from uv.lock\n"
 	@printf "  make help              Show this help\n"
 
+# shellcheck is single-threaded, so both passes fan the file list out through
+# xargs with 4 files per process and JOBS workers (measured on claude: 27.4s to 3.5s and 28.6s to
+# 8.6s). xargs -P exists in GNU and BSD xargs. Any non-zero xargs exit
+# (GNU 123-125, BSD 1) fails the pass, so a finding in any chunk is not lost.
 lint:
 	@if [ -z "$(SHELL_FILES)" ]; then \
 	  printf 'lint: derived shell file list is EMPTY — refusing to report a pass having linted nothing.\n' >&2; \
@@ -135,10 +139,10 @@ lint:
 	done; \
 	if [ -n "$(SHELLCHECK)" ]; then \
 	  if [ -n "$(SHELL_FILES)" ]; then \
-	    shellcheck $(SHELL_FILES) && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
+	    printf '%s\n' $(SHELL_FILES) | xargs -n 4 -P $(JOBS) shellcheck && printf "shellcheck OK\n" || { printf "shellcheck FAIL\n"; failed=1; }; \
 	  fi; \
 	  if [ -n "$(BATS_FILES)" ]; then \
-	    shellcheck --severity=warning $(BATS_FILES) && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
+	    printf '%s\n' $(BATS_FILES) | xargs -n 4 -P $(JOBS) shellcheck --severity=warning && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
 	  fi; \
 	else \
 	  if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then \
