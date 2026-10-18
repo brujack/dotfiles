@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| 2026-10-17 | — | [CLAUDE.md budget: one line per block, pre-push gate](specs/2026-10-17-claude-md-budget-design.md) | Pending — spec in review |
+| 2026-10-17 | — | [CLAUDE.md budget: one line per block, pre-push gate](specs/2026-10-17-claude-md-budget-design.md) | Pending — spec approved 2026-10-18, plan next |
 | 2026-10-17 | — | [bash coverage: single-quoted program bodies](specs/2026-10-17-coverage-single-quoted-program-bodies-design.md) | Retired — descoped 2026-10-17; see backlog |
 | 2026-10-17 | [bash coverage parallel](plans/2026-10-17-bash-coverage-parallel.md) | [bash coverage: run the traced suite in parallel](specs/2026-10-17-bash-coverage-parallel-design.md) | Done |
 | 2026-10-17 | [apt stale-signer detection](plans/2026-10-17-apt-stale-signer-detection.md) | [apt stale-signer detection in `-t update`](specs/2026-10-17-apt-stale-signer-detection-design.md) | Done |

@@ -1,6 +1,7 @@
 # CLAUDE.md budget: one line per rule, and a hard ceiling that stops regrowth
 
-- **Status:** Draft
+- **Approved:** 2026-10-18
+- **Status:** Approved
 - **Revision:** 4 (one line per rule, a single 105,000-byte ceiling set from two dry runs; revisions 2 and 3 had per-block caps)
 - **Follows:** ADR-0036 (CLAUDE.md relocation), ai-config ADR-0077 (CLAUDE.md content homes).
 
