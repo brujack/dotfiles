@@ -1,5 +1,7 @@
 # Bash Coverage Parallel Implementation Plan
 
+> **Status: DONE** — merged in #346 (727e9cb2), 2026-10-17. V1 and V2 recorded in the PR body; V3 (cap re-size after three parallel runs) is a backlog row.
+
 spec: docs/superpowers/specs/2026-10-17-bash-coverage-parallel-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
