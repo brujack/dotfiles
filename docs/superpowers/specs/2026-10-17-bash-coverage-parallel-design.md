@@ -1,7 +1,7 @@
 # Bash coverage: run the traced suite in parallel
 
 - **Date:** 2026-10-17
-- **Status:** Draft (Phase 1), revised after Step 8 round 2
+- **Status:** Draft (Phase 1), revised after Step 8 round 3
 - **Trigger:** the `bash-coverage` CI job hit its 25-minute cap twice on PR #343. PR #344 raised
   the cap to 60. The backlog row "bash-coverage runtime grows linearly with the suite because the
   coverage run is serial" holds the measurements behind this spec.
@@ -71,72 +71,56 @@ CI already reaches the script through `make bash-coverage` (`ci.yml`), whose rec
 computes `HAVE_PARALLEL` from the `^GNU parallel` version string. The coverage run reuses those
 instead of re-implementing them.
 
-- **Recipe.** The `bash-coverage` recipe sets `COVERAGE_BATS_JOBS=$(JOBS)` in the script's
-  environment when two conditions hold:
-  - `HAVE_PARALLEL` is `yes`;
-  - `BATS_SERIAL_FILES` is empty.
+- **Recipe.** A parse-time conditional (`ifeq`, not a shell `if`, so `make -n` prints only one
+  arm) chooses the command.
+  - When `HAVE_PARALLEL` is `yes` and `BATS_SERIAL_FILES` is empty, the recipe runs the script
+    with `COVERAGE_BATS_JOBS=$(JOBS)` in its environment.
+  - Otherwise it runs it under `env -u COVERAGE_BATS_JOBS`, so a value exported in the caller's
+    shell cannot turn a serial run parallel. A single file needing serial execution sends the
+    whole coverage run serial, which matches `make test`'s treatment of those files without
+    splitting the trace into two runs.
+- **Argument function.** `_coverage_bats_args` turns `COVERAGE_BATS_JOBS` into the bats argument
+  list, one argument per line:
+  - set to a valid value: `--jobs`, `<value>`, `--recursive`, `<tests dir>`;
+  - unset or empty: `--recursive`, `<tests dir>`, as today.
 
-  Otherwise it runs the script under `env -u COVERAGE_BATS_JOBS`, so a value exported in the
-  caller's shell cannot turn a serial run parallel. One file needing serial execution therefore
-  sends the whole coverage run serial. That matches `make test`'s treatment of those files without splitting the trace
-  into two runs.
-
-- **Script.** One function, `_coverage_bats_args`, turns `COVERAGE_BATS_JOBS` into the bats
-  argument list, one argument per line.
-  - With `COVERAGE_BATS_JOBS` set: `--jobs`, `<value>`, `--recursive`, `<tests dir>`.
-  - Unset or empty: `--recursive`, `<tests dir>`, as today.
-  - A value other than a positive integer without a leading zero makes it fail with
-    `COVERAGE_BATS_JOBS must be a positive integer, got '<value>'` on stderr. Only a direct
-    invocation can reach this, since make has already validated `JOBS`.
-- **Call site.** The main run calls `_coverage_bats_args` and checks its exit status **before**
-  `mkdir`, `rm` and `mkfifo` touch `coverage/`. An invalid value therefore exits 2 with no FIFO and
-  no reader process created. The real `bats` call is built from that function's output, read into
-  an array, so the call site cannot drift from what the function returns.
-- **Inspection flag.** `--print-bats-args` prints `_coverage_bats_args`' output and the mode line,
-  then exits (0, or 2 on an invalid value). It never reaches the main run.
-- **Mode line.** Before running bats the script prints one of two lines into the job log:
-  - `bats mode: parallel (--jobs <n>)`
-  - `bats mode: serial (COVERAGE_BATS_JOBS unset)`
+  A value other than a positive integer without a leading zero makes it return non-zero, with
+  `COVERAGE_BATS_JOBS must be a positive integer, got '<value>'` on stderr. Only a direct
+  invocation can reach this, since make has already validated `JOBS`.
+- **Call site.** The main run captures the list as `_out="$(_coverage_bats_args)" || exit 2`,
+  **before** `mkdir`, `rm` and `mkfifo` touch `coverage/`. A process substitution such as
+  `mapfile < <(…)` is not used: it discards the function's status, which was measured as `rc=0`
+  with an empty argv. The captured lines are read into an array, `bats` is invoked as
+  `bats "${_bats_args[@]}"`, and an invalid value exits 2 with no FIFO or reader created.
+- **Mode line.** The script prints one line into the job log, built from the array that is
+  actually passed to bats, not from the variable:
+  - `bats mode: parallel (--jobs <n>)` when the array contains `--jobs`;
+  - `bats mode: serial` otherwise.
+- **Inspection flag.** `--print-bats-args` prints the same array and mode line, then exits 0, or
+  2 on an invalid value. It sits above the unknown-option guard, as that guard's comment requires,
+  and never reaches the main run.
 - **Overrides.** `make bash-coverage HAVE_PARALLEL=` forces serial, and
   `make bash-coverage JOBS=6` changes the worker count. `HAVE_PARALLEL= make bash-coverage` does
   nothing, because the `Makefile` reassigns `HAVE_PARALLEL` with `:=`. Only the make-argument form
   is documented.
-- **Flag parsing.** The script's positional `--json` parsing and its unknown-option guard are
-  untouched. The value travels in the environment, not as a flag.
+- **Trace filter.** The filter is unchanged. It already matches the root literally
+  (`grep -F "COVTRACE:${REPO_ROOT}/"`), and M3 shows a prefix cannot tear under parallel writers.
+  Changing it would move the coverage figure, at zero headroom, in a change that is meant only to
+  make the run faster.
+- **Usage text.** `-h` lists `--print-bats-args` and `COVERAGE_BATS_JOBS`, and the existing `-h`
+  test asserts both.
 
-### 2. Trace extraction
-
-- The filter's extraction stage moves into `_coverage_filter_trace <root>`. It reads stdin and
-  writes normalised `path:line` lines for prefixes under `<root>`. The FIFO pipeline calls it with
-  `"${REPO_ROOT}"`.
-- The root is matched as a **literal** prefix, never interpolated into a regex. `.` in a path
-  (`.worktrees`) would otherwise match any character, and `+` would match nothing.
-  - The existing `grep -F "COVTRACE:${root}/"` prefilter stays.
-  - Extraction takes each `C*COVTRACE:` occurrence followed by `[^:]+:[0-9]+: `.
-  - It keeps the occurrence only when its path starts with `<root>/`, compared as a string.
-- The separator after the line number is required, and the `: ` is stripped afterwards. M3 shows a prefix cannot be torn, so the separator is defence in
-  depth, not a fix for an observed failure.
-- **Inspection flag.** `--filter-trace <root>` runs `_coverage_filter_trace` on stdin and exits 0.
-  The root is an argument so test fixtures can use a fake root (`/fixture-root`). A test that
-  embedded the real repo path in a traced command would put `COVTRACE:<repo>/<file>:N: ` into the
-  real trace, and the unanchored extraction would count that line as covered.
-- **Usage text.** `-h` lists `--filter-trace`, `--print-bats-args` and `COVERAGE_BATS_JOBS`. The existing test
-  `-h documents both inspection flags` is extended to cover them.
-
-### 3. CI
+### 2. CI
 
 `ci.yml` is unchanged. The job already runs `make bash-coverage` on `ubuntu-latest`, which has GNU
 parallel (M4), and the mode line shows which path it took. The 60-minute cap stays. A backlog row
 records re-sizing it to about 3x the p90 once three parallel runs exist.
 
-### 4. Documentation
+### 3. Documentation
 
-`CLAUDE.md`'s Coverage > Bash section gains a bullet covering:
-
-- how the traced suite is parallelised (`make bash-coverage` passes `COVERAGE_BATS_JOBS` when GNU
-  parallel is detected and `BATS_SERIAL_FILES` is empty);
-- the two make-argument overrides;
-- why `--filter-trace` fixtures must use a fake root.
+`CLAUDE.md`'s Coverage > Bash section gains one bullet. It says that `make bash-coverage` passes
+`COVERAGE_BATS_JOBS` when GNU parallel is detected and `BATS_SERIAL_FILES` is empty, and that
+`make bash-coverage HAVE_PARALLEL=` and `JOBS=<n>` are the overrides.
 
 ## Alternatives
 
@@ -152,73 +136,60 @@ records re-sizing it to about 3x the p90 once three parallel runs exist.
 ## Testing
 
 Tests drive the CLI and make, never `source scripts/run-bash-coverage.sh`, which has no sourcing
-guard and launches a full traced suite. **No test reaches the main run.** It writes the fixed
-paths `coverage/bash_trace.fifo` and `coverage/bash_trace.txt`, and CI's own traced run owns those
-same paths while `tests/scripts/unit.bats` executes. Every case uses an inspection flag that exits
-before the main run, or `make -n`.
+guard and launches a full traced suite. **No test reaches the main run.** The main run writes the
+fixed paths `coverage/bash_trace.fifo` and `coverage/bash_trace.txt`, and CI's own traced run owns
+those same paths while `tests/scripts/unit.bats` executes.
 
 **Script (`tests/scripts/unit.bats`):**
 
 1. `COVERAGE_BATS_JOBS=6 … --print-bats-args`: prints `--jobs`, `6`, `--recursive`, the tests dir,
    and `bats mode: parallel (--jobs 6)`.
-2. `--print-bats-args` with `COVERAGE_BATS_JOBS` explicitly unset (`env -u`), then set empty:
-   prints `--recursive`, the tests dir, and `bats mode: serial (COVERAGE_BATS_JOBS unset)`. The
-   explicit unset matters, because the variable is inherited from the enclosing coverage run.
+2. `--print-bats-args` under `env -u COVERAGE_BATS_JOBS`, then with it set empty: prints
+   `--recursive`, the tests dir, and `bats mode: serial`. The explicit unset matters, because the
+   variable is inherited from the enclosing coverage run.
 3. `--print-bats-args` with `COVERAGE_BATS_JOBS` set to `0`, `07`, `x`, `-1` or `2 3`: exit 2,
    with the message naming the value.
-4. `--filter-trace /fixture-root` on a fixture file of two prefixes at nesting depths `+` and `++`:
-   two normalised `path:line` lines.
-5. `--filter-trace /fixture-root` on
-   `COVTRACE:/fixture-root/lib/x.sh:1COVTRACE:/fixture-root/lib/y.sh:5: cmd`: exactly
-   `lib/y.sh:5`, with no `lib/x.sh:1`.
-6. `--filter-trace /fixture-root` on a prefix under another root
-   (`COVTRACE:/usr/lib/bats-core/tracing.bash:19: x`): no output.
-7. `--filter-trace /fix.ture-root` on a prefix under `/fixXture-root`: no output, because the root
-   is literal. `--filter-trace /fix+root` on a prefix under `/fix+root`: one line.
-8. Structural checks on `scripts/run-bash-coverage.sh`:
-   - The main run builds its bats argv from `_coverage_bats_args`, before the first `mkfifo`.
-   - The FIFO pipeline calls `_coverage_filter_trace "${REPO_ROOT}"`.
-   - No other `grep -oE` extraction of `COVTRACE` remains.
-
-Fixtures for cases 4–7 live in files under `tests/fixtures/coverage/` and are fed on stdin, so no
-traced test command contains a prefix string.
+4. Structural checks on `scripts/run-bash-coverage.sh`:
+   - the main run captures `_coverage_bats_args` with `|| exit 2` before the first `mkfifo`;
+   - it invokes `bats "${_bats_args[@]}"`;
+   - no literal `bats --recursive` call remains.
 
 **Recipe (a `make -n` test in `tests/makefile_*.bats` style):**
 
-9. `make -n --no-print-directory bash-coverage HAVE_PARALLEL=yes JOBS=6 BATS_SERIAL_FILES=` prints
-   a command carrying `COVERAGE_BATS_JOBS=6`.
-10. The same with `HAVE_PARALLEL=`, and again with `BATS_SERIAL_FILES=tests/x.bats`: the command
-    carries `env -u COVERAGE_BATS_JOBS` and no `COVERAGE_BATS_JOBS=`.
+5. `make --no-print-directory -C <repo> -n bash-coverage HAVE_PARALLEL=yes JOBS=6 BATS_SERIAL_FILES=`
+   prints a command carrying `COVERAGE_BATS_JOBS=6`.
+6. The same with `HAVE_PARALLEL=`, and again with `BATS_SERIAL_FILES=tests/x.bats`: the command
+   carries `env -u COVERAGE_BATS_JOBS` and no `COVERAGE_BATS_JOBS=`.
 
-The recipe test unsets `MAKEFLAGS MFLAGS MAKELEVEL JOBS` first (CLAUDE.md, Testing), and passes
-`--no-print-directory` per call (the stdout partition rule).
+The recipe test unsets `MAKEFLAGS MFLAGS MAKELEVEL JOBS` first (CLAUDE.md, Testing). It passes
+`--no-print-directory` per call, so it falls in the partition scanner's guarded set.
 
 Mutation controls:
 
-- Drop the `: ` from the pattern: case 5 emits `lib/x.sh:1`.
-- Interpolate the root into a regex: case 7 fails both ways.
 - Hard-code `--jobs 24`: case 1 fails.
-- Drop the `env -u` arm: case 10 fails.
-- Drop the `BATS_SERIAL_FILES` condition: case 10's second half fails.
-- Leave the call site on the literal `bats --recursive`: case 8 fails.
+- Derive the mode line from the variable instead of the array, and leave the call site on literal
+  `bats --recursive`: case 4 fails.
+- Capture through `< <(…)` instead of `|| exit 2`: case 4 fails.
+- Drop the `env -u` arm: case 6 fails.
+- Drop the `BATS_SERIAL_FILES` condition: case 6's second half fails.
 
 ## Requirements
 
-- **R1.** The `bash-coverage` recipe runs `scripts/run-bash-coverage.sh` with `COVERAGE_BATS_JOBS=$(JOBS)` in its environment when `HAVE_PARALLEL` is `yes` and `BATS_SERIAL_FILES` is empty, and under `env -u COVERAGE_BATS_JOBS` otherwise.
-- **R2.** `_coverage_bats_args` prints `--jobs`, `<value>`, `--recursive`, `<tests dir>` one per line when `COVERAGE_BATS_JOBS` is a positive integer without a leading zero, prints `--recursive`, `<tests dir>` when it is unset or empty, and otherwise fails printing `COVERAGE_BATS_JOBS must be a positive integer, got '<value>'` to stderr; the main run builds its `bats` argv from that output and exits 2 on failure before creating `coverage/`, the FIFO or the reader.
-- **R3.** Before running bats the script prints exactly one line, `bats mode: parallel (--jobs <n>)` or `bats mode: serial (COVERAGE_BATS_JOBS unset)`.
-- **R4.** Trace extraction is `_coverage_filter_trace <root>`, which takes each `C*COVTRACE:<path>:<n>: ` occurrence (separator required), keeps it only when `<path>` starts with the literal string `<root>/`, and emits the normalised `path:line` without the separator; the FIFO pipeline calls it with `"${REPO_ROOT}"`.
-- **R5.** `--filter-trace <root>` applies `_coverage_filter_trace` to stdin, prints its output and exits 0; `--print-bats-args` prints `_coverage_bats_args`' output and the mode line and exits 0, or 2 on an invalid value; neither reaches the main run.
-- **R6.** The script's `-h` text lists `--filter-trace <root>`, `--print-bats-args` and `COVERAGE_BATS_JOBS`, and the existing `-h` test asserts all three.
-- **R7.** Test cases 1–10 from the Testing section exist and pass, with fixtures for cases 4–7 in files under `tests/fixtures/coverage/` using fake roots.
-- **R8.** `CLAUDE.md`'s Coverage > Bash section states how the traced suite is parallelised, the `make bash-coverage HAVE_PARALLEL=` and `JOBS=<n>` overrides, and that `--filter-trace` fixtures use a fake root.
-- **V1.** In `ubuntu:24.04` (bash 5.2.21) with `--cpus 4`, run the full traced suite through `make bash-coverage` in both modes (`HAVE_PARALLEL=` for serial), as a non-root user; run each mode twice; record all four times, and confirm all four unique `file:line` sets are identical and the overall figures equal.
-- **V2.** The PR's own `bash-coverage` CI job logs `bats mode: parallel (--jobs 24)`, passes the 91% gate, and its duration and figure are recorded in the PR body.
+- **R1.** The `bash-coverage` recipe uses a parse-time conditional to run `scripts/run-bash-coverage.sh` with `COVERAGE_BATS_JOBS=$(JOBS)` in its environment when `HAVE_PARALLEL` is `yes` and `BATS_SERIAL_FILES` is empty, and under `env -u COVERAGE_BATS_JOBS` otherwise.
+- **R2.** `_coverage_bats_args` prints `--jobs`, `<value>`, `--recursive`, `<tests dir>` one per line when `COVERAGE_BATS_JOBS` is a positive integer without a leading zero, prints `--recursive`, `<tests dir>` when it is unset or empty, and otherwise returns non-zero printing `COVERAGE_BATS_JOBS must be a positive integer, got '<value>'` to stderr.
+- **R3.** The main run captures `_coverage_bats_args` as `_out="$(_coverage_bats_args)" || exit 2` before creating `coverage/`, the FIFO or the reader, reads it into the array `_bats_args`, and invokes `bats "${_bats_args[@]}"`; no literal `bats --recursive` call remains.
+- **R4.** The script prints exactly one mode line derived from `_bats_args`: `bats mode: parallel (--jobs <n>)` when the array contains `--jobs`, otherwise `bats mode: serial`.
+- **R5.** `--print-bats-args` prints the `_bats_args` lines and the mode line and exits 0, or 2 on an invalid value, without reaching the main run.
+- **R6.** The script's `-h` text lists `--print-bats-args` and `COVERAGE_BATS_JOBS`, and the existing `-h` test asserts both.
+- **R7.** Test cases 1–6 from the Testing section exist and pass.
+- **R8.** `CLAUDE.md`'s Coverage > Bash section states that `make bash-coverage` passes `COVERAGE_BATS_JOBS` when GNU parallel is detected and `BATS_SERIAL_FILES` is empty, and names the `make bash-coverage HAVE_PARALLEL=` and `JOBS=<n>` overrides.
+- **V1.** In `ubuntu:24.04` (bash 5.2.21) with `--cpus 4`, as a non-root user, run `make bash-coverage` twice in each mode (`HAVE_PARALLEL=` for serial); confirm all four runs have 0 `not ok`, identical unique `file:line` sets and equal overall figures, and record the four times.
+- **V2.** The PR's own `bash-coverage` CI job logs `bats mode: parallel (--jobs 24)`, passes the 91% gate, and finishes in under 20 minutes (the `test` job's cap); its duration and figure are recorded in the PR body.
 - **V3.** After three parallel CI runs, add their durations to the backlog row for re-sizing the cap.
-- **N1.** The 91% floor, the union-with-trace rule and the coverable-line heuristic are unchanged.
+- **N1.** The 91% floor, the union-with-trace rule, the coverable-line heuristic and the trace filter pipeline are unchanged.
 - **N2.** `.github/workflows/ci.yml` is not changed by this work.
 - **N3.** No bats file is added to `BATS_SERIAL_FILES` or otherwise excluded from the traced run.
-- **N4.** No test runs the full traced suite or reaches the script's main run, and no test fixture or traced test command contains a `COVTRACE:` string under the real repo root.
+- **N4.** No test runs the full traced suite or reaches the script's main run.
 - **N5.** The script's `--json` parsing and unknown-option guard are unchanged.
 
 ## Multi-Lens Review
@@ -301,6 +272,26 @@ Disposition: **Addressed (operator, 2026-10-17).**
 - F: V1 now runs each mode twice.
 
 The operator asked for a round 3.
+
+### Round 3 — spec at `d38d8d9d`
+
+All three lenses, told rounds 1–2 were history.
+
+| # | Lens | Sev | Finding |
+|---|------|-----|---------|
+| A | goal-fit | HIGH | §2 (the trace-filter rewrite, the separator and `--filter-trace`) fixed no defect. Today's filter already matches the root with `grep -F`, and M3 shows a prefix cannot tear. It changed no decision and does nothing for runtime. |
+| B | risk | MED | The required `: ` separator changes what today's filter extracts, at zero headroom, and V1 cannot see it because both modes use the new filter. |
+| C | ergonomics | MED | A bare `--filter-trace` would use `/` as the root and report success. |
+| D | risk | MED | `mapfile < <(_coverage_bats_args)` discards the function's status (measured `rc=0`, empty argv), so R2's exit 2 could silently vanish. |
+| E | goal-fit | LOW | The mode line was derived from the variable, not from the argv bats receives, so a call site that ignored the function would still log "parallel". |
+
+Disposition: **Addressed (operator, 2026-10-17).**
+
+- A, B, C: §2 was cut, and the filter stays untouched (N1).
+- D: R3 requires `_out="$(_coverage_bats_args)" || exit 2`, pinned by case 4.
+- E: R4 derives the mode line from `_bats_args`, and V2 gains a duration threshold.
+
+The design shrank, so review stops here.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
