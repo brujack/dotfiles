@@ -158,6 +158,21 @@ make_parallel_stub() {
 }
 
 
+# Installs a PATH shim apt-get that records the call, flips the marker the
+# flip-parallel stub reads (so the stub turns GNU), and exits $1. Sets
+# _PARALLEL_BIN and FLIP_SHIM_DIR (no subshell: the export must survive). The apt exit is the only variable, so a
+# failing install is the sole cause of any non-zero result.
+make_flip_parallel_apt() {
+  local _apt_exit="$1" _marker="${BATS_TEST_TMPDIR}/installed" _shim="${BATS_TEST_TMPDIR}/shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nif [[ -e "%s" ]]; then printf "GNU parallel 20240222\\n"; else printf "parallel from moreutils\\n"; fi\n' "${_marker}" > "${BATS_TEST_TMPDIR}/flip-parallel"
+  chmod +x "${BATS_TEST_TMPDIR}/flip-parallel"
+  printf '#!/usr/bin/env bash\nprintf "apt-get %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ntouch "%s"\nexit %s\n' "${_marker}" "${_apt_exit}" > "${_shim}/apt-get"
+  chmod +x "${_shim}/apt-get"
+  export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/flip-parallel"
+  FLIP_SHIM_DIR="${_shim}"
+}
+
 @test "install_bats_linux skips install when bats is already present" {
   make_parallel_stub "${BATS_TEST_TMPDIR}/gnu-parallel" "GNU parallel 20240222"
   export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/gnu-parallel"
@@ -204,17 +219,16 @@ make_parallel_stub() {
   [ ! -s "${MOCK_CALLS_FILE}" ] || ! grep -q "apt-get" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_bats_linux: bats present, parallel absent still installs parallel" {
+@test "install_bats_linux: bats present, parallel absent still installs parallel and returns 2" {
   unset MOCK_WHICH_MISSING MACOS
   export UBUNTU=1
   export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/no-such-parallel"
   # absent stays absent after the (mock) install, so the re-check fails too
   run install_bats_linux
+  [ "$status" -eq 2 ]
   grep -q "apt-get install -y parallel" "${MOCK_CALLS_FILE}"
-  local _install_rc="$status"
   run grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
   [ "$status" -eq 1 ]
-  [ "${_install_rc}" -ne 0 ]
 }
 
 @test "install_bats_linux: moreutils parallel triggers the parallel install" {
@@ -226,13 +240,13 @@ make_parallel_stub() {
   grep -q "apt-get install -y parallel" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_bats_linux: still non-GNU after install warns with resolved parallel and fails" {
+@test "install_bats_linux: still non-GNU after install warns with resolved parallel and returns 2" {
   unset MOCK_WHICH_MISSING MACOS
   export UBUNTU=1
   make_parallel_stub "${BATS_TEST_TMPDIR}/mu-parallel" "parallel from moreutils"
   export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/mu-parallel"
   run install_bats_linux
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"[WARN]"*"GNU parallel"* ]]
   [[ "$output" == *"command -v parallel"* ]]
 }
@@ -240,25 +254,41 @@ make_parallel_stub() {
 @test "install_bats_linux: becomes GNU after install returns 0" {
   unset MOCK_WHICH_MISSING MACOS
   export UBUNTU=1
-  local _marker="${BATS_TEST_TMPDIR}/installed" _shim="${BATS_TEST_TMPDIR}/shim"
-  mkdir -p "${_shim}"
-  printf '#!/usr/bin/env bash\nif [[ -e "%s" ]]; then printf "GNU parallel 20240222\\n"; else printf "parallel from moreutils\\n"; fi\n' "${_marker}" > "${BATS_TEST_TMPDIR}/flip-parallel"
-  chmod +x "${BATS_TEST_TMPDIR}/flip-parallel"
-  printf '#!/usr/bin/env bash\nprintf "apt-get %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ntouch "%s"\n' "${_marker}" > "${_shim}/apt-get"
-  chmod +x "${_shim}/apt-get"
-  export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/flip-parallel"
-  PATH="${_shim}:${PATH}" run install_bats_linux
+  make_flip_parallel_apt 0
+  PATH="${FLIP_SHIM_DIR}:${PATH}" run install_bats_linux
   [ "$status" -eq 0 ]
   grep -q "apt-get .*install .*-y parallel" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_bats_linux: parallel install failure returns non-zero" {
+@test "install_bats_linux: parallel apt failure alone returns 2 even when the re-check passes" {
   unset MOCK_WHICH_MISSING MACOS
+  export UBUNTU=1
+  make_flip_parallel_apt 1
+  PATH="${FLIP_SHIM_DIR}:${PATH}" run install_bats_linux
+  [ "$status" -eq 2 ]
+  grep -q "apt-get .*install .*-y parallel" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_bats_linux: bats failure with GNU parallel present returns 1" {
+  export MOCK_WHICH_MISSING=bats
+  unset MACOS
+  export UBUNTU=1
+  make_parallel_stub "${BATS_TEST_TMPDIR}/gnu-parallel" "GNU parallel 20240222"
+  export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/gnu-parallel"
+  export MOCK_APT_EXIT=1
+  run install_bats_linux
+  [ "$status" -eq 1 ]
+}
+
+@test "install_bats_linux: bats and parallel both failing returns 1, not 2" {
+  export MOCK_WHICH_MISSING=bats
+  unset MACOS
   export UBUNTU=1
   export _PARALLEL_BIN="${BATS_TEST_TMPDIR}/no-such-parallel"
   export MOCK_APT_EXIT=1
   run install_bats_linux
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]
+  grep -q "apt-get install -y bats" "${MOCK_CALLS_FILE}"
   grep -q "apt-get install -y parallel" "${MOCK_CALLS_FILE}"
 }
 

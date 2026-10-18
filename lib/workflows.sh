@@ -440,7 +440,12 @@ run_setup_user() {
   fi
 
   if [[ ${MACOS} || ${LINUX} ]]; then
-    install_bats || return 1
+    install_bats
+    case "$?" in
+      0) ;;
+      2) log_warn "install_bats: GNU parallel unavailable, continuing (test runs fall back to serial)" ;;
+      *) return 1 ;;
+    esac
   fi
 
   printf "Creating %s/bin\\n" "${HOME}"
