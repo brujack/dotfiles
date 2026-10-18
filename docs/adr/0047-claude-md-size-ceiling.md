@@ -47,7 +47,7 @@ Full record: `docs/superpowers/specs/2026-10-17-claude-md-budget-design.md`.
 
 Two dry runs projected the compressed file at 93-99 KB: a ratio of 0.351 measured on the 15
 largest blocks, and 0.747 on a stratified sample of the remaining blocks. The shipped file
-measures 70,381 bytes. 105,000 B sits above the projection with room for ordinary growth,
+measured 74,138 bytes at merge (70,381 before the rule-by-rule review restored 19 weakened or pointer-only rules). 105,000 B sits above the projection with room for ordinary growth,
 and well below the 155,308 B regrowth point.
 
 ## Consequences
