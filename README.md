@@ -479,13 +479,13 @@ Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing Syst
 make test          # lint + Python tests + all BATS tests (parallel; override with JOBS=N, force serial with HAVE_PARALLEL=)
 make test-unit     # unit + profiles tests only (faster)
 make test-python   # the vendored .claude/scripts/triage_log.py suite only
-make lint          # syntax + shellcheck only
-make bash-coverage # measure bash line coverage (PS4 xtrace); CI gates at 91%
+make lint          # syntax + shellcheck only (shellcheck runs JOBS parallel workers)
+make bash-coverage # measure bash line coverage (PS4 xtrace, parallel under JOBS); CI gates at 91%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 make sync-agent-guidance  # regenerate .cursor guidance from CLAUDE.md's ~/.claude/standards imports
 make check-agent-guidance # fail if generated guidance is out of sync
-make sync-requirements-ci  # render requirements-ci.txt from uv.lock's test-lint group
-make check-requirements-ci # fail if requirements-ci.txt has drifted from uv.lock
+make sync-requirements-ci  # render the five requirements-ci*.txt files from uv.lock's groups
+make check-requirements-ci # fail if any of the five renderings has drifted from uv.lock
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
