@@ -5,19 +5,52 @@
 #
 # Usage: bash scripts/run-bash-coverage.sh [--json /path/out.json]
 #   --json  Also write shields.io badge JSON to given path
+# Builds the bats argv for the traced run, one argument per line. Defined
+# before the flag dispatch so --print-bats-args and the main run share it.
+# COVERAGE_BATS_JOBS: positive integer without a leading zero selects --jobs;
+# unset or empty is serial; anything else is an error, never a silent serial run.
+_coverage_bats_args() {
+    local _jobs="${COVERAGE_BATS_JOBS:-}"
+    case "${_jobs}" in
+        "")
+            ;;
+        0* | *[!0-9]*)
+            printf "COVERAGE_BATS_JOBS must be a positive integer, got '%s'\n" "${_jobs}" >&2
+            return 1
+            ;;
+        *)
+            printf '%s\n' "--jobs" "${_jobs}"
+            ;;
+    esac
+    printf '%s\n' "--recursive" "${REPO_ROOT}/tests/"
+}
+
+# Mode line from an argument array, shared by --print-bats-args and the main run.
+_coverage_bats_mode() {
+    local _a
+    for _a in "$@"; do
+        if [[ "${_a}" == "--jobs" ]]; then
+            printf 'bats mode: parallel (--jobs %s)\n' "${2}"
+            return 0
+        fi
+    done
+    printf 'bats mode: serial\n'
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<'USAGE'
 Usage: run-bash-coverage.sh [--json /path/out.json]
        run-bash-coverage.sh --list-sources
        run-bash-coverage.sh --count-coverable <file>
        run-bash-coverage.sh --file-coverage <file> <trace_file>
+       run-bash-coverage.sh --print-bats-args
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
 
   --json /path/out.json   Also write a shields.io badge JSON to given path
 
-Inspecting the figure without a full run (all three exit immediately):
+Inspecting the figure without a full run (all of these exit immediately):
 
   --list-sources          Print the instrumented set — setup_env.sh plus
                           tracked config/*.sh, lib/*.sh, and scripts/*.sh
@@ -34,6 +67,13 @@ Inspecting the figure without a full run (all three exit immediately):
                           actually contains for FILE), and any heuristic
                           disagreements — the same computation the full run
                           does per file, against a trace file you supply
+  --print-bats-args       Print the bats arguments the full run would use,
+                          one per line, then the mode line. Exits 2 on an
+                          invalid COVERAGE_BATS_JOBS
+
+COVERAGE_BATS_JOBS=<n>    Run the traced suite with bats --jobs <n> (a positive
+                          integer, no leading zero). Unset or empty runs
+                          serially; any other value exits 2 before the run.
 USAGE
   exit 0
 fi
@@ -672,6 +712,15 @@ if [[ "${1:-}" == "--check-red-suite" ]]; then
     exit $?
 fi
 
+# Shows the bats argv without running the suite; exits before the main run.
+if [[ "${1:-}" == "--print-bats-args" ]]; then
+    _out="$(_coverage_bats_args)" || exit 2
+    printf '%s\n' "${_out}"
+    mapfile -t _bats_args <<<"${_out}"
+    _coverage_bats_mode "${_bats_args[@]}"
+    exit 0
+fi
+
 # Reject an unrecognised flag rather than falling through to the full run.
 # THIS MUST STAY BELOW EVERY FLAG HANDLER ABOVE. Placed higher, it rejects
 # the very flags it sits in front of — which is exactly what happened when
@@ -716,6 +765,13 @@ if ! command -v "${_bats_bin}" > /dev/null 2>&1; then
     exit 1
 fi
 
+# Captured with || exit 2 before the FIFO exists: an invalid COVERAGE_BATS_JOBS
+# must fail here, not after a reader is blocked on the pipe. A here-string, not
+# < <(...), so the function's status is not lost.
+_out="$(_coverage_bats_args)" || exit 2
+mapfile -t _bats_args <<<"${_out}"
+_coverage_bats_mode "${_bats_args[@]}"
+
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
@@ -748,7 +804,7 @@ printf "Running %d tests with coverage tracer...\n" "${test_count}"
 export BASH_ENV="${TRACER}"
 export _COV_TRACE_FILE="${TRACE_FIFO}"
 bats_log="${OUTPUT_DIR}/bats_run.log"
-bats --recursive "${REPO_ROOT}/tests/" > "${bats_log}" 2>&1
+"${_bats_bin}" "${_bats_args[@]}" > "${bats_log}" 2>&1
 bats_status=$?
 unset BASH_ENV _COV_TRACE_FILE
 
