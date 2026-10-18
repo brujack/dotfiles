@@ -191,7 +191,7 @@ None open.
 
 | Feature | Notes |
 |---------|-------|
-| `test-macos` takes about 13-15 min on GitHub's 3-vCPU macOS runner | Deferred by the operator 2026-10-17. It already runs `bats --jobs 24` (GNU parallel from Homebrew; `make -n test` under make 3.81 on the Studio shows `bats --jobs 24`), so serial-to-parallel is spent: 14m46s and 12m57s on #346. Options: a larger GitHub macOS runner (per-minute cost), a self-hosted runner on the Studio (public repo, so fork PRs need gating), or a matrix shard of the bats files (no traces to merge). |
+| `test-macos` takes about 13-15 min on GitHub's 3-vCPU macOS runner | Deferred by the operator 2026-10-17. It already runs `bats --jobs 24` (GNU parallel from Homebrew; `make -n test` under make 3.81 on the Studio shows `bats --jobs 24`), so serial-to-parallel is spent: 14m46s and 12m57s on #346. Options: a larger GitHub macOS runner (per-minute cost), a self-hosted runner on the Studio (public repo, so fork PRs need gating), or a matrix shard of the bats files (no traces to merge). Operator 2026-10-17: Studio runners would mean making dotfiles private, which brings constraints. GitHub-hosted Linux runners drop from 4 to 2 vCPUs for private repos (core.md ci-008), so `test`/`bash-coverage`/`powershell` would need the `claude`/workstation self-hosted runners too. Actions minutes become metered (macOS at 10x). Renovate's public-repo inlining (CLAUDE.md Dependency Automation) wants a re-look. Fork-PR gating stops being needed. |
 
 ### P2 — bugs and security
 
