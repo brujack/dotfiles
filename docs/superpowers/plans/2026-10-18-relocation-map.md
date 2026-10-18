@@ -92,4 +92,16 @@ MOVE | - `Makefile:1`'s `MAKEFLAGS += --no-print-directory` suppres | dotfiles-b
 MOVE | - `MAKEFLAGS` is an exported env var every spawned `make` in | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
 MOVE | - `tests/scripts/makefile_lint_scope.bats` enforces the part | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
 MOVE | - The partition scanner sees only the invoking line, so it i | dotfiles-bats-test-infrastructure.md | Testing: MAKEFLAGS partition detail
+MOVE | - Machine roles are now driven by the **profile/capability m | dotfiles-conventions.md | CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules
+MOVE | - The Homebrew `make` gnubin directory must be prepended to  | dotfiles-conventions.md | CLAUDE.md relocation: Homebrew make gnubin PATH prepend rules
+MOVE | - Which `make` an actor resolves depends on whether the proc | dotfiles-conventions.md | CLAUDE.md relocation: which make an actor resolves
+MOVE | - `setup_env.sh` gates every workflow on `env which brew`, a | dotfiles-conventions.md | CLAUDE.md relocation: Linux workstation brew PATH, cargo tools and tfenv
+MOVE | - `setup_user` — Configs, shells, directory structure, symli | dotfiles-conventions.md | CLAUDE.md relocation: setup_env.sh workflow catalog
+MOVE | - `--dry-run` — guarantees **no outbound write**: no `git pu | dotfiles-conventions.md | CLAUDE.md relocation: --dry-run option semantics
+MOVE | - **`env which` vs `command -v`:** `setup_env.sh` uses `whic | dotfiles-conventions.md | CLAUDE.md relocation: shell conventions (env which, prereq tests, sudo dpkg, apt conffile, sourcing guard)
+MOVE | **A `# [HAS_*]` tag selects drift expectations only — it doe | dotfiles-conventions.md | CLAUDE.md relocation: Brewfile HAS_ tag selects drift only
+MOVE | Two consequences worth holding: tagging an entry does not ke | dotfiles-conventions.md | CLAUDE.md relocation: Brewfile HAS_ tag consequences
+MOVE | **Formula/cask dedup rule:** never add both a formula and a  | dotfiles-conventions.md | CLAUDE.md relocation: Brewfile formula/cask dedup and tap trust
+MOVE | - `~/.claude/` — `settings.json`, `CLAUDE.md`, `mcp.json.tem | dotfiles-conventions.md | CLAUDE.md relocation: Windows AI config link targets
+MOVE | Ruby version managers: **rbenv on Linux** (`lib/linux_ubuntu | dotfiles-conventions.md | CLAUDE.md relocation: Ruby version manager split
 ```
