@@ -1126,3 +1126,74 @@ _is_make_c_candidate() {
   [[ "${output}" == *"${_want}"* ]]
   [[ "${output}" != *"${_not}"* ]]
 }
+
+# --- parallel shellcheck passes (xargs -n 4 -P $(JOBS)) ---------------------
+
+_lint_fixture() {
+  # Writes <name> with a bash shebang and the given body into BATS_TEST_TMPDIR.
+  local _name="$1" _body="$2"
+  printf '#!/usr/bin/env bash\n%s\n' "${_body}" > "${BATS_TEST_TMPDIR}/${_name}"
+  printf '%s' "${BATS_TEST_TMPDIR}/${_name}"
+}
+
+_lint_run() {
+  # $1 = SHELL_FILES, $2 = BATS_FILES. ZSH_FILES is one clean fixture.
+  local _zsh="${BATS_TEST_TMPDIR}/ok.zsh"
+  printf 'print ok\n' > "${_zsh}"
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" lint \
+    SHELL_FILES="$1" BATS_FILES="$2" ZSH_FILES="${_zsh}"
+}
+
+_clean_shell_files() {
+  local _i _list=""
+  for _i in 1 2 3 4 5; do
+    _list+="$(_lint_fixture "c${_i}.sh" 'printf "%s\n" "$1"') "
+  done
+  printf '%s' "${_list}"
+}
+
+@test "lint shellcheck pass fails when a sixth-position file has a finding" {
+  command -v shellcheck > /dev/null || skip "shellcheck absent"
+  local _clean _bad _bats
+  _clean="$(_clean_shell_files)"
+  _bad="$(_lint_fixture bad.sh 'echo $1')"
+  _bats="$(_lint_fixture ok.bats 'printf "%s\n" ok')"
+  _lint_run "${_clean}${_bad}" "${_bats}"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"shellcheck FAIL"* ]]
+  [[ "${output}" != *"shellcheck OK"* ]]
+}
+
+@test "lint shellcheck bats pass fails on a warning-level finding" {
+  command -v shellcheck > /dev/null || skip "shellcheck absent"
+  local _clean _bats
+  _clean="$(_clean_shell_files)"
+  _bats="$(_lint_fixture bad.bats 'cd /nonexistent')"
+  _lint_run "${_clean}" "${_bats}"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"shellcheck bats FAIL"* ]]
+  [[ "${output}" != *"shellcheck bats OK"* ]]
+}
+
+@test "lint passes both shellcheck passes when every fixture is clean" {
+  command -v shellcheck > /dev/null || skip "shellcheck absent"
+  local _clean _bats
+  _clean="$(_clean_shell_files)"
+  _bats="$(_lint_fixture ok.bats 'printf "%s\n" ok')"
+  _lint_run "${_clean}" "${_bats}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"shellcheck OK"* ]]
+  [[ "${output}" == *"shellcheck bats OK"* ]]
+}
+
+@test "Makefile runs both shellcheck passes through xargs -n 4 -P \$(JOBS)" {
+  local _line _pat
+  # Comment lines are dropped first: a comment carrying the xargs string must
+  # not satisfy the pin while the real recipe line is serial.
+  for _pat in 'SHELL_FILES.*shellcheck &&' 'BATS_FILES.*shellcheck --severity=warning'; do
+    _line="$(command grep -v '^[[:space:]]*#' "${REPO_ROOT}/Makefile" | command grep -E "${_pat}" | head -1)"
+    [[ "${_line}" == *'xargs -n 4 -P $(JOBS)'* ]]
+  done
+}

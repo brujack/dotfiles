@@ -418,6 +418,27 @@ _cheat_seed() {
   grep -q "git clone" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_setup_user continues past install_bats returning 2 with a warning" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_bats() { return 2; }
+  run run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"*"install_bats"* ]]
+  [[ "$output" == *"Creating ${HOME}/bin"* ]]
+  [ -d "${HOME}/bin" ]
+}
+
+@test "run_setup_user stops when install_bats returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_bats() { return 1; }
+  run run_setup_user
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Creating ${HOME}/bin"* ]]
+  [ ! -d "${HOME}/bin" ]
+}
+
 @test "run_setup_user creates HOME/bin on macOS" {
   export MACOS=1
   unset LINUX UBUNTU

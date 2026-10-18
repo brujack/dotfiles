@@ -41,13 +41,41 @@ install_zsh_linux() {
 }
 
 install_bats_linux() {
+  local _rc=0 _parallel_rc=0
+  local _parallel="${_PARALLEL_BIN:-parallel}"
+
   if quiet_which bats; then
     log_info "bats already installed"
-    return 0
+  else
+    log_info "Installing bats"
+    sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y bats || _rc=1
   fi
 
-  log_info "Installing bats"
-  sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y bats
+  if _is_gnu_parallel "${_parallel}"; then
+    log_info "GNU parallel already installed"
+  else
+    # Ubuntu's parallel package diverts moreutils' /usr/bin/parallel to
+    # /usr/bin/parallel.moreutils, so installing over moreutils is supported.
+    log_info "Installing GNU parallel"
+    sudo -H DEBIAN_FRONTEND=noninteractive apt-get install "${APT_CONFFILE_OPTS[@]}" -y parallel || _parallel_rc=2
+    if ! _is_gnu_parallel "${_parallel}"; then
+      log_warn "GNU parallel not available after install; command -v parallel resolves to: $(command -v parallel || printf 'none')"
+      _parallel_rc=2
+    fi
+  fi
+
+  # bats failure (1) outranks a parallel-only failure (2): parallel is a speed
+  # dependency, so callers treat 2 as a warning.
+  [[ "${_rc}" -ne 0 ]] && return "${_rc}"
+  return "${_parallel_rc}"
+}
+
+# True when "$1 --version" prints a first line starting with "GNU parallel"
+# (moreutils ships an incompatible binary under the same name).
+_is_gnu_parallel() {
+  local _first
+  _first="$("$1" --version 2>/dev/null | head -n 1)"
+  [[ "${_first}" == "GNU parallel"* ]]
 }
 
 update_apt_packages() {

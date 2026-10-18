@@ -1079,6 +1079,58 @@ FIXTURE
   [ "$status" -eq 0 ]
   [[ "$output" == *"--list-sources"* ]]
   [[ "$output" == *"--count-coverable"* ]]
+  [[ "$output" == *"--print-bats-args"* ]]
+  [[ "$output" == *"COVERAGE_BATS_JOBS"* ]]
+}
+
+# Every case below goes through --print-bats-args: it exits before the main
+# run, so a regressed guard fails at an assertion instead of launching a full
+# traced suite. env -u clears the variable because CI's traced run inherits it.
+@test "run-bash-coverage.sh --print-bats-args with a valid job count is parallel" {
+  COVERAGE_BATS_JOBS=6 run _run_coverage --print-bats-args
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--jobs"* ]]
+  [[ "$output" == *"bats mode: parallel (--jobs 6)"* ]]
+  [[ "$output" == *"--recursive"* ]]
+}
+
+@test "run-bash-coverage.sh --print-bats-args is serial when the variable is unset or empty" {
+  run env -u COVERAGE_BATS_JOBS bash -c 'PATH="$(printf "%s" "${PATH}" | tr ":" "\n" | command grep -v tests/mocks | tr "\n" ":")" bash "$1" --print-bats-args' _ "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bats mode: serial"* ]]
+  [[ "$output" != *"--jobs"* ]]
+
+  COVERAGE_BATS_JOBS="" run _run_coverage --print-bats-args
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bats mode: serial"* ]]
+  [[ "$output" != *"--jobs"* ]]
+}
+
+@test "run-bash-coverage.sh --print-bats-args rejects an invalid job count naming the value" {
+  local _v
+  for _v in 0 07 x -1 "2 3"; do
+    COVERAGE_BATS_JOBS="${_v}" run _run_coverage --print-bats-args
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"COVERAGE_BATS_JOBS must be a positive integer, got '${_v}'"* ]]
+  done
+}
+
+@test "run-bash-coverage.sh main run captures the bats argv before the FIFO exists" {
+  local _script="${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  local _caps _cap _fifo _mkdir
+  # Two captures exist: the --print-bats-args handler (always early) and the
+  # main run's. Only the last one is the main run, so take that one.
+  _caps="$(command grep -n '_out="$(_coverage_bats_args)" || exit 2' "${_script}" | cut -d: -f1)"
+  [ "$(printf '%s\n' "${_caps}" | wc -l)" -eq 2 ]
+  _cap="$(printf '%s\n' "${_caps}" | tail -1)"
+  _fifo="$(command grep -n '^mkfifo' "${_script}" | head -1 | cut -d: -f1)"
+  _mkdir="$(command grep -nF 'mkdir -p "${OUTPUT_DIR}"' "${_script}" | head -1 | cut -d: -f1)"
+  [ -n "${_fifo}" ]
+  [ -n "${_mkdir}" ]
+  [ "${_cap}" -lt "${_fifo}" ]
+  [ "${_cap}" -lt "${_mkdir}" ]
+  command grep -qF '"${_bats_bin}" "${_bats_args[@]}"' "${_script}"
+  ! command grep -qE '^[[:space:]]*bats --recursive' "${_script}"
 }
 
 # The empty-set guard is the fail-loud mechanism for this script's headline
