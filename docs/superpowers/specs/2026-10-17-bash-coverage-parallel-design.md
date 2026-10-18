@@ -1,7 +1,8 @@
 # Bash coverage: run the traced suite in parallel
 
 - **Date:** 2026-10-17
-- **Status:** Draft (Phase 1), revised after Step 8 round 3
+- **Status:** Approved (Phase 1)
+- **Approved:** 2026-10-17
 - **Trigger:** the `bash-coverage` CI job hit its 25-minute cap twice on PR #343. PR #344 raised
   the cap to 60. The backlog row "bash-coverage runtime grows linearly with the suite because the
   coverage run is serial" holds the measurements behind this spec.
