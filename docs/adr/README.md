@@ -50,3 +50,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0044](0044-host-kernel-limits-persist-via-sysctl-d.md) | Host kernel limits persist via sysctl.d, never lowering a higher value | 2026-10-08 | Accepted |
 | [0045](0045-tracked-zshenv-for-non-interactive-macos-python3.md) | A tracked .zshenv puts Homebrew's python3 first for non-interactive macOS zsh | 2026-10-11 | Accepted |
 | [0046](0046-release-asset-pins-from-the-github-api-digest.md) | Release asset pins come from the GitHub API digest | 2026-10-14 | Accepted |
+| [0047](0047-claude-md-size-ceiling.md) | CLAUDE.md has a hard size ceiling, one line per rule | 2026-10-18 | Accepted |

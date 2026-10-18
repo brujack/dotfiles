@@ -132,6 +132,10 @@ seams that must keep their variable names and overrides; the three sampled compr
 - **N4.** `claude_md_budget.py` has no trailer, environment variable or flag that skips or raises its ceiling.
 - **N5.** No edit to `README.md` or to any dotfiles file other than `CLAUDE.md`, `scripts/pre-push`, `scripts/claude_md_budget.py`, their tests, `tests/scripts/docs_inert_premise.bats`, `Makefile`, `.cursor/rules/global-claude-standards.mdc`, the new ADR, `docs/adr/README.md` and `docs/superpowers/**`.
 
+## Amendments
+
+- R5 -> dotfiles `CLAUDE.md` no longer contains `@~/.claude/standards/powershell.md` and names `powershell.md` as required reading before writing or changing PowerShell code or its lint and test configuration. — the Cursor mirror cannot be regenerated: it is gitignored and untracked, and `scripts/sync-agent-guidance.sh` exits 1 (`No standards imports found`) once the last import is gone; fixing the script is outside N5, so it is a backlog row.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `bbb3a96c` (Step 7 self-review commit, before Step 8 dispatch)
