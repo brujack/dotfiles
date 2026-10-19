@@ -220,22 +220,40 @@ setup() {
   grep -q '"pep621"' "${REPO_ROOT}/renovate.json"
 }
 
-@test "renovate.json keeps python-version updates out of automerge" {
+@test "renovate.json holds Python interpreter updates out of automerge" {
   # Renovate classes requires-python ==3.14.* -> ==3.15.* as "minor", so the
   # minor/patch rule labelled it automerge-ok (dotfiles#350). An interpreter
   # bump also needs PYTHON_VER, the five renderings and a venv rebuild on every
   # machine, so no rule that automerges or adds automerge-ok may reach it.
+  # The matcher is depName/packageName negation (not matchDatasources), so it
+  # covers setup-python, pyenv, mise/asdf, poetry and Docker python as well as
+  # pep621; the packageRules are the fleet's canonical five.
   python3 - "${REPO_ROOT}/renovate.json" <<'EOF'
 import json, sys
 rules = json.load(open(sys.argv[1]))["packageRules"]
+dep_names = ["python", "library/python", "docker.io/library/python"]
 for r in rules:
+    if "matchDatasources" in r:
+        sys.exit(f"rule uses matchDatasources: {r}")
     arms = r.get("automerge") is True or "automerge-ok" in r.get("addLabels", [])
-    if arms and "!python-version" not in r.get("matchDatasources", []):
-        sys.exit(f"rule reaches python-version: {r}")
-held = [r for r in rules
-        if r.get("matchDatasources") == ["python-version"] and r.get("automerge") is False]
-if not held:
-    sys.exit("no python-version rule with automerge false")
+    if not arms:
+        continue
+    negated = r.get("matchDepNames", [])
+    if not all("!" + n in negated for n in dep_names):
+        sys.exit(f"rule reaches python depNames: {r}")
+    if "!actions/python-versions" not in r.get("matchPackageNames", []):
+        sys.exit(f"rule reaches actions/python-versions: {r}")
+    if r.get("matchManagers") != ["!terraform", "!gomod"]:
+        sys.exit(f"rule has wrong matchManagers: {r}")
+if not [r for r in rules
+        if r.get("matchDepNames") == dep_names and r.get("automerge") is False]:
+    sys.exit("no python depName hold rule with automerge false")
+if not [r for r in rules
+        if r.get("matchPackageNames") == ["actions/python-versions"]
+        and r.get("automerge") is False]:
+    sys.exit("no actions/python-versions hold rule with automerge false")
+if len(rules) != 5:
+    sys.exit(f"expected exactly 5 packageRules, found {len(rules)}")
 EOF
 }
 
