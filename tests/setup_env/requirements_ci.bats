@@ -235,7 +235,9 @@ dep_names = ["python", "library/python", "docker.io/library/python"]
 for r in rules:
     if "matchDatasources" in r:
         sys.exit(f"rule uses matchDatasources: {r}")
-    arms = r.get("automerge") is True or "automerge-ok" in r.get("addLabels", [])
+    arms = (r.get("automerge") is True
+            or "automerge-ok" in r.get("addLabels", [])
+            or "automerge-ok" in r.get("labels", []))
     if not arms:
         continue
     negated = r.get("matchDepNames", [])
