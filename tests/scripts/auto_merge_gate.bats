@@ -21,13 +21,19 @@ GH
   : > "${GITHUB_OUTPUT}"
 }
 
-# _pr <author> <labels-json> <files-json> [changedFiles]
+# _pr <author> <labels-json> <files-json> [changedFiles] [is_bot]
+# is_bot is a JSON literal; default is true for an "app/" login, else false.
+# The literal "absent" omits the field, to model a payload gh did not fill in.
 _pr() {
-  local _n
+  local _n _bot
   _n="${4:-$(printf '%s' "$3" | jq 'length')}"
+  _bot="${5:-}"
+  if [[ -z "${_bot}" ]]; then
+    case "$1" in app/*) _bot=true ;; *) _bot=false ;; esac
+  fi
   export FAKE_GH_JSON
-  FAKE_GH_JSON="$(jq -cn --arg a "$1" --argjson l "$2" --argjson f "$3" --argjson n "${_n}" \
-    '{author:{login:$a}, labels:($l|map({name:.})), files:($f|map({path:.})), changedFiles:$n}')"
+  FAKE_GH_JSON="$(jq -cn --arg a "$1" --argjson l "$2" --argjson f "$3" --argjson n "${_n}" --arg b "${_bot}" \
+    '{author:({login:$a} + (if $b == "absent" then {} else {is_bot:($b|fromjson)} end)), labels:($l|map({name:.})), files:($f|map({path:.})), changedFiles:$n}')"
 }
 
 @test "a human PR with ordinary files is cleared to merge" {
@@ -49,6 +55,67 @@ _pr() {
   run bash "${GATE}" 1
   [ "$status" -eq 0 ]
   [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
+@test "a Dependabot PR without automerge-ok is held" {
+  _pr "app/dependabot" '[]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+  [[ "$output" == *"app/dependabot"* ]]
+}
+
+@test "a Dependabot PR with automerge-ok is cleared to merge" {
+  _pr "app/dependabot" '["automerge-ok"]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
+}
+
+@test "a github-actions PR without automerge-ok is held" {
+  _pr "app/github-actions" '[]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
+@test "a label that only starts with automerge-ok does not clear a bot PR" {
+  _pr "app/renovate" '["automerge-ok-pending"]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
+}
+
+@test "a bot PR with automerge-ok among several labels merges, in either order" {
+  : > "${GITHUB_OUTPUT}"
+  _pr "app/renovate" '["renovate","automerge-ok"]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
+  : > "${GITHUB_OUTPUT}"
+  _pr "app/renovate" '["automerge-ok","renovate"]' '["lib/a.sh"]'
+  run bash "${GATE}" 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${GITHUB_OUTPUT}")" = "merge=true" ]
+}
+
+@test "an empty author login stops the gate" {
+  _pr "" '[]' '["lib/a.sh"]' "" false
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot read PR"* ]]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
+@test "a missing or non-boolean is_bot stops the gate" {
+  local _bot
+  for _bot in absent null '"true"' 1; do
+    : > "${GITHUB_OUTPUT}"
+    _pr "app/renovate" '["automerge-ok"]' '["lib/a.sh"]' "" "${_bot}"
+    run bash "${GATE}" 1
+    [ "$status" -eq 1 ] || { printf 'is_bot=%s: status %s\n' "${_bot}" "$status" >&3; return 1; }
+    [ ! -s "${GITHUB_OUTPUT}" ] || { printf 'is_bot=%s: wrote output\n' "${_bot}" >&3; return 1; }
+  done
 }
 
 @test "uv.lock changed without pyproject.toml is held, whoever the author" {
@@ -78,14 +145,14 @@ _pr() {
 }
 
 @test "a filename containing a newline cannot pose as pyproject.toml" {
-  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":[{"path":"uv.lock"},{"path":"x\npyproject.toml"}],"changedFiles":2}'
+  export FAKE_GH_JSON='{"author":{"is_bot":false,"login":"brujack"},"labels":[],"files":[{"path":"uv.lock"},{"path":"x\npyproject.toml"}],"changedFiles":2}'
   run bash "${GATE}" 1
   [ "$status" -eq 0 ]
   [ "$(cat "${GITHUB_OUTPUT}")" = "merge=false" ]
 }
 
 @test "a payload missing changedFiles exits 1 rather than skipping the truncation check" {
-  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":[{"path":"lib/a.sh"}]}'
+  export FAKE_GH_JSON='{"author":{"is_bot":false,"login":"brujack"},"labels":[],"files":[{"path":"lib/a.sh"}]}'
   run bash "${GATE}" 1
   [ "$status" -eq 1 ]
   [ ! -s "${GITHUB_OUTPUT}" ]
@@ -99,14 +166,14 @@ _pr() {
 }
 
 @test "a files field that is not an array exits 1" {
-  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":[],"files":{"x":{"path":"lib/a.sh"}},"changedFiles":1}'
+  export FAKE_GH_JSON='{"author":{"is_bot":false,"login":"brujack"},"labels":[],"files":{"x":{"path":"lib/a.sh"}},"changedFiles":1}'
   run bash "${GATE}" 1
   [ "$status" -eq 1 ]
   [ ! -s "${GITHUB_OUTPUT}" ]
 }
 
 @test "a null labels field exits 1 even for a human PR" {
-  export FAKE_GH_JSON='{"author":{"login":"brujack"},"labels":null,"files":[{"path":"lib/a.sh"}],"changedFiles":1}'
+  export FAKE_GH_JSON='{"author":{"is_bot":false,"login":"brujack"},"labels":null,"files":[{"path":"lib/a.sh"}],"changedFiles":1}'
   run bash "${GATE}" 1
   [ "$status" -eq 1 ]
   [ ! -s "${GITHUB_OUTPUT}" ]
@@ -130,6 +197,18 @@ _pr() {
 @test "two concatenated gh payloads exit 1 and write no merge decision" {
   _pr "brujack" '[]' '["lib/a.sh"]'
   export FAKE_GH_JSON="${FAKE_GH_JSON}${FAKE_GH_JSON}" FAKE_GH_EXIT=0
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
+@test "an unlabelled bot payload followed by a clear one exits 1, not held" {
+  # The bot verdict carries its login after a tab. A second document must
+  # not ride along as the "login" and turn a can't-decide into a decision.
+  _pr "brujack" '[]' '["lib/a.sh"]'
+  local _human="${FAKE_GH_JSON}"
+  _pr "app/renovate" '[]' '["lib/a.sh"]'
+  export FAKE_GH_JSON="${FAKE_GH_JSON}${_human}" FAKE_GH_EXIT=0
   run bash "${GATE}" 1
   [ "$status" -eq 1 ]
   [ ! -s "${GITHUB_OUTPUT}" ]

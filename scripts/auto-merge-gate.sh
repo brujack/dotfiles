@@ -5,7 +5,7 @@
 # cannot decide, so a broken query can never fall through to a merge.
 #
 # Held for a human (merge=false, green):
-#   - a Renovate PR without the automerge-ok label;
+#   - a bot PR (author.is_bot) without the automerge-ok label;
 #   - any PR that changes uv.lock without changing pyproject.toml;
 #   - any PR whose file list gh truncated, since uv.lock could be the hidden one.
 #
@@ -22,25 +22,30 @@
 # and a field that is missing or of the wrong type must stop the gate, not
 # compare as null and quietly skip a check.
 #
-# `app/renovate` is what `gh pr view --json author` returns. REST says
-# `renovate[bot]` for the SAME PR, and mixing them fails open. Do NOT settle
-# it with `gh pr list --author`: it accepts BOTH and bare `renovate` returns
-# 0, indistinguishable from "no PRs".
+# The gate decides on `author.is_bot`, never on a login string: `gh pr view`
+# reports `app/renovate` where REST reports `renovate[bot]` for the SAME PR,
+# and keying on either spelling fails open for the other. The login is only
+# printed.
 #
 # AFFIRMATIVE label, not `!major`: excluding a negative fails OPEN, since every
-# way labelling can break yields a PR without the label. Scoped to Renovate:
-# the label comes from renovate.json, so no human PR can carry it.
+# way labelling can break yields a PR without the label. Keyed on
+# `author.is_bot` (ADR-0085), not on one bot's login, so Dependabot,
+# github-actions and any future bot are held without the gate naming them.
+# `is_bot` comes from the same `gh pr view` call as the login, which is why
+# the login is read there too. A missing or non-boolean `is_bot`, or an empty
+# login, is a malformed payload and stops the gate.
 _gate_verdict() {
   # One jq clause per line, joined here rather than written as one multi-line
   # string: the bash coverage tracer sees a multi-line argument as a single
   # command, so its continuation lines could never count as covered.
   local _prog
   _prog='if (.author.login | type) != "string" or (.changedFiles | type) != "number"'
+  _prog+=' or (.author.is_bot | type) != "boolean" or .author.login == ""'
   _prog+=' or (.files | type) != "array" or (.labels | type) != "array"'
   _prog+=' then error("malformed payload") else . end'
   _prog+=' | .files |= map(.path)'
-  _prog+=' | if .author.login == "app/renovate"'
-  _prog+=' and (any(.labels[]; .name == "automerge-ok") | not) then "renovate-unlabelled"'
+  _prog+=' | if .author.is_bot == true'
+  _prog+=' and (any(.labels[]; .name == "automerge-ok") | not) then "bot-unlabelled\t" + .author.login'
   _prog+=' elif (.files | length) < .changedFiles then "truncated"'
   _prog+=' elif any(.files[]; . == "uv.lock") and (any(.files[]; . == "pyproject.toml") | not) then "lock-only"'
   _prog+=' else "clear" end'
@@ -66,9 +71,22 @@ auto_merge_gate() {
     return 1
   }
 
+  # jq prints one verdict per document, so a newline means gh returned more
+  # than one. Refuse before the split below, which would otherwise read the
+  # second document's verdict as the first one's login.
+  if [[ "${_verdict}" == *$'\n'* ]]; then
+    printf 'unexpected gate verdict %q -- refusing to auto-merge\n' "${_verdict}" >&2
+    return 1
+  fi
+
+  # Only bot-unlabelled carries a payload (the login, tab-separated).
+  local _login="${_verdict#*$'\t'}"
+  [[ "${_login}" == "${_verdict}" ]] && _login=""
+  _verdict="${_verdict%%$'\t'*}"
+
   case "${_verdict}" in
-    renovate-unlabelled)
-      printf 'renovate PR lacks automerge-ok -- leaving open for triage\n'
+    bot-unlabelled)
+      printf 'bot PR (%s) lacks automerge-ok -- leaving open for triage\n' "${_login}"
       ;;
     truncated)
       printf 'gh could not list every changed file -- leaving open for a human\n'
@@ -82,8 +100,8 @@ auto_merge_gate() {
       return 0
       ;;
     *)
-      # jq exits 0 on empty input and prints nothing, and prints one verdict
-      # per document when gh returns more than one, so this is reachable.
+      # jq exits 0 on empty input and prints nothing, so this is reachable;
+      # several documents are refused by the newline guard above.
       printf 'unexpected gate verdict %q -- refusing to auto-merge\n' "${_verdict}" >&2
       return 1
       ;;

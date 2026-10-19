@@ -2,8 +2,18 @@ name: CI
 
 on:
   pull_request:
+    # labeled re-runs the gate when automerge-ok is applied after the PR
+    # opens; ready_for_review covers a draft marked ready (not a default type).
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     branches:
       - master
+
+# Bots apply labels in a burst, each firing a `labeled` run; cancel the
+# superseded ones. A job-level label filter that skips reads as passing, so
+# the gate script decides instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -312,7 +322,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        # scripts/auto-merge-gate.sh holds a Renovate PR without automerge-ok,
+        # scripts/auto-merge-gate.sh holds a bot PR without automerge-ok,
         # any PR changing uv.lock without pyproject.toml, and any PR gh cannot
         # list in full; it writes merge=true|false to GITHUB_OUTPUT, and exits
         # 1 (red) when it cannot decide.
