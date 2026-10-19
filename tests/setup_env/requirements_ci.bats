@@ -220,22 +220,57 @@ setup() {
   grep -q '"pep621"' "${REPO_ROOT}/renovate.json"
 }
 
-@test "renovate.json keeps python-version updates out of automerge" {
+@test "renovate.json holds Python interpreter updates out of automerge" {
   # Renovate classes requires-python ==3.14.* -> ==3.15.* as "minor", so the
   # minor/patch rule labelled it automerge-ok (dotfiles#350). An interpreter
   # bump also needs PYTHON_VER, the five renderings and a venv rebuild on every
   # machine, so no rule that automerges or adds automerge-ok may reach it.
+  # The matcher is depName/packageName negation (not matchDatasources), so it
+  # covers setup-python, pyenv, mise/asdf, poetry and Docker python as well as
+  # pep621; the packageRules are the fleet's canonical five.
   python3 - "${REPO_ROOT}/renovate.json" <<'EOF'
 import json, sys
-rules = json.load(open(sys.argv[1]))["packageRules"]
+cfg = json.load(open(sys.argv[1]))
+rules = cfg["packageRules"]
+# Renovate also applies labels set at the config root and in manager-level
+# blocks (e.g. "pep621": {"addLabels": [...]}) to every update they reach.
+if cfg.get("automerge") is True:
+    sys.exit("config root sets automerge true")
+scopes = [("root", cfg)] + [(k, v) for k, v in cfg.items() if isinstance(v, dict)]
+for where, scope in scopes:
+    for field in ("labels", "addLabels"):
+        if "automerge-ok" in scope.get(field, []):
+            sys.exit(f"automerge-ok in {field} of {where}")
+dep_names = ["python", "library/python", "docker.io/library/python"]
 for r in rules:
-    arms = r.get("automerge") is True or "automerge-ok" in r.get("addLabels", [])
-    if arms and "!python-version" not in r.get("matchDatasources", []):
-        sys.exit(f"rule reaches python-version: {r}")
-held = [r for r in rules
-        if r.get("matchDatasources") == ["python-version"] and r.get("automerge") is False]
-if not held:
-    sys.exit("no python-version rule with automerge false")
+    if "matchDatasources" in r:
+        sys.exit(f"rule uses matchDatasources: {r}")
+    arms = (r.get("automerge") is True
+            or "automerge-ok" in r.get("addLabels", [])
+            or "automerge-ok" in r.get("labels", []))
+    if not arms:
+        continue
+    negated = r.get("matchDepNames", [])
+    if not all("!" + n in negated for n in dep_names):
+        sys.exit(f"rule reaches python depNames: {r}")
+    if "!actions/python-versions" not in r.get("matchPackageNames", []):
+        sys.exit(f"rule reaches actions/python-versions: {r}")
+    if r.get("matchManagers") != ["!terraform", "!gomod"]:
+        sys.exit(f"rule has wrong matchManagers: {r}")
+# A hold rule must match ONLY its own field with the exact expected list: an
+# extra match* key narrows it (e.g. matchManagers ["npm"]) and an extra entry
+# widens what it names, either of which lets python updates through unheld.
+for field, expected in (("matchDepNames", dep_names),
+                        ("matchPackageNames", ["actions/python-versions"])):
+    holds = [r for r in rules if r.get(field) == expected and r.get("automerge") is False]
+    if not holds:
+        sys.exit(f"no {field} hold rule with automerge false")
+    for r in holds:
+        extra = [k for k in r if k.startswith("match") and k != field]
+        if extra:
+            sys.exit(f"hold rule carries extra matchers {extra}: {r}")
+if len(rules) != 5:
+    sys.exit(f"expected exactly 5 packageRules, found {len(rules)}")
 EOF
 }
 
