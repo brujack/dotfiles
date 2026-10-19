@@ -234,6 +234,8 @@ cfg = json.load(open(sys.argv[1]))
 rules = cfg["packageRules"]
 # Renovate also applies labels set at the config root and in manager-level
 # blocks (e.g. "pep621": {"addLabels": [...]}) to every update they reach.
+if cfg.get("automerge") is True:
+    sys.exit("config root sets automerge true")
 scopes = [("root", cfg)] + [(k, v) for k, v in cfg.items() if isinstance(v, dict)]
 for where, scope in scopes:
     for field in ("labels", "addLabels"):
@@ -255,13 +257,18 @@ for r in rules:
         sys.exit(f"rule reaches actions/python-versions: {r}")
     if r.get("matchManagers") != ["!terraform", "!gomod"]:
         sys.exit(f"rule has wrong matchManagers: {r}")
-if not [r for r in rules
-        if r.get("matchDepNames") == dep_names and r.get("automerge") is False]:
-    sys.exit("no python depName hold rule with automerge false")
-if not [r for r in rules
-        if r.get("matchPackageNames") == ["actions/python-versions"]
-        and r.get("automerge") is False]:
-    sys.exit("no actions/python-versions hold rule with automerge false")
+# A hold rule must match ONLY its own field with the exact expected list: an
+# extra match* key narrows it (e.g. matchManagers ["npm"]) and an extra entry
+# widens what it names, either of which lets python updates through unheld.
+for field, expected in (("matchDepNames", dep_names),
+                        ("matchPackageNames", ["actions/python-versions"])):
+    holds = [r for r in rules if r.get(field) == expected and r.get("automerge") is False]
+    if not holds:
+        sys.exit(f"no {field} hold rule with automerge false")
+    for r in holds:
+        extra = [k for k in r if k.startswith("match") and k != field]
+        if extra:
+            sys.exit(f"hold rule carries extra matchers {extra}: {r}")
 if len(rules) != 5:
     sys.exit(f"expected exactly 5 packageRules, found {len(rules)}")
 EOF
