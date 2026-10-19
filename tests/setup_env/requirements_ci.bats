@@ -220,6 +220,25 @@ setup() {
   grep -q '"pep621"' "${REPO_ROOT}/renovate.json"
 }
 
+@test "renovate.json keeps python-version updates out of automerge" {
+  # Renovate classes requires-python ==3.14.* -> ==3.15.* as "minor", so the
+  # minor/patch rule labelled it automerge-ok (dotfiles#350). An interpreter
+  # bump also needs PYTHON_VER, the five renderings and a venv rebuild on every
+  # machine, so no rule that automerges or adds automerge-ok may reach it.
+  python3 - "${REPO_ROOT}/renovate.json" <<'EOF'
+import json, sys
+rules = json.load(open(sys.argv[1]))["packageRules"]
+for r in rules:
+    arms = r.get("automerge") is True or "automerge-ok" in r.get("addLabels", [])
+    if arms and "!python-version" not in r.get("matchDatasources", []):
+        sys.exit(f"rule reaches python-version: {r}")
+held = [r for r in rules
+        if r.get("matchDatasources") == ["python-version"] and r.get("automerge") is False]
+if not held:
+    sys.exit("no python-version rule with automerge false")
+EOF
+}
+
 @test "no rendering has a single-segment name pip_requirements would match" {
   # The four narrow slices escape Renovate's pip_requirements pattern only
   # because they are two-segment names -- the pattern allows at most one
