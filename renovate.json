@@ -50,6 +50,9 @@
   ],
   "packageRules": [
     {
+      "matchDatasources": [
+        "!python-version"
+      ],
       "matchUpdateTypes": [
         "minor",
         "patch"
@@ -68,6 +71,9 @@
       "automerge": false
     },
     {
+      "matchDatasources": [
+        "!python-version"
+      ],
       "matchUpdateTypes": [
         "pin",
         "pinDigest",
@@ -78,6 +84,13 @@
       "addLabels": [
         "automerge-ok"
       ]
+    },
+    {
+      "description": "Python interpreter bumps (requires-python) need PYTHON_VER, the five CI renderings and a venv rebuild on every machine; never automerge (dotfiles#350).",
+      "matchDatasources": [
+        "python-version"
+      ],
+      "automerge": false
     }
   ]
 }
