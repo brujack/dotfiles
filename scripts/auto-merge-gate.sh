@@ -5,7 +5,7 @@
 # cannot decide, so a broken query can never fall through to a merge.
 #
 # Held for a human (merge=false, green):
-#   - a Renovate PR without the automerge-ok label;
+#   - a bot PR (author.is_bot) without the automerge-ok label;
 #   - any PR that changes uv.lock without changing pyproject.toml;
 #   - any PR whose file list gh truncated, since uv.lock could be the hidden one.
 #
@@ -28,19 +28,24 @@
 # 0, indistinguishable from "no PRs".
 #
 # AFFIRMATIVE label, not `!major`: excluding a negative fails OPEN, since every
-# way labelling can break yields a PR without the label. Scoped to Renovate:
-# the label comes from renovate.json, so no human PR can carry it.
+# way labelling can break yields a PR without the label. Keyed on
+# `author.is_bot` (ADR-0085), not on one bot's login, so Dependabot,
+# github-actions and any future bot are held without the gate naming them.
+# `is_bot` comes from the same `gh pr view` call as the login, which is why
+# the login is read there too. A missing or non-boolean `is_bot`, or an empty
+# login, is a malformed payload and stops the gate.
 _gate_verdict() {
   # One jq clause per line, joined here rather than written as one multi-line
   # string: the bash coverage tracer sees a multi-line argument as a single
   # command, so its continuation lines could never count as covered.
   local _prog
   _prog='if (.author.login | type) != "string" or (.changedFiles | type) != "number"'
+  _prog+=' or (.author.is_bot | type) != "boolean" or .author.login == ""'
   _prog+=' or (.files | type) != "array" or (.labels | type) != "array"'
   _prog+=' then error("malformed payload") else . end'
   _prog+=' | .files |= map(.path)'
-  _prog+=' | if .author.login == "app/renovate"'
-  _prog+=' and (any(.labels[]; .name == "automerge-ok") | not) then "renovate-unlabelled"'
+  _prog+=' | if .author.is_bot == true'
+  _prog+=' and (any(.labels[]; .name == "automerge-ok") | not) then "bot-unlabelled\t" + .author.login'
   _prog+=' elif (.files | length) < .changedFiles then "truncated"'
   _prog+=' elif any(.files[]; . == "uv.lock") and (any(.files[]; . == "pyproject.toml") | not) then "lock-only"'
   _prog+=' else "clear" end'
@@ -66,9 +71,14 @@ auto_merge_gate() {
     return 1
   }
 
+  # Only bot-unlabelled carries a payload (the login, tab-separated).
+  local _login="${_verdict#*$'\t'}"
+  [[ "${_login}" == "${_verdict}" ]] && _login=""
+  _verdict="${_verdict%%$'\t'*}"
+
   case "${_verdict}" in
-    renovate-unlabelled)
-      printf 'renovate PR lacks automerge-ok -- leaving open for triage\n'
+    bot-unlabelled)
+      printf 'bot PR (%s) lacks automerge-ok -- leaving open for triage\n' "${_login}"
       ;;
     truncated)
       printf 'gh could not list every changed file -- leaving open for a human\n'
