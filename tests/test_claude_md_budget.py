@@ -135,6 +135,26 @@ class BudgetTest(unittest.TestCase):
             "CLAUDE.md absent at HEAD; nothing to measure.",
         )
 
+    def test_hook_exported_git_vars_do_not_redirect_the_repo(self) -> None:
+        self.commit(b"a" * 1234)
+        env = _env()
+        env["GIT_DIR"] = "/nonexistent"
+        env["GIT_WORK_TREE"] = "/nonexistent"
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "HEAD"],
+            cwd=self.repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(),
+            "CLAUDE.md at HEAD is 1234 bytes (ceiling 105000).",
+        )
+
     def test_subdirectory_run_sees_root_claude_md(self) -> None:
         self.commit(b"a" * (CEILING + 1))
         sub = self.repo / "sub"
@@ -150,6 +170,7 @@ class BudgetTest(unittest.TestCase):
     def assert_not_regular(self, description: str) -> None:
         result = self.run_script("HEAD")
         self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
         self.assertIn(
             f"CLAUDE.md at HEAD must be a regular file, but it is {description}.",
             result.stderr,
