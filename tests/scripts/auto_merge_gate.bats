@@ -202,6 +202,18 @@ _pr() {
   [ ! -s "${GITHUB_OUTPUT}" ]
 }
 
+@test "an unlabelled bot payload followed by a clear one exits 1, not held" {
+  # The bot verdict carries its login after a tab. A second document must
+  # not ride along as the "login" and turn a can't-decide into a decision.
+  _pr "brujack" '[]' '["lib/a.sh"]'
+  local _human="${FAKE_GH_JSON}"
+  _pr "app/renovate" '[]' '["lib/a.sh"]'
+  export FAKE_GH_JSON="${FAKE_GH_JSON}${_human}" FAKE_GH_EXIT=0
+  run bash "${GATE}" 1
+  [ "$status" -eq 1 ]
+  [ ! -s "${GITHUB_OUTPUT}" ]
+}
+
 @test "a valid payload followed by a malformed one exits 1 rather than merging" {
   _pr "brujack" '[]' '["lib/a.sh"]'
   export FAKE_GH_JSON="${FAKE_GH_JSON}"'{"author":null}' FAKE_GH_EXIT=0

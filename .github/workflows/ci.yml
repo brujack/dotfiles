@@ -322,7 +322,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        # scripts/auto-merge-gate.sh holds a Renovate PR without automerge-ok,
+        # scripts/auto-merge-gate.sh holds a bot PR without automerge-ok,
         # any PR changing uv.lock without pyproject.toml, and any PR gh cannot
         # list in full; it writes merge=true|false to GITHUB_OUTPUT, and exits
         # 1 (red) when it cannot decide.

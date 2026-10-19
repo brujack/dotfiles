@@ -22,10 +22,10 @@
 # and a field that is missing or of the wrong type must stop the gate, not
 # compare as null and quietly skip a check.
 #
-# `app/renovate` is what `gh pr view --json author` returns. REST says
-# `renovate[bot]` for the SAME PR, and mixing them fails open. Do NOT settle
-# it with `gh pr list --author`: it accepts BOTH and bare `renovate` returns
-# 0, indistinguishable from "no PRs".
+# The gate decides on `author.is_bot`, never on a login string: `gh pr view`
+# reports `app/renovate` where REST reports `renovate[bot]` for the SAME PR,
+# and keying on either spelling fails open for the other. The login is only
+# printed.
 #
 # AFFIRMATIVE label, not `!major`: excluding a negative fails OPEN, since every
 # way labelling can break yields a PR without the label. Keyed on
@@ -71,6 +71,14 @@ auto_merge_gate() {
     return 1
   }
 
+  # jq prints one verdict per document, so a newline means gh returned more
+  # than one. Refuse before the split below, which would otherwise read the
+  # second document's verdict as the first one's login.
+  if [[ "${_verdict}" == *$'\n'* ]]; then
+    printf 'unexpected gate verdict %q -- refusing to auto-merge\n' "${_verdict}" >&2
+    return 1
+  fi
+
   # Only bot-unlabelled carries a payload (the login, tab-separated).
   local _login="${_verdict#*$'\t'}"
   [[ "${_login}" == "${_verdict}" ]] && _login=""
@@ -92,8 +100,8 @@ auto_merge_gate() {
       return 0
       ;;
     *)
-      # jq exits 0 on empty input and prints nothing, and prints one verdict
-      # per document when gh returns more than one, so this is reachable.
+      # jq exits 0 on empty input and prints nothing, so this is reachable;
+      # several documents are refused by the newline guard above.
       printf 'unexpected gate verdict %q -- refusing to auto-merge\n' "${_verdict}" >&2
       return 1
       ;;
