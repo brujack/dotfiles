@@ -230,7 +230,15 @@ setup() {
   # pep621; the packageRules are the fleet's canonical five.
   python3 - "${REPO_ROOT}/renovate.json" <<'EOF'
 import json, sys
-rules = json.load(open(sys.argv[1]))["packageRules"]
+cfg = json.load(open(sys.argv[1]))
+rules = cfg["packageRules"]
+# Renovate also applies labels set at the config root and in manager-level
+# blocks (e.g. "pep621": {"addLabels": [...]}) to every update they reach.
+scopes = [("root", cfg)] + [(k, v) for k, v in cfg.items() if isinstance(v, dict)]
+for where, scope in scopes:
+    for field in ("labels", "addLabels"):
+        if "automerge-ok" in scope.get(field, []):
+            sys.exit(f"automerge-ok in {field} of {where}")
 dep_names = ["python", "library/python", "docker.io/library/python"]
 for r in rules:
     if "matchDatasources" in r:
