@@ -6195,8 +6195,8 @@ _inotify_nontext_fixture() {
 }
 
 # ── _install_ubuntu_tmp_inodes ───────────────────────────────────────────────
-# load_mocks points _TMP_DROPIN, _SYSTEMCTL_BIN, _FINDMNT_BIN, _TMP_STOCK_UNIT and
-# _MOUNT_BIN at the tracked tests/mocks/mount. The stock unit carries nr_inodes=1m, the findmnt stub
+# load_mocks points _TMP_DROPIN, _SYSTEMCTL_BIN, _FINDMNT_BIN and _TMP_STOCK_UNIT
+# at BATS_TEST_TMPDIR. The stock unit carries nr_inodes=1m, the findmnt stub
 # reports a live 16777216 unless MOCK_TMP_LIVE_INODES says otherwise, and the mount stub
 # logs MOUNT CALLED. Spec: ai-config docs/superpowers/specs/2026-10-20-tmp-inode-reaper-design.md
 
@@ -6287,6 +6287,66 @@ _tmp_inodes_calls() { grep -c "^$1" "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"remount,nr_inodes=2g /tmp"* ]]
   [[ "$output" != *"16m"* ]]
+}
+
+@test "tmp_inodes: a read-back that differs from what was written returns 1 and does not reload" {
+  # Shadow cat inside the step: the read-back then differs from the written content.
+  cat() { printf 'tampered\n'; }
+  run --separate-stderr _install_ubuntu_tmp_inodes
+  unset -f cat
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"read-back mismatch"* ]]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+}
+
+@test "tmp_inodes: an unreadable drop-in returns 1 naming unreadable and does not reload" {
+  printf '[Mount]\nOptions=nr_inodes=1k\n' > "${_TMP_DROPIN}"
+  chmod 000 "${_TMP_DROPIN}"
+  run --separate-stderr _install_ubuntu_tmp_inodes
+  chmod 600 "${_TMP_DROPIN}"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"exists but is unreadable"* ]]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+}
+
+@test "tmp_inodes: a failing daemon-reload returns 1 with its message, while a passing one returns 0" {
+  MOCK_SYSTEMCTL_RELOAD_EXIT=1 run --separate-stderr _install_ubuntu_tmp_inodes
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"tmp-inodes: daemon-reload failed"* ]]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+  rm -f "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+}
+
+@test "tmp_inodes: a drop-in at nr_inodes=0 (unlimited) is kept, while a 1k drop-in in the same fixture is raised" {
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=0\n' > "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_TMP_DROPIN}")" = "$(printf '[Mount]\nOptions=mode=1777,nr_inodes=0')" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=1k\n' > "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  grep -q 'nr_inodes=16m' "${_TMP_DROPIN}"
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+}
+
+@test "tmp_inodes: live nr_inodes=0 (unlimited) prints no notice, while live 1048576 does" {
+  MOCK_TMP_LIVE_INODES=0 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"live nr_inodes="* ]]
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"live nr_inodes=1048576"* ]]
+}
+
+@test "tmp_inodes: live 1048576 against a drop-in at 0 says configured unlimited" {
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=0\n' > "${_TMP_DROPIN}"
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"configured unlimited;"* ]]
+  [[ "$output" == *"remount,nr_inodes=0 /tmp"* ]]
 }
 
 @test "tmp_inodes: the notice repeats on a second run while the live value lags" {

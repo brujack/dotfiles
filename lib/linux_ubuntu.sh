@@ -111,8 +111,12 @@ _install_ubuntu_kernel_keys() {
   return "${_rc}"
 }
 
+# The stand-in for tmpfs's nr_inodes=0 (unlimited): above any real ceiling (2^62).
+_tmp_inodes_unlimited() { printf '4611686018427387904\n'; }
+
 # Convert a tmpfs count with an optional k/m/g suffix (1m = 1048576) to a plain integer.
-# Prints nothing and returns 1 for anything else.
+# tmpfs treats 0 as unlimited, so 0 maps to a value above any real ceiling. Prints nothing
+# and returns 1 for anything else.
 _tmp_inodes_to_int() {
   local _v="${1}"
   [[ ${_v} =~ ^([0-9]+)([kKmMgG]?)$ ]] || return 1
@@ -122,6 +126,7 @@ _tmp_inodes_to_int() {
     m | M) _n=$((_n * 1048576)) ;;
     g | G) _n=$((_n * 1073741824)) ;;
   esac
+  ((_n > 0)) || _n="$(_tmp_inodes_unlimited)"
   printf '%s\n' "${_n}"
 }
 
@@ -206,7 +211,9 @@ _install_ubuntu_tmp_inodes() {
   if [[ ,${_live_opts}, =~ ,nr_inodes=([0-9]+[kKmMgG]?), ]]; then
     _live_raw="${BASH_REMATCH[1]}"
     if _live="$(_tmp_inodes_to_int "${_live_raw}")" && ((_live < _cfg)); then
-      printf 'tmp-inodes: live nr_inodes=%s, configured %s; takes effect at next boot or run: sudo mount -o remount,nr_inodes=%s /tmp\n' "${_live}" "${_cfg}" "${_existing}"
+      local _cfg_shown="${_cfg}"
+      ((_cfg < $(_tmp_inodes_unlimited))) || _cfg_shown=unlimited
+      printf 'tmp-inodes: live nr_inodes=%s, configured %s; takes effect at next boot or run: sudo mount -o remount,nr_inodes=%s /tmp\n' "${_live}" "${_cfg_shown}" "${_existing}"
     fi
   fi
 
