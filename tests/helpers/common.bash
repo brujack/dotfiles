@@ -105,7 +105,7 @@ STUB
     cat > "${_MOUNT_BIN}" << 'STUB'
 #!/usr/bin/env bash
 printf "MOUNT CALLED %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit 0
+exit 1
 STUB
     chmod +x "${_MOUNT_BIN}"
     export PATH="${BATS_TEST_TMPDIR}/mount-bin:${PATH}"

@@ -187,6 +187,7 @@ _install_ubuntu_tmp_inodes() {
       return 1
     fi
     _cfg="${TMP_NR_INODES}"
+    _existing=16m
     if [[ -n ${_SYSTEMCTL_BIN} ]]; then
       "${_systemctl}" daemon-reload
     else
@@ -205,7 +206,7 @@ _install_ubuntu_tmp_inodes() {
   if [[ ,${_live_opts}, =~ ,nr_inodes=([0-9]+[kKmMgG]?), ]]; then
     _live_raw="${BASH_REMATCH[1]}"
     if _live="$(_tmp_inodes_to_int "${_live_raw}")" && ((_live < _cfg)); then
-      printf 'tmp-inodes: live nr_inodes=%s, configured %s; takes effect at next boot or run: sudo mount -o remount,nr_inodes=16m /tmp\n' "${_live}" "${_cfg}"
+      printf 'tmp-inodes: live nr_inodes=%s, configured %s; takes effect at next boot or run: sudo mount -o remount,nr_inodes=%s /tmp\n' "${_live}" "${_cfg}" "${_existing}"
     fi
   fi
 

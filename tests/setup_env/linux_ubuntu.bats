@@ -6281,6 +6281,14 @@ _tmp_inodes_calls() { grep -c "^$1" "${MOCK_CALLS_FILE}" || true; }
   [[ "$output" != *"live nr_inodes="* ]]
 }
 
+@test "tmp_inodes: the notice names a hand-raised drop-in's value, never 16m" {
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=2g\n' > "${_TMP_DROPIN}"
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"remount,nr_inodes=2g /tmp"* ]]
+  [[ "$output" != *"16m"* ]]
+}
+
 @test "tmp_inodes: the notice repeats on a second run while the live value lags" {
   MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
   [[ "$output" == *"live nr_inodes=1048576"* ]]
