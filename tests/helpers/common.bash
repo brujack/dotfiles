@@ -77,10 +77,10 @@ STUB
   # never be reached (tdd.md E2). The stock unit fixture carries systemd's stock line;
   # the systemctl stub prints it as FragmentPath (MOCK_TMP_FRAGMENT="" means no unit),
   # and the findmnt stub reports a live nr_inodes already at the ceiling
-  # (MOCK_TMP_LIVE_INODES overrides). The mount stub records MOUNT CALLED: the step
+  # (MOCK_TMP_LIVE_INODES overrides). The tracked tests/mocks/mount (first on PATH) records MOUNT CALLED and exits 1: the step
   # must never run it, and a test asserts that.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    mkdir -p "${BATS_TEST_TMPDIR}/tmp-mount.d" "${BATS_TEST_TMPDIR}/mount-bin"
+    mkdir -p "${BATS_TEST_TMPDIR}/tmp-mount.d"
     export _TMP_DROPIN="${BATS_TEST_TMPDIR}/tmp-mount.d/override.conf"
     export _TMP_STOCK_UNIT="${BATS_TEST_TMPDIR}/tmp.mount"
     printf '[Mount]\nWhat=tmpfs\nWhere=/tmp\nType=tmpfs\nOptions=mode=1777,strictatime,nosuid,nodev,size=50%%%%,nr_inodes=1m,x-systemd.graceful-option=usrquota\n' > "${_TMP_STOCK_UNIT}"
@@ -101,14 +101,7 @@ printf "findmnt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 printf 'rw,nosuid,nodev,strictatime,mode=1777,nr_inodes=%s,usrquota\n' "${MOCK_TMP_LIVE_INODES:-16777216}"
 STUB
     chmod +x "${_FINDMNT_BIN}"
-    export _MOUNT_BIN="${BATS_TEST_TMPDIR}/mount-bin/mount"
-    cat > "${_MOUNT_BIN}" << 'STUB'
-#!/usr/bin/env bash
-printf "MOUNT CALLED %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit 1
-STUB
-    chmod +x "${_MOUNT_BIN}"
-    export PATH="${BATS_TEST_TMPDIR}/mount-bin:${PATH}"
+    export _MOUNT_BIN="${REPO_ROOT}/tests/mocks/mount"
   fi
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.

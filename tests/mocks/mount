@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# The tmp_inodes step must never run mount; any call fails the test that reaches it.
+printf "mount %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+printf "MOUNT CALLED %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+exit 1

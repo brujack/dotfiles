@@ -6196,7 +6196,7 @@ _inotify_nontext_fixture() {
 
 # ── _install_ubuntu_tmp_inodes ───────────────────────────────────────────────
 # load_mocks points _TMP_DROPIN, _SYSTEMCTL_BIN, _FINDMNT_BIN, _TMP_STOCK_UNIT and
-# _MOUNT_BIN at BATS_TEST_TMPDIR. The stock unit carries nr_inodes=1m, the findmnt stub
+# _MOUNT_BIN at the tracked tests/mocks/mount. The stock unit carries nr_inodes=1m, the findmnt stub
 # reports a live 16777216 unless MOCK_TMP_LIVE_INODES says otherwise, and the mount stub
 # logs MOUNT CALLED. Spec: ai-config docs/superpowers/specs/2026-10-20-tmp-inode-reaper-design.md
 
