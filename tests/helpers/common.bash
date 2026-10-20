@@ -73,6 +73,38 @@ STUB
     printf '2000\n' > "${_KEYS_MAXKEYS_PROC}"
     printf '500000\n' > "${_KEYS_MAXBYTES_PROC}"
   fi
+  # tmp_inodes step seams: the real /etc drop-in, systemctl, findmnt and mount must
+  # never be reached (tdd.md E2). The stock unit fixture carries systemd's stock line;
+  # the systemctl stub prints it as FragmentPath (MOCK_TMP_FRAGMENT="" means no unit),
+  # and the findmnt stub reports a live nr_inodes already at the ceiling
+  # (MOCK_TMP_LIVE_INODES overrides); MOCK_SYSTEMCTL_RELOAD_EXIT sets daemon-reload's exit. The tracked tests/mocks/mount (first on PATH) records MOUNT CALLED and exits 1: the step
+  # must never run it, and a test asserts that.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    mkdir -p "${BATS_TEST_TMPDIR}/tmp-mount.d"
+    export _TMP_DROPIN="${BATS_TEST_TMPDIR}/tmp-mount.d/override.conf"
+    export _TMP_STOCK_UNIT="${BATS_TEST_TMPDIR}/tmp.mount"
+    printf '[Mount]\nWhat=tmpfs\nWhere=/tmp\nType=tmpfs\nOptions=mode=1777,strictatime,nosuid,nodev,size=50%%%%,nr_inodes=1m,x-systemd.graceful-option=usrquota\n' > "${_TMP_STOCK_UNIT}"
+    export _SYSTEMCTL_BIN="${BATS_TEST_TMPDIR}/systemctl-stub"
+    cat > "${_SYSTEMCTL_BIN}" << 'STUB'
+#!/usr/bin/env bash
+printf "systemctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ $1 == daemon-reload ]]; then
+  exit "${MOCK_SYSTEMCTL_RELOAD_EXIT:-0}"
+fi
+if [[ $1 == show ]]; then
+  printf '%s\n' "${MOCK_TMP_FRAGMENT-${_TMP_STOCK_UNIT}}"
+fi
+exit 0
+STUB
+    chmod +x "${_SYSTEMCTL_BIN}"
+    export _FINDMNT_BIN="${BATS_TEST_TMPDIR}/findmnt-stub"
+    cat > "${_FINDMNT_BIN}" << 'STUB'
+#!/usr/bin/env bash
+printf "findmnt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+printf 'rw,nosuid,nodev,strictatime,mode=1777,nr_inodes=%s,usrquota\n' "${MOCK_TMP_LIVE_INODES:-16777216}"
+STUB
+    chmod +x "${_FINDMNT_BIN}"
+  fi
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.
   export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-nvidia-version"

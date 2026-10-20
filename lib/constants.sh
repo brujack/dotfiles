@@ -212,6 +212,14 @@ readonly KEYS_MAXKEYS_CONF=/etc/sysctl.d/90-dotfiles-keys-maxkeys.conf
 readonly KEYS_MAXBYTES_CONF=/etc/sysctl.d/90-dotfiles-keys-maxbytes.conf
 readonly KEYS_MAXKEYS_PROC=/proc/sys/kernel/keys/maxkeys
 readonly KEYS_MAXBYTES_PROC=/proc/sys/kernel/keys/maxbytes
+# /tmp inode ceiling: systemd's stock tmp.mount caps tmpfs at nr_inodes=1m, which an
+# unreaped scratch pile exhausted on 2026-10-20. The drop-in repeats the stock options
+# with only nr_inodes changed, because a drop-in's Options= replaces the unit's line.
+# Read by lib/linux_ubuntu.sh:_install_ubuntu_tmp_inodes. Spec:
+# docs/superpowers/specs/2026-10-20-tmp-inode-reaper-design.md (ai-config)
+readonly TMP_MOUNT_DROPIN=/etc/systemd/system/tmp.mount.d/override.conf
+readonly TMP_NR_INODES=16777216 # written as 16m in TMP_MOUNT_OPTIONS
+readonly TMP_MOUNT_OPTIONS='Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=16m,x-systemd.graceful-option=usrquota'
 readonly SYSTEMD_RUN_DIR=/run/systemd/system
 readonly AI_CONFIG="ai-config"
 # read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
