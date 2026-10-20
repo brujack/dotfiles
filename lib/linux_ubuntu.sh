@@ -21,7 +21,7 @@ install_ubuntu_packages() {
   # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
   # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
-  for _step in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp \
+  for _step in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
     if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
@@ -109,6 +109,114 @@ _install_ubuntu_kernel_keys() {
     "${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}" "${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}" \
     "${_KEYS_MAXBYTES_CONF:+_KEYS_MAXBYTES_CONF}" || _rc=1
   return "${_rc}"
+}
+
+# Convert a tmpfs count with an optional k/m/g suffix (1m = 1048576) to a plain integer.
+# Prints nothing and returns 1 for anything else.
+_tmp_inodes_to_int() {
+  local _v="${1}"
+  [[ ${_v} =~ ^([0-9]+)([kKmMgG]?)$ ]] || return 1
+  local _n=$((10#${BASH_REMATCH[1]}))
+  case "${BASH_REMATCH[2]}" in
+    k | K) _n=$((_n * 1024)) ;;
+    m | M) _n=$((_n * 1048576)) ;;
+    g | G) _n=$((_n * 1073741824)) ;;
+  esac
+  printf '%s\n' "${_n}"
+}
+
+# Print the nr_inodes value (raw, suffix kept) from the last Options= line of a unit file.
+_tmp_inodes_option() {
+  local _line
+  _line="$(sed -n 's/^Options=//p' "${1}" | tail -n 1)"
+  [[ ${_line} =~ (^|,)nr_inodes=([0-9]+[kKmMgG]?)(,|$) ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[2]}"
+}
+
+# Print the Options= line of a unit file with the nr_inodes option removed.
+_tmp_inodes_options_sans_inodes() {
+  local _opts="${1}"
+  _opts="$(printf '%s\n' "${_opts}" | sed -n 's/^Options=//p' | tail -n 1)"
+  printf '%s\n' "${_opts}" | tr ',' '\n' | { command grep -v '^nr_inodes=' || true; } | paste -sd, -
+}
+
+# systemd's stock tmp.mount caps /tmp (a tmpfs) at nr_inodes=1m; an unreaped scratch pile
+# exhausted it on 2026-10-20. Write a tmp.mount drop-in raising it to TMP_NR_INODES and
+# reload systemd. Never remounts /tmp live (a remount under every running session is the
+# one step here that could break them all at once): the ceiling takes effect at next boot,
+# and a notice repeats on every run while the live value lags. Warns when the stock unit's
+# options change in anything but nr_inodes, since the drop-in repeats them. A higher
+# existing value is never lowered. A set seam is written or run WITHOUT sudo.
+# Spec: ai-config docs/superpowers/specs/2026-10-20-tmp-inode-reaper-design.md
+_install_ubuntu_tmp_inodes() {
+  local _dropin="${_TMP_DROPIN:-${TMP_MOUNT_DROPIN}}"
+  local _systemctl="${_SYSTEMCTL_BIN:-systemctl}"
+  local _findmnt="${_FINDMNT_BIN:-findmnt}"
+  local _fragment
+  _fragment="$("${_systemctl}" show -P FragmentPath tmp.mount 2> /dev/null)" || _fragment=""
+  if [[ -z ${_fragment} ]]; then
+    printf 'tmp-inodes: skipped (no tmp.mount)\n'
+    return 0
+  fi
+
+  local _cfg=0 _existing=""
+  if [[ -e ${_dropin} ]]; then
+    if [[ ! -r ${_dropin} ]]; then
+      printf 'tmp-inodes: %s exists but is unreadable; fix by hand\n' "${_dropin}" >&2
+      return 1
+    fi
+    if ! _existing="$(_tmp_inodes_option "${_dropin}")" || ! _cfg="$(_tmp_inodes_to_int "${_existing}")"; then
+      printf 'tmp-inodes: %s has no readable nr_inodes; fix by hand\n' "${_dropin}" >&2
+      return 1
+    fi
+  fi
+
+  if [[ ! -e ${_dropin} ]] || ((_cfg < TMP_NR_INODES)); then
+    local _content
+    _content="$(printf '[Mount]\n%s\n' "${TMP_MOUNT_OPTIONS}")"
+    if [[ -n ${_TMP_DROPIN} ]]; then
+      { mkdir -p "$(dirname "${_dropin}")" && printf '%s\n' "${_content}" > "${_dropin}"; } 2> /dev/null
+    else
+      sudo mkdir -p "$(dirname "${_dropin}")" && printf '%s\n' "${_content}" | sudo tee "${_dropin}" > /dev/null
+    fi || {
+      printf 'tmp-inodes: cannot write %s\n' "${_dropin}" >&2
+      return 1
+    }
+    if [[ ! -r ${_dropin} || "$(cat "${_dropin}")" != "${_content}" ]]; then
+      printf 'tmp-inodes: read-back mismatch (%s)\n' "${_dropin}" >&2
+      return 1
+    fi
+    _cfg="${TMP_NR_INODES}"
+    if [[ -n ${_SYSTEMCTL_BIN} ]]; then
+      "${_systemctl}" daemon-reload
+    else
+      sudo systemctl daemon-reload
+    fi || {
+      printf 'tmp-inodes: daemon-reload failed\n' >&2
+      return 1
+    }
+    printf 'tmp-inodes: drop-in written (%s)\n' "${_dropin}"
+  fi
+
+  # An absent nr_inodes in the live options means tmpfs's default (half of RAM in pages),
+  # which is far above any ceiling set here, so only an explicit lower value is a lag.
+  local _live_opts _live_raw _live
+  _live_opts="$("${_findmnt}" -no OPTIONS /tmp 2> /dev/null)" || _live_opts=""
+  if [[ ,${_live_opts}, =~ ,nr_inodes=([0-9]+[kKmMgG]?), ]]; then
+    _live_raw="${BASH_REMATCH[1]}"
+    if _live="$(_tmp_inodes_to_int "${_live_raw}")" && ((_live < _cfg)); then
+      printf 'tmp-inodes: live nr_inodes=%s, configured %s; takes effect at next boot or run: sudo mount -o remount,nr_inodes=16m /tmp\n' "${_live}" "${_cfg}"
+    fi
+  fi
+
+  if [[ -r ${_fragment} ]]; then
+    local _stock _ours
+    _stock="$(_tmp_inodes_options_sans_inodes "$(sed -n '/^Options=/p' "${_fragment}")")"
+    _ours="$(_tmp_inodes_options_sans_inodes "${TMP_MOUNT_OPTIONS}")"
+    if [[ ${_stock} != "${_ours}" ]]; then
+      printf 'tmp-inodes: stock tmp.mount options changed; review %s\n' "${_dropin}"
+    fi
+  fi
 }
 
 # Persist max(live, floor) for one sysctl key in its own conf and apply it when

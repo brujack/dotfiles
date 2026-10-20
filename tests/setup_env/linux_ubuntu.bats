@@ -340,13 +340,13 @@ EOF
   export LINUX=1 UBUNTU=1 NOBLE=1
   _install_ubuntu_base_packages() { return 2; }
   local _s
-  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
 }
 
 @test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
@@ -356,20 +356,20 @@ EOF
   cd "${REPO_ROOT}"
   export MOCK_XARGS_EXIT=1
   local _s
-  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
 }
 
 @test "install_ubuntu_packages: base rc 1 stops before any later step" {
   unset MACOS NOBLE RESOLUTE
   export LINUX=1 UBUNTU=1
   local _s
-  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   : > "${MOCK_CALLS_FILE}"
@@ -2712,7 +2712,7 @@ STUB
 
 _stub_all_steps_but_docker() {
   local _s
-  for _s in inotify kernel_keys workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys tmp_inodes workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   _install_ubuntu_base_packages() { return 0; }
@@ -5317,7 +5317,7 @@ _albert_assert_last_good_untouched() {
   export MOCK_CURL_EXIT=22
   _install_ubuntu_base_packages() { :; }
   local _s
-  for _s in inotify kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
     eval "_install_ubuntu_${_s}() { :; }"
   done
   run --separate-stderr install_ubuntu_packages
@@ -5987,13 +5987,13 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_inotify() { printf 'ran inotify\n' >> "${MOCK_CALLS_FILE}"; return 1; }
   local _s
-  for _s in kernel_keys workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: inotify"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | head -1)" = "ran inotify" ]
 }
 
@@ -6194,6 +6194,119 @@ _inotify_nontext_fixture() {
   [[ "$stderr" != *"cannot read back"* ]]
 }
 
+# ── _install_ubuntu_tmp_inodes ───────────────────────────────────────────────
+# load_mocks points _TMP_DROPIN, _SYSTEMCTL_BIN, _FINDMNT_BIN, _TMP_STOCK_UNIT and
+# _MOUNT_BIN at BATS_TEST_TMPDIR. The stock unit carries nr_inodes=1m, the findmnt stub
+# reports a live 16777216 unless MOCK_TMP_LIVE_INODES says otherwise, and the mount stub
+# logs MOUNT CALLED. Spec: ai-config docs/superpowers/specs/2026-10-20-tmp-inode-reaper-design.md
+
+_tmp_inodes_calls() { grep -c "^$1" "${MOCK_CALLS_FILE}" || true; }
+
+@test "tmp_inodes: first run writes the exact drop-in and reloads systemd once" {
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_TMP_DROPIN}")" = "$(printf '[Mount]\nOptions=mode=1777,strictatime,nosuid,nodev,size=50%%%%,nr_inodes=16m,x-systemd.graceful-option=usrquota')" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+}
+
+@test "tmp_inodes: a second run leaves the drop-in alone and does not reload again" {
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+  local _before
+  _before="$(cat "${_TMP_DROPIN}")"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_TMP_DROPIN}")" = "${_before}" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+}
+
+@test "tmp_inodes: a lower drop-in value is raised and reloaded" {
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=2m\n' > "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  grep -q 'nr_inodes=16m' "${_TMP_DROPIN}"
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 1 ]
+}
+
+@test "tmp_inodes: a higher drop-in value is kept, while a lower one in the same fixture is raised" {
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=64m\n' > "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_TMP_DROPIN}")" = "$(printf '[Mount]\nOptions=mode=1777,nr_inodes=64m')" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+  printf '[Mount]\nOptions=mode=1777,nr_inodes=1m\n' > "${_TMP_DROPIN}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  grep -q 'nr_inodes=16m' "${_TMP_DROPIN}"
+}
+
+@test "tmp_inodes: a drop-in with no readable nr_inodes is refused and untouched" {
+  printf '[Mount]\nOptions=mode=1777\n' > "${_TMP_DROPIN}"
+  run --separate-stderr _install_ubuntu_tmp_inodes
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"fix by hand"* ]]
+  [ "$(cat "${_TMP_DROPIN}")" = "$(printf '[Mount]\nOptions=mode=1777')" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+}
+
+@test "tmp_inodes: a host with no tmp.mount unit skips without writing, while the same fixture with the unit writes" {
+  MOCK_TMP_FRAGMENT="" run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tmp-inodes: skipped (no tmp.mount)"* ]]
+  [ ! -e "${_TMP_DROPIN}" ]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [ -e "${_TMP_DROPIN}" ]
+}
+
+@test "tmp_inodes: a failed write returns 1 and does not reload" {
+  export _TMP_DROPIN="${BATS_TEST_TMPDIR}/no-such-dir/deeper/override.conf"
+  mkdir -p "${BATS_TEST_TMPDIR}/no-such-dir"
+  chmod 500 "${BATS_TEST_TMPDIR}/no-such-dir"
+  run --separate-stderr _install_ubuntu_tmp_inodes
+  chmod 700 "${BATS_TEST_TMPDIR}/no-such-dir"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"tmp-inodes: cannot write"* ]]
+  [ "$(_tmp_inodes_calls 'systemctl daemon-reload')" -eq 0 ]
+}
+
+@test "tmp_inodes: live 1048576 prints the notice with the remount command, live 16777216 does not" {
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tmp-inodes: live nr_inodes=1048576, configured 16777216; takes effect at next boot or run: sudo mount -o remount,nr_inodes=16m /tmp"* ]]
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"live nr_inodes="* ]]
+}
+
+@test "tmp_inodes: the notice repeats on a second run while the live value lags" {
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [[ "$output" == *"live nr_inodes=1048576"* ]]
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"live nr_inodes=1048576"* ]]
+}
+
+@test "tmp_inodes: drift warns when the stock line changes an option other than nr_inodes, and is silent when only nr_inodes differs" {
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"stock tmp.mount options changed"* ]]
+  printf '[Mount]\nOptions=mode=1777,strictatime,nosuid,nodev,noexec,size=50%%%%,nr_inodes=1m,x-systemd.graceful-option=usrquota\n' > "${_TMP_STOCK_UNIT}"
+  run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"tmp-inodes: stock tmp.mount options changed; review ${_TMP_DROPIN}"* ]]
+}
+
+@test "tmp_inodes: the step never runs mount, including when the notice fires" {
+  MOCK_TMP_LIVE_INODES=1048576 run _install_ubuntu_tmp_inodes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"live nr_inodes=1048576"* ]]
+  [ "$(_tmp_inodes_calls 'MOUNT CALLED')" -eq 0 ]
+  [ "$(_tmp_inodes_calls 'findmnt -no OPTIONS /tmp')" -ge 1 ]
+}
+
 # ── _install_ubuntu_kernel_keys ──────────────────────────────────────────────
 # load_mocks points _KEYS_MAXKEYS_CONF / _KEYS_MAXBYTES_CONF (absent) and
 # _KEYS_MAXKEYS_PROC / _KEYS_MAXBYTES_PROC (seeded at the floors 2000 / 500000)
@@ -6366,13 +6479,13 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_kernel_keys() { printf 'ran kernel_keys\n' >> "${MOCK_CALLS_FILE}"; return 1; }
   local _s
-  for _s in inotify workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: kernel_keys"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 14 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "ran kernel_keys" ]
 }
 
