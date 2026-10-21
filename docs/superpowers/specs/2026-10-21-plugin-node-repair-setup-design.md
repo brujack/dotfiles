@@ -1,7 +1,8 @@
 # Plugin node-path repair: atomic rewrite, and run it from setup/developer
 
 - **Date:** 2026-10-21
-- **Status:** Draft (Phase 1)
+- **Status:** Approved (Phase 1)
+- **Approved:** 2026-10-21
 - **Trigger:** backlog P2 rows "`repair_plugin_node_paths` rewrites in place, not atomically"
   and "`-t setup` and `-t developer` never run the plugin node-path repair"
   (`docs/superpowers/README.md`).
@@ -178,3 +179,10 @@ Disposition: Addressed — test 2b (`MOCK_CP_EXIT=1`) added, the write-to-temp b
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Risk (scoped re-review of the revised sections)
+
+Reviewed at commit: `347a128a`
+Finding: No issues. No test asserts a full `cannot repair` line (`plugin_node_paths.bats:146`, `:161` are substring globs; `update_plugin_node.bats:81` greps `could not be repaired`); `tests/mocks/cp` exits on `MOCK_CP_EXIT` before the real copy; `stat -c %a || stat -f %Lp` printed `640` on the Studio; `brew install <formula>` is right because an unlinked keg keeps `opt/`.
+Assumption: a pinned `node@NN` formula might since be disabled, making its `brew install` remedy fail. Checked 2026-10-21 over every plugin config on all three brew hosts: `claude` 15 `opt/node`, `workstation` 15 `Cellar/node`, `studio` none; no host pins a versioned `node@NN`.
+Disposition: Accepted, reason: no host pins a versioned node@NN formula today (operator, 2026-10-21).
