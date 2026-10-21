@@ -204,3 +204,74 @@ LIST
   [ "$(sed -n '1p' "${_log}")" = "macos" ]
   [ "$(sed -n '2p' "${_log}")" = "cargo-tools" ]
 }
+
+# ── run_setup_or_developer: plugin node-path repair ───────────────────────
+# The package step can upgrade brew node and strand plugin configs pinned to
+# the old Cellar path, so the repair runs right after packages and before
+# cargo tools. Spec: 2026-10-21-plugin-node-repair-setup-design.md Testing 6-9.
+
+@test "run_setup_or_developer runs repair_plugin_node_paths after macos packages and before cargo tools" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  install_macos_packages() { printf 'macos\n' >> "${_log}"; return 0; }
+  repair_plugin_node_paths() { printf 'repair\n' >> "${_log}"; return 0; }
+  install_cargo_tools() { printf 'cargo-tools\n' >> "${_log}"; return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 0; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "${_log}")" -eq 3 ]
+  [ "$(sed -n '1p' "${_log}")" = "macos" ]
+  [ "$(sed -n '2p' "${_log}")" = "repair" ]
+  [ "$(sed -n '3p' "${_log}")" = "cargo-tools" ]
+}
+
+@test "run_setup_or_developer warns but continues when repair_plugin_node_paths returns 1" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/cargo_tools.ran"
+  install_macos_packages() { return 0; }
+  repair_plugin_node_paths() { return 1; }
+  install_cargo_tools() { touch "${_marker}"; return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 0; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"plugin node paths: some pins could not be repaired — see the 'cannot repair' lines above"* ]]
+  [ -f "${_marker}" ]
+}
+
+@test "run_setup_or_developer is silent when repair_plugin_node_paths returns 2" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  local _marker="${BATS_TEST_TMPDIR}/repair.ran"
+  install_macos_packages() { return 0; }
+  repair_plugin_node_paths() { touch "${_marker}"; return 2; }
+  install_cargo_tools() { return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 0; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [ -f "${_marker}" ]
+  [[ "$output" != *"plugin node paths"* ]]
+}
+
+@test "run_setup_or_developer runs repair_plugin_node_paths after ubuntu packages" {
+  unset MACOS
+  export UBUNTU=1 LINUX=1
+  local _log="${BATS_TEST_TMPDIR}/order.log"
+  : > "${_log}"
+  install_ubuntu_packages() { printf 'ubuntu\n' >> "${_log}"; return 0; }
+  repair_plugin_node_paths() { printf 'repair\n' >> "${_log}"; return 0; }
+  install_cargo_tools() { printf 'cargo-tools\n' >> "${_log}"; return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 0; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "${_log}")" -eq 3 ]
+  [ "$(sed -n '1p' "${_log}")" = "ubuntu" ]
+  [ "$(sed -n '2p' "${_log}")" = "repair" ]
+  [ "$(sed -n '3p' "${_log}")" = "cargo-tools" ]
+}
