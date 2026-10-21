@@ -151,8 +151,10 @@ jobs:
 
       # The tail above can miss the cause: on dotfiles#358 it showed 3327 ok,
       # no `not ok`, and bats still exiting 1. Keep the whole log. cancelled()
-      # covers the job timeout, where failure() alone is false. overwrite lets a
-      # re-run attempt replace the earlier attempt's log.
+      # covers the job timeout, where failure() alone is false; it also fires
+      # when cancel-in-progress supersedes a run, which costs only the upload.
+      # overwrite lets a re-run attempt upload at all, and so replaces the
+      # earlier attempt's log: download it before re-running.
       - name: Upload the full make test log
         if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

@@ -20,7 +20,7 @@ _job_steps() {
     /^  [A-Za-z_][A-Za-z0-9_-]*:$/ { job=$1; sub(/:$/, "", job); next }
     job != want { next }
     /^      - / { if (started) print step; step=""; started=1 }
-    /^ *(- )?(uses|if|name|path):/ {
+    /^ *(- )?(uses|if|name|path|overwrite):/ {
       line=$0; sub(/^ *(- )?/, "", line); step=step line ";"
     }
     END { if (started) print step }
@@ -44,6 +44,9 @@ _job_steps() {
   # the hang case, when the full log matters most.
   [[ "${_upload}" == *"if: failure() || cancelled();"* ]]
   [[ "${_upload}" == *"path: /tmp/make-test.log;"* ]]
+  # Without overwrite, a re-run attempt's upload fails on the name the first
+  # attempt already used, and the re-run keeps no log.
+  [[ "${_upload}" == *"overwrite: true;"* ]]
 }
 
 @test "the test-macos log upload runs after the step that writes the log" {
