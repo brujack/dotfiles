@@ -82,8 +82,8 @@ return "${_rc}"
 ### `run_developer_or_ansible` (`lib/workflows.sh`)
 
 The GitHub CLI step moves to straight after `_dotfiles_run_tmpdir_setup`, before `_require_npm_pins`.
-It is no longer fatal: its rc is kept, the rest of the chain runs unchanged, and the function ends
-with that rc.
+It is no longer fatal: the rest of the chain runs unchanged. A gh failure ends the run with a
+closing warning, rc 0, and a ledger entry recording exit code 2.
 
 ```bash
 run_developer_or_ansible() {
@@ -95,19 +95,24 @@ run_developer_or_ansible() {
   _require_npm_pins || return 1
   ... (unchanged npm, ruby, setup_ansible, clone_personal_repos) ...
   if [[ ${_gh_rc} -ne 0 ]]; then
-    log_warn "github cli install incomplete; see the warnings above"
+    log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings at the start of this run"
   fi
   _ledger_write_run_entry "developer" "${_gh_rc}" || true
-  return "${_gh_rc}"
 }
 ```
 
-- rc 2 means "the run completed but a step was partial". This follows the repo's 0/1/2 convention
-  (`install_ubuntu_packages`, `install_git_hooks_all_repos`), where 1 is a hard failure that
-  stopped the run. `setup_env.sh`'s `_run_or_exit` exits with that code, so `-t developer` and
-  `-t ansible` exit 2. They are the last step in `setup_env.sh`'s chain for both types.
-- The ledger entry records the rc. `_ledger_write_run_entry` sets `success: false` for any
-  non-zero rc, so a partial run is not recorded as a success.
+- The process exit stays 0, matching every other partial step in a developer run
+  (`run_setup_or_developer` maps `install_ubuntu_packages` rc 2 to a warning, `lib/workflows.sh:570-576`;
+  CLAUDE.md: "callers warn on 2 and continue, and `-t developer` then exits 0"). A non-zero exit
+  would also stop a combined `-t developer -t update` run before `run_update`, because
+  `_run_or_exit` (`setup_env.sh:86-90`) exits on any non-zero rc and `process_args` accepts several
+  `-t` flags. No automated caller of `setup_env.sh` exists in dotfiles, terraform_ansible or
+  ai-config (grepped 2026-10-21), so no consumer reads the exit code.
+- The durable signal is the ledger. `_ledger_write_run_entry` sets `success: false` for any
+  non-zero exit code (`lib/update_summary.sh:418-419`), so recording 2 marks the run partial
+  without changing the process exit.
+- The closing warning names the three stages and points at the start of the run, because the gh
+  warnings now print first and sit above npm, ruby, ansible and clone output.
 - Every hard failure (`|| return 1`) after the gh step keeps its current behaviour: it returns 1
   and writes no ledger entry, as it does today.
 
@@ -129,15 +134,29 @@ New or changed tests, each RED before its code:
 4. `apt install gh` fails (`MOCK_APT_FAIL_SUBCMD`): returns 1 with the `gh: install failed` warning.
 5. Not Ubuntu: returns 0 and makes no `curl`, `apt` or `sudo` call.
 6. The two existing tests (`DEBIAN_FRONTEND`, `apt install gh`) keep passing under the seams.
+   `setup()` seeds a non-empty `MOCK_CURL_STDOUT`: without it `tests/mocks/curl` only `touch`es
+   the `-o` target, the empty key fails `_install_apt_keyring`'s conversion stage, the function
+   returns 1, and both bare calls fail under bats errexit before their `grep`.
 7. `run_developer_or_ansible`, gh stubbed to return 1: `setup_ansible` and `clone_personal_repos`
-   still run, the function returns 2, and the ledger entry is written with rc 2.
+   still run, the function returns 0, the closing `github cli: install incomplete` warning is
+   printed, and `_ledger_write_run_entry` is called with exit code 2 (stubbed to record its args).
 8. `run_developer_or_ansible`, gh stubbed to return 0 and `install_ruby` stubbed to return 1: the
    gh stub's call is recorded **before** the ruby stub's in `MOCK_CALLS_FILE` (ordering), and the
    function returns 1.
 9. `run_developer_or_ansible` with `LINUX` unset: gh is not called, rc 0 (existing macOS path).
 
 Test 7 is the one that fails if the step is fatal again. Test 8 fails if the step moves back below
-the npm and ruby steps. Test 1 fails against the old `wget | tee` (the keyring ends at 0 bytes).
+the npm and ruby steps. Against the old code test 1 goes RED only through its rc and warning
+assertions: the old `wget | tee` writes the hardcoded `/etc/apt/keyrings` path, not the seamed
+fixture, so the byte-identical check passes there. The byte check guards a future regression that
+writes through the seamed path; nothing in this change makes the clobber itself go RED.
+
+## Rejected alternative
+
+Folding gh into `install_ubuntu_packages`, which already aggregates rc 2 into a warning inside
+`run_setup_or_developer`. It fixes the ordering without touching `run_developer_or_ansible`, but
+`-t ansible` alone would stop installing gh and `-t setup` machines would start installing it,
+which changes who gets apt `gh` (N3).
 
 ## Out of scope
 
@@ -155,11 +174,38 @@ the npm and ruby steps. Test 1 fails against the old `wget | tee` (the keyring e
 - **R4.** `[gh-keyring]` `apt install gh` is attempted after a keyring or source failure, and its failure makes the function return 1 with a warning naming `gh`.
 - **R5.** `[gh-keyring]` The keyring and list paths are read from `_GH_CLI_KEYRING` and `_GH_CLI_SOURCES_LIST`, defaulting to `/etc/apt/keyrings/githubcli-archive-keyring.gpg` and `/etc/apt/sources.list.d/github-cli.list`.
 - **R6.** `[gh-order]` `run_developer_or_ansible` calls `install_github_cli_linux` (on `LINUX`) before `_require_npm_pins`.
-- **R7.** `[gh-order]` A non-zero rc from `install_github_cli_linux` does not stop `run_developer_or_ansible`: every later step still runs, and when none of them hard-fails the function returns 2.
+- **R7.** `[gh-order]` A non-zero rc from `install_github_cli_linux` does not stop `run_developer_or_ansible`: every later step still runs, and when none of them hard-fails the function returns 0 after a `github cli: install incomplete` warning.
 - **R8.** `[gh-order]` On that partial path the ledger entry is written with exit code 2; a hard failure later in the chain still returns 1 and writes no entry.
 - **R9.** `[gh-tests]` `tests/setup_env/workflows.bats` sets `_GH_CLI_KEYRING` and `_GH_CLI_SOURCES_LIST` under `BATS_TEST_TMPDIR` in `setup()`.
+- **R10.** `[gh-tests]` `tests/setup_env/workflows.bats` `setup()` seeds a non-empty `MOCK_CURL_STDOUT`, and the two existing `install_github_cli_linux` tests keep their bare calls.
 - **V1.** `make test` exits 0 and CI is green, including `bash-coverage` at or above 91%.
 - **V2.** On `claude`, after merge, `-t developer` leaves `/etc/apt/keyrings/githubcli-archive-keyring.gpg` a valid binary key (`file` reports an OpenPGP public key) and `sudo apt update` reports no error for `cli.github.com`.
 - **N1.** No change to `_install_apt_keyring` or `_write_apt_source_list`.
 - **N2.** No change to the fail-fast behaviour of any step in `run_developer_or_ansible` other than the GitHub CLI step.
 - **N3.** No change to which machines install apt `gh` or linuxbrew `gh`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `8903ab69` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; premises verified (`lib/developer.sh:509-522`, `lib/workflows.sh:615-637`, `lib/linux_ubuntu.sh:1577`). (1) "Test 1 fails against the old `wget | tee`" was false: the old code writes the hardcoded `/etc` path, so the byte check passes there and test 1 goes RED only through rc and warning. (2) Simpler path not weighed: fold gh into `install_ubuntu_packages`, which already aggregates rc 2. (3) Reads-it: no automated invoker of `-t developer`/`-t ansible`; the ledger `success` field is the only durable output.
+Assumption: no current or planned caller treats a non-zero exit from `-t developer`/`-t ansible` as a hard failure. Checked by the orchestrator: `grep -rn setup_env` over terraform_ansible and ai-config scripts/workflows found no invoker.
+Disposition: Addressed — test 1's claim corrected in Testing; the fold-in alternative recorded under Rejected alternative (changes N3); the process exit returns to 0 (see Ergonomics).
+
+### Ergonomics
+
+Finding: rc 2 broke the repo convention at the CLI boundary: every other partial developer step warns and exits 0 (`lib/workflows.sh:570-576`, CLAUDE.md). Combined `-t developer -t update` would exit 2 before `run_update` (`setup_env.sh:86-99`, `lib/helpers.sh:1655-1668`). The closing "see the warnings above" warning sits hundreds of lines below the gh warnings.
+Assumption: the operator wants a gh failure as a non-zero process exit rather than a warning.
+Disposition: Addressed — operator chose "exit 0, ledger false" (2026-10-21): the function returns 0, the ledger records exit code 2 (`success: false`), and the closing warning names the stages and points at the start of the run.
+
+### Risk
+
+Finding: Test 6 was false as written: neither existing gh test sets `MOCK_CURL_STDOUT`, so `tests/mocks/curl:81-85` only `touch`es the `-o` target, `_install_apt_keyring` fails at conversion, and the bare calls fail under errexit. Everything else verified: `curl -fsSL` follows redirects, `setup_env.sh:47-48` sources `linux_ubuntu.sh` first, all real `sudo` execs land under seamed paths, the widened list rewrite on a failed fetch writes identical content.
+Assumption: no uncertain assumption found (the gh key is binary; the live 4528-byte key confirms it).
+Disposition: Addressed — operator accepted seeding `MOCK_CURL_STDOUT` in `setup()` (R10).
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
