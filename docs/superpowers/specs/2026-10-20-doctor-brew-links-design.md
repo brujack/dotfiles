@@ -1,7 +1,8 @@
 # doctor: report dangling Homebrew links and unlinked kegs
 
 - **Date:** 2026-10-20
-- **Status:** Draft (Phase 1)
+- **Status:** Approved (Phase 1)
+- **Approved:** 2026-10-20
 - **Trigger:** backlog P1 "nothing reports dangling Homebrew links or unlinked kegs". On
   2026-10-04 on the Studio, `-t update --brew-only` left 5 dangling `/opt/homebrew/opt` links
   and an unlinked `uv` keg, and no update section or `doctor` check named them.
