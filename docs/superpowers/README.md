@@ -421,6 +421,7 @@ None open.
 | Two resolver seam shapes for "override, then PATH, then prefixes" | `resolve_uv` (`lib/helpers.sh`) keeps its fallback list as an array (`UV_FALLBACK_PATHS`) and accepts any `command -v` result. `_doctor_resolve_executable` takes a space-separated string and requires an absolute, executable path, so it cannot hold a path with spaces (none exists today). Converge them or state why the doctor one differs. Phase 3 maintainability advisory on the doctor brew links branch. |
 | gh installed twice on `claude` | linuxbrew `gh` (`lib/linux_ubuntu.sh:1425` list) shadows apt `/usr/bin/gh` from `install_github_cli_linux`; `workstation` has only apt's (measured 2026-10-21). Decide one source. Out of scope of `specs/2026-10-21-gh-cli-keyring-design.md`. |
 | gh CLI apt key is not fingerprint-pinned | `install_github_cli_linux` fetches `githubcli-archive-keyring.gpg` over HTTPS and trusts it on first use; edge, microsoft-prod and albert pin a primary fingerprint via `_build_pinned_keyring`. Not new risk (the old `wget | tee` was the same); raised by `security-review` on the gh-cli-keyring branch, 2026-10-21. |
+| `apt install gh` has no `-y` | `install_github_cli_linux` runs `apt install ... gh` without `-y`, so a non-tty `-t developer`/`-t ansible` run aborts at apt's continue prompt whenever gh pulls extra packages; since the gh-cli-keyring branch the step runs first, so it is hit even when later steps would fail. Pre-existing; raised by `pr-review` on that branch, 2026-10-21. |
 
 ### P3 — docs
 
