@@ -1,7 +1,8 @@
 # install_github_cli_linux: no clobber on a failed fetch, seamed paths, run first
 
 - **Date:** 2026-10-21
-- **Status:** Draft (Phase 1)
+- **Status:** Approved (Phase 1)
+- **Approved:** 2026-10-21
 - **Trigger:** backlog P2 rows "`install_github_cli_linux` writes an empty keyring on a failed
   fetch" and "`install_github_cli_linux` tests reach real `/etc/apt` paths"
   (`docs/superpowers/README.md`), plus the ordering defect the first row names. Raised by Step 8
@@ -209,3 +210,10 @@ Disposition: Addressed — operator accepted seeding `MOCK_CURL_STDOUT` in `setu
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Risk (scoped re-review of the revised sections)
+
+Reviewed at commit: `22a43b52`
+Finding: No issues. Seeding `MOCK_CURL_STDOUT` left `tests/setup_env/workflows.bats` at 318 ok / 0 not ok under `bats --jobs 24`; test 7 is writable with the function-stub pattern at `workflows.bats:863`; `lib/update_summary.sh:418-419` confirms exit code 2 records `success: false`; no R contradicts an N. Test 8 must assert both the gh and the ruby lines are present, not only their order.
+Assumption: the ledger is the durable signal, but `_ledger_write_run_entry` silently returns 0 without `~/.config/dotfiles/machine-id` (`lib/update_summary.sh:404-406`). Checked 2026-10-21: present on `claude` and `workstation`, the only Linux development boxes.
+Disposition: Accepted, reason: machine-id verified present on both Linux development boxes (operator, 2026-10-21).
