@@ -2685,6 +2685,7 @@ _stub_refresher_fail() {
   _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
   run run_developer_or_ansible
   [ "$status" -eq 0 ]
+  [[ "$output" != *"github cli: install incomplete"* ]]
   [ "$(grep -c '^github_cli_linux$' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
@@ -2703,6 +2704,7 @@ _stub_refresher_fail() {
   run run_developer_or_ansible
   local _rc="${status}"
   [ "${_rc}" -eq 0 ]
+  [[ "${output}" != *"github cli: install incomplete"* ]]
   run grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
   [ "${status}" -ne 0 ]
   grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"

@@ -420,6 +420,7 @@ None open.
 | Retire ratna from the identity table | ratna (the fleet's one x86_64 mac) no longer runs dotfiles (operator, 2026-10-11), yet `config/profiles.sh` still maps `ratna`/`ratna-1`, `tests/helpers/legacy_oracle.bash` and `6_path.zsh:38` still describe it, and `RATNA` stays a legacy identity var. The Homebrew installer pin 09c62fc5 now aborts on Intel, so nothing here could bootstrap it anyway. |
 | Two resolver seam shapes for "override, then PATH, then prefixes" | `resolve_uv` (`lib/helpers.sh`) keeps its fallback list as an array (`UV_FALLBACK_PATHS`) and accepts any `command -v` result. `_doctor_resolve_executable` takes a space-separated string and requires an absolute, executable path, so it cannot hold a path with spaces (none exists today). Converge them or state why the doctor one differs. Phase 3 maintainability advisory on the doctor brew links branch. |
 | gh installed twice on `claude` | linuxbrew `gh` (`lib/linux_ubuntu.sh:1425` list) shadows apt `/usr/bin/gh` from `install_github_cli_linux`; `workstation` has only apt's (measured 2026-10-21). Decide one source. Out of scope of `specs/2026-10-21-gh-cli-keyring-design.md`. |
+| gh CLI apt key is not fingerprint-pinned | `install_github_cli_linux` fetches `githubcli-archive-keyring.gpg` over HTTPS and trusts it on first use; edge, microsoft-prod and albert pin a primary fingerprint via `_build_pinned_keyring`. Not new risk (the old `wget | tee` was the same); raised by `security-review` on the gh-cli-keyring branch, 2026-10-21. |
 
 ### P3 — docs
 
