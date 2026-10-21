@@ -49,12 +49,25 @@ _FIX_BROKEN="tests/fixtures/brew/doctor-broken-symlinks.txt"
 _FIX_UNLINKED="tests/fixtures/brew/doctor-unlinked-kegs.txt"
 _PROBE_ARGV="doctor --quiet check_for_broken_symlinks check_for_unlinked_but_not_keg_only"
 
+# The real sleep: load_mocks puts a mock `sleep` first on PATH, which returns
+# at once and would defeat every timing test.
+_real_sleep() {
+  local _c
+  for _c in /bin/sleep /usr/bin/sleep; do
+    if [[ -x "${_c}" ]]; then
+      printf '%s' "${_c}"
+      return 0
+    fi
+  done
+  skip "no real 'sleep' binary at /bin or /usr/bin"
+}
+
 # _write_brew_stub <path> <rc> [<output-file> [<sleep-seconds>]]
 # Logs argv (one line, "$*") to ${BATS_TEST_TMPDIR}/brew-calls, prints the
 # output file's text, optionally sleeps, then exits <rc>.
 _write_brew_stub() {
   local _path="$1" _rc="$2" _file="${3:-}" _sleep="${4:-}" _sleep_bin=""
-  [[ -z "${_sleep}" ]] || _sleep_bin="$(command -v sleep)"
+  [[ -z "${_sleep}" ]] || _sleep_bin="$(_real_sleep)"
   mkdir -p "$(dirname "${_path}")"
   {
     printf '#!/bin/bash\n'
@@ -83,6 +96,16 @@ _numbered_fixture() {
   done < "${REPO_ROOT}/${_fix}"
 }
 
+# Calls the check with errexit off, as production runs it (bats runs a test body
+# under set -e, and a status-1 `command -v` inside the check would abort it).
+# Records the check's own status in _CHECK_RC.
+_invoke_check() {
+  set +e
+  _doctor_check_brew_links
+  _CHECK_RC=$?
+  set -e
+}
+
 _reset_counters() {
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0
@@ -94,7 +117,8 @@ _reset_counters() {
 _run_check() {
   _OUT_FILE="${BATS_TEST_TMPDIR}/check-out"
   _reset_counters
-  _doctor_check_brew_links > "${_OUT_FILE}"
+  _invoke_check > "${_OUT_FILE}"
+  [ "${_CHECK_RC}" -eq 0 ]
   _OUT="$(<"${_OUT_FILE}")"
 }
 
@@ -102,7 +126,7 @@ _run_check() {
 _make_bin_dir() {
   _BIN_DIR="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${_BIN_DIR}"
-  ln -s "$(command -v sleep)" "${_BIN_DIR}/sleep"
+  ln -s "$(_real_sleep)" "${_BIN_DIR}/sleep"
 }
 
 @test "brew links: no brew anywhere prints the skip line and changes no counter" {
@@ -111,7 +135,7 @@ _make_bin_dir() {
   export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-brew"
   _OUT_FILE="${BATS_TEST_TMPDIR}/check-out"
   _reset_counters
-  PATH="${_BIN_DIR}" _doctor_check_brew_links > "${_OUT_FILE}"
+  PATH="${_BIN_DIR}" _invoke_check > "${_OUT_FILE}"
   [[ "$(<"${_OUT_FILE}")" == *"Homebrew links:"* ]]
   [[ "$(<"${_OUT_FILE}")" == *"  brew not found — skipped"* ]]
   [ "${_DOCTOR_PASS}" -eq 0 ]
@@ -129,7 +153,7 @@ _make_bin_dir() {
   printf '#!/bin/bash\nprintf "fallback\\n" >> "%s/brew-calls"\nexit 0\n' "${BATS_TEST_TMPDIR}" > "${BATS_TEST_TMPDIR}/fb/brew"
   export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/fb/brew"
   _reset_counters
-  PATH="${_BIN_DIR}" _doctor_check_brew_links > /dev/null
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
   grep -qx "${_PROBE_ARGV}" "${BATS_TEST_TMPDIR}/brew-calls"
   ! command grep -q fallback "${BATS_TEST_TMPDIR}/brew-calls"
 }
@@ -141,7 +165,7 @@ _make_bin_dir() {
   export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/missing/brew ${BATS_TEST_TMPDIR}/fb/brew"
   rm -f "${BATS_TEST_TMPDIR}/brew-calls"
   _reset_counters
-  PATH="${_BIN_DIR}" _doctor_check_brew_links > /dev/null
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
   grep -qx "${_PROBE_ARGV}" "${BATS_TEST_TMPDIR}/brew-calls"
   [ "${_DOCTOR_PASS}" -eq 1 ]
 }
@@ -276,7 +300,7 @@ _make_bin_dir() {
   export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-timeout"
   _OUT_FILE="${BATS_TEST_TMPDIR}/check-out"
   _reset_counters
-  PATH="${_BIN_DIR}" _doctor_check_brew_links > "${_OUT_FILE}"
+  PATH="${_BIN_DIR}" _invoke_check > "${_OUT_FILE}"
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
   ! command grep -q 'rc 127' "${_OUT_FILE}"
@@ -294,7 +318,7 @@ _make_bin_dir() {
   export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/missing/gtimeout ${BATS_TEST_TMPDIR}/gtimeout"
   unset _DOCTOR_BREW_TIMEOUT
   _reset_counters
-  PATH="${_BIN_DIR}" _doctor_check_brew_links > /dev/null
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
   [ "$(<"${BATS_TEST_TMPDIR}/timeout-calls")" = "60" ]
   [ "${_DOCTOR_PASS}" -eq 1 ]
 }
@@ -341,7 +365,8 @@ _make_bin_dir() {
   _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 3
   export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
   _reset_counters
-  _doctor_check_brew_links > /dev/null
+  _invoke_check > /dev/null
+  [ "${_CHECK_RC}" -eq 0 ]
 }
 
 @test "brew links: run_doctor calls _doctor_check_brew_links right after _doctor_check_gnu_coreutils" {

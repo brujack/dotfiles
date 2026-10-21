@@ -520,6 +520,7 @@ run_doctor() {
   _doctor_check_aws_key_expiry
   _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
+  _doctor_check_brew_links
   _doctor_check_conffile_dist
   _doctor_check_flatpak_gl
   _doctor_check_inotify_limits
@@ -1279,6 +1280,159 @@ _doctor_check_gnu_coreutils() {
   else
     doctor_fail "sort" "not GNU (${_ver}) — pyenv will drop the pytest shim; run: setup_env.sh -t setup"
   fi
+}
+
+# Formats "<name>, <name>, … <M> more" for a doctor WARN: at most 10 names,
+# then the remainder as a count (spec 2026-10-20-doctor-brew-links-design.md,
+# Verdicts). Args are the names; prints the text that goes inside the
+# parentheses.
+_doctor_brew_links_names() {
+  local _max=10 _shown="" _i
+  for (( _i = 1; _i <= $# && _i <= _max; _i++ )); do
+    _shown+="${_shown:+, }${!_i}"
+  done
+  if [[ $# -gt ${_max} ]]; then
+    _shown+=", … $(( $# - _max )) more"
+  fi
+  printf '%s' "${_shown}"
+}
+
+# Reports dangling Homebrew links and unlinked kegs by running Homebrew's own
+# two named `brew doctor` checks. WARN only, never FAIL: both findings clear
+# with one command and are prefix housekeeping, not a broken machine.
+# Spec: docs/superpowers/specs/2026-10-20-doctor-brew-links-design.md
+_doctor_check_brew_links() {
+  printf "\nHomebrew links:\n"
+
+  # Brew: the operator's override, then PATH, then fixed prefixes. `-t doctor`
+  # bypasses the brew prereq and can run over ssh, cron or launchd, where
+  # linuxbrew's PATH entry (interactive zsh only) is absent.
+  local _brew="" _cand
+  local -a _cands
+  if [[ -n "${_BREW_BIN:-}" ]]; then
+    # An override the operator named is never silently replaced by another brew.
+    if [[ ! -x "${_BREW_BIN}" ]]; then
+      doctor_warn "brew links" "_BREW_BIN is set but not executable: ${_BREW_BIN}"
+      return 0
+    fi
+    _brew="${_BREW_BIN}"
+  else
+    # `command -v` can answer with a bare function or alias name; keep paths only.
+    _brew="$(command -v brew 2>/dev/null)"
+    if [[ "${_brew}" != /* || ! -x "${_brew}" ]]; then
+      _brew=""
+      read -ra _cands <<< "${_BREW_FALLBACK_PATHS:-/opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew}"
+      for _cand in "${_cands[@]}"; do
+        if [[ -x "${_cand}" ]]; then
+          _brew="${_cand}"
+          break
+        fi
+      done
+    fi
+  fi
+  if [[ -z "${_brew}" ]]; then
+    printf "  brew not found — skipped\n"
+    return 0
+  fi
+
+  # Timeout: macOS has no `timeout`, only Homebrew's gtimeout, so without the
+  # fallback the bound would be missing in exactly the contexts the brew
+  # fallbacks exist for. None found: the probe runs unbounded, the same
+  # accepted degrade as _doctor_check_dev_tools.
+  local _timeout_bin
+  _timeout_bin="$(command -v timeout 2>/dev/null)"
+  if [[ "${_timeout_bin}" != /* || ! -x "${_timeout_bin}" ]]; then
+    _timeout_bin=""
+    read -ra _cands <<< "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}"
+    for _cand in "${_cands[@]}"; do
+      if [[ -x "${_cand}" ]]; then
+        _timeout_bin="${_cand}"
+        break
+      fi
+    done
+  fi
+  local _bound="${_DOCTOR_BREW_TIMEOUT:-60}"
+
+  # `local` is declared apart from the assignment: `local _out="$(…)"` would
+  # replace the command's status with local's own and _rc would read 0.
+  # --quiet drops the maintainers' preamble; the verdict comes from the rc.
+  local _out _rc
+  if [[ -n "${_timeout_bin}" ]]; then
+    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_timeout_bin}" "${_bound}" "${_brew}" doctor --quiet \
+      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
+  else
+    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_brew}" doctor --quiet \
+      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
+  fi
+  _rc=$?
+
+  if [[ ${_rc} -eq 0 ]]; then
+    doctor_pass "brew links"
+    return 0
+  fi
+
+  # Parse in bash. `==>` and `✔` lines are progress output, skipped everywhere.
+  # State: "" none, broken = reading broken-symlink entries, kegwait = saw the
+  # unlinked-kegs header, kegs = reading keg entries. The keg list is anchored
+  # on the "Run `brew link` on these:" line, not the header, because two
+  # explanation lines sit between them.
+  local _line _state="" _entry _first="" _first_warn="" _last=""
+  local -a _broken=() _kegs=()
+  while IFS= read -r _line; do
+    case "${_line}" in
+      "==>"* | "✔"*) continue ;;
+    esac
+    if [[ -n "${_line}" ]]; then
+      _last="${_line}"
+      [[ -n "${_first}" ]] || _first="${_line}"
+      if [[ -z "${_first_warn}" && ( "${_line}" == "Warning:"* || "${_line}" == "Error:"* ) ]]; then
+        _first_warn="${_line}"
+      fi
+    fi
+    case "${_state}" in
+      broken | kegs)
+        _entry="${_line#"${_line%%[![:space:]]*}"}"
+        if [[ "${_line}" == " "* && -n "${_entry}" ]]; then
+          if [[ "${_state}" == broken ]]; then
+            _broken+=("${_entry}")
+          else
+            _kegs+=("${_entry}")
+          fi
+          continue
+        fi
+        _state=""
+        ;;
+      kegwait)
+        if [[ "${_line}" == *"Run \`brew link\` on these:"* ]]; then
+          _state=kegs
+        fi
+        continue
+        ;;
+    esac
+    case "${_line}" in
+      *"Broken symlinks were found"*) _state=broken ;;
+      *"You have unlinked kegs in your Cellar"*) _state=kegwait ;;
+    esac
+  done <<< "${_out}"
+
+  if [[ ${_rc} -eq 1 && ( ${#_broken[@]} -gt 0 || ${#_kegs[@]} -gt 0 ) ]]; then
+    if [[ ${#_broken[@]} -gt 0 ]]; then
+      doctor_warn "brew links" "broken symlinks: ${#_broken[@]} ($(_doctor_brew_links_names "${_broken[@]}")) — run: brew cleanup --prune-prefix"
+    fi
+    if [[ ${#_kegs[@]} -gt 0 ]]; then
+      # One paste: brew link takes every keg, not just the ones shown.
+      doctor_warn "brew links" "unlinked kegs: ${#_kegs[@]} ($(_doctor_brew_links_names "${_kegs[@]}")) — run: brew link ${_kegs[*]}"
+    fi
+  elif [[ ${_rc} -eq 1 ]]; then
+    # Unrecognised output fails closed: warn, never pass.
+    _first="${_first_warn:-${_first}}"
+    doctor_warn "brew links" "brew doctor rc 1${_first:+: ${_first}}"
+  elif [[ ${_rc} -eq 124 && -n "${_timeout_bin}" ]]; then
+    doctor_warn "brew links" "brew doctor did not finish in ${_bound}s"
+  else
+    doctor_warn "brew links" "brew doctor rc ${_rc}${_last:+: ${_last}}"
+  fi
+  return 0
 }
 
 # Single source of truth for the ansible venv's bin directory. Both
