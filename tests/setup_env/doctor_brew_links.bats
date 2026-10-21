@@ -64,7 +64,7 @@ _real_sleep() {
 
 # _write_brew_stub <path> <rc> [<output-file> [<sleep-seconds>]]
 # Logs argv (one line, "$*") to ${BATS_TEST_TMPDIR}/brew-calls, prints the
-# output file's text, optionally sleeps, then exits <rc>.
+# output file's text to stderr (real brew prints findings via opoo), optionally sleeps, then exits <rc>.
 _write_brew_stub() {
   local _path="$1" _rc="$2" _file="${3:-}" _sleep="${4:-}" _sleep_bin=""
   [[ -z "${_sleep}" ]] || _sleep_bin="$(_real_sleep)"
@@ -72,7 +72,7 @@ _write_brew_stub() {
   {
     printf '#!/bin/bash\n'
     printf 'printf "%%s\\n" "$*" >> "%s/brew-calls"\n' "${BATS_TEST_TMPDIR}"
-    [[ -z "${_file}" ]] || printf 'printf "%%s\\n" "$(<"%s")"\n' "${_file}"
+    [[ -z "${_file}" ]] || printf 'printf "%%s\\n" "$(<"%s")" >&2\n' "${_file}"
     [[ -z "${_sleep}" ]] || printf '"%s" %s\n' "${_sleep_bin}" "${_sleep}"
     printf 'exit %s\n' "${_rc}"
   } > "${_path}"
@@ -170,6 +170,39 @@ _make_bin_dir() {
   [ "${_DOCTOR_PASS}" -eq 1 ]
 }
 
+@test "brew links: fallback list skips a non-executable existing file and uses the executable stub" {
+  _make_bin_dir
+  unset _BREW_BIN
+  : > "${BATS_TEST_TMPDIR}/plain-file"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/fb/brew" 0
+  export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/plain-file ${BATS_TEST_TMPDIR}/fb/brew"
+  rm -f "${BATS_TEST_TMPDIR}/brew-calls"
+  _reset_counters
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
+  grep -qx "${_PROBE_ARGV}" "${BATS_TEST_TMPDIR}/brew-calls"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
+@test "brew links: unbounded probe (no timeout) captures stderr findings" {
+  _make_bin_dir
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${REPO_ROOT}/${_FIX_BROKEN}"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-timeout"
+  _OUT_FILE="${BATS_TEST_TMPDIR}/check-out"
+  _reset_counters
+  PATH="${_BIN_DIR}" _invoke_check > "${_OUT_FILE}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [[ "$(<"${_OUT_FILE}")" == *"broken symlinks: 1 (/opt/homebrew/opt/zz-doctor-probe)"* ]]
+}
+
+@test "brew links: with several Warning: lines the first one is the detail" {
+  printf 'plain\nWarning: A\nWarning: B\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/odd.txt"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  _run_check
+  command grep -qxE '.*\[WARN\].* brew links: brew doctor rc 1: Warning: A' "${_OUT_FILE}"
+}
+
 @test "brew links: a non-executable _BREW_BIN warns, names it, and never probes or falls through" {
   : > "${BATS_TEST_TMPDIR}/not-exec"
   export _BREW_BIN="${BATS_TEST_TMPDIR}/not-exec"
@@ -252,7 +285,7 @@ _make_bin_dir() {
 }
 
 @test "brew links: unrecognised rc 1 output warns with the first Warning: line and never passes" {
-  printf '==> Downloading Homebrew API data\nWarning: Something new\nmore text\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+  printf '==> Downloading Homebrew API data\nplain first line\nWarning: Something new\nmore text\n' > "${BATS_TEST_TMPDIR}/odd.txt"
   _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/odd.txt"
   export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
   _run_check
@@ -358,6 +391,11 @@ _make_bin_dir() {
     _run_check
     [ "${_DOCTOR_FAIL}" -eq 0 ]
     [ "${_DOCTOR_FAILED}" -eq 0 ]
+    if [[ ${_rc} -ge 2 ]]; then
+      # Findings text at an rc other than 1 is not a findings verdict.
+      [[ "${_OUT}" == *"brew doctor rc ${_rc}"* ]]
+      [[ "${_OUT}" != *"broken symlinks:"* ]]
+    fi
   done
 }
 
