@@ -1297,87 +1297,34 @@ _doctor_brew_links_names() {
   printf '%s' "${_shown}"
 }
 
-# Reports dangling Homebrew links and unlinked kegs by running Homebrew's own
-# two named `brew doctor` checks. WARN only, never FAIL: both findings clear
-# with one command and are prefix housekeeping, not a broken machine.
-# Spec: docs/superpowers/specs/2026-10-20-doctor-brew-links-design.md
-_doctor_check_brew_links() {
-  printf "\nHomebrew links:\n"
-
-  # Brew: the operator's override, then PATH, then fixed prefixes. `-t doctor`
-  # bypasses the brew prereq and can run over ssh, cron or launchd, where
-  # linuxbrew's PATH entry (interactive zsh only) is absent.
-  local _brew="" _cand
+# Prints the first usable <cmd>: `command -v` (absolute and executable only, so
+# a function or alias name is rejected), then each executable entry of the
+# space-separated <fallbacks>. Prints nothing when none resolves.
+_doctor_resolve_executable() {
+  local _found _cand
   local -a _cands
-  if [[ -n "${_BREW_BIN:-}" ]]; then
-    # An override the operator named is never silently replaced by another brew.
-    if [[ ! -x "${_BREW_BIN}" ]]; then
-      doctor_warn "brew links" "_BREW_BIN is set but not executable: ${_BREW_BIN}"
+  _found="$(command -v "$1" 2>/dev/null)"
+  if [[ "${_found}" == /* && -x "${_found}" ]]; then
+    printf '%s' "${_found}"
+    return 0
+  fi
+  read -ra _cands <<< "$2"
+  for _cand in "${_cands[@]}"; do
+    if [[ -x "${_cand}" ]]; then
+      printf '%s' "${_cand}"
       return 0
     fi
-    _brew="${_BREW_BIN}"
-  else
-    # `command -v` can answer with a bare function or alias name; keep paths only.
-    _brew="$(command -v brew 2>/dev/null)"
-    if [[ "${_brew}" != /* || ! -x "${_brew}" ]]; then
-      _brew=""
-      read -ra _cands <<< "${_BREW_FALLBACK_PATHS:-/opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew}"
-      for _cand in "${_cands[@]}"; do
-        if [[ -x "${_cand}" ]]; then
-          _brew="${_cand}"
-          break
-        fi
-      done
-    fi
-  fi
-  if [[ -z "${_brew}" ]]; then
-    printf "  brew not found — skipped\n"
-    return 0
-  fi
+  done
+  return 0
+}
 
-  # Timeout: macOS has no `timeout`, only Homebrew's gtimeout, so without the
-  # fallback the bound would be missing in exactly the contexts the brew
-  # fallbacks exist for. None found: the probe runs unbounded, the same
-  # accepted degrade as _doctor_check_dev_tools.
-  local _timeout_bin
-  _timeout_bin="$(command -v timeout 2>/dev/null)"
-  if [[ "${_timeout_bin}" != /* || ! -x "${_timeout_bin}" ]]; then
-    _timeout_bin=""
-    read -ra _cands <<< "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}"
-    for _cand in "${_cands[@]}"; do
-      if [[ -x "${_cand}" ]]; then
-        _timeout_bin="${_cand}"
-        break
-      fi
-    done
-  fi
-  local _bound="${_DOCTOR_BREW_TIMEOUT:-60}"
-
-  # `local` is declared apart from the assignment: `local _out="$(…)"` would
-  # replace the command's status with local's own and _rc would read 0.
-  # --quiet drops the maintainers' preamble; the verdict comes from the rc.
-  local _out _rc
-  if [[ -n "${_timeout_bin}" ]]; then
-    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_timeout_bin}" "${_bound}" "${_brew}" doctor --quiet \
-      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
-  else
-    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_brew}" doctor --quiet \
-      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
-  fi
-  _rc=$?
-
-  if [[ ${_rc} -eq 0 ]]; then
-    doctor_pass "brew links"
-    return 0
-  fi
-
-  # Parse in bash. `==>` and `✔` lines are progress output, skipped everywhere.
-  # State: "" none, broken = reading broken-symlink entries, kegwait = saw the
-  # unlinked-kegs header, kegs = reading keg entries. The keg list is anchored
-  # on the "Run `brew link` on these:" line, not the header, because two
-  # explanation lines sit between them.
-  local _line _state="" _entry _first="" _first_warn="" _last=""
-  local -a _broken=() _kegs=()
+# Parses `brew doctor` output ($1) into the caller's _broken and _kegs arrays
+# and _first, _first_warn and _last scalars (bash dynamic scoping; the caller
+# declares them). `==>` and `✔` lines are progress, skipped everywhere. The keg
+# list is anchored on the "Run `brew link` on these:" line, not the header,
+# because two explanation lines sit between them.
+_doctor_brew_links_parse() {
+  local _line _entry _state=""   # "", broken, kegwait or kegs
   while IFS= read -r _line; do
     case "${_line}" in
       "==>"* | "✔"*) continue ;;
@@ -1413,7 +1360,63 @@ _doctor_check_brew_links() {
       *"Broken symlinks were found"*) _state=broken ;;
       *"You have unlinked kegs in your Cellar"*) _state=kegwait ;;
     esac
-  done <<< "${_out}"
+  done <<< "$1"
+}
+
+# Reports dangling Homebrew links and unlinked kegs by running Homebrew's own
+# two named `brew doctor` checks. WARN only, never FAIL: both findings clear
+# with one command and are prefix housekeeping, not a broken machine.
+# Spec: docs/superpowers/specs/2026-10-20-doctor-brew-links-design.md
+_doctor_check_brew_links() {
+  printf "\nHomebrew links:\n"
+
+  # Brew: the operator's override, then PATH, then fixed prefixes. `-t doctor`
+  # bypasses the brew prereq and can run over ssh, cron or launchd, where
+  # linuxbrew's PATH entry (interactive zsh only) is absent.
+  local _brew=""
+  if [[ -n "${_BREW_BIN:-}" ]]; then
+    # An override the operator named is never silently replaced by another brew.
+    if [[ ! -x "${_BREW_BIN}" ]]; then
+      doctor_warn "brew links" "_BREW_BIN is set but not executable: ${_BREW_BIN}"
+      return 0
+    fi
+    _brew="${_BREW_BIN}"
+  else
+    _brew="$(_doctor_resolve_executable brew "${_BREW_FALLBACK_PATHS:-/opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew}")"
+  fi
+  if [[ -z "${_brew}" ]]; then
+    printf "  brew not found — skipped\n"
+    return 0
+  fi
+
+  # macOS has no `timeout`, only Homebrew's gtimeout, so without the fallback
+  # the bound would be missing in exactly the contexts the brew fallbacks
+  # exist for. None found: the probe runs unbounded, the same accepted degrade
+  # as _doctor_check_dev_tools.
+  local _timeout_bin _bound="${_DOCTOR_BREW_TIMEOUT:-60}"
+  _timeout_bin="$(_doctor_resolve_executable timeout "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}")"
+
+  # `local` is declared apart from the assignment: `local _out="$(…)"` would
+  # replace the command's status with local's own and _rc would read 0.
+  # --quiet drops the maintainers' preamble; the verdict comes from the rc.
+  local _out _rc
+  if [[ -n "${_timeout_bin}" ]]; then
+    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_timeout_bin}" "${_bound}" "${_brew}" doctor --quiet \
+      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
+  else
+    _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_brew}" doctor --quiet \
+      check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
+  fi
+  _rc=$?
+
+  if [[ ${_rc} -eq 0 ]]; then
+    doctor_pass "brew links"
+    return 0
+  fi
+
+  local _first="" _first_warn="" _last=""
+  local -a _broken=() _kegs=()
+  _doctor_brew_links_parse "${_out}"
 
   if [[ ${_rc} -eq 1 && ( ${#_broken[@]} -gt 0 || ${#_kegs[@]} -gt 0 ) ]]; then
     if [[ ${#_broken[@]} -gt 0 ]]; then
