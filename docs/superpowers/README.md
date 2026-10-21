@@ -17,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-20 | — | [doctor: report dangling Homebrew links and unlinked kegs](specs/2026-10-20-doctor-brew-links-design.md) | Pending |
 | 2026-10-18 | [CLAUDE.md budget](plans/2026-10-18-claude-md-budget.md) | [CLAUDE.md budget: one line per rule, 105k ceiling](specs/2026-10-17-claude-md-budget-design.md) | Done — merged as dotfiles#347 2026-10-18; CLAUDE.md 61.7k to 33k tokens |
 | 2026-10-17 | — | [bash coverage: single-quoted program bodies](specs/2026-10-17-coverage-single-quoted-program-bodies-design.md) | Retired — descoped 2026-10-17; see backlog |
 | 2026-10-17 | [bash coverage parallel](plans/2026-10-17-bash-coverage-parallel.md) | [bash coverage: run the traced suite in parallel](specs/2026-10-17-bash-coverage-parallel-design.md) | Done |
