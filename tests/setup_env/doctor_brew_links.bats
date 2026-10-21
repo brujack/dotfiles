@@ -41,9 +41,9 @@ setup() {
 
 # ── _doctor_check_brew_links ─────────────────────────────────────────────────
 #
-# Per-test brew stubs live under BATS_TEST_TMPDIR. Stubs use an absolute
-# shebang and bash builtins only, so they still run when a test scopes PATH to
-# a directory holding nothing but the tools that test needs.
+# Per-test brew stubs live under BATS_TEST_TMPDIR. Every stub a scoped-PATH
+# test runs uses an absolute shebang and bash builtins only, so it still runs
+# when PATH holds nothing but the tools that test needs.
 
 _FIX_BROKEN="tests/fixtures/brew/doctor-broken-symlinks.txt"
 _FIX_UNLINKED="tests/fixtures/brew/doctor-unlinked-kegs.txt"
@@ -122,7 +122,7 @@ _run_check() {
   _OUT="$(<"${_OUT_FILE}")"
 }
 
-# A PATH directory holding only sleep (and optionally the real timeout).
+# A PATH directory holding only sleep.
 _make_bin_dir() {
   _BIN_DIR="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${_BIN_DIR}"
