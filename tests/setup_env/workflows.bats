@@ -1409,6 +1409,7 @@ nvidia" ]
   run install_github_cli_linux
   [ "${status}" -eq 1 ]
   [ ! -e "${_GH_CLI_SOURCES_LIST}" ]
+  [[ "${output}" == *"source write skipped (no keyring)"* ]]
 }
 
 @test "install_github_cli_linux: success writes keyring and source list, returns 0" {
@@ -1434,7 +1435,20 @@ nvidia" ]
   export LINUX=1
   run install_github_cli_linux
   [ "${status}" -eq 0 ]
-  ! grep -qE "curl|apt" "${MOCK_CALLS_FILE}"
+  run grep -qE "curl|apt|sudo" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+}
+
+@test "install_github_cli_linux: source list write failure returns 1, keyring kept, still installs gh" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  # tests/mocks/tee swallows real tee failures (|| true), so drive it by exit knob.
+  export MOCK_TEE_EXIT=1
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "${MOCK_CURL_STDOUT}" ]
+  [[ "${output}" == *"github cli: source list: source list write failed"* ]]
+  grep -q "apt install.* gh" "${MOCK_CALLS_FILE}"
 }
 
 # ── setup_ansible ─────────────────────────────────────────────────────────────
