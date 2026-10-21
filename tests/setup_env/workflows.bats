@@ -10,6 +10,14 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   load_setup_env
+  # install_github_cli_linux writes a keyring and a source list; tests/mocks/sudo
+  # execs real tee/install/mv, so unset seams would write the real /etc/apt.
+  # _APT_KEY_TMP_ROOT is needed because BSD mktemp -d ignores TMPDIR.
+  export _GH_CLI_KEYRING="${BATS_TEST_TMPDIR}/apt/keyrings/githubcli-archive-keyring.gpg"
+  export _GH_CLI_SOURCES_LIST="${BATS_TEST_TMPDIR}/apt/sources.list.d/github-cli.list"
+  mkdir -p "${BATS_TEST_TMPDIR}/apt/sources.list.d" "${BATS_TEST_TMPDIR}/apt-key-tmp"
+  export _APT_KEY_TMP_ROOT="${BATS_TEST_TMPDIR}/apt-key-tmp"
+  export MOCK_CURL_STDOUT='fake-gh-keyring-bytes'
   # load_setup_env sources real detect_env(), which sets HAS_AWS=1 for real
   # on this box's actual profile (mac_workstation) -- nothing about that is
   # test fixture. run_update's aws section now performs real signature
@@ -1379,6 +1387,54 @@ nvidia" ]
   export UBUNTU=1
   install_github_cli_linux
   grep -q "apt install gh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_github_cli_linux: failed fetch keeps existing keyring, returns 1, still installs gh" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  mkdir -p "$(dirname "${_GH_CLI_KEYRING}")"
+  printf 'old-key' > "${_GH_CLI_KEYRING}"
+  export MOCK_CURL_EXIT=22
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "old-key" ]
+  [[ "${output}" == *"github cli: keyring: install failed"* ]]
+  grep -q "apt install.* gh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_github_cli_linux: failed fetch with no keyring writes no source list" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_CURL_EXIT=22
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ ! -e "${_GH_CLI_SOURCES_LIST}" ]
+}
+
+@test "install_github_cli_linux: success writes keyring and source list, returns 0" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  run install_github_cli_linux
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "fake-gh-keyring-bytes" ]
+  grep -qF "signed-by=${_GH_CLI_KEYRING}] https://cli.github.com/packages stable main" "${_GH_CLI_SOURCES_LIST}"
+}
+
+@test "install_github_cli_linux: apt install failure returns 1 with a warning" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_APT_FAIL_SUBCMD=install
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"github cli: gh: install failed"* ]]
+}
+
+@test "install_github_cli_linux: non-Ubuntu does nothing and returns 0" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  run install_github_cli_linux
+  [ "${status}" -eq 0 ]
+  ! grep -qE "curl|apt" "${MOCK_CALLS_FILE}"
 }
 
 # ── setup_ansible ─────────────────────────────────────────────────────────────
