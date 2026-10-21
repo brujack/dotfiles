@@ -169,3 +169,125 @@ in the same change.
 - **N2.** The check never runs `brew cleanup`, `brew link` or any other command that modifies the prefix.
 - **N3.** No new line in the `-t update` summary.
 - **N4.** The check does not walk the prefix itself; Homebrew's two named checks are the only detector.
+
+## Multi-Lens Review
+
+Reviewed at commit: `c631baab` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding:
+
+1. The "Likely mechanism" paragraph contradicts the only recorded incident. dotfiles#315's body
+   records the 2026-10-04 Studio run summarizing `[OK] brew` with 7 cask failures. Before #315,
+   a cask failure did not abort `brew_update`, so `brew cleanup` ran and exited 0, and 5 dangling
+   `opt` links survived it anyway. So "survivors imply a hard failure" is unsupported, and
+   `run: brew cleanup` may not be the right remedy.
+2. The Probe snippet runs `"${_timeout_bin}"` unconditionally. With `timeout` absent that is
+   `"" 60 brew …` and rc 127: a WARN on every stock-macOS ssh, cron or launchd run.
+   `_doctor_check_dev_tools` branches on `[[ -n "${_timeout_bin}" ]]`. No test covers that path.
+3. Under `load_mocks`, `command -v brew` resolves to `tests/mocks/brew`, whose `*)` arm exits
+   `MOCK_BREW_EXIT:-0`. Every end-to-end `run_doctor` test silently gains a PASS, and tests that
+   set `MOCK_BREW_EXIT` gain a WARN (`tests/setup_env/unit.bats:1055`, `:2969` assert counts).
+   `load_mocks` should export `_BREW_BIN` to a stub, as it does for `_BREW_AZ_BIN`.
+4. Reads-it test passes narrowly. The only consumer is the operator reading interactive
+   `-t doctor`. The output changes a decision (run cleanup or link) but persists nowhere, and the
+   hazard is born in `-t update`, which N1 and N3 keep it out of. This is a conscious choice, not
+   a defect.
+5. Verdict count is adequate: one PASS case (rc 0, where Homebrew's rc is the authority), and
+   the fixture tests assert a named path or keg, so an empty parser goes red.
+
+Assumption: `brew cleanup` clears the dangling `opt` links this check reports. The 10-04 record
+suggests a cleanup that exited 0 left 5. Settle it in V1 with the operator's "yes": plant the
+link, run the remedy, re-run the probe. The 10-04 transcript is not retained: on the Studio,
+`~/.local/share/dotfiles/` holds only `cadence`, `renovate-held` and `venv-snapshots`, and no
+`err_brew*`, `detail_brew*` or update log dated 2026-10-03 to 2026-10-06 exists under `~`
+(searched 2026-10-20).
+
+Disposition:
+
+### Ergonomics
+
+Finding:
+
+1. N2 is false as written. Every `brew` call, `doctor` included, runs `brew vendor-install ruby`
+   when `vendor/portable-ruby/current` does not match the pin (`utils/ruby.sh:136-139`). This
+   was triggered on `claude` under `env -i`: it re-poured portable-ruby 4.0.7_1 from cache. On a
+   cold cache it would be a network download. A `timeout` kill mid-pour could leave `brew` broken.
+   The `==>` lines it prints would become the "first non-empty line" detail.
+2. Remedies:
+   - `brew cleanup` deletes old kegs and caches. `brew cleanup --prune-prefix` does only the
+     symlink prune (`cleanup.rb:977`).
+   - `brew link <keg>` must print the real keg name, one line per keg.
+   - A conflicting link needs `--overwrite`, or can be left to `brew link`'s own error.
+3. Over ssh to the Studio, `command -v timeout` prints nothing. The gnubin `timeout` exists but is
+   not on that `PATH`. So the bound is absent in exactly the contexts that motivate the fallback
+   brew paths.
+4. V1 holds the planted link in the live prefix for a whole `-t doctor` run. Capture with the bare
+   probe, then run doctor once for rendering.
+5. The rc-0 PASS case passes with an empty stub that never ran. Assert the stub was called in that
+   same case.
+6. Minor: `_DOCTOR_PROBE_TIMEOUT` would carry two defaults (10 for dev-tools, 60 here).
+
+Measured: probe rc 0 in 1.9 s on `claude` and 6 s on the Studio. 23 keg-only racks on the Studio
+raise no WARN.
+
+Assumption: that probe output in non-interactive contexts is only the two checks' text, with no
+side effects, inside the timeout. The portable-ruby pour shows it can go either way. How often it
+happens after a `brew update` bumps the pin is unknown. Confirm by comparing
+`readlink vendor/portable-ruby/current` with `vendor/portable-ruby-version` after the next pin
+bump, before any other brew command.
+
+Disposition:
+
+### Risk
+
+Finding:
+
+1. The probe is not offline. `brew.rb:139-141` runs `Homebrew::API.fetch_api_files!` before every
+   Ruby command, and `api.rb:236-245` downloads when the cache is missing or older than 7 days.
+   `HOMEBREW_NO_AUTO_UPDATE` only stops the refresh of an existing cache. Do not use
+   `HOMEBREW_NO_INSTALL_FROM_API`: with no local core tap, `diagnostic.rb:1202` maps
+   `FormulaUnavailableError` to "not keg-only", so every keg-only rack would read as unlinked.
+2. The "brew absent everywhere" test cannot reach the skip branch as written.
+   - Under `load_mocks`, `command -v brew` finds the mock.
+   - Without `load_mocks`, on `claude` it finds the real `/home/linuxbrew/.linuxbrew/bin/brew`.
+   - CLAUDE.md forbids absence by `PATH` editing.
+   - The dev-tools timeout tests show the scoped-`PATH` stub mechanism. Name it.
+3. Same as Goal-fit 3: `load_mocks` should export `_BREW_BIN` to a recording stub. Otherwise a
+   future unstubbed `run_doctor` test without mocks runs real brew from a fake `HOME`.
+4. The unlinked-keg finding prints the header, then two unindented explanation lines, then
+   ``Run `brew link` on these:``, then the indented kegs (`diagnostic.rb:1209-1218`). A parser
+   that stops at the first unindented line finds 0 kegs. Anchor on the `Run `brew link`` line.
+5. Same as Ergonomics 6: use a separate timeout variable or document the coupling.
+6. V1 says run `-t doctor` and "save the raw probe output". Doctor's rendering is not raw, so
+   capture with the bare `brew doctor <checks> 2>&1`. Also require `brew link` rc 0 and
+   `var/homebrew/linked/<keg>` present afterwards.
+
+Smaller points: an unlinked keg from an untrusted tap is never reported (`UntrustedTapError` is
+rescued as keg-only, `diagnostic.rb:1200`). Under `GITHUB_ACTIONS`, `opoo` emits `::warning::`
+annotations, so the format changes; doctor never runs in CI.
+
+Premise verified: named checks run alone (`cmd/doctor.rb:55`). An unknown name gives rc 1. Findings
+go to stderr as `Warning: …`. Homebrew has no localisation. Probe rc 0 in 5.8 s on the Studio and
+1.4 s on `claude`.
+
+Assumption: the probe finishes quickly with no network access under cron, launchd or a bats
+`HOME`, whose API cache is missing or stale.
+
+Measured by the orchestrator 2026-10-20 on `claude`, in a fresh temp `HOME` under `env -i`:
+
+- rc 0 in 3.2 s.
+- Printed `==> Downloading Homebrew API data` and `✔︎ JSON API packages.x86_64_linux.jws.json`
+  before `Your system is ready to brew.`
+- Wrote 37 MB under the temp `HOME`.
+
+So the cold-cache case fits the bound on this link. It does add two non-finding lines the parser
+must skip. It also writes 37 MB into any `HOME` that reaches real brew, which is a further reason
+for the `load_mocks` default stub.
+
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
