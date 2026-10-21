@@ -509,15 +509,27 @@ update_gems() {
 install_github_cli_linux() {
   if [[ -n ${UBUNTU} ]]; then
     printf "installing github cli on Ubuntu\\n"
-    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
-    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    sudo -H apt update
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" gh
-    if [[ -x $(command -v gh) ]]; then
-      printf "gh is installed Ubuntu\\n"
-    fi
+    local _keyring="${_GH_CLI_KEYRING:-/etc/apt/keyrings/githubcli-archive-keyring.gpg}"
+    local _list="${_GH_CLI_SOURCES_LIST:-/etc/apt/sources.list.d/github-cli.list}"
+    local _rc=0
+    sudo mkdir -p "$(dirname "${_keyring}")"
+    # _install_apt_keyring never truncates an existing keyring on a failed fetch.
+    _install_apt_keyring https://cli.github.com/packages/githubcli-archive-keyring.gpg "${_keyring}" binary || {
+      log_warn "github cli: keyring: install failed"
+      _rc=1
+    }
+    _write_apt_source_list "github cli" "source list" "${_keyring}" "${_list}" \
+      "deb [arch=$(dpkg --print-architecture) signed-by=${_keyring}] https://cli.github.com/packages stable main" \
+      || _rc=1
+    # A failed refresh must not mask the install result; apt install decides.
+    sudo -H apt update || :
+    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" gh || {
+      log_warn "github cli: gh: install failed"
+      _rc=1
+    }
+    return "${_rc}"
   fi
+  return 0
 }
 
 # Ensure the pinned PYTHON_VER interpreter exists and is executable under
