@@ -431,8 +431,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - `_DOCKER_KEYRING`/`_DOCKER_SOURCES_LIST` (`lib/linux_ubuntu.sh:_install_ubuntu_docker`)
   - Defaults `/etc/apt/keyrings/docker.asc` and `/etc/apt/sources.list.d/docker.list`; set both at setup scope so the sudo mock cannot write the real `/etc/apt`.
 
-- `_GH_CLI_KEYRING`/`_GH_CLI_SOURCES_LIST` (`lib/developer.sh:install_github_cli_linux`)
-  - Defaults `/etc/apt/keyrings/githubcli-archive-keyring.gpg` and `/etc/apt/sources.list.d/github-cli.list`; `tests/setup_env/workflows.bats` sets both at setup scope so the sudo mock cannot write the real `/etc/apt`.
+- Set `_GH_CLI_KEYRING`/`_GH_CLI_SOURCES_LIST` (`install_github_cli_linux`) and a non-empty `MOCK_CURL_STDOUT` at setup scope in `tests/setup_env/workflows.bats` (`tests/mocks/sudo` execs real writes into `/etc/apt`); fail the list write with `MOCK_TEE_EXIT`, never a missing directory. → `dotfiles-test-seams.md` § `gh cli keyring and source list seams`
 
 - `MOCK_WGET_FAIL_URL`/`MOCK_CURL_FAIL_URL`/`MOCK_APT_FAIL_SUBCMD`/`MOCK_MV_FAIL_ARGS` fail only the matching call; set `SHIM_*` variables (`SHIM_DIR` in `tests/setup_env/linux_ubuntu.bats`) per test, never at setup scope (real `usermod`/`flatpak` would run). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: mock failure knobs and SHIM_DIR shims`
 
