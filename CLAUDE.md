@@ -431,6 +431,9 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - `_DOCKER_KEYRING`/`_DOCKER_SOURCES_LIST` (`lib/linux_ubuntu.sh:_install_ubuntu_docker`)
   - Defaults `/etc/apt/keyrings/docker.asc` and `/etc/apt/sources.list.d/docker.list`; set both at setup scope so the sudo mock cannot write the real `/etc/apt`.
 
+- `_GH_CLI_KEYRING`/`_GH_CLI_SOURCES_LIST` (`lib/developer.sh:install_github_cli_linux`)
+  - Defaults `/etc/apt/keyrings/githubcli-archive-keyring.gpg` and `/etc/apt/sources.list.d/github-cli.list`; `tests/setup_env/workflows.bats` sets both at setup scope so the sudo mock cannot write the real `/etc/apt`.
+
 - `MOCK_WGET_FAIL_URL`/`MOCK_CURL_FAIL_URL`/`MOCK_APT_FAIL_SUBCMD`/`MOCK_MV_FAIL_ARGS` fail only the matching call; set `SHIM_*` variables (`SHIM_DIR` in `tests/setup_env/linux_ubuntu.bats`) per test, never at setup scope (real `usermod`/`flatpak` would run). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: mock failure knobs and SHIM_DIR shims`
 
 - Drive tflint/tfsec via `_TFLINT_URL`/`_TFLINT_SHA256`/`_TFSEC_URL`/`_TFSEC_SHA256` with a local fixture URL and a deliberately wrong checksum; never mock `sha256sum`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: tflint and tfsec seams`

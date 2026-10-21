@@ -10,6 +10,14 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
   load_setup_env
+  # install_github_cli_linux writes a keyring and a source list; tests/mocks/sudo
+  # execs real tee/install/mv, so unset seams would write the real /etc/apt.
+  # _APT_KEY_TMP_ROOT is needed because BSD mktemp -d ignores TMPDIR.
+  export _GH_CLI_KEYRING="${BATS_TEST_TMPDIR}/apt/keyrings/githubcli-archive-keyring.gpg"
+  export _GH_CLI_SOURCES_LIST="${BATS_TEST_TMPDIR}/apt/sources.list.d/github-cli.list"
+  mkdir -p "${BATS_TEST_TMPDIR}/apt/sources.list.d" "${BATS_TEST_TMPDIR}/apt-key-tmp"
+  export _APT_KEY_TMP_ROOT="${BATS_TEST_TMPDIR}/apt-key-tmp"
+  export MOCK_CURL_STDOUT='fake-gh-keyring-bytes'
   # load_setup_env sources real detect_env(), which sets HAS_AWS=1 for real
   # on this box's actual profile (mac_workstation) -- nothing about that is
   # test fixture. run_update's aws section now performs real signature
@@ -1381,6 +1389,68 @@ nvidia" ]
   grep -q "apt install gh" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_github_cli_linux: failed fetch keeps existing keyring, returns 1, still installs gh" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  mkdir -p "$(dirname "${_GH_CLI_KEYRING}")"
+  printf 'old-key' > "${_GH_CLI_KEYRING}"
+  export MOCK_CURL_EXIT=22
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "old-key" ]
+  [[ "${output}" == *"github cli: keyring: install failed"* ]]
+  grep -q "apt install.* gh" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_github_cli_linux: failed fetch with no keyring writes no source list" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_CURL_EXIT=22
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ ! -e "${_GH_CLI_SOURCES_LIST}" ]
+  [[ "${output}" == *"source write skipped (no keyring)"* ]]
+}
+
+@test "install_github_cli_linux: success writes keyring and source list, returns 0" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  run install_github_cli_linux
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "fake-gh-keyring-bytes" ]
+  grep -qF "signed-by=${_GH_CLI_KEYRING}] https://cli.github.com/packages stable main" "${_GH_CLI_SOURCES_LIST}"
+}
+
+@test "install_github_cli_linux: apt install failure returns 1 with a warning" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_APT_FAIL_SUBCMD=install
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"github cli: gh: install failed"* ]]
+}
+
+@test "install_github_cli_linux: non-Ubuntu does nothing and returns 0" {
+  unset MACOS UBUNTU
+  export LINUX=1
+  run install_github_cli_linux
+  [ "${status}" -eq 0 ]
+  run grep -qE "curl|apt|sudo" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+}
+
+@test "install_github_cli_linux: source list write failure returns 1, keyring kept, still installs gh" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  # tests/mocks/tee swallows real tee failures (|| true), so drive it by exit knob.
+  export MOCK_TEE_EXIT=1
+  run install_github_cli_linux
+  [ "${status}" -eq 1 ]
+  [ "$(cat "${_GH_CLI_KEYRING}")" = "${MOCK_CURL_STDOUT}" ]
+  [[ "${output}" == *"github cli: source list: source list write failed"* ]]
+  grep -q "apt install.* gh" "${MOCK_CALLS_FILE}"
+}
+
 # ── setup_ansible ─────────────────────────────────────────────────────────────
 
 @test "setup_ansible calls pyenv install when Python version absent" {
@@ -2612,11 +2682,68 @@ _stub_refresher_fail() {
   install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
   run run_developer_or_ansible
   [ "$status" -eq 0 ]
-  grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"github cli: install incomplete"* ]]
+  [ "$(grep -c '^github_cli_linux$' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
+  grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible skips the gh step when LINUX is unset" {
+  unset LINUX UBUNTU
+  export MACOS=1
+  install_ruby_tools()       { return 0; }
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_developer_or_ansible
+  local _rc="${status}"
+  [ "${_rc}" -eq 0 ]
+  [[ "${output}" != *"github cli: install incomplete"* ]]
+  run grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+  grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible continues, warns and ledgers 2 when install_github_cli_linux fails" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  install_ruby_tools()       { return 0; }
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { return 1; }
+  setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_developer_or_ansible
+  [ "$status" -eq 0 ]
+  grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
+  grep -q "clone_repos" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"github cli: install incomplete"* ]]
+  grep -q "^ledger developer 2$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible runs the gh step before install_ruby, and a ruby failure still returns 1 with no ledger entry" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  install_ruby_tools()       { return 0; }
+  install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  install_ruby()             { printf "install_ruby\n" >> "${MOCK_CALLS_FILE}"; return 1; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_developer_or_ansible
+  [ "$status" -eq 1 ]
+  local _gh_line _ruby_line
+  _gh_line="$(grep -n "github_cli_linux" "${MOCK_CALLS_FILE}" | head -n 1 | cut -d: -f1)"
+  _ruby_line="$(grep -n "install_ruby" "${MOCK_CALLS_FILE}" | head -n 1 | cut -d: -f1)"
+  [ -n "${_gh_line}" ]
+  [ -n "${_ruby_line}" ]
+  [ "${_gh_line}" -lt "${_ruby_line}" ]
+  run grep -q "^ledger" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
 }
 
 # Every whitespace-separated token after '-g' on an npm global install line must be
