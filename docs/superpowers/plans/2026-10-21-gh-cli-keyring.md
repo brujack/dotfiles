@@ -1,5 +1,7 @@
 # gh CLI keyring Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#360 (487b303f), 2026-10-21.
+
 spec: docs/superpowers/specs/2026-10-21-gh-cli-keyring-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
