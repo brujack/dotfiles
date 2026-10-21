@@ -638,8 +638,9 @@ run_developer_or_ansible() {
   setup_ansible || return 1
   clone_personal_repos
   if [[ ${_gh_rc} -ne 0 ]]; then
-    log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings at the start of this run"
+    log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings earlier in this run"
   fi
+  # A gh partial deliberately records exit code 2 (success: false) while the process exits 0: the operator chose the ledger as the durable signal (spec 2026-10-21-gh-cli-keyring); run_setup_or_developer's partials still record 0.
   _ledger_write_run_entry "developer" "${_gh_rc}" || true
 }
 

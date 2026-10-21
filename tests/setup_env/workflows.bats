@@ -2685,9 +2685,26 @@ _stub_refresher_fail() {
   _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
   run run_developer_or_ansible
   [ "$status" -eq 0 ]
-  grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
+  [ "$(grep -c '^github_cli_linux$' "${MOCK_CALLS_FILE}")" -eq 1 ]
   grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
+  grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_developer_or_ansible skips the gh step when LINUX is unset" {
+  unset LINUX UBUNTU
+  export MACOS=1
+  install_ruby_tools()       { return 0; }
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 0; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_developer_or_ansible
+  local _rc="${status}"
+  [ "${_rc}" -eq 0 ]
+  run grep -q "github_cli_linux" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
   grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
 }
 
