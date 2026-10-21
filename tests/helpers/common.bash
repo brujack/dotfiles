@@ -46,8 +46,8 @@ STUB
     chmod +x "${_BREW_AZ_BIN}"
   fi
   # Every CI and fleet machine has a real brew at a default fallback path
-  # (claude and GitHub's ubuntu image have /home/linuxbrew/.linuxbrew/bin/brew
-  # off PATH; the macOS runner has /opt/homebrew/bin/brew), so without these
+  # (claude and GitHub's ubuntu image have /home/linuxbrew/.linuxbrew/bin/brew,
+  # often on PATH too; the macOS runner has /opt/homebrew/bin/brew), so without these
   # defaults a run_doctor test would run real brew from a fake HOME (37 MB API
   # cache, possible portable-Ruby pour). Both are exported because
   # tests/setup_env/unit.bats reaches the check through a subprocess
