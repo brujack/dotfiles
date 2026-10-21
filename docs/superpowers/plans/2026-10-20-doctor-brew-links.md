@@ -2,6 +2,8 @@
 
 spec: docs/superpowers/specs/2026-10-20-doctor-brew-links-design.md
 
+> **Status: DONE** — merged as dotfiles#358 (6d7cfb31), 2026-10-21.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** `-t doctor` reports dangling Homebrew links and unlinked kegs as one-line WARNs, using Homebrew's own two named `brew doctor` checks.
