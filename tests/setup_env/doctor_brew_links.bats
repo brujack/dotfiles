@@ -247,7 +247,7 @@ _make_bin_dir() {
   _run_check
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [[ "${_OUT}" == *"unlinked kegs: 1 (tree) — run: brew link tree"* ]]
-  [[ "${_OUT}" != *"✔"* ]]
+  [[ "${_OUT}" != *"JSON API"* ]]
   [[ "${_OUT}" != *"==>"* ]]
 }
 
@@ -258,7 +258,7 @@ _make_bin_dir() {
   _run_check
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
-  [[ "${_OUT}" == *"brew doctor rc 1: Warning: Something new"* ]]
+  command grep -qxE '.*\[WARN\].* brew links: brew doctor rc 1: Warning: Something new' "${_OUT_FILE}"
 }
 
 @test "brew links: rc 1 with no Warning:/Error: line uses the first non-progress non-empty line" {
@@ -359,6 +359,130 @@ _make_bin_dir() {
     [ "${_DOCTOR_FAIL}" -eq 0 ]
     [ "${_DOCTOR_FAILED}" -eq 0 ]
   done
+}
+
+@test "brew links: timeout, skip and non-executable outcomes never call doctor_fail" {
+  local _real_timeout
+  _real_timeout="$(command -v timeout 2>/dev/null || true)"
+  [[ -n "${_real_timeout}" ]] || skip "no 'timeout' binary on PATH -- cannot exercise the bound"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 0 "" 5
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew" _DOCTOR_BREW_TIMEOUT=1
+  _run_check
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+  : > "${BATS_TEST_TMPDIR}/not-exec"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/not-exec"
+  _run_check
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  _make_bin_dir
+  unset _BREW_BIN
+  export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-brew"
+  _reset_counters
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAILED}" -eq 0 ]
+}
+
+@test "brew links: every WARN verdict kind is a single line" {
+  local _real_timeout
+  _real_timeout="$(command -v timeout 2>/dev/null || true)"
+  [[ -n "${_real_timeout}" ]] || skip "no 'timeout' binary on PATH -- cannot exercise the bound"
+  local _kind
+  for _kind in unrecognised rc3 timeout notexec; do
+    case "${_kind}" in
+      unrecognised)
+        printf 'Warning: Something new\n  indented follow-up\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+        _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/odd.txt" ;;
+      rc3)
+        printf 'one\ntwo\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+        _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 3 "${BATS_TEST_TMPDIR}/odd.txt" ;;
+      timeout)
+        _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 0 "" 5
+        export _DOCTOR_BREW_TIMEOUT=1 ;;
+      notexec)
+        : > "${BATS_TEST_TMPDIR}/brew"
+        chmod -x "${BATS_TEST_TMPDIR}/brew" ;;
+    esac
+    export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+    _run_check
+    # Header line, then exactly one WARN line and nothing after it.
+    [ "$(command grep -c . "${_OUT_FILE}")" -eq 2 ]
+    [[ "$(tail -n 1 "${_OUT_FILE}")" == *"[WARN]"* ]]
+  done
+}
+
+@test "brew links: an unindented line ends the broken list, so a second header starts its own WARN" {
+  printf '\nWarning: Broken symlinks were found:\n  /p\nWarning: You have unlinked kegs in your Cellar.\nLeaving kegs unlinked can lead to build-trouble\nthose kegs to fail\n\nRun `brew link` on these:\n  tree\n' > "${BATS_TEST_TMPDIR}/two.txt"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/two.txt"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  _run_check
+  [ "${_DOCTOR_WARN}" -eq 2 ]
+  [[ "${_OUT}" == *"broken symlinks: 1 (/p) — run:"* ]]
+  [[ "${_OUT}" == *"unlinked kegs: 1 (tree) — run: brew link tree"* ]]
+}
+
+@test "brew links: a ✔ progress line is never used as the rc 1 detail" {
+  printf '✔︎ JSON API packages.arm64_tahoe.jws.json\nsomething odd\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/odd.txt"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  _run_check
+  [[ "${_OUT}" == *"brew doctor rc 1: something odd"* ]]
+}
+
+@test "brew links: an Error: line is preferred over an earlier plain line" {
+  printf 'something\nError: No check available by the name: x\n' > "${BATS_TEST_TMPDIR}/odd.txt"
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 1 "${BATS_TEST_TMPDIR}/odd.txt"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  _run_check
+  [[ "${_OUT}" == *"brew doctor rc 1: Error: No check available by the name: x"* ]]
+}
+
+@test "brew links: rc 124 with no timeout resolved is reported as rc 124, not a timeout" {
+  _make_bin_dir
+  _write_brew_stub "${BATS_TEST_TMPDIR}/brew" 124
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-timeout"
+  _OUT_FILE="${BATS_TEST_TMPDIR}/check-out"
+  _reset_counters
+  PATH="${_BIN_DIR}" _invoke_check > "${_OUT_FILE}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [[ "$(<"${_OUT_FILE}")" == *"brew doctor rc 124"* ]]
+  [[ "$(<"${_OUT_FILE}")" != *"did not finish"* ]]
+}
+
+@test "brew links: the unbounded probe still sets HOMEBREW_NO_AUTO_UPDATE=1 and reads stdin at EOF" {
+  _make_bin_dir
+  # Bash builtins only: the scoped PATH holds no cat or wc.
+  printf '#!/bin/bash\nIFS= read -r _l; printf "%%s|%%s\\n" "${HOMEBREW_NO_AUTO_UPDATE-unset}" "$?" > "%s/env-seen"\nexit 0\n' "${BATS_TEST_TMPDIR}" > "${BATS_TEST_TMPDIR}/brew"
+  chmod +x "${BATS_TEST_TMPDIR}/brew"
+  export _BREW_BIN="${BATS_TEST_TMPDIR}/brew"
+  export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-timeout"
+  unset HOMEBREW_NO_AUTO_UPDATE
+  _reset_counters
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null < <(printf 'not-empty\n')
+  [ "$(<"${BATS_TEST_TMPDIR}/env-seen")" = "1|1" ]
+}
+
+@test "brew links: a function named brew is not mistaken for an executable; the fallback is used" {
+  _make_bin_dir
+  brew() { :; }
+  unset _BREW_BIN
+  _write_brew_stub "${BATS_TEST_TMPDIR}/fb/brew" 0
+  export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/fb/brew"
+  rm -f "${BATS_TEST_TMPDIR}/brew-calls"
+  # An executable named brew in the cwd makes a bare `-x brew` succeed, so only
+  # the absolute-path guard keeps the function name out.
+  mkdir -p "${BATS_TEST_TMPDIR}/cwd"
+  : > "${BATS_TEST_TMPDIR}/cwd/brew"
+  chmod +x "${BATS_TEST_TMPDIR}/cwd/brew"
+  _reset_counters
+  cd "${BATS_TEST_TMPDIR}/cwd"
+  PATH="${_BIN_DIR}" _invoke_check > /dev/null
+  cd "${REPO_ROOT}"
+  unset -f brew
+  grep -qx "${_PROBE_ARGV}" "${BATS_TEST_TMPDIR}/brew-calls"
 }
 
 @test "brew links: the check returns 0 on a WARN outcome" {
