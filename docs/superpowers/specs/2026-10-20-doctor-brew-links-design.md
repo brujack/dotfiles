@@ -27,27 +27,33 @@ machine's live prefix.
 The 2026-10-04 reading is the only time the hazard has been observed. Nothing says how often
 it happens.
 
-**Mechanism: unknown.** Two readings of the source, and the record contradicts the simple story.
+**Mechanism: the links broke after cleanup.** This is derived from Homebrew's source. The
+2026-10-04 transcript is not retained, so it was not observed directly.
 
-- `brew cleanup` with no arguments prunes every broken symlink under the prefix link
-  directories, `opt` included. The routine is `prune_prefix_symlinks_and_directories`
-  (`Library/Homebrew/cleanup.rb:977`), which walks `Keg.must_exist_subdirectories`
-  (`keg.rb:155`: the keg link dirs plus `opt` and `var/homebrew/linked`).
-- `brew_update` (`lib/helpers.sh:203-230`) runs `brew cleanup` last.
+- **Cleanup prunes.** `brew cleanup` with no arguments prunes every broken symlink under the
+  prefix link directories, `opt` included.
+  - The routine is `prune_prefix_symlinks_and_directories` (`Library/Homebrew/cleanup.rb:977`).
+    It walks `Keg.must_exist_subdirectories` (`keg.rb:155`: the keg link dirs plus `opt` and
+    `var/homebrew/linked`).
+  - It runs last in `clean!`, after formula cleanup and autoremove (`cleanup.rb:448-482`). So a
+    link that cleanup's own removals break is pruned in the same pass.
+- **The test for "broken".** It is `Utils::Path.resolved_path_exists?`, defined only at
+  `utils/path.rb:89`: `path.dirname.join(path.readlink).exist?`. `exist?` follows the whole link
+  chain, which is effectively the test `find -L` makes. Its last change was 2026-09-05, before the
+  incident.
+- **Cleanup ran on 2026-10-04.** dotfiles#315's body records that run summarizing `[OK] brew`
+  with 7 cask failures. Before #315, a cask failure did not abort `brew_update`, so the final
+  `brew cleanup` ran and exited 0.
 
-Yet on the 2026-10-04 run, cleanup ran and exited 0 and 5 dangling `opt` links still survived.
+The conclusion: the 5 `opt` links that survived were not broken when cleanup's prune ran. They
+broke later in that run, or afterwards. `check_for_broken_symlinks` applies the same walk and the
+same test at the moment doctor runs. So a `-t doctor` run after the breakage reports them, and
+`brew cleanup --prune-prefix` removes them.
 
-- dotfiles#315's body records that run summarizing `[OK] brew` with 7 cask failures.
-- Before #315, a cask failure did not abort `brew_update`.
+Which later step broke them is not established. It does not change this design.
 
-So either something after cleanup created the links, or cleanup did not prune them. The
-transcript is not retained, so this spec does not claim a cause.
-
-An unlinked keg means a link step failed partway through an upgrade. Cleanup does not relink,
-so cleanup never repairs that case.
-
-Because the cause is unknown, V1 checks the remedy as well as the detector: whether
-`brew cleanup --prune-prefix` clears a planted dangling `opt` link.
+An unlinked keg means a link step failed partway through an upgrade. Cleanup does not relink, so
+cleanup never repairs that case.
 
 The gap is detection. A degraded prefix stays silent until a tool fails to run, and on
 2026-10-04 the update summary said `[OK]` over it.
@@ -59,15 +65,19 @@ The gap is detection. A degraded prefix stays silent until a tool fails to run, 
 Homebrew already checks both conditions (`Library/Homebrew/diagnostic.rb`).
 
 - `check_for_broken_symlinks` (`:451`) walks the same `Keg.must_exist_subdirectories` that
-  cleanup prunes.
+  cleanup prunes, with the same `resolved_path_exists?` test.
 - `check_for_unlinked_but_not_keg_only` (`:1194`) lists every Cellar rack that has no
   `var/homebrew/linked` entry and is not keg-only. It rescues `UntrustedTapError` as keg-only
   (`:1200`), so a keg from an untrusted tap is never reported. That limit is Homebrew's, and
   this check inherits it.
 
 `brew doctor <check> <check>` runs only the named checks (`cmd/doctor.rb:55`), and
-`brew doctor --list-checks` lists both names. An unknown name gives rc 1. dotfiles calls this
-command and does not walk the prefix itself.
+`brew doctor --list-checks` lists both names. An unknown name gives rc 1 with
+`Error: No check available by the name: …`. dotfiles calls this command and does not walk the
+prefix itself.
+
+A hidden `brew doctor --json` (added 2026-07-17) is not used. Being hidden, it is no more of a
+contract than the text, and it gives broken-symlink paths only inside message text.
 
 **What a probe can still write.** `brew doctor` does not change link state, but it is not
 side-effect free:
@@ -87,8 +97,8 @@ no local core tap, `diagnostic.rb:1202` maps `FormulaUnavailableError` to "not k
 every keg-only rack would read as unlinked.
 
 Both writes are accepted. They are what any interactive `brew` command does. A `timeout` kill
-during a pour is the one harmful case, and the 60 s bound sits well above the 6 s worst
-measured run.
+during a pour is the one harmful case, and the 60 s bound sits well above the 6 s worst measured
+run.
 
 ### Unit
 
@@ -102,14 +112,13 @@ measured run.
 3. The entries of `_BREW_FALLBACK_PATHS`, in order. The default is `/opt/homebrew/bin/brew`,
    then `/usr/local/bin/brew`, then `/home/linuxbrew/.linuxbrew/bin/brew`.
 
-The fixed paths matter because `-t doctor` bypasses the brew prereq and can run over `ssh`,
-cron or launchd. linuxbrew's `PATH` entry exists only in interactive zsh (`CLAUDE.md`, Linux
+The fixed paths matter because `-t doctor` bypasses the brew prereq and can run over `ssh`, cron
+or launchd. linuxbrew's `PATH` entry exists only in interactive zsh (`CLAUDE.md`, Linux
 workstation brew PATH).
 
-A `_BREW_BIN` that is set but not executable prints a WARN that names it. It never falls
-through to resolution, because an override the operator named must not be silently replaced.
-When no candidate resolves, the check prints `  brew not found — skipped` and changes no
-counter.
+A `_BREW_BIN` that is set but not executable prints a WARN that names it. It never falls through
+to resolution, because an override the operator named must not be silently replaced. When no
+candidate resolves, the check prints `  brew not found — skipped` and changes no counter.
 
 **Timeout resolution, first hit wins:**
 
@@ -117,26 +126,38 @@ counter.
 2. The entries of `_TIMEOUT_FALLBACK_PATHS`, in order. The default is
    `/opt/homebrew/bin/gtimeout`, then `/usr/local/bin/gtimeout`.
 
-Measured 2026-10-20: over `ssh studio`, `command -v timeout` prints nothing, while
-`/opt/homebrew/bin/gtimeout` exists. Without the fallback, the bound would be missing in exactly
-the contexts the brew fallbacks exist for.
+Measured 2026-10-20 over `ssh studio`:
+
+- `command -v timeout` prints nothing, and `/usr/bin/timeout` is absent.
+- `/opt/homebrew/bin/gtimeout` exists. It is GNU coreutils 9.12 with the same arguments, and
+  `gtimeout 1 sleep 3` gives rc 124.
+
+Without the fallback, the bound would be missing in exactly the contexts the brew fallbacks
+exist for.
 
 **Probe:**
 
 ```bash
+local _out _rc
 if [[ -n "${_timeout_bin}" ]]; then
   _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_timeout_bin}" "${_DOCTOR_BREW_TIMEOUT:-60}" \
-    "${_brew}" doctor check_for_broken_symlinks check_for_unlinked_but_not_keg_only \
+    "${_brew}" doctor --quiet check_for_broken_symlinks check_for_unlinked_but_not_keg_only \
     </dev/null 2>&1)"
 else
-  _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_brew}" doctor \
+  _out="$(HOMEBREW_NO_AUTO_UPDATE=1 "${_brew}" doctor --quiet \
     check_for_broken_symlinks check_for_unlinked_but_not_keg_only </dev/null 2>&1)"
 fi
 _rc=$?
 ```
 
-- stdout and stderr go to one variable. Findings arrive on stderr as `Warning: …`, and the
-  "ready" line on stdout.
+- Declare `_out` and `_rc` before the assignment. Never write `local _out="$(…)"`: `local`'s own
+  status replaces the command's and `_rc` reads 0. Measured in bash: the form above captures
+  rc 124 and rc 3, and the `local` form captures 0.
+- `--quiet` drops the "Please note that these warnings are just used to help the Homebrew
+  maintainers…" preamble that `cmd/doctor.rb` prints before the first finding
+  (`if first_warning && !args.quiet?`). It also drops the "ready" line, which does not matter:
+  the verdict comes from the rc. Findings still print.
+- stdout and stderr go to one variable. Findings arrive on stderr as `Warning: …`.
 - When no `timeout` resolves, the probe runs unbounded. This is the same accepted degrade
   `_doctor_check_dev_tools` documents, and its `[[ -n ]]` branch is the model here.
 - The bound is a separate `_DOCTOR_BREW_TIMEOUT` with a 60 s default. It is not
@@ -149,31 +170,39 @@ _rc=$?
 - Lines starting with `==>` or `✔` are progress output (the API download, a Ruby pour) and are
   skipped everywhere.
 - **Broken symlinks.** The header is a line containing `Broken symlinks were found`. Its entries
-  are the indented lines that follow, up to the next unindented line.
+  are the indented lines that follow, up to the next blank or unindented line. `append_indented_list`
+  (`diagnostic.rb:86`) renders each as `  <path>`, and a blank line and
+  ``Remove them with `brew cleanup` `` follow the list.
 - **Unlinked kegs.** The header is a line containing `You have unlinked kegs in your Cellar`.
   Homebrew prints two unindented explanation lines after it, then ``Run `brew link` on these:``,
   then the indented kegs (`diagnostic.rb:1209-1218`). So the keg list is anchored on the
   ``Run `brew link` on these:`` line, not on the header.
+- Colour wraps only `Warning:`, so a "contains" header match survives it.
 
-**Verdicts:**
+**Verdicts.** Every verdict is one line, in the compact shape `_doctor_check_pyenv_shims` already
+uses (`lib/helpers.sh:1378`, `missing: N entries (a, b…) — run: pyenv rehash`). `doctor_warn`
+prints a single line, so no detail carries a newline.
 
 | Probe result | Verdict | Detail |
 | --- | --- | --- |
 | rc 0 | `doctor_pass "brew links"` | none |
-| rc 1, broken-symlinks header present | one `doctor_warn "brew links"` | the paths, then `run: brew cleanup --prune-prefix` |
-| rc 1, unlinked-kegs header present | one `doctor_warn "brew links"` | the kegs, then one `run: brew link <keg>` line per keg, with the real keg name |
-| rc 1, neither header | `doctor_warn "brew links"` | `brew doctor rc 1:` plus the first non-progress, non-empty output line |
+| rc 1, broken-symlinks header present | one `doctor_warn "brew links"` | `broken symlinks: <N> (<path>, <path>…) — run: brew cleanup --prune-prefix` |
+| rc 1, unlinked-kegs header present | one `doctor_warn "brew links"` | `unlinked kegs: <N> (<keg>, <keg>…) — run: brew link <every keg>` |
+| rc 1, neither header | `doctor_warn "brew links"` | `brew doctor rc 1:` plus the first line starting `Warning:` or `Error:`, else the first non-progress, non-empty line |
 | rc 124 with a timeout resolved | `doctor_warn "brew links"` | `brew doctor did not finish in <N>s` |
-| any other rc | `doctor_warn "brew links"` | `brew doctor rc <N>:` plus the last non-progress, non-empty output line |
+| any other rc | `doctor_warn "brew links"` | `brew doctor rc <N>:` plus the last non-progress, non-empty line |
 
-When both headers are present, each produces its own WARN, so there are 2. Each list is capped
-at 10 entries. Past that, a final `… <M> more` line follows, and the `brew link` lines are capped
-the same way.
+When both headers are present, each produces its own WARN, so there are 2. The names shown in
+parentheses are capped at 10, ending with `… <M> more` past that.
 
-`brew cleanup --prune-prefix` prunes only the prefix symlinks and directories and removes no
-other files (its `--help` text, on both the Studio and `claude`). A bare `brew cleanup` would also
-delete old kegs and caches. A conflicting link makes `brew link` fail with its own message naming
-`--overwrite`, and the check does not repeat it.
+The `brew link` command names every keg, not just the 10 shown. `brew link` takes several
+formulae in one call, so it is one paste however many kegs there are. A conflicting link makes
+`brew link` fail with its own message naming `--overwrite`, and the check does not repeat it.
+
+`brew cleanup --prune-prefix` deletes no kegs, caches or logs. It does remove every broken link,
+every empty directory (and every directory holding only `.DS_Store`, `utils/path.rb:64-73`) under
+the prune directories, and broken `Caskroom` links (`cleanup.rb:977-1027`). That is the same prune
+a bare `brew cleanup` runs on every `-t update`, so recommending it adds no new kind of deletion.
 
 Findings are WARN, not FAIL:
 
@@ -187,7 +216,8 @@ closed. Trusting rc 0 is right, because `cmd/doctor.rb:72` sets `Homebrew.failed
 ### Fixtures
 
 Stub outputs are not typed by hand. V1 captures them from the real probe on the Studio, run bare
-(`brew doctor <the two checks> 2>&1`), never through `-t doctor`, whose rendering is not raw.
+with the probe's own argv (`brew doctor --quiet <the two checks> 2>&1`), never through
+`-t doctor`, whose rendering is not raw.
 
 - `tests/fixtures/brew/doctor-broken-symlinks.txt` is captured with one planted dangling link.
 - `tests/fixtures/brew/doctor-unlinked-kegs.txt` is captured with one keg unlinked.
@@ -197,44 +227,65 @@ operator's "yes" before they run.
 
 ### Tests
 
-`tests/helpers/common.bash` `load_mocks` exports `_BREW_BIN` to a recording stub that prints
-`Your system is ready to brew.` and exits 0. That is the same pattern as `_BREW_AZ_BIN` and
-`_CARGO_BIN`. It does two things:
+`tests/helpers/common.bash` `load_mocks` exports two things at setup scope (tdd-009). This is the
+same pattern as `_BREW_AZ_BIN` and `_CARGO_BIN`.
+
+- **`_BREW_BIN`** points to a recording stub that prints nothing and exits 0. The stub logs its
+  argv under `BATS_TEST_TMPDIR`, never through a `${MOCK_CALLS_FILE:-/tmp/mock_calls}` fallback.
+- **`_BREW_FALLBACK_PATHS`** is set to `"${BATS_TEST_TMPDIR:-/nonexistent}/no-brew"`.
+
+Both are `export`, not plain assignment. Three existing tests reach the check through a
+subprocess and depend on the exported values: `unit.bats:555` and `:1472` run
+`bash setup_env.sh -t doctor`, and `:1960` runs an unstubbed `run_doctor` on the unmocked `PATH`.
+
+What this guarantees:
 
 - No `run_doctor` test reaches `tests/mocks/brew`'s `*)` arm.
-- No `run_doctor` test reaches a real brew, which would write 37 MB of API cache into the fake
-  `HOME`.
+- No test reaches a real brew through `command -v` or through a fallback path. Every machine the
+  suite runs on has a real brew at a default fallback path: `claude`, GitHub's ubuntu image (off
+  `PATH`) and the macOS runner.
+- With `BATS_TEST_TMPDIR` empty, the stub path becomes `/nonexistent/…`. R4 then gives a WARN,
+  which fails closed.
 
-Existing `run_doctor` tests that assert counts are updated for the one added PASS.
+No existing count assertion changes. The `run_doctor` asserts count fails and warnings, never
+passes.
 
 `tests/setup_env/doctor_brew_links.bats` points `_BREW_BIN` at a per-test stub in
 `BATS_TEST_TMPDIR`. The stub prints a fixture, exits with a chosen rc, and appends its argv to a
 call log.
 
-- **Brew absent everywhere.** Unset `_BREW_BIN`, set `_BREW_FALLBACK_PATHS` to a missing path,
-  and run the check under a scoped `PATH`: a private directory of `#!/bin/bash` stubs for the
-  commands the check needs, with no `brew`. This is the mechanism the dev-tools timeout tests use;
-  the inherited `PATH` is never edited. Result: the skip line, and pass, warn and fail unchanged.
+- **Brew absent everywhere.** Unset `_BREW_BIN`, set `_BREW_FALLBACK_PATHS` to a missing path, and
+  run the check under a scoped `PATH`: a private directory of `#!/bin/bash` stubs for the commands
+  the check needs, with no `brew`. This is the mechanism the dev-tools timeout tests use; the
+  inherited `PATH` is never edited. Result: the skip line, and pass, warn and fail unchanged.
+- **`command -v` wins.** `_BREW_BIN` unset, a brew stub on the scoped `PATH`, and the fallback list
+  pointing at a second stub. Only the `PATH` stub's log records a call.
+- **Fallback used.** `_BREW_BIN` unset, no brew on the scoped `PATH`, and `_BREW_FALLBACK_PATHS`
+  listing a missing path then a stub. The stub's log records the call.
 - **`_BREW_BIN` not executable.** WARN naming the path, and the call log stays empty.
 - **rc 0.** One PASS, and the call log holds exactly one call whose argv is
-  `doctor check_for_broken_symlinks check_for_unlinked_but_not_keg_only`.
-- **Broken-symlinks fixture, rc 1.** One WARN containing the fixture's path and
+  `doctor --quiet check_for_broken_symlinks check_for_unlinked_but_not_keg_only`.
+- **Broken-symlinks fixture, rc 1.** One WARN line containing the fixture's path and
   `brew cleanup --prune-prefix`.
-- **Unlinked-keg fixture, rc 1.** One WARN containing the fixture's keg and
+- **Unlinked-keg fixture, rc 1.** One WARN line containing the fixture's keg and
   `brew link <that keg>`.
-- **Both fixtures concatenated, rc 1.** Exactly 2 WARNs.
-- **A fixture prefixed with captured `==> Downloading Homebrew API data` and `✔︎ JSON API …`
-  lines, rc 1.** The same WARN as without them.
-- **Unrecognised output, rc 1.** WARN containing `rc 1`, and PASS unchanged.
+- **Both fixtures concatenated, rc 1.** Exactly 2 WARN lines.
+- **Progress lines.** A fixture prefixed with captured `==> Downloading Homebrew API data` and
+  `✔︎ JSON API …` lines, rc 1: the same WARN as without them.
+- **Unrecognised output, rc 1.** Output whose first line is progress and whose second is
+  `Warning: Something new`: one WARN whose detail is `brew doctor rc 1: Warning: Something new`.
+  PASS is unchanged.
 - **Timeout.** A stub that sleeps, under `_DOCTOR_BREW_TIMEOUT=1` with a resolved timeout: WARN
   containing `did not finish`.
-- **No timeout.** Scoped `PATH` without `timeout` and `_TIMEOUT_FALLBACK_PATHS` set to a missing
+- **No timeout.** Scoped `PATH` without `timeout`, and `_TIMEOUT_FALLBACK_PATHS` set to a missing
   path. The stub still runs, the verdict is PASS, and nothing reports rc 127.
 - **Timeout via fallback.** Scoped `PATH` without `timeout`, and `_TIMEOUT_FALLBACK_PATHS` pointing
   at a recording wrapper for the real `timeout`. The wrapper's log shows it was called with the
-  bound.
+  bound. The real `timeout` is located as `doctor_dev_tools.bats:45-48` does, and the test skips
+  when there is none; on macOS, `timeout` may exist only under gnubin.
 - **rc 3.** WARN containing `rc 3`.
-- **12 paths.** 10 paths and `… 2 more`.
+- **12 paths.** 10 names shown and `… 2 more`.
+- **12 kegs.** 10 names shown and `… 2 more`, and the `brew link` command names all 12.
 - **`run_doctor`.** It calls `_doctor_check_brew_links`. Run `run_doctor` with the check stubbed to
   record a call.
 
@@ -245,20 +296,20 @@ one-line rule in `CLAUDE.md` Test Seams, in the same change.
 ## Requirements
 
 - **R1.** `[PR1]` `run_doctor` calls `_doctor_check_brew_links` directly after `_doctor_check_gnu_coreutils`.
-- **R2.** `[PR1]` The probe runs `brew doctor check_for_broken_symlinks check_for_unlinked_but_not_keg_only` with `HOMEBREW_NO_AUTO_UPDATE=1` and stdin from `/dev/null`, and never sets `HOMEBREW_NO_INSTALL_FROM_API`.
-- **R3.** `[PR1]` Brew resolves from `_BREW_BIN`, then `command -v brew`, then `_BREW_FALLBACK_PATHS` (default `/opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew`), first hit wins.
+- **R2.** `[PR1]` The probe runs `brew doctor --quiet check_for_broken_symlinks check_for_unlinked_but_not_keg_only` with `HOMEBREW_NO_AUTO_UPDATE=1` and stdin from `/dev/null`, and never sets `HOMEBREW_NO_INSTALL_FROM_API`.
+- **R3.** `[PR1]` Brew resolves from `_BREW_BIN`, then `command -v brew`, then `_BREW_FALLBACK_PATHS` (default `/opt/homebrew/bin/brew /usr/local/bin/brew /home/linuxbrew/.linuxbrew/bin/brew`), first hit wins, and a test covers each of the three sources winning.
 - **R4.** `[PR1]` A set but non-executable `_BREW_BIN` produces a WARN naming it and the probe does not run.
 - **R5.** `[PR1]` With no brew resolvable, the check prints `brew not found — skipped` and changes no doctor counter.
 - **R6.** `[PR1]` Timeout resolves from `command -v timeout`, then `_TIMEOUT_FALLBACK_PATHS` (default `/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout`); when one resolves the probe is bounded by `_DOCTOR_BREW_TIMEOUT` (default 60 s), and when none resolves the probe runs unbounded and its rc is judged as if no timeout were involved.
 - **R7.** `[PR1]` rc 0 produces exactly one PASS labelled `brew links`.
-- **R8.** `[PR1]` rc 1 produces one WARN per recognised finding, listing at most 10 entries plus a `… <M> more` line; the broken-symlinks WARN names `brew cleanup --prune-prefix` and the unlinked-kegs WARN gives one `brew link <keg>` line per listed keg with the real keg name.
+- **R8.** `[PR1]` rc 1 produces one single-line WARN per recognised finding, showing the count and at most 10 names plus `… <M> more`; the broken-symlinks WARN ends `run: brew cleanup --prune-prefix` and the unlinked-kegs WARN ends `run: brew link` followed by every unlinked keg name.
 - **R9.** `[PR1]` The unlinked-keg list is read from the indented lines after ``Run `brew link` on these:``, and lines starting with `==>` or `✔` are never parsed as entries or used as detail.
-- **R10.** `[PR1]` rc 1 with no recognised finding, rc 124 with a resolved timeout, and any other non-zero rc each produce a WARN and never a PASS.
+- **R10.** `[PR1]` rc 1 with no recognised finding, rc 124 with a resolved timeout, and any other non-zero rc each produce a WARN and never a PASS; the rc 1 detail is the first `Warning:` or `Error:` line when one exists.
 - **R11.** `[PR1]` No outcome of this check calls `doctor_fail`.
-- **R12.** `[PR1]` `load_mocks` exports `_BREW_BIN` to a recording stub that exits 0.
-- **R13.** `[PR1]` Test fixtures for the two findings are files under `tests/fixtures/brew/` captured from the bare real probe in V1.
+- **R12.** `[PR1]` `load_mocks` exports `_BREW_BIN` to a recording stub that exits 0 and logs under `BATS_TEST_TMPDIR`, and exports `_BREW_FALLBACK_PATHS` to a missing path under `BATS_TEST_TMPDIR`.
+- **R13.** `[PR1]` Test fixtures for the two findings are files under `tests/fixtures/brew/` captured from the bare real probe in V1 with R2's argv.
 - **R14.** `[PR1]` `_BREW_BIN`, `_BREW_FALLBACK_PATHS`, `_TIMEOUT_FALLBACK_PATHS` and `_DOCTOR_BREW_TIMEOUT` are documented in `dotfiles-test-seams.md` and as a one-line rule in `CLAUDE.md` Test Seams.
-- **V1.** On the Studio, with the operator's "yes" before each step: (a) Plant `ln -s /nonexistent /opt/homebrew/opt/zz-doctor-probe`. Run the bare probe and save its output as the broken-symlinks fixture. (b) Run `brew cleanup --prune-prefix`. Re-run the bare probe and confirm rc 0. Confirm `find -L /opt/homebrew/opt -maxdepth 1 -type l` returns 0, then `rm -f` the link if it is still present. (c) Choose a `<keg>` that is not keg-only and for which `brew uses --installed <keg>` prints nothing. Run `brew unlink <keg>`, run the bare probe, save its output as the unlinked-kegs fixture, then run `brew link <keg>`. Confirm `brew link` exits 0 and `/opt/homebrew/var/homebrew/linked/<keg>` exists. (d) Once the branch is built, run `./setup_env.sh -t doctor` once with a planted link and confirm the WARN renders with the path and the remedy. Remove the link again.
+- **V1.** On the Studio, with the operator's "yes" before each step: (a) Immediately before, confirm `find -L /opt/homebrew/opt -maxdepth 1 -type l` returns 0. Plant `ln -s /nonexistent /opt/homebrew/opt/zz-doctor-probe`, run the bare probe with R2's argv and save its output as the broken-symlinks fixture, then `rm` the link and confirm the `find` returns 0 again. (b) Choose a `<keg>` that is not keg-only and for which `brew uses --installed <keg>` prints nothing. Run `brew unlink <keg>`, run the bare probe and save its output as the unlinked-kegs fixture, then run `brew link <keg>`; confirm `brew link` exits 0 and `/opt/homebrew/var/homebrew/linked/<keg>` exists. (c) Once the branch is built, plant the link again, run `./setup_env.sh -t doctor` once, confirm the single-line WARN shows the path and `brew cleanup --prune-prefix`, then `rm` the link and confirm the `find` returns 0.
 - **V2.** On the Studio and on `claude`, the merged check on the real, clean prefix prints PASS for `brew links`.
 - **V3.** On `claude`, `env -i HOME="${HOME}" PATH=/usr/bin:/bin bash ./setup_env.sh -t doctor` (brew not on `PATH`, as for ssh, cron and launchd) still finds linuxbrew through the fallback paths and prints PASS rather than the skip line.
 - **N1.** `brew_update` and every `-t update` section are unchanged.
@@ -387,3 +438,103 @@ Disposition: Addressed (1-6), Accepted (smaller points). Operator 2026-10-20: "I
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review — Round 2
+
+Reviewed at commit: `cb25381c` (round-1 revision). All three lenses re-ran, because round 1
+changed design substance.
+
+### Goal-Fit (round 2)
+
+Finding:
+
+1. V1(b) cannot fail. The detector and the remedy share one walk (`Keg.must_exist_subdirectories`)
+   and one test (`Utils::Path.resolved_path_exists?`, `utils/path.rb:89`), so a planted
+   `/nonexistent` link passes by construction. It also cannot tell apart the two readings of
+   2026-10-04:
+   - The links broke after cleanup, and the check catches them.
+   - Homebrew's test did not count them as broken, and the check misses them.
+2. Hidden `brew doctor --json` (added 2026-07-17) gives `affects` and `remediation.commands` for
+   unlinked kegs, but not paths for broken symlinks. It is not a public contract.
+3. With any finding present, the "neither header" detail is always Homebrew's "Please note…"
+   preamble.
+
+Assumption: the 2026-10-04 links broke after `brew cleanup`'s prune ran.
+
+Orchestrator check 2026-10-20, Studio Homebrew source:
+
+- The prune runs last in `clean!` (`cleanup.rb:448-482`).
+- `resolved_path_exists?` is `path.dirname.join(path.readlink).exist?`, which follows the whole
+  chain and so is effectively the test `find -L` makes.
+- `git log -S resolved_path_exists` shows its last change on 2026-09-05, before the incident.
+
+So the second reading needs links that `find -L` reports and Homebrew's test does not, and that
+does not happen for an ordinary dangling link. The first reading holds.
+
+Disposition: Addressed (1, 3), Accepted (2). Operator 2026-10-20: "Accepted".
+
+- 1: V1(b) removed. The mechanism paragraph rewritten as the source-derived conclusion.
+- 3: `--quiet` added (R2), and the fallback detail prefers a `Warning:` or `Error:` line (R10).
+- 2, accepted: the switch is hidden, so it is no more stable than the text, and it does not give
+  broken-symlink paths.
+
+### Ergonomics (round 2)
+
+Finding:
+
+1. The multi-line WARN detail would break `doctor_warn`'s single-line layout. Ten `brew link`
+   lines means ten pastes, and `brew link` takes several formulae at once. Use the one-line
+   pyenv-shims shape (`lib/helpers.sh:1378`).
+2. The "neither header" detail is the "Please note…" preamble. `--quiet` removes it.
+
+Premise verified: the two checks are clean on both machines. The Studio has 238 racks, 215
+linked entries and 23 keg-only racks, and raises no WARN.
+
+Assumption: same as Goal-Fit round 2, settled as recorded there.
+
+Disposition: Addressed. Operator 2026-10-20: "Accepted".
+
+- 1: single-line WARNs. Names are capped at 10, and one `brew link` command names every keg
+  (R8).
+- 2: `--quiet` (R2).
+
+### Risk (round 2)
+
+Finding:
+
+1. `_BREW_FALLBACK_PATHS` still defaults to real paths, and every machine the suite runs on has a
+   real brew at one of them. `load_mocks` must also export it to a missing path. The stub must log
+   under `BATS_TEST_TMPDIR`, not `${MOCK_CALLS_FILE:-/tmp/mock_calls}`. The export is load-bearing
+   for `unit.bats:555`, `:1472` and `:1960`.
+2. R3's resolution order is untested.
+3. The fallback detail is the "Please note…" preamble.
+4. V1(b) has no pre-check, and its post-check covers only `opt`.
+5. `--prune-prefix` also removes empty and `.DS_Store`-only directories. Studio blast radius
+   today: 0 empty directories and 0 broken links across the prune dirs and `Caskroom`.
+
+Checked clean:
+
+- (a) `_rc=$?` after the if/else captures the rc. The `local _out="$(…)"` form does not, which was
+  measured.
+- (c) `gtimeout` has compatible arguments.
+- (e) No existing count assertion breaks.
+
+Assumption: same as Goal-Fit round 2, settled as recorded there.
+
+Disposition: Addressed (1-4), Accepted (5). Operator 2026-10-20: "Accepted".
+
+- 1: R12 now exports both values, with the log under `BATS_TEST_TMPDIR`.
+- 2: two resolution tests, and R3 requires them.
+- 3: R10.
+- 4: V1(b) removed; V1(a) and V1(c) check the `find` before and after.
+- Smaller: the probe declares `local` first; the gtimeout-fallback test finds the real `timeout` as
+  `doctor_dev_tools.bats:45-48` does; the "update existing count asserts" line is dropped.
+- 5, accepted: a bare `brew cleanup` runs the same prune on every `-t update`. The Design now
+  states what the prune removes.
+
+### Stopping
+
+Round 2's findings land in the apparatus (test isolation, fixture argv, output layout), except
+Goal-Fit 1. That one was settled from source rather than by another round. The round-2
+corrections removed V1(b) and replaced multi-line output with a single line, so the design
+shrank. Both stop signals agree, and the operator accepted stopping after round 2.
