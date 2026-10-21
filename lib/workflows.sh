@@ -613,7 +613,13 @@ _require_npm_pins() {
 }
 
 run_developer_or_ansible() {
+  local _gh_rc=0
   _dotfiles_run_tmpdir_setup || return 1
+  # gh runs first and non-fatally: an apt-source failure must not cost the npm,
+  # ruby and ansible steps after it. The partial is warned and ledgered below.
+  if [[ -n ${LINUX} ]]; then
+    install_github_cli_linux || _gh_rc=2
+  fi
   _require_npm_pins || return 1
   printf "Installing json2yaml via npm\n"
   npm install -g "json2yaml@${JSON2YAML_VER}" || return 1
@@ -629,12 +635,12 @@ run_developer_or_ansible() {
 
   install_ruby_tools || return 1
   install_ruby || return 1
-  if [[ -n ${LINUX} ]]; then
-    install_github_cli_linux || return 1
-  fi
   setup_ansible || return 1
   clone_personal_repos
-  _ledger_write_run_entry "developer" 0 || true
+  if [[ ${_gh_rc} -ne 0 ]]; then
+    log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings at the start of this run"
+  fi
+  _ledger_write_run_entry "developer" "${_gh_rc}" || true
 }
 
 run_recreate_venv() {
