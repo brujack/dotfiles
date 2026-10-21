@@ -539,3 +539,31 @@ Round 2's findings land in the apparatus (test isolation, fixture argv, output l
 Goal-Fit 1. That one was settled from source rather than by another round. The round-2
 corrections removed V1(b) and replaced multi-line output with a single line, so the design
 shrank. Both stop signals agree, and the operator accepted stopping after round 2.
+
+## Amendments
+
+- finding R14 (2026-10-21, reviewer both): NOT-BUILT — CLAUDE.md:447 adds the one-line Test Seams rule naming all four variables and pointing to 'dotfiles-test-seams.md § doctor brew links seams', but the diff contains no change to dotfiles-test-seams.md, so the seam documentation itself is not present.
+- R14 -> `_BREW_BIN`, `_BREW_FALLBACK_PATHS`, `_TIMEOUT_FALLBACK_PATHS` and `_DOCTOR_BREW_TIMEOUT` are documented as a one-line rule in `CLAUDE.md` Test Seams in this repo and in ai-config's `docs/knowledge/dotfiles-test-seams.md` § `doctor brew links seams` (ai-config e1a56bdb). — the knowledge file lives in ai-config, so its half can never appear in this repo's diff; it landed on ai-config master separately.
+
+## Spec alignment (2026-10-21)
+
+- spec: docs/superpowers/specs/2026-10-20-doctor-brew-links-design.md
+- anchor: 60648700f70579cbdb0f748119f1d594d6c7ba74
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R14 | both | NOT-BUILT | CLAUDE.md:447 adds the one-line Test Seams rule naming all four variables and pointing to 'dotfiles-test-seams.md § doctor brew links seams', but the diff contains no change to dotfiles-test-seams.md, so the seam documentation itself is not present. | - R14 -> `_BREW_BIN`, `_BREW_FALLBACK_PATHS`, `_TIMEOUT_FALLBACK_PATHS` and `_DOCTOR_BREW_TIMEOUT` are documented as a one-line rule in `CLAUDE.md` Test Seams in this repo and in ai-config's `docs/knowledge/dotfiles-test-seams.md` § `doctor brew links seams` (ai-config e1a56bdb). — the knowledge file lives in ai-config, so its half can never appear in this repo's diff; it landed on ai-config master separately. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: (a) and (b) done 2026-10-20 on the Studio with the operator's yes: the find was 0 before, the planted link probe gave rc 1, the link was removed and the find was 0 after; `brew unlink tree`, probe rc 1, then `brew link tree` rc 0 and linked/tree restored. Both fixtures committed as 49cb7994. (c) runs after merge.
+- V2: Pre-merge on claude: the Phase 3 bug-scan ran the real linuxbrew probe, which returned rc 0 in 1.5 s, and the check reported [PASS] brew links. The Studio leg and the merged-tree run happen after merge.
+- V3: Post-merge: not yet run.

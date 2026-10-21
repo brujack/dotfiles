@@ -45,6 +45,24 @@ exit "${MOCK_BREW_AZ_EXIT:-0}"
 STUB
     chmod +x "${_BREW_AZ_BIN}"
   fi
+  # Every CI and fleet machine has a real brew at a default fallback path
+  # (claude and GitHub's ubuntu image have /home/linuxbrew/.linuxbrew/bin/brew,
+  # often on PATH too; the macOS runner has /opt/homebrew/bin/brew), so without these
+  # defaults a run_doctor test would run real brew from a fake HOME (37 MB API
+  # cache, possible portable-Ruby pour). Both are exported because
+  # tests/setup_env/unit.bats reaches the check through a subprocess
+  # (`bash setup_env.sh -t doctor`). The stub logs to a path fixed at write
+  # time, never a ${MOCK_CALLS_FILE:-/tmp/...} fallback.
+  export _BREW_BIN="${BATS_TEST_TMPDIR:-/nonexistent}/brew-stub"
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    cat > "${_BREW_BIN}" << STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${BATS_TEST_TMPDIR}/brew-calls"
+exit 0
+STUB
+    chmod +x "${_BREW_BIN}"
+  fi
+  export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR:-/nonexistent}/no-brew"
   # inotify step/doctor seams: the real conf, /proc file and sysctl binary must
   # never be reached (tdd.md E2). Live value starts at 1024 so no apply happens
   # unless a test lowers it.

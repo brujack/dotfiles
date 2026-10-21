@@ -1,0 +1,5 @@
+
+Warning: Broken symlinks were found:
+  /opt/homebrew/opt/zz-doctor-probe
+
+Remove them with `brew cleanup`

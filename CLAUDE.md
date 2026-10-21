@@ -444,6 +444,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Drive the doctor probe timeout with a sleeping stub under `_DOCTOR_PROBE_TIMEOUT=1`, never the real 10 s default. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: doctor probe timeout seam`
 
+- Drive `_doctor_check_brew_links` only through `_BREW_BIN` and `_BREW_FALLBACK_PATHS` (`load_mocks` stubs both, since every fleet and CI box has a real brew at a fallback path) and its bound only through `_TIMEOUT_FALLBACK_PATHS` and `_DOCTOR_BREW_TIMEOUT`; reach the no-brew and no-timeout branches with a per-call scoped `PATH` of stubs (`PATH="${_BIN_DIR}" <call>`), never by editing the inherited `PATH`. → `dotfiles-test-seams.md` § `doctor brew links seams`
+
 - Override `_CRATES_API` for any `CARGO_TOOLS` staleness test that needs an unreachable crates.io. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: crates api seam`
 
 - Set the sysctl seams (`_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC`, `_SYSTEMD_RUN_DIR` and `_KEYS_MAXKEYS_CONF`, `_KEYS_MAXKEYS_PROC`, `_KEYS_MAXBYTES_CONF`, `_KEYS_MAXBYTES_PROC`) under `BATS_TEST_TMPDIR` (`load_mocks` does) so `sudo`/`sysctl` never reach the real `/etc/sysctl.d` or kernel; a test reaching the real inotify step sets or unsets `HAS_DOCKER` itself (developer shells export it); no test runs the step with `_SYSCTL_CONF` unset (`_sysctl_conf_write` is tested behind a recording `sudo` shim). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: sysctl and kernel keys seams`
