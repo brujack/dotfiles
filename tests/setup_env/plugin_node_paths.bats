@@ -159,6 +159,9 @@ _make_plugin() {
   chmod 644 "${_dir}/hooks/hooks.json"
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot repair ${_dir}/hooks/hooks.json: rewrite failed"* ]]
+  # The -w refusal must stop the attempt before any copy of this file.
+  run grep -qF "cp -p ${_dir}/hooks/hooks.json" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
   grep -qF "${STALE_NODE}" "${_dir}/hooks/hooks.json"
   grep -qF "\"command\":\"${STABLE_NODE}\"" "${_dir}/.claude-plugin/plugin.json"
 }
@@ -177,6 +180,7 @@ _make_plugin() {
   [[ "$output" == *"rewrite failed"* ]]
   cmp "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
   run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
   [[ "$output" != *"hooks.json."* ]]
 }
 
@@ -207,6 +211,7 @@ _make_plugin() {
   [[ "$output" == *"rewrite failed"* ]]
   cmp "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
   run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
   [[ "$output" != *"hooks.json."* ]]
 }
 
@@ -223,6 +228,7 @@ _make_plugin() {
   grep -qF "${STABLE_NODE}" "${_file}"
   refute_grep "${STALE_NODE}" "${_file}" -F
   run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
   [[ "$output" != *"hooks.json."* ]]
 }
 
@@ -245,6 +251,9 @@ _make_plugin() {
   chmod 644 "${_dir}/hooks/hooks.json"
   [ "$status" -eq 1 ]
   [[ "$output" == *"— check write permission and free space in ${_dir}/hooks"* ]]
+  # The -w refusal must stop the attempt before any copy of this file.
+  run grep -qF "cp -p ${_dir}/hooks/hooks.json" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
 }
 
 @test "repair_plugin_node_paths is a no-op on a second run" {

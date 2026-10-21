@@ -1592,8 +1592,8 @@ repair_plugin_node_paths() {
       continue
     fi
     _tmp=""
-    # -w first: a rename replaces a read-only file whenever its directory is
-    # writable, so refuse here what an in-place write would have refused.
+    # -w first: this keeps a deliberately read-only config in place. A rename
+    # would replace it whenever its directory is writable.
     # Quoted replacement: bash >= 5.2 expands & in an unquoted one (shell.md).
     # mktemp beside the config keeps the rename on one filesystem; cp -p
     # carries the mode, since mktemp creates 0600.
