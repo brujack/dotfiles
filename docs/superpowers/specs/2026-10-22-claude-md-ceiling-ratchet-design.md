@@ -128,6 +128,20 @@ its docs-only early exit, or a post-commit `make test`, or CI. This spec keeps t
 - **N2.** No flag, environment variable or trailer that skips or changes the ceiling (ADR-0047 decision 3 stands).
 - **N3.** No ai-config file changes.
 
+## Amendments
+
+- R4 -> `tests/test_claude_md_budget.py` tests 85,000 B allowed, 85,001 B refused and an 85,002-byte multibyte file refused; `tests/scripts/pre_push.bats` tests 85,000 B allowed and 85,001 B refused; both assert the refusal output names `85000`, `ADR-0047` and `dotfiles-*.md`; the pre-push `nochecker` case asserts the output lacks `CLAUDE.md budget check failed`; and the 85,001-byte pre-push refusal asserts the hook's closing line `Any message from git or the checker is above.` with no `105,0` figure. — the multibyte case belongs to the checker's own suite (design 3), and Task 1 review found the hook's closing line untested.
+- finding R4 (2026-10-22, reviewer A): NOT-BUILT — The bats half is present (85,000 allowed at pre_push.bats:1122, 85,001 refused asserting ADR-0047, dotfiles-*.md, 'ceiling 85000', the closing line and != '105,0' at 1106-1118, nochecker != 'CLAUDE.md budget check failed' at 1136) and the Python suite shows 85,001 refused with 85000/ADR-0047/dotfiles-*.md (74-77) and 85,002-byte multibyte refused (90-94), but no Python test of an 85,000-byte CLAUDE.md being allowed appears in the diff; it may exist unchanged and track the CEILING constant, which this diff cannot show.
+- R4 reviewed: `tests/test_claude_md_budget.py:66` `test_exactly_at_ceiling_allowed` commits `b"a" * CEILING` (the literal 85_000 at :15) and asserts exit 0; its lines are unchanged, so the diff cannot show it.
+- finding R6 (2026-10-22, reviewer both): DIFFERS — The row is moved to the closed table with 'CLOSED 2026-10-22, superseded by ADR-0047', removed from the open table, and the spec/plan are indexed at :20, but the closed row keeps its pre-closure body verbatim, so it still carries numeric bar figures ('About 85,000 units ... toward the ≤ 50,000 bar', 'the 85k figure below') — one numerically identical to the new ceiling and the old ≤ 50,000 target — rather than citing ADR-0047 with no ceiling figure.
+- R6 -> `docs/superpowers/README.md` has the relocation row in the closed table with `CLOSED 2026-10-22, superseded by ADR-0047`, not in any open table, its new Closed note citing ADR-0047 with no ceiling figure ahead of the row's earlier body, which is kept unchanged as the record of the deferral; and it indexes this spec and its plan. — the closed table keeps each row's history by design (its heading says so), and the earlier body's 85,000 is a UTF-16 relocation estimate, not a ceiling; the stale 2026-10-22 re-audit note was removed in f0c06f46.
+- finding R3 (2026-10-22, reviewer A): NOT-BUILT — The diff removes every listed figure from the lines it touches and adds none (the new bats string '105,0' is not a listed token), but a tree-wide absence cannot be shown from a diff: unchanged lines, e.g. the remainder of the multi-ref test after tests/scripts/pre_push.bats:1233, are not visible.
+- R3 reviewed: tree-wide `git grep -nE '105,000|105_000|105000|105001|105002' -- . ':!docs/superpowers/specs' ':!docs/superpowers/plans' ':!docs/adr'` at fe7ba581 exits 1 (no match), and Task 1's acceptance gate runs the same command.
+- finding R4 (2026-10-22, reviewer A): NOT-BUILT — Present: bats 85,001 refused asserting ADR-0047, dotfiles-*.md, 'ceiling 85000', the closing line and != '105,0' (pre_push.bats:1106-1119), bats 85,000 allowed (:1122), nochecker != 'CLAUDE.md budget check failed' (:1136), Python 85,001 refused naming 85000/dotfiles-*.md/ADR-0047 (test_claude_md_budget.py:74-77) and 85,002-byte multibyte refused (:90-94); absent: no Python test of an 85,000-byte CLAUDE.md allowed appears in the diff (the spec amendment claims an unchanged test at :66, which this diff cannot show).
+- R4 reviewed: `tests/test_claude_md_budget.py:66` `test_exactly_at_ceiling_allowed` commits `b"a" * CEILING` (the literal 85_000 at :15) and asserts exit 0; unchanged lines, so absent from any diff.
+- finding R6 (2026-10-22, reviewer B): DIFFERS — Closed placement, the 'CLOSED 2026-10-22, superseded by ADR-0047' title, removal from the open table, a Closed note citing ADR-0047 with no ceiling figure, and the spec/plan index row at :20 are all present, but the row's earlier body is not kept unchanged: its opening '**Re-audited 2026-10-22, partly done:** `CLAUDE.md` is 75,341 bytes ... the remaining gap is unmeasured.' sentence is dropped, only the text from 'Deferred from the 2026-09-11' onward is carried over verbatim.
+- R6 -> `docs/superpowers/README.md` has the relocation row in the closed table with `CLOSED 2026-10-22, superseded by ADR-0047`, not in any open table, its new Closed note citing ADR-0047 with no ceiling figure, followed by the row's original body from "Deferred from the 2026-09-11" onward kept unchanged as the record of the deferral (the 2026-10-22 re-audit note is dropped); and it indexes this spec and its plan. — the earlier R6 amendment said the whole earlier body was unchanged, but f0c06f46 removed the stale re-audit note on purpose.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `d1065025` (Step 7 self-review commit, before Step 8 dispatch)
@@ -161,3 +175,30 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - Risk: the closed row versus R3 (as Goal-fit); the `nochecker` test's `ADR-0047` absence assertion cannot fail once the hook stops printing the remedy. Assumption: no uncertain assumption found (no open PR, no branch over 80,000 B).
 
 Disposition: Addressed — operator 2026-10-22, all five: R8 dropped and the rate question moved into the ADR-0047 amendment (design 4, R5); the closed row cites ADR-0047, not a figure (design 5, R6); the Problem section states detection is post-commit by design (the `HEAD`-only read keeps `docs_inert_premise.bats` true), and `make test` is unchanged; the hook line reads "Any message from git or the checker is above." (R2); the `nochecker` case asserts the hook's header is absent (R4). Wording- and test-level changes with the design smaller; no round 3, by the operator's choice.
+
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-22-claude-md-ceiling-ratchet-design.md
+- anchor: 9b48042582a8d04fa2c609b62d4e752f9c230228
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R3 | A | NOT-BUILT | The diff removes every listed figure from the lines it touches and adds none (the new bats string '105,0' is not a listed token), but a tree-wide absence cannot be shown from a diff: unchanged lines, e.g. the remainder of the multi-ref test after tests/scripts/pre_push.bats:1233, are not visible. | - R3 reviewed: tree-wide `git grep -nE '105,000\|105_000\|105000\|105001\|105002' -- . ':!docs/superpowers/specs' ':!docs/superpowers/plans' ':!docs/adr'` at fe7ba581 exits 1 (no match), and Task 1's acceptance gate runs the same command. |
+| R4 | A | NOT-BUILT | Present: bats 85,001 refused asserting ADR-0047, dotfiles-*.md, 'ceiling 85000', the closing line and != '105,0' (pre_push.bats:1106-1119), bats 85,000 allowed (:1122), nochecker != 'CLAUDE.md budget check failed' (:1136), Python 85,001 refused naming 85000/dotfiles-*.md/ADR-0047 (test_claude_md_budget.py:74-77) and 85,002-byte multibyte refused (:90-94); absent: no Python test of an 85,000-byte CLAUDE.md allowed appears in the diff (the spec amendment claims an unchanged test at :66, which this diff cannot show). | - R4 reviewed: `tests/test_claude_md_budget.py:66` `test_exactly_at_ceiling_allowed` commits `b"a" * CEILING` (the literal 85_000 at :15) and asserts exit 0; unchanged lines, so absent from any diff. |
+| R6 | B | DIFFERS | Closed placement, the 'CLOSED 2026-10-22, superseded by ADR-0047' title, removal from the open table, a Closed note citing ADR-0047 with no ceiling figure, and the spec/plan index row at :20 are all present, but the row's earlier body is not kept unchanged: its opening '**Re-audited 2026-10-22, partly done:** `CLAUDE.md` is 75,341 bytes ... the remaining gap is unmeasured.' sentence is dropped, only the text from 'Deferred from the 2026-09-11' onward is carried over verbatim. | - R6 -> `docs/superpowers/README.md` has the relocation row in the closed table with `CLOSED 2026-10-22, superseded by ADR-0047`, not in any open table, its new Closed note citing ADR-0047 with no ceiling figure, followed by the row's original body from "Deferred from the 2026-09-11" onward kept unchanged as the record of the deferral (the 2026-10-22 re-audit note is dropped); and it indexes this spec and its plan. — the earlier R6 amendment said the whole earlier body was unchanged, but f0c06f46 removed the stale re-audit note on purpose. |
+
+### Reviewed
+
+- R4 reviewed: `tests/test_claude_md_budget.py:66` `test_exactly_at_ceiling_allowed` commits `b"a" * CEILING` (the literal 85_000 at :15) and asserts exit 0; its lines are unchanged, so the diff cannot show it.
+- R3 reviewed: tree-wide `git grep -nE '105,000|105_000|105000|105001|105002' -- . ':!docs/superpowers/specs' ':!docs/superpowers/plans' ':!docs/adr'` at fe7ba581 exits 1 (no match), and Task 1's acceptance gate runs the same command.
+- R4 reviewed: `tests/test_claude_md_budget.py:66` `test_exactly_at_ceiling_allowed` commits `b"a" * CEILING` (the literal 85_000 at :15) and asserts exit 0; unchanged lines, so absent from any diff.
+
+### Verifications
+
+- V1: Task 1 red step against CEILING = 105_000: python FAILED (failures=7); bats budget gate not ok 1, 4, 5, 7, 8, 10 (85,001/85,002 refusals and ADR-0047 assertions).
+- V2: make test exit 0 at 0aa8ba9a: bats 1..3360, 3360 ok, 0 not ok; python 199 tests OK; checker printed 'CLAUDE.md at HEAD is 75341 bytes (ceiling 85000).' Later commits touch only docs/superpowers/README.md and the spec.
+- V3: ListAgents 2026-10-22: no other session works in dotfiles; the ai-config session (owner of the knowledge files the remedy points at) was messaged with the 85,000 figure.

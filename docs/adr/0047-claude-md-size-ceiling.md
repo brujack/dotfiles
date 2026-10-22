@@ -29,12 +29,12 @@ Full record: `docs/superpowers/specs/2026-10-17-claude-md-budget-design.md`.
 1. **One line per rule.** `CLAUDE.md` states each rule in one line. Verbatim detail lives in
    `ai-config/docs/knowledge/dotfiles-*.md`, reached by ADR-0036's pointer
    (`` → `<file>` § `<heading>` ``).
-2. **A hard 105,000-byte ceiling.** `scripts/claude_md_budget.py` fails when `CLAUDE.md`
+2. **A hard 85,000-byte ceiling (amended 2026-10-22; see Amendments).** `scripts/claude_md_budget.py` fails when `CLAUDE.md`
    exceeds it. It runs in `scripts/pre-push`, using the checker taken from the pushed commit
    and running before the docs-only early exit so a `CLAUDE.md`-only push is checked, and in
    `make test` through the `check-claude-md-budget` target.
 3. **No override.** There is no trailer, flag or environment variable that skips or raises
-   the limit. Raising the ceiling requires an amendment to this ADR stating why.
+   the limit. Changing the ceiling, up or down, requires an amendment to this ADR stating why.
 4. **Seam routing.** A new test seam's description goes to
    `ai-config/docs/knowledge/dotfiles-test-seams.md`; `CLAUDE.md` carries only a one-line
    entry and pointer.
@@ -47,8 +47,8 @@ Full record: `docs/superpowers/specs/2026-10-17-claude-md-budget-design.md`.
 
 Two dry runs projected the compressed file at 93-99 KB: a ratio of 0.351 measured on the 15
 largest blocks, and 0.747 on a stratified sample of the remaining blocks. The shipped file
-measured about 74 KB at merge (about 70 KB before the rule-by-rule review restored 19 weakened or pointer-only rules); `wc -c CLAUDE.md` gives the current figure. 105,000 B sits above the projection with room for ordinary growth,
-and well below the 155,308 B regrowth point.
+measured about 74 KB at merge (about 70 KB before the rule-by-rule review restored 19 weakened or pointer-only rules); `wc -c CLAUDE.md` gives the current figure. The original 105,000 B ceiling sat above the projection with room for ordinary growth,
+and well below the 155,308 B regrowth point; it was lowered on 2026-10-22 (see Amendments).
 
 ## Consequences
 
@@ -61,6 +61,24 @@ and well below the 155,308 B regrowth point.
   touches two repos when it adds a seam.
 - Pointers depend on ai-config's headings, as in ADR-0036; renaming a `###` heading in a
   `dotfiles-*.md` knowledge file breaks a pointer.
+
+## Amendments
+
+### 2026-10-22: ceiling lowered to 85,000 bytes
+
+The ceiling is now an 85,000-byte ceiling. `CLAUDE.md` measured 74,272 B at `48087820` (2026-10-18)
+and 75,341 B at `74fcd339` (2026-10-21): +1,069 B over five commits. A ceiling 30,000 B above the
+file does not constrain it. 80,000 B was offered and declined as too tight.
+
+Lowering the ceiling, like raising it, requires an amendment to this ADR. The checker's refusal
+message now carries the remedy (move detail to `ai-config/docs/knowledge/dotfiles-*.md`), so
+`make test` and CI show it, not only the pre-push hook.
+
+Open question: whether the post-ceiling growth rate (about 214 B per commit) or the pre-ceiling
+rate (about 600 B per commit) holds. The next amendment records whether the first change to reach
+85,000 B relocated text or raised the ceiling.
+
+Record: `docs/superpowers/specs/2026-10-22-claude-md-ceiling-ratchet-design.md`.
 
 ## Related
 

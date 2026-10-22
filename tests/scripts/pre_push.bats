@@ -1103,22 +1103,25 @@ _budget_commit() {
   "
 }
 
-@test "budget gate refuses a CLAUDE.md-only push of 105001 bytes and names the ceiling" {
+@test "budget gate refuses a CLAUDE.md-only push of 85001 bytes and names the ceiling" {
   base_sha=$(_budget_commit 100)
-  local_sha=$(_budget_commit 105001)
+  local_sha=$(_budget_commit 85001)
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 1 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
-  [[ "$output" == *"105,000 bytes"* ]]
+  [[ "$output" == *"ADR-0047"* ]]
+  [[ "$output" == *"dotfiles-*.md"* ]]
   # The checker itself refused, not a git step failing first.
-  [[ "$output" == *"bytes, ceiling 105000"* ]]
+  [[ "$output" == *"bytes, ceiling 85000"* ]]
+  [[ "$output" == *"Any message from git or the checker is above."* ]]
+  [[ "$output" != *"105,0"* ]]
   [[ "$output" == *"refs/heads/feat/x"* ]]
 }
 
-@test "budget gate allows a CLAUDE.md of exactly 105000 bytes" {
+@test "budget gate allows a CLAUDE.md of exactly 85000 bytes" {
   base_sha=$(_budget_commit 100)
-  local_sha=$(_budget_commit 105000)
+  local_sha=$(_budget_commit 85000)
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
@@ -1126,28 +1129,29 @@ _budget_commit() {
 
 @test "budget gate does not refuse a pushed commit that predates the checker" {
   base_sha=$(_budget_commit 100 nochecker)
-  local_sha=$(_budget_commit 105001 nochecker)
+  local_sha=$(_budget_commit 85001 nochecker)
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"105,000 bytes"* ]]
+  [[ "$output" != *"CLAUDE.md budget check failed"* ]]
 }
 
 @test "budget gate runs the committed checker, not the working-tree copy" {
   base_sha=$(_budget_commit 100)
-  local_sha=$(_budget_commit 105001)
+  local_sha=$(_budget_commit 85001)
   printf 'import sys\nsys.exit(0)\n' > "${REPO_DIR}/scripts/claude_md_budget.py"
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"105,000 bytes"* ]]
+  [[ "$output" == *"ADR-0047"* ]]
+  [[ "$output" == *"dotfiles-*.md"* ]]
   # The checker itself refused, not a git step failing first.
-  [[ "$output" == *"bytes, ceiling 105000"* ]]
+  [[ "$output" == *"bytes, ceiling 85000"* ]]
 }
 
 @test "budget gate refuses a two-ref push whose first ref is over the ceiling" {
   base_sha=$(_budget_commit 100)
-  bad_sha=$(_budget_commit 105001)
+  bad_sha=$(_budget_commit 85001)
   _git_clean "checkout --quiet -B good ${base_sha}"
   good_sha=$(_budget_commit 200)
   _write_make_mock 0
@@ -1183,28 +1187,30 @@ SHIM
 @test "budget gate uses the pushed commit's checker, not HEAD's (stub checker at HEAD)" {
   base_sha=$(_budget_commit 100)
   _git_clean "checkout --quiet -B bad ${base_sha}"
-  bad_sha=$(_budget_commit 105001)
+  bad_sha=$(_budget_commit 85001)
   _git_clean "checkout --quiet -B stub ${base_sha}"
   _commit_file "scripts/claude_md_budget.py" "import sys; sys.exit(0)" "chore: stub checker" > /dev/null
   _write_make_mock 0
   run _run_pre_push "refs/heads/bad ${bad_sha} refs/heads/bad ${base_sha}\n"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"105,000 bytes"* ]]
+  [[ "$output" == *"ADR-0047"* ]]
+  [[ "$output" == *"dotfiles-*.md"* ]]
   # The checker itself refused, not a git step failing first.
-  [[ "$output" == *"bytes, ceiling 105000"* ]]
+  [[ "$output" == *"bytes, ceiling 85000"* ]]
 }
 
 @test "budget gate detects the pushed commit's checker when HEAD has none" {
   base_sha=$(_budget_commit 100 nochecker)
   _git_clean "checkout --quiet -B bad ${base_sha}"
-  bad_sha=$(_budget_commit 105001)
+  bad_sha=$(_budget_commit 85001)
   _git_clean "checkout --quiet -B none ${base_sha}"
   _write_make_mock 0
   run _run_pre_push "refs/heads/bad ${bad_sha} refs/heads/bad ${base_sha}\n"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"105,000 bytes"* ]]
+  [[ "$output" == *"ADR-0047"* ]]
+  [[ "$output" == *"dotfiles-*.md"* ]]
   # The checker itself refused, not a git step failing first.
-  [[ "$output" == *"bytes, ceiling 105000"* ]]
+  [[ "$output" == *"bytes, ceiling 85000"* ]]
 }
 
 @test "budget gate refuses when git ls-tree fails on a nonexistent local sha" {
@@ -1219,9 +1225,9 @@ SHIM
 @test "budget gate names every over-ceiling ref in a multi-ref push" {
   base_sha=$(_budget_commit 100)
   _git_clean "checkout --quiet -B one ${base_sha}"
-  one_sha=$(_budget_commit 105001)
+  one_sha=$(_budget_commit 85001)
   _git_clean "checkout --quiet -B two ${base_sha}"
-  two_sha=$(_budget_commit 105002)
+  two_sha=$(_budget_commit 85002)
   _write_make_mock 0
   run _run_pre_push "refs/heads/one ${one_sha} refs/heads/one ${base_sha}\nrefs/heads/two ${two_sha} refs/heads/two ${base_sha}\n"
   [ "$status" -eq 1 ]
