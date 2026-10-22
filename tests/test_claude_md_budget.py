@@ -12,7 +12,7 @@ import unittest.mock
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "claude_md_budget.py"
-CEILING = 105_000
+CEILING = 85_000
 _GIT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE")
 
 
@@ -71,8 +71,10 @@ class BudgetTest(unittest.TestCase):
         self.commit(b"a" * (CEILING + 1))
         result = self.run_script("HEAD")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("105001", result.stderr)
-        self.assertIn("105000", result.stderr)
+        self.assertIn("85001", result.stderr)
+        self.assertIn("85000", result.stderr)
+        self.assertIn("ai-config/docs/knowledge/dotfiles-*.md", result.stderr)
+        self.assertIn("ADR-0047", result.stderr)
 
     def test_no_claude_md_allowed(self) -> None:
         self.commit(None)
@@ -85,11 +87,11 @@ class BudgetTest(unittest.TestCase):
         self.assertTrue(result.stderr.strip())
 
     def test_counts_bytes_not_characters(self) -> None:
-        text = "é" * 52_501  # 52,501 characters, 105,002 bytes
+        text = "é" * 42_501  # 42,501 characters, 85,002 bytes
         self.commit(text.encode("utf-8"))
         result = self.run_script("HEAD")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("105002", result.stderr)
+        self.assertIn("85002", result.stderr)
 
     def test_no_argument_exits_2(self) -> None:
         self.commit(b"a")
@@ -123,7 +125,7 @@ class BudgetTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(
             result.stdout.strip(),
-            "CLAUDE.md at HEAD is 1234 bytes (ceiling 105000).",
+            "CLAUDE.md at HEAD is 1234 bytes (ceiling 85000).",
         )
 
     def test_absent_prints_absent_line(self) -> None:
@@ -152,7 +154,7 @@ class BudgetTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             result.stdout.strip(),
-            "CLAUDE.md at HEAD is 1234 bytes (ceiling 105000).",
+            "CLAUDE.md at HEAD is 1234 bytes (ceiling 85000).",
         )
 
     def test_subdirectory_run_sees_root_claude_md(self) -> None:
@@ -240,7 +242,7 @@ class BudgetTest(unittest.TestCase):
         _git(self.repo, "commit", "-q", "-m", "exec big")
         result = self.run_script("HEAD")
         self.assertEqual(result.returncode, 1)
-        self.assertIn("105001", result.stderr)
+        self.assertIn("85001", result.stderr)
 
     def test_over_ceiling_has_no_mode_remedy(self) -> None:
         self.commit(b"a" * (CEILING + 1))
