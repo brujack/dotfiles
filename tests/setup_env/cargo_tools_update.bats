@@ -239,7 +239,7 @@ LIST
   setup_vim_plugins() { return 0; }
   run run_setup_or_developer
   [ "$status" -eq 0 ]
-  [[ "$output" == *"plugin node paths: some pins could not be repaired — see the 'cannot repair' lines above"* ]]
+  [[ "$output" == *"plugin node paths: some configs could not be checked or repaired — see the 'cannot repair' lines above"* ]]
   [ -f "${_marker}" ]
 }
 

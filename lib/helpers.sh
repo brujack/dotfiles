@@ -1550,21 +1550,57 @@ _claude_plugin_cache_dir() {
   printf '%s' "${_OVERRIDE_CLAUDE_PLUGIN_CACHE:-${HOME}/.claude/plugins/cache}"
 }
 
-# Prints "<config file>\t<node path>" for every versioned Homebrew node a
-# plugin config names that is no longer executable. rc 2 when there is no
-# plugin cache at all, so callers can tell "nothing to check" from "clean".
+# Prints "<plugin>@<marketplace>" for a config under the plugin cache, from the
+# first two components of its cache-relative path (<marketplace>/<plugin>/...).
+_plugin_cache_id() {
+  local _rel _plugin
+  _rel="${1#"$(_claude_plugin_cache_dir)/"}"
+  _plugin="${_rel#*/}"
+  printf '%s@%s' "${_plugin%%/*}" "${_rel%%/*}"
+}
+
+# Prints one "<config file>\t<tag>" line per finding. <tag> is the absolute
+# path of a versioned Homebrew node the config names that is no longer
+# executable, or "unreadable" (grep could not read the file) or "nontext"
+# (grep printed something that is not a match, e.g. "Binary file ... matches"
+# or a diagnostic). A file tagged unreadable or nontext was not read as clean
+# text, so callers must never treat it as clean. Each file is grepped on its
+# own under LC_ALL=C, so a byte that is invalid in the caller's locale cannot
+# hide a pin. rc 2 when there is no plugin cache at all, so callers can tell
+# "nothing to check" from "clean".
 _plugin_stale_node_paths() {
   local _cache
   _cache="$(_claude_plugin_cache_dir)"
   [[ -d "${_cache}" ]] || return 2
 
-  local _file _node
+  local _file _node _out _rc
+  # "${_cache}/": find does not descend a symlinked starting point without it.
   while IFS= read -r -d '' _file; do
+    _out="$(LC_ALL=C grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" 2>&1)"
+    _rc=$?
+    if [[ ${_rc} -ge 2 ]]; then
+      printf '%s\tunreadable\n' "${_file}"
+      continue
+    fi
+    if [[ -n "${_out}" && "$(printf '%s\n' "${_out}" | LC_ALL=C grep -vc '^/')" -ne 0 ]]; then
+      printf '%s\tnontext\n' "${_file}"
+      continue
+    fi
+    [[ -n "${_out}" ]] || continue
     while IFS= read -r _node; do
       [[ -x "${_node}" ]] || printf '%s\t%s\n' "${_file}" "${_node}"
-    done < <(grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" | LC_ALL=C sort -u)
-  done < <(find "${_cache}" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
+    done < <(printf '%s\n' "${_out}" | LC_ALL=C sort -u)
+  done < <(find "${_cache}/" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
   return 0
+}
+
+# Prints "<formula>\t<stable path>" for a versioned Cellar node: the formula
+# name and the keg's opt/ symlink that brew keeps pointed at the current version.
+_plugin_stable_node() {
+  local _node="$1" _formula
+  _formula="${_node#*/Cellar/}"
+  _formula="${_formula%%/*}"
+  printf '%s\t%s\n' "${_formula}" "${_node%%/Cellar/*}/opt/${_formula}/bin/node"
 }
 
 # Rewrites each stale pin to the keg's opt/ symlink, which brew keeps pointed
@@ -1572,7 +1608,8 @@ _plugin_stale_node_paths() {
 # .../opt/node/bin/node. The write is atomic (temp file beside the config,
 # then rename), so a failed write never leaves a truncated config. rc 0 when
 # nothing was stale or everything was repaired, 1 when any pin could not be
-# repaired, 2 when there is no cache.
+# repaired, 2 when there is no cache. A config the finder tagged "unreadable"
+# or "nontext" is never written: the line names the remedy and rc is 1.
 repair_plugin_node_paths() {
   local _stale _rc
   _stale="$(_plugin_stale_node_paths)"
@@ -1582,9 +1619,18 @@ repair_plugin_node_paths() {
 
   local _file _node _formula _stable _content _tmp _failed=0
   while IFS=$'\t' read -r _file _node; do
-    _formula="${_node#*/Cellar/}"
-    _formula="${_formula%%/*}"
-    _stable="${_node%%/Cellar/*}/opt/${_formula}/bin/node"
+    if [[ "${_node}" == "unreadable" ]]; then
+      printf "cannot repair %s: cannot be read — run: chmod u+r '%s'\n" "${_file}" "${_file}" >&2
+      _failed=1
+      continue
+    fi
+    if [[ "${_node}" == "nontext" ]]; then
+      printf "cannot repair %s: contains non-text data — reinstall plugin %s\n" \
+        "${_file}" "$(_plugin_cache_id "${_file}")" >&2
+      _failed=1
+      continue
+    fi
+    IFS=$'\t' read -r _formula _stable < <(_plugin_stable_node "${_node}")
     if [[ ! -x "${_stable}" ]]; then
       printf "cannot repair %s: %s is gone and %s does not exist — run: brew install %s\n" \
         "${_file}" "${_node}" "${_stable}" "${_formula}" >&2
@@ -1614,6 +1660,8 @@ repair_plugin_node_paths() {
   return "${_failed}"
 }
 
+# FAILs each stale pin, and each config the scan could not read ("unreadable")
+# or read as text ("nontext"); any such tag means no PASS line.
 _doctor_check_plugin_node_paths() {
   local _stale _rc _cache
   _stale="$(_plugin_stale_node_paths)"
@@ -1628,9 +1676,29 @@ _doctor_check_plugin_node_paths() {
   fi
 
   _cache="$(_claude_plugin_cache_dir)"
-  local _file _node
+  local _file _node _label _formula _stable
   while IFS=$'\t' read -r _file _node; do
-    doctor_fail "${_file#"${_cache}/"}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+    _label="${_file#"${_cache}/"}"
+    case "${_node}" in
+      unreadable)
+        doctor_fail "${_label}" "cannot be read — run: chmod u+r '${_file}'"
+        ;;
+      nontext)
+        doctor_fail "${_label}" "contains non-text data — reinstall plugin $(_plugin_cache_id "${_file}")"
+        ;;
+      *)
+        IFS=$'\t' read -r _formula _stable < <(_plugin_stable_node "${_node}")
+        # Name the cause the repair would hit: no opt link, a read-only config,
+        # or neither (then the update itself is the remedy).
+        if [[ ! -x "${_stable}" ]]; then
+          doctor_fail "${_label}" "pins missing ${_node} — run: brew install ${_formula}"
+        elif [[ ! -w "${_file}" ]]; then
+          doctor_fail "${_label}" "pins missing ${_node} — run: chmod u+w '${_file}' && setup_env.sh -t update --brew-only"
+        else
+          doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+        fi
+        ;;
+    esac
   done <<< "${_stale}"
 }
 

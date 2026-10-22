@@ -17,10 +17,10 @@ spec: docs/superpowers/specs/2026-10-21-plugin-node-check-hardening-design.md
 - A tagged config is never written (N3).
 - No EXIT/RETURN trap and no temp file in `lib/helpers.sh` (`scripts/check-lib-exit-traps.sh` runs in `make lint`); no `grep -a`.
 - Exact strings (copy verbatim):
-  - repair unreadable: `cannot repair <file>: cannot be read — run: chmod u+r <file>`
+  - repair unreadable: `cannot repair <file>: cannot be read — run: chmod u+r '<file>'`
   - repair nontext: `cannot repair <file>: contains non-text data — reinstall plugin <plugin>@<marketplace>`
-  - doctor unreadable: `cannot be read — run: chmod u+r <file>`; doctor nontext: `contains non-text data — reinstall plugin <plugin>@<marketplace>`
-  - doctor stale-pin remedies: `run: brew install <formula>` / `run: chmod u+w <file> && setup_env.sh -t update --brew-only` / `run: setup_env.sh -t update --brew-only`, each after `pins missing <node> — `
+  - doctor unreadable: `cannot be read — run: chmod u+r '<file>'`; doctor nontext: `contains non-text data — reinstall plugin <plugin>@<marketplace>`
+  - doctor stale-pin remedies: `run: brew install <formula>` / `run: chmod u+w '<file>' && setup_env.sh -t update --brew-only` / `run: setup_env.sh -t update --brew-only`, each after `pins missing <node> — `
   - update warn: `plugin config(s) could not be checked or repaired — see detail`
   - setup warn: `plugin node paths: some configs could not be checked or repaired — see the 'cannot repair' lines above`
 - In every `chmod` remedy `<file>` is the absolute path; doctor's label stays cache-relative. `<plugin>@<marketplace>` come from cache-relative path components 2 and 1.
@@ -63,7 +63,7 @@ depends_on: []
 **Steps:**
 
 - [ ] Write failing tests (spec Testing 1, 2, 3, 4, 6):
-  1. `chmod 000` hooks.json (root-skip like :151): `run _plugin_stale_node_paths` output has `<file>\tunreadable`; `run repair_plugin_node_paths` status 1, output has `cannot be read — run: chmod u+r <abs file>`, file byte-identical after `chmod 644` (`cmp` against a saved copy); `run _doctor_check_plugin_node_paths` has `[FAIL]` and the doctor text, no `no plugin pins a missing node binary`; restore mode before assertions.
+  1. `chmod 000` hooks.json (root-skip like :151): `run _plugin_stale_node_paths` output has `<file>\tunreadable`; `run repair_plugin_node_paths` status 1, output has `cannot be read — run: chmod u+r '<abs file>'`, file byte-identical after `chmod 644` (`cmp` against a saved copy); `run _doctor_check_plugin_node_paths` has `[FAIL]` and the doctor text, no `no plugin pins a missing node binary`; restore mode before assertions.
   2. `_make_plugin "mkt/plg/1.0.0" "${STALE_NODE}"`, then append a NUL to hooks.json (`printf '\0' >> …`): finder has `<file>\tnontext` and not the pin for that file; repair status 1 with `reinstall plugin plg@mkt`, file byte-identical; doctor FAILs it.
   3. hooks.json written as `{"c":"\377<STALE_NODE>"}` (byte between `"` and the pin), no NUL; first `locale -a | command grep -qxiE 'en_US\.utf-?8'` else `fail`; then `LC_ALL=en_US.UTF-8 run _plugin_stale_node_paths`: no tag, pin reported.
   4. One unreadable config plus a writable sibling plugin with a stale pin: the sibling is still repaired.
@@ -97,7 +97,7 @@ depends_on: [1]
 
 **Steps:**
 
-- [ ] Write failing tests (spec Testing 5): `_plugin_stable_node /x/Cellar/node@22/22.1.0/bin/node` prints `node@22\t/x/opt/node@22/bin/node`; doctor with no `_make_brew_node` → `run: brew install node`; doctor with `_make_brew_node` and hooks.json `chmod 444` (root-skip) → `run: chmod u+w <abs file> && setup_env.sh -t update --brew-only`; doctor with link present and writable → `run: setup_env.sh -t update --brew-only` (the existing :306 test must still hold).
+- [ ] Write failing tests (spec Testing 5): `_plugin_stable_node /x/Cellar/node@22/22.1.0/bin/node` prints `node@22\t/x/opt/node@22/bin/node`; doctor with no `_make_brew_node` → `run: brew install node`; doctor with `_make_brew_node` and hooks.json `chmod 444` (root-skip) → `run: chmod u+w '<abs file>' && setup_env.sh -t update --brew-only`; doctor with link present and writable → `run: setup_env.sh -t update --brew-only` (the existing :306 test must still hold).
 - [ ] Run; confirm they fail on assertions.
 - [ ] Implement per spec Design §2; repair's existing output and every existing repair test unchanged.
 - [ ] Gates; commit.

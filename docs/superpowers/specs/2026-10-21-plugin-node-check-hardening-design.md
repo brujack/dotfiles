@@ -180,6 +180,12 @@ setup seam:
 - **N2.** No change to `run_setup_or_developer` or `run_update`'s `plugin-node` section beyond the two warning strings in R8.
 - **N3.** A config tagged `unreadable` or `nontext` is never written.
 
+## Amendments
+
+- R3 -> For a tagged line, `repair_plugin_node_paths` leaves the file unchanged, returns 1, and prints `cannot repair <file>: cannot be read — run: chmod u+r '<file>'` (`unreadable`) or `cannot repair <file>: contains non-text data — reinstall plugin <plugin>@<marketplace>` (`nontext`), with plugin and marketplace taken from the cache-relative path. — Task 1 code review: a pasted remedy must survive a path containing a space, so the path is single-quoted.
+- R4 -> For a tagged line, `_doctor_check_plugin_node_paths` calls `doctor_fail` with `cannot be read — run: chmod u+r '<file>'` or `contains non-text data — reinstall plugin <plugin>@<marketplace>`, and does not print `no plugin pins a missing node binary`. — Task 1 code review: the pasted path is single-quoted, as in R3.
+- R6 -> For a stale pin, doctor's remedy is `run: brew install <formula>` when the `opt/` node is not executable, else `run: chmod u+w '<file>' && setup_env.sh -t update --brew-only` when the config is not writable, else `run: setup_env.sh -t update --brew-only`. — Task 1 code review: the pasted path is single-quoted, as in R3.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `8c4e1119` (Step 7 self-review commit, before Step 8 dispatch)
@@ -236,3 +242,23 @@ Finding: test 3 could pass without the fix: under BSD grep in a UTF-8 locale a `
 Assumption: that `macos-latest`'s `/usr/bin/grep` drops a match after an invalid byte as the Studio's 2.6.0-FreeBSD does; if not, test 3 guards nothing in CI. Settled by the first test-macos run of test 3 against the pre-fix code (Phase 2 RED step).
 Disposition: Addressed (operator, 2026-10-21) — test 3 fixes the byte position and asserts the locale exists; test 2 uses `mkt/plg/1.0.0`; §1 states `<file>` in `chmod` remedies is absolute. Findings have moved from design to test apparatus, so review stops here. Assumption to be checked by Phase 2's RED run on the macOS leg.
 
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-21-plugin-node-check-hardening-design.md
+- anchor: e4af6415d0479989c276121e73cfcd126733e729
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
