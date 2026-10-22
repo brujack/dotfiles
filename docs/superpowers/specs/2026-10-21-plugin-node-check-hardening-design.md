@@ -96,6 +96,8 @@ Consumers:
   `cannot be read — run: chmod u+r <file>` or
   `contains non-text data — reinstall plugin <plugin>@<marketplace>`. A tagged config is a
   FAIL, so doctor never PASSes over a file it did not scan.
+- In every `chmod` remedy, `<file>` is the absolute path, not doctor's cache-relative label,
+  so a pasted command works from any directory.
 - The two callers' summary warnings are reworded, the only change to them:
   - `run_update`'s `plugin-node` section:
     `plugin config(s) could not be checked or repaired — see detail`;
@@ -134,14 +136,20 @@ setup seam:
 1. An unreadable config (`chmod 000`, root-skip): finder emits `<file>\tunreadable`; repair
    returns 1 with the `cannot be read — run: chmod u+r` line and leaves the file
    byte-identical; doctor FAILs it and sets the failure flag; no `[PASS]` line.
-2. A config with a NUL byte holding a stale pin: finder emits `<file>\tnontext` and not the
-   pin; repair returns 1 with `reinstall plugin <plugin>@<marketplace>` naming the fixture's
-   plugin and marketplace, and leaves the file byte-identical (`cmp` against a saved copy);
+2. A config with a NUL byte holding a stale pin, in a fixture whose marketplace and plugin
+   names differ (`mkt/plg/1.0.0`): finder emits `<file>\tnontext` and not the pin; repair
+   returns 1 with `reinstall plugin plg@mkt`, which a swapped derivation would fail, and leaves the file byte-identical (`cmp` against a saved copy);
    doctor FAILs it.
-3. A config whose stale-pin line also holds one `\xff` byte, no NUL, with the test's
-   `LC_ALL` set to a UTF-8 locale (`en_US.UTF-8` on macOS, `C.UTF-8` on Linux): the file is
-   not tagged and the pin is reported. Without the `LC_ALL=C` in R2 this fails on the macOS
-   CI leg, which resolves `/usr/bin/grep` (BSD).
+3. A config whose stale pin is preceded on the same line by one `\xff` byte, placed
+   between the opening `"` and the pin path (`"\377/…/Cellar/node/<v>/bin/node"`), no NUL,
+   with the test's `LC_ALL` set to `en_US.UTF-8`: the file is not tagged and the pin is
+   reported. The byte position is load-bearing: measured on the Studio, a `\xff` as the last
+   byte before `\n`, or on another line, still prints the pin under BSD grep in a UTF-8
+   locale, so a fixture placed there passes without the fix. The test first asserts
+   `locale -a` lists `en_US.UTF-8` and fails if not, because a missing locale silently falls
+   back to C and makes the case vacuous. It discriminates only on the macOS CI leg (BSD
+   `/usr/bin/grep`); GNU grep prints the pin in every locale and placement, so on Linux it is
+   a regression guard only.
 4. A readable sibling config in the same cache is still reported and repaired (one bad file
    does not stop the scan).
 5. Doctor remedy, one test each: missing `opt/` link → `run: brew install node`; read-only
@@ -217,4 +225,12 @@ Disposition: Addressed — remedies change state (`chmod u+r`, `chmod u+w … &&
 Finding: No issues. GNU grep 3.12 and BSD grep 2.6.0 under C, `en_US.UTF-8` and `C.UTF-8`: clean, no-pin and lone-`\xff` files give empty stderr and `/`-prefixed lines; NUL is caught by the not-`/` rule on both. Real caches: 132 (`claude`), 131 (Studio), 78 (`workstation`), 0 tagged; `workstation` has 2 live pins, so V2 is not vacuous there. Implementation traps: `sort -u <<< ""` yields one empty line; `local _out=$(…)` loses grep's rc.
 Assumption: no uncertain assumption found; weakest is that `test-macos` resolves BSD `/usr/bin/grep` (ci.yml adds no gnubin).
 Disposition: N/A — clean; both traps recorded in Design §1.
+
+### Round 3 (scoped Risk re-review of §1, §2's R6 remedy, Testing, R1–R4, R6, V2)
+
+Reviewed at commit: `b31da998`.
+
+Finding: test 3 could pass without the fix: under BSD grep in a UTF-8 locale a `\xff` before or inside the match drops the pin, but one as the last byte before `\n` or on another line does not, and the spec did not fix the position; a missing locale also falls back to C silently. Test 2's `ctx/ctx` fixture cannot catch a swapped `<plugin>@<marketplace>` derivation. The `chmod` remedies must name the absolute path, since doctor's label is cache-relative. Clean probes: real cache depth (131 configs at depth 5, one at depth 7, components 1/2 always marketplace/plugin); `LC_ALL=C` still flags NUL and rc-2 files on both greps; bare `setup_env.sh` matches existing remedies; no rc-2-with-pins case.
+Assumption: that `macos-latest`'s `/usr/bin/grep` drops a match after an invalid byte as the Studio's 2.6.0-FreeBSD does; if not, test 3 guards nothing in CI. Settled by the first test-macos run of test 3 against the pre-fix code (Phase 2 RED step).
+Disposition: (pending operator) proposed Addressed — test 3 fixes the byte position and asserts the locale exists; test 2 uses `mkt/plg/1.0.0`; §1 states `<file>` in `chmod` remedies is absolute. Findings have moved from design to test apparatus, so review stops here. Assumption to be checked by Phase 2's RED run on the macOS leg.
 
