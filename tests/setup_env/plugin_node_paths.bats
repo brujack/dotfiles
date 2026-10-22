@@ -400,16 +400,23 @@ _make_plugin() {
   local _repair_status="${status}" _repair_out="${output}"
   run _doctor_check_plugin_node_paths
   local _doctor_status="${status}" _doctor_out="${output}"
+  _DOCTOR_FAILED=0
+  _doctor_check_plugin_node_paths >/dev/null
+  local _flag="${_DOCTOR_FAILED}"
   chmod 644 "${_file}"
+
+  [ "$(printf '%s\n' "${_find_out}" | command grep -c -F "${_file}")" -eq 1 ]
+  [[ "${_repair_out}" != *"brew install"* ]]
+  [ "${_flag}" -eq 1 ]
 
   [ "${_find_status}" -eq 0 ]
   [[ "${_find_out}" == *"${_file}"$'\t'"unreadable"* ]]
   [ "${_repair_status}" -eq 1 ]
-  [[ "${_repair_out}" == *"cannot repair ${_file}: cannot be read — run: chmod u+r ${_file}"* ]]
+  [[ "${_repair_out}" == *"cannot repair ${_file}: cannot be read — run: chmod u+r '${_file}'"* ]]
   cmp "${_file}" "${BATS_TEST_TMPDIR}/saved"
   [ "${_doctor_status}" -eq 0 ]
   [[ "${_doctor_out}" == *"[FAIL]"* ]]
-  [[ "${_doctor_out}" == *"ctx/ctx/1.0.169/hooks/hooks.json: cannot be read — run: chmod u+r ${_file}"* ]]
+  [[ "${_doctor_out}" == *"ctx/ctx/1.0.169/hooks/hooks.json: cannot be read — run: chmod u+r '${_file}'"* ]]
   [[ "${_doctor_out}" != *"no plugin pins a missing node binary"* ]]
 }
 
@@ -424,10 +431,12 @@ _make_plugin() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"${_file}"$'\t'"nontext"* ]]
   [[ "$output" != *"${_file}"$'\t'"${STALE_NODE}"* ]]
+  [ "$(printf '%s\n' "$output" | command grep -c -F "${_file}")" -eq 1 ]
 
   run repair_plugin_node_paths
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot repair ${_file}: contains non-text data — reinstall plugin plg@mkt"* ]]
+  [[ "$output" != *"brew install"* ]]
   cmp "${_file}" "${BATS_TEST_TMPDIR}/saved"
 
   run _doctor_check_plugin_node_paths
@@ -438,7 +447,7 @@ _make_plugin() {
 }
 
 @test "a pin next to an invalid UTF-8 byte is still found under a UTF-8 locale" {
-  locale -a | command grep -qxiE 'en_US\.utf-?8' || fail "en_US.UTF-8 locale not installed; this test cannot discriminate"
+  locale -a | command grep -qxiE 'en_US\.utf-?8' || { printf '%s\n' "en_US.UTF-8 locale not installed; this test needs it" >&2; return 1; }
   _make_brew_node
   local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
   mkdir -p "${_dir}/hooks"

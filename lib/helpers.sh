@@ -1550,6 +1550,15 @@ _claude_plugin_cache_dir() {
   printf '%s' "${_OVERRIDE_CLAUDE_PLUGIN_CACHE:-${HOME}/.claude/plugins/cache}"
 }
 
+# Prints "<plugin>@<marketplace>" for a config under the plugin cache, from the
+# first two components of its cache-relative path (<marketplace>/<plugin>/...).
+_plugin_cache_id() {
+  local _rel _plugin
+  _rel="${1#"$(_claude_plugin_cache_dir)/"}"
+  _plugin="${_rel#*/}"
+  printf '%s@%s' "${_plugin%%/*}" "${_rel%%/*}"
+}
+
 # Prints one "<config file>\t<tag>" line per finding. <tag> is the absolute
 # path of a versioned Homebrew node the config names that is no longer
 # executable, or "unreadable" (grep could not read the file) or "nontext"
@@ -1598,19 +1607,16 @@ repair_plugin_node_paths() {
   [[ ${_rc} -ne 0 ]] && return "${_rc}"
   [[ -z "${_stale}" ]] && return 0
 
-  local _file _node _formula _stable _content _tmp _failed=0 _cache _rel _plugin
-  _cache="$(_claude_plugin_cache_dir)"
+  local _file _node _formula _stable _content _tmp _failed=0
   while IFS=$'\t' read -r _file _node; do
     if [[ "${_node}" == "unreadable" ]]; then
-      printf "cannot repair %s: cannot be read — run: chmod u+r %s\n" "${_file}" "${_file}" >&2
+      printf "cannot repair %s: cannot be read — run: chmod u+r '%s'\n" "${_file}" "${_file}" >&2
       _failed=1
       continue
     fi
     if [[ "${_node}" == "nontext" ]]; then
-      _rel="${_file#"${_cache}/"}"
-      _plugin="${_rel#*/}"
-      _plugin="${_plugin%%/*}@${_rel%%/*}"
-      printf "cannot repair %s: contains non-text data — reinstall plugin %s\n" "${_file}" "${_plugin}" >&2
+      printf "cannot repair %s: contains non-text data — reinstall plugin %s\n" \
+        "${_file}" "$(_plugin_cache_id "${_file}")" >&2
       _failed=1
       continue
     fi
@@ -1647,7 +1653,7 @@ repair_plugin_node_paths() {
 }
 
 # FAILs each stale pin, and each config the scan could not read ("unreadable")
-# or parse ("nontext"); any such tag means no PASS line.
+# or read as text ("nontext"); any such tag means no PASS line.
 _doctor_check_plugin_node_paths() {
   local _stale _rc _cache
   _stale="$(_plugin_stale_node_paths)"
@@ -1662,17 +1668,15 @@ _doctor_check_plugin_node_paths() {
   fi
 
   _cache="$(_claude_plugin_cache_dir)"
-  local _file _node _label _plugin
+  local _file _node _label
   while IFS=$'\t' read -r _file _node; do
     _label="${_file#"${_cache}/"}"
     case "${_node}" in
       unreadable)
-        doctor_fail "${_label}" "cannot be read — run: chmod u+r ${_file}"
+        doctor_fail "${_label}" "cannot be read — run: chmod u+r '${_file}'"
         ;;
       nontext)
-        _plugin="${_label#*/}"
-        _plugin="${_plugin%%/*}@${_label%%/*}"
-        doctor_fail "${_label}" "contains non-text data — reinstall plugin ${_plugin}"
+        doctor_fail "${_label}" "contains non-text data — reinstall plugin $(_plugin_cache_id "${_file}")"
         ;;
       *)
         doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
