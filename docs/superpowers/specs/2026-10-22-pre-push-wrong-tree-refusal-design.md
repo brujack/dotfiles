@@ -31,49 +31,53 @@ Every worktree runs this file: `.git/hooks/pre-push` is a symlink to the main ch
 
 ### Which refs must match
 
-A ref line **needs the tree** when its own diff range sets `needs_test`: the diff failed to
-resolve, or at least one changed path is not inert by `_path_is_inert`. This is the same test
-the loop already applies; the change records it per ref instead of only in the aggregate.
-Deletion lines (`local_sha` all zeros) are already skipped and stay skipped.
+Once the suite will run (`needs_test=1` after the loop), **every non-deletion ref line** must
+name the commit the hook's checkout has at `HEAD`. Deletion lines (`local_sha` all zeros) are
+already skipped and stay skipped. A push whose every ref is inert-only exits 0 before the
+check, as today, so a doc push from any checkout is unaffected.
 
-A ref that is inert-only never needs the tree, so a doc push from any checkout behaves exactly
-as today.
+Operator decision 2026-10-22: every ref rather than only the refs whose own diff is non-inert.
+The per-ref form allows `git push origin feat docs/x` with `docs/x` elsewhere, needs per-ref
+bookkeeping and a test of its own, and a tally of dotfiles session transcripts found zero
+multi-ref pushes, so it would carry cost for no current user.
+
+**Accepted limitation.** A push of two or more branches at different commits that needs the
+suite can never pass; push each ref on its own. A stacked-branch push is the only legitimate
+shape this refuses, and its only escape is `--no-verify`, which drops every check in the chain
+(git-workflow-046). The tally found none.
 
 ### The check
 
 After the loop, after the existing three refusals (unresolved range, CLAUDE.md budget,
 direct-to-master), and only when `needs_test=1`:
 
-1. Resolve the tested tree's commit: `git rev-parse --verify --quiet 'HEAD^{commit}'`, run
-   before the `unset GIT_DIR ...` line so a worktree push reads the worktree's own `HEAD`.
-2. For each ref that needs the tree, peel its `local_sha`:
+1. Resolve the tested tree's commit: `git rev-parse --verify --quiet 'HEAD^{commit}'`.
+2. For each non-deletion ref line, peel its `local_sha`:
    `git rev-parse --verify --quiet "${local_sha}^{commit}"`. Peeling makes an annotated tag at
-   `HEAD` match.
+   `HEAD` match. The loop records `local_ref`, `local_sha` and `remote_ref` per line for this.
 3. Refuse (exit 1, before `make`) if step 1 fails, if any peel fails, or if any peeled commit
    differs from step 1's commit. All three are fail-closed.
+
+Every git read in steps 1-2 runs inside a conditional (`if ! x="$(...)"`), so under the hook's
+`set -e` a failure reaches the refusal message rather than exiting silently.
 
 Placing it last keeps the existing refusals' messages and precedence unchanged; a push that
 would already be refused for another reason reports that reason.
 
 ### The refusal message
 
-To stderr, in the hook's existing style:
+To stderr, in the hook's existing style, one block per mismatched or unpeelable ref:
 
 ```
 pre-push: the suite tests this checkout's working tree, not the pushed commit.
-  <local_ref> is at <short sha>; this checkout is at <short sha> (<path>).
+  <local_ref> is at <short sha>; this checkout (<path>) is at <short sha>.
+Push each ref from a checkout whose HEAD is that commit:
+  git push <remote> <local_ref>:<remote_ref>
 ```
 
-followed by one remedy per mismatched ref:
-
-- If `git worktree list --porcelain` has an entry whose `HEAD` line equals the peeled commit,
-  print `Push from the worktree that has it checked out:` and `  cd <that path> && git push ...`.
-- Otherwise print `Check it out first, then push from there:` with
-  `  git switch <branch>` or `  git worktree add <path> <branch>`, where `<branch>` is
-  `local_ref` without `refs/heads/` (for a non-branch ref, the short sha).
-
-The listing is read for the message only; it never changes the verdict. If
-`git worktree list` itself fails, the generic remedy is printed.
+`<remote>` is the hook's `$1`. An unresolvable `HEAD` or `local_sha` prints `unresolved` in
+place of its short SHA. No worktree lookup: operator decision 2026-10-22, since it changes no
+verdict and the two SHAs plus the exact command already say what to do.
 
 ### What does not change
 
@@ -81,46 +85,66 @@ The listing is read for the message only; it never changes the verdict. If
   `${REPO_ROOT:-...}`; that seam serves a different fix (choosing a tree), and a refusal
   needs none.
 - The suite still runs against the working tree as it is on disk. Uncommitted edits in the
-  correct checkout are still tested along with the commit; that is a separate gap (N1).
+  correct checkout are still tested along with the commit; that is a separate gap (N1),
+  backlogged.
+- Where `HEAD` is read relative to the `unset GIT_DIR ...` line does not matter: measured by
+  all three round-1 lenses, a worktree push resolves the same `HEAD` either side of it, since
+  discovery from the hook's cwd finds the worktree's `.git` file. Keep git reads above the
+  `unset` by convention, matching the existing range resolution.
+
+### The fleet rule this contradicts
+
+core.md `git-workflow-043` ends "Tests failing only in push: push from main", and its knowledge
+entry (`ai-config/docs/knowledge/ai-config-standards-core.md` § git-workflow-043) gives a
+`git -C /path/to/main/repo` push of the branch. After this change that push is refused in
+dotfiles for any branch needing the suite, and it is exactly the push that tests the wrong
+tree. Its original reason, `GIT_DIR` leaking from a worktree push into fixture-building tests,
+is already handled here by the hook's `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+GIT_INDEX_FILE`. Operator decision 2026-10-22: amend the rule in ai-config in the same release
+(V3), after messaging the ai-config session, so the always-loaded instruction stops
+prescribing a push the hook refuses.
 
 ## Testing
 
 New cases in `tests/scripts/pre_push.bats`, each building a fixture repo and feeding a
 synthetic ref line:
 
-| Case                     | Ref line                                                    | Expect                                                     |
-| ------------------------ | ----------------------------------------------------------- | ---------------------------------------------------------- |
-| mismatch refused         | non-inert change, `local_sha` = an older commit, HEAD ahead | exit 1, message names both short shas, `make` never called |
-| match runs suite         | same change, `local_sha` = HEAD                             | exit 0, `make` called once                                 |
-| inert-only mismatch      | `.md`-only change, `local_sha` != HEAD                      | exit 0, no refusal text, `make` not called                 |
-| tag peeled               | annotated tag object at HEAD, non-inert change              | exit 0, `make` called                                      |
-| worktree named           | mismatch, a fixture worktree has the commit checked out     | message contains that worktree's path                      |
-| generic remedy           | mismatch, no worktree has it                                | message contains `git worktree add`                        |
-| two refs, one mismatched | branch at HEAD plus a second non-inert ref elsewhere        | exit 1, names only the mismatched ref                      |
+| Case                        | Ref lines                                                          | Expect                                                         |
+| --------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| mismatch refused            | non-inert change, `local_sha` = an older commit, HEAD ahead        | exit 1, message names both short SHAs, `make` never called     |
+| match runs suite            | same change, `local_sha` = HEAD                                    | exit 0, `make` called once                                     |
+| inert-only mismatch         | `.md`-only change, `local_sha` != HEAD                             | exit 0, no refusal text, `make` not called                     |
+| tag peeled                  | annotated tag object at HEAD, non-inert change                     | exit 0, `make` called                                          |
+| mixed refs refused          | non-inert ref at HEAD plus an inert ref at another commit          | exit 1, names only the ref not at HEAD                         |
+| unpeelable ref              | non-inert ref whose `local_sha` is a tag object pointing at a blob | exit 1, `unresolved` in the message, `make` never called       |
+| unborn HEAD                 | fixture with no commit checked out, non-inert ref                  | exit 1, `make` never called                                    |
+| master refusal wins         | non-inert ref to `refs/heads/master` at a non-HEAD commit          | exit 1 with the existing direct-to-master text, not this one's |
+| remedy is the exact command | mismatch                                                           | message contains the R4 command with `origin` and both refs    |
 
-The "match runs suite" case is the one that proves the check computes: a check that never
-read HEAD (always refusing, or always passing) fails it or the "mismatch refused" case.
+"Match runs suite" and "tag peeled" prove the check computes: a check whose `HEAD` read returns
+nothing refuses both, and one that never records the ref lines passes "mismatch refused".
 
-Existing cases: any of the 110 that feeds a non-inert ref whose `local_sha` is not the fixture's
-HEAD and asserts `make` ran will now be refused. Not yet measured; the plan's first task counts
-them and changes each to push the fixture's HEAD, never weakening an assertion.
+Existing cases, measured by two round-1 lenses on a prototype: 109 cases, 108 pass, one is
+refused. It is #83, "live_paths is reset per ref" (`pre_push.bats:884`), which pushes `feat/x`
+at `sha1` with `HEAD` at `sha2`. Pushing `feat/x` at `sha2` keeps its subject (the branch range
+still carries `deploy.sh`, the master range stays `.md`-only).
 
 ## Requirements
 
-- **R1.** `scripts/pre-push` exits 1 without invoking `make` when a ref line whose diff sets `needs_test` has a `local_sha` that, peeled to a commit, differs from the hook checkout's `HEAD` commit.
-- **R2.** `scripts/pre-push` exits 1 without invoking `make` when `HEAD` or a needs-test ref's `local_sha` cannot be peeled to a commit.
+- **R1.** When the suite would run, `scripts/pre-push` exits 1 without invoking `make` if any non-deletion ref line's `local_sha`, peeled to a commit, differs from the hook checkout's `HEAD` commit.
+- **R2.** When the suite would run, `scripts/pre-push` exits 1 without invoking `make` if `HEAD` or any non-deletion ref's `local_sha` cannot be peeled to a commit.
 - **R3.** A push whose every ref line is inert-only is never refused by the R1/R2 check, whatever commit it names.
-- **R4.** The R1 refusal message names the mismatched `local_ref`, both short SHAs and the checkout path.
-- **R5.** When `git worktree list --porcelain` shows a worktree whose `HEAD` is the pushed commit, the refusal prints that worktree's path; otherwise it prints a `git worktree add` remedy.
-- **R6.** The R1/R2 check runs after the unresolved-range, CLAUDE.md budget and direct-to-master refusals, so each of those keeps its existing message when it also applies.
-- **R7.** `HEAD` is resolved before the hook's `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` line.
-- **R8.** `tests/scripts/pre_push.bats` carries the seven cases in the Testing table.
+- **R4.** The refusal names each offending `local_ref`, its short SHA (or `unresolved`), the checkout path and its `HEAD` short SHA (or `unresolved`), and prints the push command `git push <remote> <local_ref>:<remote_ref>` for it, with `<remote>` taken from the hook's first argument.
+- **R5.** The R1/R2 check runs after the unresolved-range, CLAUDE.md budget and direct-to-master refusals, so each of those keeps its existing message when it also applies.
+- **R6.** `tests/scripts/pre_push.bats` carries the nine cases in the Testing table.
 - **V1.** `make test` exits 0 on the branch.
-- **V2.** A real push of the feature branch from its own worktree passes the hook; a real push of the same branch from the main checkout (on master) is refused with the R4 message. Record both outputs in the PR body.
+- **V2.** Before merge, run the branch's own hook on real pushes by passing `-c core.hooksPath=<worktree>/scripts` to git: from the feature worktree it passes; from the main checkout (on master) the same branch push is refused with the R4 message. Record both outputs in the PR body.
+- **V3.** An ai-config change amending core.md `git-workflow-043` and its knowledge entry so neither prescribes pushing a branch from the main checkout is merged in the same release; the dotfiles PR body links it.
 - **N1.** The hook does not change what the suite runs against: no `git archive`, no switching, no temporary checkout.
 - **N2.** No `REPO_ROOT` override seam is added.
-- **N3.** No existing pre_push.bats assertion is deleted or weakened; an existing case is changed only to push its fixture's HEAD.
+- **N3.** No existing pre_push.bats assertion is deleted or weakened; an existing case is changed only in the commit its ref line pushes or the commit its fixture has at `HEAD`.
 - **N4.** ai-config's and terraform_ansible's hooks are not changed.
+- **N5.** The hook does not read `git worktree list`.
 
 ## Multi-Lens Review
 
@@ -130,19 +154,19 @@ Reviewed at commit: `d9e42816` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Worth building at this size; a ~15-line prototype of R1 refused 1 of the 109 existing cases (not 110): #83 "live_paths is reset per ref" (`pre_push.bats:884`), fixable under N3. (1) V2 cannot produce its evidence before merge: `.git/hooks/pre-push` symlinks the main checkout's `scripts/pre-push`, which is master's, so both pushes run the old hook; run them with `git -c core.hooksPath=<worktree>/scripts push`. (2) R7 is unobservable: in a worktree-push fixture `git rev-parse HEAD` returned the same commit before and after the `unset`, because discovery from cwd finds the worktree's `.git` file. (3) R2 and R6 have no test case (unborn HEAD, unpeelable `local_sha`, a push that also hits the master refusal). (4) R5's worktree listing changes no verdict and its output is stderr only; R4's two SHAs plus path already tell the reader what to do.
 Assumption: no routine workflow pushes a non-inert ref other than the issuing checkout's HEAD; settle by tallying push commands in dotfiles transcripts.
-Disposition:
+Disposition: Addressed (operator, 2026-10-22). V2 runs the branch hook via `core.hooksPath`; R7 dropped (now a convention note); unborn-HEAD, unpeelable-ref and master-precedence cases added; R5 worktree lookup cut to the exact push command (operator: "Cut to generic line"). Assumption settled by the Ergonomics lens transcript tally: zero multi-ref pushes.
 
 ### Ergonomics
 
 Finding: (1) R1's per-ref scoping is untested: an implementation that checks every ref whenever the aggregate `needs_test=1` passes all seven cases yet refuses an inert ref at a non-HEAD commit pushed with a non-inert ref at HEAD. (2) R2/R7 as Goal-Fit. (3) Remedies are not pasteable: print the exact `git push <remote> <local_ref>:<remote_ref>` instead of `...`; drop `git switch` (contradicts git-workflow-019 and fails "already checked out"); give `git worktree add` a concrete path. (4) Breakage measured: 108/109, #83 fails; it pushes feat/x at sha1 and master at sha2, so "push its fixture's HEAD" may not keep its subject, and N3 should also allow moving the fixture's HEAD. (5) Transcript tally across dotfiles sessions: ~300 inert `HEAD:master` pushes and ~40 single-ref `push -u origin <branch>` from the branch's worktree; zero multi-ref, sha-refspec, `--tags` or `--all` pushes. Stacked multi-branch pushes are the only legitimate shape refused, and their only escape is `--no-verify`; say so.
 Assumption: no uncertain assumption found (the transcript tally settles the push-shape question on current habits).
-Disposition:
+Disposition: Addressed (operator, 2026-10-22). Per-ref scoping replaced by every non-deletion ref (operator: "Every non-deletion ref"), so the mixed shape is refused and tested; remedy prints the exact push command, no `git switch`; N3 widened to allow moving a fixture's HEAD; stacked pushes stated as an accepted limitation.
 
 ### Risk
 
 Finding: (1) V2 as Goal-Fit. (2) core.md `git-workflow-043` and its knowledge entry (`ai-config-standards-core.md:418`) tell sessions "Tests failing only in push: push from main" (`git -C /path/to/main/repo push origin branch-name`); after this change that workaround is refused for any branch needing the suite, and the 2026-09-11 incident looks like it being followed. (3) R7 as Goal-Fit. (4) 109 cases, #83 the only breakage. (5) A multi-ref remedy that replays the same push can never pass: tell the reader to push each ref alone. `git worktree list --porcelain` lists `prunable` entries, so skip them. A bare `$(git rev-parse ...)` under `set -e` exits silently: the spec should require each read inside a conditional. Checked clean: paths with spaces, worktree `GIT_DIR`, deletions, tag peel, R6 order, no R/N contradiction.
 Assumption: no skill pushes a needs-suite ref from a cwd other than the branch's worktree. Checked 2026-10-22: `grep -rn 'git -C [^|]*push' ~/.claude/skills/*/SKILL.md` finds `add-claude-plugin:171` (`git -C ~/git-repos/personal/dotfiles push`), which pushes the main checkout's current branch, so HEAD equals the pushed commit and it passes. Refuted for skills; the fleet rule in (2) is the live conflict.
-Disposition:
+Disposition: Addressed (operator, 2026-10-22). git-workflow-043 amended in ai-config in the same release (V3; operator: "Amend it in ai-config now"); the remedy tells the reader to push each ref alone; the prunable-entry edge went with the worktree lookup; every git read is required inside a conditional.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
