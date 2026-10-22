@@ -345,6 +345,20 @@ _make_plugin() {
   [[ "$output" == *"plugin.json: pins missing ${STALE_NODE} — run: setup_env.sh -t update --brew-only"* ]]
 }
 
+@test "_doctor_check_plugin_node_paths prefers brew install over chmod when both causes hold" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
+  # No _make_brew_node: the opt link is missing AND hooks.json is read-only.
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _file="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks/hooks.json"
+  chmod 444 "${_file}"
+
+  run _doctor_check_plugin_node_paths
+  chmod 644 "${_file}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: brew install node"* ]]
+  [[ "$output" != *"chmod u+w"* ]]
+}
+
 @test "_doctor_check_plugin_node_paths names only update when link is present and config writable" {
   _make_brew_node
   _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
