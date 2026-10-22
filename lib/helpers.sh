@@ -1593,6 +1593,15 @@ _plugin_stale_node_paths() {
   return 0
 }
 
+# Prints "<formula>\t<stable path>" for a versioned Cellar node: the formula
+# name and the keg's opt/ symlink that brew keeps pointed at the current version.
+_plugin_stable_node() {
+  local _node="$1" _formula
+  _formula="${_node#*/Cellar/}"
+  _formula="${_formula%%/*}"
+  printf '%s\t%s\n' "${_formula}" "${_node%%/Cellar/*}/opt/${_formula}/bin/node"
+}
+
 # Rewrites each stale pin to the keg's opt/ symlink, which brew keeps pointed
 # at the current version: .../Cellar/node/26.8.2/bin/node becomes
 # .../opt/node/bin/node. The write is atomic (temp file beside the config,
@@ -1620,9 +1629,7 @@ repair_plugin_node_paths() {
       _failed=1
       continue
     fi
-    _formula="${_node#*/Cellar/}"
-    _formula="${_formula%%/*}"
-    _stable="${_node%%/Cellar/*}/opt/${_formula}/bin/node"
+    IFS=$'\t' read -r _formula _stable < <(_plugin_stable_node "${_node}")
     if [[ ! -x "${_stable}" ]]; then
       printf "cannot repair %s: %s is gone and %s does not exist — run: brew install %s\n" \
         "${_file}" "${_node}" "${_stable}" "${_formula}" >&2
@@ -1668,7 +1675,7 @@ _doctor_check_plugin_node_paths() {
   fi
 
   _cache="$(_claude_plugin_cache_dir)"
-  local _file _node _label
+  local _file _node _label _formula _stable
   while IFS=$'\t' read -r _file _node; do
     _label="${_file#"${_cache}/"}"
     case "${_node}" in
@@ -1679,7 +1686,16 @@ _doctor_check_plugin_node_paths() {
         doctor_fail "${_label}" "contains non-text data — reinstall plugin $(_plugin_cache_id "${_file}")"
         ;;
       *)
-        doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+        IFS=$'\t' read -r _formula _stable < <(_plugin_stable_node "${_node}")
+        # Name the cause the repair would hit: no opt link, a read-only config,
+        # or neither (then the update itself is the remedy).
+        if [[ ! -x "${_stable}" ]]; then
+          doctor_fail "${_label}" "pins missing ${_node} — run: brew install ${_formula}"
+        elif [[ ! -w "${_file}" ]]; then
+          doctor_fail "${_label}" "pins missing ${_node} — run: chmod u+w '${_file}' && setup_env.sh -t update --brew-only"
+        else
+          doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+        fi
         ;;
     esac
   done <<< "${_stale}"
