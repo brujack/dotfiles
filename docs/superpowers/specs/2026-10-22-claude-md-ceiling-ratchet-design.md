@@ -1,0 +1,103 @@
+# CLAUDE.md ceiling ratchet: 105,000 to 85,000 bytes, and close the relocation row
+
+- **Status:** Draft
+- **Follows:** ADR-0047 (CLAUDE.md size ceiling), ADR-0036 (relocation with pointers),
+  `specs/2026-10-17-claude-md-budget-design.md`.
+
+## Problem
+
+The backlog row "Move CLAUDE.md reference text to knowledge files" still sits open. It was
+deferred from the 2026-09-11 re-sort and lists four pieces of open work. Measured 2026-10-22
+on master `d8c23166`:
+
+- **File-based pointer grouping under a six-file cap: done.** `CLAUDE.md` carries 172
+  `` → `<file>` `` matches, and 169 of them name five knowledge files
+  (`dotfiles-conventions.md` 78, `dotfiles-test-seams.md` 58,
+  `dotfiles-bats-test-infrastructure.md` 29, `dotfiles-bash-coverage.md` 3,
+  `dotfiles-testing-toolchain.md` 1). The other three match the pattern but are not knowledge
+  pointers (`writing-plans`, `firecrawl-cli`, and the `file` placeholder in the header).
+- **Accounting at bullet granularity: done.** ADR-0047 decision 1 made every rule one line.
+- **Rule-5 lines for non-derivable hazards: done.** The 2026-10-18 rule-by-rule review gave
+  every original rule a verdict and restored 19 weakened or pointer-only rules (ADR-0047,
+  Basis for the ceiling).
+- **The ≤ 50,000 UTF-16-unit bar: replaced.** During the 2026-10-17 spec the operator moved
+  from a 50,000-byte ceiling to 70,000 and then to 105,000, set from two dry runs (that
+  spec's Multi-Lens Review dispositions). `CLAUDE.md` is 74,755 UTF-16 units and 75,341
+  bytes. Reaching 50,000 would mean replacing ADR-0036's per-line pointers, whose 172
+  suffixes alone are 15,473 units. The operator declined that on 2026-10-22.
+
+So the row is superseded. What it was guarding against has not gone away, though: unbounded
+regrowth. The file went from 122,627 B to 155,308 B in three weeks after ADR-0036.
+
+The 105,000-byte ceiling now sits 29,659 bytes above the file. Measured sizes of
+`CLAUDE.md` at each commit that touched it since the ceiling landed (`git show
+<sha>:CLAUDE.md | wc -c`, population: every master commit touching the file since
+`48087820`):
+
+| date       | commit     | bytes  |
+| ---------- | ---------- | ------ |
+| 2026-10-18 | `48087820` | 74,272 |
+| 2026-10-18 | `5b18e452` | 74,305 |
+| 2026-10-20 | `6d7cfb31` | 74,774 |
+| 2026-10-21 | `63ce5323` | 74,982 |
+| 2026-10-21 | `487b303f` | 75,291 |
+| 2026-10-21 | `74fcd339` | 75,341 |
+
+That is +1,069 B over five commits in three days. At that rate the file reaches 105,000 B in
+about 12 weeks. The cut from 155 KB to 75 KB would be about 40% given back before the gate
+said anything.
+
+A second copy of the ceiling has already appeared. `scripts/pre-push:179` hard-codes
+"The ceiling is 105,000 bytes" in its own failure message, and nothing ties it to
+`CEILING` in `scripts/claude_md_budget.py:20`. The checker's own message, printed just above
+it, already names the ceiling (`CLAUDE.md at <rev> is <n> bytes, ceiling <CEILING>`).
+
+## Design
+
+1. **Lower the ceiling to 85,000 bytes.** `scripts/claude_md_budget.py` sets
+   `CEILING = 85_000`. That leaves 9,659 B of headroom over today's 75,341 B. At the measured
+   rate the file reaches the ceiling in about four weeks. From then on, any change that grows
+   `CLAUDE.md` moves detail out to a knowledge file in the same change, which is ADR-0047's
+   remedy. 80,000 B was offered and declined as too tight; the operator chose 85,000 on
+   2026-10-22.
+2. **One copy of the number.** The `scripts/pre-push` failure line stops stating a figure.
+   It points at the checker's message above it and keeps the remedy text. Bats assertions
+   that match the hook's `105,000 bytes` text are removed. Assertions on the checker's
+   `bytes, ceiling <n>` text move to 85000.
+3. **Tests pin the new boundary.** In `tests/test_claude_md_budget.py` and
+   `tests/scripts/pre_push.bats`, every 105,000 boundary fixture moves to 85,000: exactly
+   85,000 B allowed, 85,001 B refused. The multibyte case becomes `"é" * 42_501`
+   (42,501 characters, 85,002 bytes) and still shows bytes are counted, not characters. The
+   red step runs the moved tests against the unchanged 105,000 constant: the 85,001-byte
+   refusal cases must fail first.
+4. **ADR-0047 amendment.** ADR-0047 gets a dated `## Amendments` entry. It records the new
+   ceiling, the measured sizes and rate, the declined 80,000 option, and that lowering the
+   ceiling, like raising it, needs an amendment. Decision 2's figure is updated to match and
+   cites the amendment. The script comment at `CEILING` names the amendment.
+5. **Close the row.** In `docs/superpowers/README.md`, "Move CLAUDE.md reference text to
+   knowledge files" moves to the closed table, titled
+   `— CLOSED 2026-10-22, superseded by ADR-0047`, with the evidence above. Index rows for
+   this spec and its plan are added.
+6. **Notice.** Lowering a ceiling can turn another session's push red. Before merge, any
+   other session working in dotfiles is told the new figure (git-workflow-020).
+
+## Out of scope
+
+- Changing the pointer format, or moving any `CLAUDE.md` text.
+- Any ai-config file.
+- Measuring in UTF-16 units: the gate stays in bytes.
+
+## Requirements
+
+- **R1.** `[PR1]` `scripts/claude_md_budget.py` sets `CEILING = 85_000`, and `claude_md_budget.py <rev>` exits 1 for an 85,001-byte `CLAUDE.md` and 0 for an 85,000-byte one.
+- **R2.** `[PR1]` `scripts/pre-push`'s budget-failure line contains no ceiling figure and still names `ai-config/docs/knowledge/dotfiles-*.md` and ADR-0047.
+- **R3.** `[PR1]` No tracked file outside `docs/superpowers/specs/`, `docs/superpowers/plans/` and `docs/adr/` contains `105,000`, `105_000`, `105000` or `105001`.
+- **R4.** `[PR1]` `tests/test_claude_md_budget.py` and `tests/scripts/pre_push.bats` test 85,000 B allowed, 85,001 B refused and an 85,002-byte multibyte file refused, and assert the checker's output names `85000`.
+- **R5.** `[PR1]` ADR-0047 carries an `## Amendments` entry dated 2026-10-22 stating the 85,000-byte ceiling, the measured 74,272 to 75,341 B growth, and that lowering needs an amendment as raising does; decision 2 states 85,000.
+- **R6.** `[PR1]` `docs/superpowers/README.md` has the relocation row in the closed table with `CLOSED 2026-10-22, superseded by ADR-0047`, not in any open table, and indexes this spec and its plan.
+- **V1.** The red step's output shows the 85,001-byte refusal tests failing against `CEILING = 105_000` before the constant changes.
+- **V2.** `make test` exits 0 on the branch, and `claude_md_budget.py HEAD` reports a size at or below 85,000.
+- **V3.** Every other session working in dotfiles has been sent the new figure before merge.
+- **N1.** No `CLAUDE.md` content changes.
+- **N2.** No flag, environment variable or trailer that skips or changes the ceiling (ADR-0047 decision 3 stands).
+- **N3.** No ai-config file changes.
