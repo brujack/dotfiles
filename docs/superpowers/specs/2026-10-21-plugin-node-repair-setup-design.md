@@ -186,3 +186,24 @@ Reviewed at commit: `347a128a`
 Finding: No issues. No test asserts a full `cannot repair` line (`plugin_node_paths.bats:146`, `:161` are substring globs; `update_plugin_node.bats:81` greps `could not be repaired`); `tests/mocks/cp` exits on `MOCK_CP_EXIT` before the real copy; `stat -c %a || stat -f %Lp` printed `640` on the Studio; `brew install <formula>` is right because an unlinked keg keeps `opt/`.
 Assumption: a pinned `node@NN` formula might since be disabled, making its `brew install` remedy fail. Checked 2026-10-21 over every plugin config on all three brew hosts: `claude` 15 `opt/node`, `workstation` 15 `Cellar/node`, `studio` none; no host pins a versioned `node@NN`.
 Disposition: Accepted, reason: no host pins a versioned node@NN formula today (operator, 2026-10-21).
+
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-21-plugin-node-repair-setup-design.md
+- anchor: 803f3cd061d5e0ba1c7cb826bced19090b932a07
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
