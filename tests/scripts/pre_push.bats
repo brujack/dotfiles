@@ -886,7 +886,7 @@ _master_push_of() {
   sha1=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
   sha2=$(_commit_file "docs/a.md" "x" "docs: a")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/feat/x ${sha1} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
+  run _run_pre_push "refs/heads/feat/x ${sha2} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
   [ "$status" -eq 0 ]
   [[ "$output" != *"refusing"* ]]
   _assert_suite_ran
@@ -1233,4 +1233,150 @@ SHIM
   [ "$status" -eq 1 ]
   [[ "$output" == *"refs/heads/one"* ]]
   [[ "$output" == *"refs/heads/two"* ]]
+}
+
+# --- wrong-tree refusal: the suite tests REPO_ROOT's working tree, so every
+# pushed ref must be at that tree's HEAD or the green run proves nothing about
+# what is pushed. ---
+
+# Run the hook from <cwd>. <extra> is shell text run after the GIT_* unset, so
+# a case can deliberately export one (as git does for a push from a worktree).
+_run_pre_push_at() {
+  local _cwd="${1}" _stdin="${2}" _extra="${3:-}"
+  local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
+  printf "%b" "${_stdin}" | bash -c "
+    export PATH='${_path_with_make}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    ${_extra}
+    cd '${_cwd}' && bash '${REPO_ROOT}/scripts/pre-push'
+  "
+}
+
+@test "wrong-tree: a ref behind this checkout's HEAD is refused before the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  sha2=$(_commit_file "b.sh" "echo 2" "feat: b")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not the pushed commit"* ]]
+  [[ "$output" == *"${sha1:0:7}"* ]]
+  [[ "$output" == *"${sha2:0:7}"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: a ref at this checkout's HEAD runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "a.sh" "echo 1" "feat: a" > /dev/null
+  sha2=$(_commit_file "b.sh" "echo 2" "feat: b")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat ${sha2} refs/heads/feat ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"not the pushed commit"* ]]
+  [ "$(grep -c "^make " "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "wrong-tree: an inert-only push from another commit is not refused" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "docs/a.md" "a" "docs: a")
+  _commit_file "docs/b.md" "b" "docs: b" > /dev/null
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"not the pushed commit"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: an annotated tag at HEAD is peeled and matches" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "a.sh" "echo 1" "feat: a" > /dev/null
+  _git_clean "tag -a v1 -m v1"
+  tag_sha=$(_git_clean "rev-parse v1")
+  _write_make_mock 0
+  run _run_pre_push "refs/tags/v1 ${tag_sha} refs/tags/v1 ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"not the pushed commit"* ]]
+  _assert_suite_ran
+}
+
+@test "wrong-tree: a mixed push is refused and names only the stale ref" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  old_sha=$(_commit_file "docs/a.md" "a" "docs: a")
+  sha2=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat ${sha2} refs/heads/feat ${base_sha}\nrefs/heads/docs ${old_sha} refs/heads/docs ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refs/heads/docs"* ]]
+  [[ "$output" != *"refs/heads/feat"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: a tag that peels to no commit is refused as unresolved" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "a.sh" "echo 1" "feat: a" > /dev/null
+  _git_clean "tag -a t -m t \"\$(git -C '${REPO_DIR}' rev-parse 'HEAD^{tree}')\""
+  tag_sha=$(_git_clean "rev-parse t")
+  _write_make_mock 0
+  run _run_pre_push "refs/tags/t ${tag_sha} refs/tags/t ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unresolved"* ]]
+  [[ "$output" != *"expected commit type"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: an unborn HEAD is refused as unresolved" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  second="${BATS_TEST_TMPDIR}/repo2"
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    git clone --quiet '${REPO_DIR}' '${second}'
+    git -C '${second}' checkout --quiet --orphan empty
+    git -C '${second}' rm -rf --quiet --cached .
+  "
+  _write_make_mock 0
+  run _run_pre_push_at "${second}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unresolved"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: the master refusal wins over the wrong-tree refusal" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${sha1} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refusing a direct push to master"* ]]
+  [[ "$output" != *"not the pushed commit"* ]]
+}
+
+@test "wrong-tree: an exported GIT_DIR naming another worktree cannot fake a match" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${sha1}"
+  _write_make_mock 0
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" \
+    "export GIT_DIR='${REPO_DIR}/.git/worktrees/wt'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not the pushed commit"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: an exported GIT_WORK_TREE is the tree tested and is what HEAD is read from" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${sha1}"
+  wt="$(cd "${wt}" && pwd -P)"
+  _write_make_mock 0
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" \
+    "export GIT_WORK_TREE='${wt}'"
+  [ "$status" -eq 0 ]
+  grep -qF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
 }
