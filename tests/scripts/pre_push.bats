@@ -56,7 +56,7 @@ _run_pre_push() {
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${_path_with_make}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push' ${_hook_args}
+    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
   "
 }
 
@@ -1410,9 +1410,12 @@ _run_pre_push_at() {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
   _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  bare="${BATS_TEST_TMPDIR}/origin.git"
+  _git_clean "init --quiet --bare '${bare}'"
+  _git_clean "remote add origin '${bare}'"
   _write_make_mock 0
   run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" "" \
-    "'https://token@example.invalid/r.git'"
+    "'https://token@origin.example.invalid/r.git'"
   [ "$status" -eq 1 ]
   [[ "$output" == *"<remote>"* ]]
   [[ "$output" != *"example.invalid"* ]]

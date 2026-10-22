@@ -211,8 +211,14 @@ fi
 # Name the remote only when it is a configured remote name: git passes $1 as a
 # URL for a URL push, and a URL can carry a token that must never be printed.
 remote_name="<remote>"
-if git remote 2>/dev/null | grep -qxF -- "${1:-}"; then
-    remote_name="${1}"
+# Exact line comparison (grep -x treats a newline in $1 as several patterns).
+if [[ -n "${1:-}" && "${1}" != *$'\n'* ]]; then
+    while IFS= read -r _name; do
+        if [[ "${_name}" == "${1}" ]]; then
+            remote_name="${1}"
+            break
+        fi
+    done < <(git remote 2>/dev/null)
 fi
 wrong_tree_lines=""
 remedy_lines=""
