@@ -383,3 +383,104 @@ _make_plugin() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"${HOME}/.claude/plugins/cache/ctx/ctx/1.0.169/hooks/hooks.json"$'\t'"${STALE_NODE}"* ]]
 }
+
+# ── configs the scan cannot read, and a symlinked cache root ─────────────────
+
+@test "an unreadable config is tagged, refused by repair, and FAILed by doctor" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode 000 this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _file="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks/hooks.json"
+  cp -p "${_file}" "${BATS_TEST_TMPDIR}/saved"
+  chmod 000 "${_file}"
+
+  run _plugin_stale_node_paths
+  local _find_status="${status}" _find_out="${output}"
+  run repair_plugin_node_paths
+  local _repair_status="${status}" _repair_out="${output}"
+  run _doctor_check_plugin_node_paths
+  local _doctor_status="${status}" _doctor_out="${output}"
+  chmod 644 "${_file}"
+
+  [ "${_find_status}" -eq 0 ]
+  [[ "${_find_out}" == *"${_file}"$'\t'"unreadable"* ]]
+  [ "${_repair_status}" -eq 1 ]
+  [[ "${_repair_out}" == *"cannot repair ${_file}: cannot be read — run: chmod u+r ${_file}"* ]]
+  cmp "${_file}" "${BATS_TEST_TMPDIR}/saved"
+  [ "${_doctor_status}" -eq 0 ]
+  [[ "${_doctor_out}" == *"[FAIL]"* ]]
+  [[ "${_doctor_out}" == *"ctx/ctx/1.0.169/hooks/hooks.json: cannot be read — run: chmod u+r ${_file}"* ]]
+  [[ "${_doctor_out}" != *"no plugin pins a missing node binary"* ]]
+}
+
+@test "a config with a NUL byte is tagged nontext, refused by repair, and FAILed by doctor" {
+  _make_brew_node
+  _make_plugin "mkt/plg/1.0.0" "${STALE_NODE}"
+  local _file="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/mkt/plg/1.0.0/hooks/hooks.json"
+  printf '\0' >> "${_file}"
+  cp -p "${_file}" "${BATS_TEST_TMPDIR}/saved"
+
+  run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"${_file}"$'\t'"nontext"* ]]
+  [[ "$output" != *"${_file}"$'\t'"${STALE_NODE}"* ]]
+
+  run repair_plugin_node_paths
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot repair ${_file}: contains non-text data — reinstall plugin plg@mkt"* ]]
+  cmp "${_file}" "${BATS_TEST_TMPDIR}/saved"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"mkt/plg/1.0.0/hooks/hooks.json: contains non-text data — reinstall plugin plg@mkt"* ]]
+  [[ "$output" != *"no plugin pins a missing node binary"* ]]
+}
+
+@test "a pin next to an invalid UTF-8 byte is still found under a UTF-8 locale" {
+  locale -a | command grep -qxiE 'en_US\.utf-?8' || fail "en_US.UTF-8 locale not installed; this test cannot discriminate"
+  _make_brew_node
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  mkdir -p "${_dir}/hooks"
+  printf '{"c":"\377%s"}\n' "${STALE_NODE}" > "${_dir}/hooks/hooks.json"
+
+  LC_ALL=en_US.UTF-8 run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" != *$'\t'"nontext"* ]]
+  [[ "$output" != *$'\t'"unreadable"* ]]
+  [[ "$output" == *"${_dir}/hooks/hooks.json"$'\t'"${STALE_NODE}"* ]]
+}
+
+@test "repair still repairs a writable sibling when another config is unreadable" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode 000 this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/bad/1.0.0" "${STALE_NODE}"
+  _make_plugin "ctx/good/1.0.0" "${STALE_NODE}"
+  local _bad="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/bad/1.0.0/hooks/hooks.json"
+  local _good="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/good/1.0.0"
+  chmod 000 "${_bad}"
+
+  run repair_plugin_node_paths
+  chmod 644 "${_bad}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot be read"* ]]
+  grep -qF "\\\"${STABLE_NODE}\\\" " "${_good}/hooks/hooks.json"
+  grep -qF "\"command\":\"${STABLE_NODE}\"" "${_good}/.claude-plugin/plugin.json"
+}
+
+@test "a cache root that is a symlink is descended, and doctor's label has no doubled slash" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  mv "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}" "${BATS_TEST_TMPDIR}/real-cache"
+  ln -s "${BATS_TEST_TMPDIR}/real-cache" "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}"
+
+  run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks/hooks.json"$'\t'"${STALE_NODE}"* ]]
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" == *"ctx/ctx/1.0.169/hooks/hooks.json: pins missing ${STALE_NODE}"* ]]
+  [[ "$output" != *"//"* ]]
+}
