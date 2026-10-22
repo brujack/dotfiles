@@ -45,39 +45,57 @@ is a doctor PASS that claims more than its mechanism checked.
 
 ### 1. Tag any config the scan could not read cleanly
 
-`_plugin_stale_node_paths` greps each config on its own, capturing stdout and stderr
-together and the exit status:
+`_plugin_stale_node_paths` greps each config on its own, in the C locale, capturing stdout
+and stderr together and the exit status:
 
 ```bash
-_out="$(grep -oE '<pin regex>' "${_file}" 2>&1)"; _rc=$?
+_out="$(LC_ALL=C grep -oE '<pin regex>' "${_file}" 2>&1)"; _rc=$?
 ```
 
-Every line the pin regex can print starts with `/`. So the file is tagged
-`<file>\tunread`, and none of its lines is used, when either holds:
+`LC_ALL=C` is load-bearing on macOS. Measured 2026-10-21 on the Studio (BSD grep 2.6.0,
+`/usr/bin/grep`): a config whose pin line also holds one `\xff` byte gives `rc=1 out=[]`
+under `en_US.UTF-8`, identical to "no match", and `rc=0` with the pin under `LC_ALL=C`. GNU
+grep 3.12 prints the pin in every locale. The pin regex is ASCII, and both greps still flag a
+NUL byte under `LC_ALL=C` (round-2 Goal-fit and Risk lenses).
 
-- `_rc` is 2 or more (GNU grep: unreadable file, I/O error);
-- any output line does not start with `/` (GNU grep's `grep: <file>: binary file matches`
-  on stderr, BSD grep's `Binary file <file> matches` on stdout, any other diagnostic).
+Every line the pin regex can print starts with `/`. Two cases tag the file, and none of its
+lines is used:
+
+- `_rc` is 2 or more → `<file>\tunreadable` (GNU and BSD grep: permission denied, I/O
+  error, file gone);
+- otherwise, any output line does not start with `/` → `<file>\tnontext` (GNU grep's
+  `grep: <file>: binary file matches` on stderr, BSD grep's `Binary file <file> matches` on
+  stdout, any other diagnostic).
 
 Otherwise the lines are the candidate pins, deduplicated and checked with `[[ -x ]]` as
-today. rc 1 (no match) is a clean file.
+today. rc 1 (no match) is a clean file. An empty `_out` must not be fed to the dedupe as a
+line: `sort -u <<< ""` yields one empty line. The assignment and its `$?` stay on separate
+statements from any `local` declaration, or `$?` is `local`'s.
 
-This replaces an enumerated pre-check design (`[[ -r ]]` plus a `tr -d '\000' | cmp` NUL
-probe) that the round-1 lenses refuted: BSD `tr` aborts on an invalid UTF-8 byte in a
-UTF-8 locale and would tag a valid text config on macOS only, and no enumeration catches a
-failure nobody listed. Reading grep's own result catches the listed causes and the unlisted
-ones. No `grep -a`: the repair reads the file with `$(<file)`, which drops NUL bytes, so a
-binary config must be refused, never rewritten. No temp file is needed for stderr, so the
-no-trap rule for `lib/helpers.sh` is untouched.
+Reading grep's own result catches the listed causes and unlisted ones (a file changed
+between `find` and grep); an enumerated pre-check (`[[ -r ]]`, a `tr | cmp` NUL probe) was
+refuted in round 1. No `grep -a`: the repair reads the file with `$(<file)`, which drops NUL
+bytes, so a non-text config must be refused, never rewritten. No temp file is needed for
+stderr, so the no-trap rule for `lib/helpers.sh` is untouched.
+
+The two tags exist because their remedies differ. For a `nontext` file the remedy names the
+plugin, taken from the cache-relative path `<marketplace>/<plugin>/<version>/…`; no command
+is given, because no shell command repairs a config holding binary data, and
+`claude plugins install` is not verified to replace an already-cached version (operator
+choice, 2026-10-21).
 
 Consumers:
 
-- `repair_plugin_node_paths`: for an `unread` line print
-  `cannot repair <file>: could not be read as text — run: ls -l <file>`, set `_failed=1`,
-  `continue`. The file is not touched. rc stays 0/1/2.
-- `_doctor_check_plugin_node_paths`: for an `unread` line
-  `doctor_fail "<file relative to the cache>" "could not be read as text — run: ls -l <file>"`.
-  An unread config is a FAIL, so doctor never PASSes over a file it did not scan.
+- `repair_plugin_node_paths`: the file is not touched, `_failed=1`, `continue`, after
+  printing
+  - `unreadable`: `cannot repair <file>: cannot be read — run: chmod u+r <file>`;
+  - `nontext`: `cannot repair <file>: contains non-text data — reinstall plugin <plugin>@<marketplace>`.
+
+  rc stays 0/1/2.
+- `_doctor_check_plugin_node_paths`: `doctor_fail "<file relative to the cache>"` with
+  `cannot be read — run: chmod u+r <file>` or
+  `contains non-text data — reinstall plugin <plugin>@<marketplace>`. A tagged config is a
+  FAIL, so doctor never PASSes over a file it did not scan.
 - The two callers' summary warnings are reworded, the only change to them:
   - `run_update`'s `plugin-node` section:
     `plugin config(s) could not be checked or repaired — see detail`;
@@ -93,7 +111,7 @@ both call it (two callers).
 For each stale pin doctor chooses, in this order:
 
 - `opt/` link not executable → `pins missing <node> — run: brew install <formula>`;
-- config not writable → `pins missing <node> — run: ls -l <file>`;
+- config not writable → `pins missing <node> — run: chmod u+w <file> && setup_env.sh -t update --brew-only`;
 - otherwise → `pins missing <node> — run: setup_env.sh -t update --brew-only` (unchanged).
 
 A full disk cannot be predicted from doctor; it keeps the generic remedy, and the repair's
@@ -113,41 +131,44 @@ pins it.
 In `tests/setup_env/plugin_node_paths.bats`, under the existing `_OVERRIDE_CLAUDE_PLUGIN_CACHE`
 setup seam:
 
-1. An unreadable config (`chmod 000`, root-skip): finder emits `<file>\tunread`; repair
-   returns 1 with the `could not be read as text — run: ls -l` line and leaves the file
+1. An unreadable config (`chmod 000`, root-skip): finder emits `<file>\tunreadable`; repair
+   returns 1 with the `cannot be read — run: chmod u+r` line and leaves the file
    byte-identical; doctor FAILs it and sets the failure flag; no `[PASS]` line.
-2. A config with a NUL byte holding a stale pin: finder emits `<file>\tunread` and not the
-   pin; repair returns 1 and leaves the file byte-identical (`cmp` against a saved copy);
+2. A config with a NUL byte holding a stale pin: finder emits `<file>\tnontext` and not the
+   pin; repair returns 1 with `reinstall plugin <plugin>@<marketplace>` naming the fixture's
+   plugin and marketplace, and leaves the file byte-identical (`cmp` against a saved copy);
    doctor FAILs it.
-3. A config with one invalid UTF-8 byte (`\xff`) and no NUL, holding a stale pin: it is
-   **not** tagged, and the pin is reported. The macOS CI leg runs this file, so this covers
-   the BSD side.
+3. A config whose stale-pin line also holds one `\xff` byte, no NUL, with the test's
+   `LC_ALL` set to a UTF-8 locale (`en_US.UTF-8` on macOS, `C.UTF-8` on Linux): the file is
+   not tagged and the pin is reported. Without the `LC_ALL=C` in R2 this fails on the macOS
+   CI leg, which resolves `/usr/bin/grep` (BSD).
 4. A readable sibling config in the same cache is still reported and repaired (one bad file
    does not stop the scan).
 5. Doctor remedy, one test each: missing `opt/` link → `run: brew install node`; read-only
-   config with the `opt/` link present → `run: ls -l`; writable config with the link
-   present → `run: setup_env.sh -t update --brew-only`.
+   config with the `opt/` link present → `run: chmod u+w <file> && setup_env.sh -t update --brew-only`;
+   writable config with the link present → `run: setup_env.sh -t update --brew-only`.
 6. A cache root that is a symlink to a directory holding a stale pin: the finder reports it;
    doctor's label is the path relative to the cache, with no doubled slash.
 7. The two reworded summary warnings: the existing `-t update` and
    `run_setup_or_developer` rc-1 tests assert the new text.
-8. Existing tests keep passing.
+8. Existing tests keep passing; "ignores a bare node interpreter" and the PASS test guard the
+   empty-`_out` dedupe trap.
 
 ## Requirements
 
-- **R1.** `_plugin_stale_node_paths` emits `<file>\tunread`, and none of that file's pins, when grep on the file exits 2 or more or prints any line that does not start with `/`.
-- **R2.** `_plugin_stale_node_paths` captures grep's stdout and stderr per file without a temp file or trap, and does not use `grep -a`.
-- **R3.** For an `unread` line, `repair_plugin_node_paths` prints `cannot repair <file>: could not be read as text — run: ls -l <file>`, leaves the file unchanged, and returns 1.
-- **R4.** For an `unread` line, `_doctor_check_plugin_node_paths` calls `doctor_fail` with `could not be read as text — run: ls -l <file>` and does not print `no plugin pins a missing node binary`.
+- **R1.** `_plugin_stale_node_paths` emits `<file>\tunreadable` when grep on the file exits 2 or more, else `<file>\tnontext` when grep prints any line that does not start with `/`, and emits none of a tagged file's pins.
+- **R2.** `_plugin_stale_node_paths` runs the per-file grep as `LC_ALL=C grep -oE`, captures its stdout and stderr together without a temp file or trap, and does not use `grep -a`.
+- **R3.** For a tagged line, `repair_plugin_node_paths` leaves the file unchanged, returns 1, and prints `cannot repair <file>: cannot be read — run: chmod u+r <file>` (`unreadable`) or `cannot repair <file>: contains non-text data — reinstall plugin <plugin>@<marketplace>` (`nontext`), with plugin and marketplace taken from the cache-relative path.
+- **R4.** For a tagged line, `_doctor_check_plugin_node_paths` calls `doctor_fail` with `cannot be read — run: chmod u+r <file>` or `contains non-text data — reinstall plugin <plugin>@<marketplace>`, and does not print `no plugin pins a missing node binary`.
 - **R5.** `_plugin_stable_node <node>` prints `<formula>\t<stable path>`, and both `repair_plugin_node_paths` and `_doctor_check_plugin_node_paths` use it.
-- **R6.** For a stale pin, doctor's remedy is `run: brew install <formula>` when the `opt/` node is not executable, else `run: ls -l <file>` when the config is not writable, else `run: setup_env.sh -t update --brew-only`.
+- **R6.** For a stale pin, doctor's remedy is `run: brew install <formula>` when the `opt/` node is not executable, else `run: chmod u+w <file> && setup_env.sh -t update --brew-only` when the config is not writable, else `run: setup_env.sh -t update --brew-only`.
 - **R7.** `_plugin_stale_node_paths` passes `"${_cache}/"` to `find`, so a symlinked cache root is descended.
 - **R8.** `run_update`'s `plugin-node` warning reads `plugin config(s) could not be checked or repaired — see detail`, and `run_setup_or_developer`'s reads `plugin node paths: some configs could not be checked or repaired — see the 'cannot repair' lines above`.
 - **V1.** `make test` exits 0 and CI is green, including `bash-coverage` at or above 91%.
-- **V2.** On `claude` and `workstation`, `./setup_env.sh -t doctor` prints the literal `[PASS] no plugin pins a missing node binary` line before and after the change.
+- **V2.** On `claude`, `workstation` and the Studio, `./setup_env.sh -t doctor` prints the literal `[PASS] no plugin pins a missing node binary` line before and after the change, recorded beside the count of configs the finder scanned there (`find <cache>/ -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) | wc -l`).
 - **N1.** No change to `repair_plugin_node_paths`'s rewrite sequence (`-w`, `mktemp`, `cp -p`, `printf`, `mv -f`) or its rc contract (0/1/2).
 - **N2.** No change to `run_setup_or_developer` or `run_update`'s `plugin-node` section beyond the two warning strings in R8.
-- **N3.** A config tagged `unread` is never written.
+- **N3.** A config tagged `unreadable` or `nontext` is never written.
 
 ## Multi-Lens Review
 
@@ -174,3 +195,26 @@ Disposition: Addressed — the NUL probe is gone; an unread file is detected fro
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `d3953898` (all three lenses, design substance changed in round 1).
+
+#### Goal-Fit
+
+Finding: macOS false-clean survives the revision. BSD grep under `en_US.UTF-8` returns `rc=1 out=[]` for a pin line holding one `\xff` byte, so the file reads as clean; `LC_ALL=C` restores the pin. Reproduced by the orchestrator on the Studio. Test 3 as written could pass or fail depending on runner locale and byte placement.
+Assumption: that grep's rc plus first character separates "scanned clean" from "not scanned" in the operator's real locale. Refuted for BSD under `en_US.UTF-8`; holds under `LC_ALL=C`.
+Disposition: Addressed — R2 adds `LC_ALL=C`; test 3 puts the byte on the pin's line under a UTF-8 locale.
+
+#### Ergonomics
+
+Finding: `run: ls -l <file>` only inspects; pasted and re-run, doctor shows the same FAIL, against the paste-then-rerun loop. V2's PASS is also what an empty scan prints; pair it with the scanned-config count (132 on `claude`, 78 on `workstation`).
+Assumption: that a non-writable plugin config is an accident, not a deliberate pin. 0 of 132 on `claude` are non-writable.
+Disposition: Addressed — remedies change state (`chmod u+r`, `chmod u+w … && setup_env.sh -t update --brew-only`); non-text data names the plugin to reinstall without a command (operator chose A, 2026-10-21); V2 records the config count. Assumption accepted: a stale pin in a read-only config breaks its hook whether or not the mode was deliberate, so FAIL is right.
+
+#### Risk
+
+Finding: No issues. GNU grep 3.12 and BSD grep 2.6.0 under C, `en_US.UTF-8` and `C.UTF-8`: clean, no-pin and lone-`\xff` files give empty stderr and `/`-prefixed lines; NUL is caught by the not-`/` rule on both. Real caches: 132 (`claude`), 131 (Studio), 78 (`workstation`), 0 tagged; `workstation` has 2 live pins, so V2 is not vacuous there. Implementation traps: `sort -u <<< ""` yields one empty line; `local _out=$(…)` loses grep's rc.
+Assumption: no uncertain assumption found; weakest is that `test-macos` resolves BSD `/usr/bin/grep` (ci.yml adds no gnubin).
+Disposition: N/A — clean; both traps recorded in Design §1.
+
