@@ -575,6 +575,14 @@ run_setup_or_developer() {
     fi
   fi
 
+  # The package step can upgrade brew node, which strands any plugin config
+  # pinned to the old Cellar path (see _claude_plugin_cache_dir).
+  local _plugin_node_rc=0
+  repair_plugin_node_paths || _plugin_node_rc=$?
+  if [[ ${_plugin_node_rc} -eq 1 ]]; then
+    log_warn "plugin node paths: some pins could not be repaired — see the 'cannot repair' lines above"
+  fi
+
   # Same degrade-not-abort shape as install_aws_tools below: an absent
   # toolchain or one broken crate must not cost pyenv/ansible/ruby/rust.
   install_cargo_tools || log_warn "cargo tools incomplete — see above"

@@ -159,8 +159,101 @@ _make_plugin() {
   chmod 644 "${_dir}/hooks/hooks.json"
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot repair ${_dir}/hooks/hooks.json: rewrite failed"* ]]
+  # The -w refusal must stop the attempt before any copy of this file.
+  run grep -qF "cp -p ${_dir}/hooks/hooks.json" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
   grep -qF "${STALE_NODE}" "${_dir}/hooks/hooks.json"
   grep -qF "\"command\":\"${STABLE_NODE}\"" "${_dir}/.claude-plugin/plugin.json"
+}
+
+# The original config must survive every failed rewrite byte-for-byte, and no
+# temp file may be left beside it (a stray hooks.json.XXXXXX is cache litter).
+@test "repair_plugin_node_paths keeps the config intact and leaves no temp when the final mv fails" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  cp -p "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+  export MOCK_MV_FAIL_ARGS="${_dir}/hooks/hooks.json"
+
+  run repair_plugin_node_paths
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rewrite failed"* ]]
+  cmp "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+  run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"hooks.json."* ]]
+}
+
+@test "repair_plugin_node_paths keeps the config intact when the temp file cannot be created" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only directory mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  cp -p "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+  chmod 555 "${_dir}/hooks"
+
+  run repair_plugin_node_paths
+  chmod 755 "${_dir}/hooks"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rewrite failed"* ]]
+  cmp "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+}
+
+@test "repair_plugin_node_paths removes the temp and keeps the config when cp fails" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  cp -p "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+  export MOCK_CP_EXIT=1
+
+  run repair_plugin_node_paths
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rewrite failed"* ]]
+  cmp "${_dir}/hooks/hooks.json" "${BATS_TEST_TMPDIR}/saved"
+  run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"hooks.json."* ]]
+}
+
+@test "repair_plugin_node_paths preserves the config's file mode and leaves no temp" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  local _file="${_dir}/hooks/hooks.json"
+  chmod 640 "${_file}"
+
+  run repair_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "${_file}" 2>/dev/null || stat -f %Lp "${_file}")" == "640" ]
+  grep -qF "${STABLE_NODE}" "${_file}"
+  refute_grep "${STALE_NODE}" "${_file}" -F
+  run ls "${_dir}/hooks"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"hooks.json."* ]]
+}
+
+@test "repair_plugin_node_paths names brew install as the remedy when the opt link is missing" {
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+
+  run repair_plugin_node_paths
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"— run: brew install node"* ]]
+}
+
+@test "repair_plugin_node_paths names write permission and free space as the remedy when the rewrite fails" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  chmod 444 "${_dir}/hooks/hooks.json"
+
+  run repair_plugin_node_paths
+  chmod 644 "${_dir}/hooks/hooks.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"— check write permission and free space in ${_dir}/hooks"* ]]
+  # The -w refusal must stop the attempt before any copy of this file.
+  run grep -qF "cp -p ${_dir}/hooks/hooks.json" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
 }
 
 @test "repair_plugin_node_paths is a no-op on a second run" {

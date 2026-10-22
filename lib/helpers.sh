@@ -1569,8 +1569,10 @@ _plugin_stale_node_paths() {
 
 # Rewrites each stale pin to the keg's opt/ symlink, which brew keeps pointed
 # at the current version: .../Cellar/node/26.8.2/bin/node becomes
-# .../opt/node/bin/node. rc 0 when nothing was stale or everything was
-# repaired, 1 when any pin could not be repaired, 2 when there is no cache.
+# .../opt/node/bin/node. The write is atomic (temp file beside the config,
+# then rename), so a failed write never leaves a truncated config. rc 0 when
+# nothing was stale or everything was repaired, 1 when any pin could not be
+# repaired, 2 when there is no cache.
 repair_plugin_node_paths() {
   local _stale _rc
   _stale="$(_plugin_stale_node_paths)"
@@ -1578,20 +1580,32 @@ repair_plugin_node_paths() {
   [[ ${_rc} -ne 0 ]] && return "${_rc}"
   [[ -z "${_stale}" ]] && return 0
 
-  local _file _node _formula _stable _content _failed=0
+  local _file _node _formula _stable _content _tmp _failed=0
   while IFS=$'\t' read -r _file _node; do
     _formula="${_node#*/Cellar/}"
     _formula="${_formula%%/*}"
     _stable="${_node%%/Cellar/*}/opt/${_formula}/bin/node"
     if [[ ! -x "${_stable}" ]]; then
-      printf "cannot repair %s: %s is gone and %s does not exist\n" "${_file}" "${_node}" "${_stable}" >&2
+      printf "cannot repair %s: %s is gone and %s does not exist — run: brew install %s\n" \
+        "${_file}" "${_node}" "${_stable}" "${_formula}" >&2
       _failed=1
       continue
     fi
+    _tmp=""
+    # -w first: this keeps a deliberately read-only config in place. A rename
+    # would replace it whenever its directory is writable.
     # Quoted replacement: bash >= 5.2 expands & in an unquoted one (shell.md).
-    if ! _content="$(<"${_file}")" \
-      || ! printf '%s\n' "${_content//"${_node}"/"${_stable}"}" > "${_file}"; then
-      printf "cannot repair %s: rewrite failed\n" "${_file}" >&2
+    # mktemp beside the config keeps the rename on one filesystem; cp -p
+    # carries the mode, since mktemp creates 0600.
+    if [[ ! -w "${_file}" ]] \
+      || ! _content="$(<"${_file}")" \
+      || ! _tmp="$(mktemp "${_file}.XXXXXX")" \
+      || ! cp -p "${_file}" "${_tmp}" \
+      || ! printf '%s\n' "${_content//"${_node}"/"${_stable}"}" > "${_tmp}" \
+      || ! mv -f "${_tmp}" "${_file}"; then
+      [[ -n "${_tmp}" ]] && rm -f "${_tmp}"
+      printf "cannot repair %s: rewrite failed — check write permission and free space in %s\n" \
+        "${_file}" "${_file%/*}" >&2
       _failed=1
       continue
     fi
