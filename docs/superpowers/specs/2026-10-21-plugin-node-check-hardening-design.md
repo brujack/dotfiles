@@ -124,3 +124,29 @@ setup seam:
 - **N1.** No change to `repair_plugin_node_paths`'s rewrite sequence (`-w`, `mktemp`, `cp -p`, `printf`, `mv -f`) or its rc contract (0/1/2).
 - **N2.** No change to `run_setup_or_developer` or `run_update`'s `plugin-node` section.
 - **N3.** A config tagged `unreadable` or `binary` is never written.
+
+## Multi-Lens Review
+
+Reviewed at commit: `8c4e1119` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Item 2 carries the real value; items 1 and 3 are accepted operator scope. Item 1 over-builds and still leaks: the `unreadable` and `binary` tags reach every consumer as the same text (R3, R4), so the split changes no decision, while the grep inside `< <(grep … | sort -u)` keeps discarding its own rc and stderr. Any failure the pre-checks did not enumerate (a file changed between `find` and grep) still yields an empty, clean result. Simpler: grep each file with stderr captured and tag it unread on rc >= 2 or non-empty stderr; one tag, no `tr`/`cmp`, no locale reasoning. `LC_ALL=C` (R2) defends nothing reproducible: GNU grep 3.12 under `en_US.UTF-8` matched a pin in a file with a lone `\xff`, rc 0, no stderr. V2 is the only PASS-expecting case and passes on an empty finder.
+Assumption: R6's `run: brew install <formula>` assumes the pinned formula is still installable. A pin naming a disabled versioned formula (`node@18`) would move the dead end, not remove it. Open because `claude`'s cache holds no Cellar pins today; settle by reading where context-mode records `process.execPath` (mksglu/context-mode#1090) and `brew info --json=v2 <formula> | jq '.formulae[0].disabled'`.
+Disposition:
+
+### Ergonomics
+
+Finding: the new unread FAIL/WARN has no pasteable remedy ("check its permissions and contents"), against the operator's paste-one-remedy-then-rerun workflow, so it fires on every doctor, update and setup run until tuned out, which then hides the real stale-pin case. R6's "check write permission on <file>" has the same defect; `helpers.sh` already uses a pasteable `ls -l` remedy elsewhere. The cache path encodes `<marketplace>/<plugin>/<version>`, so a reinstall command is derivable. N2 freezes two summary strings that become wrong for an unread file with no pin: `-t update`'s "stale node path(s) could not be repaired" and setup's "some pins could not be repaired". V2 passes vacuously; it should assert the literal `[PASS] no plugin pins a missing node binary` line.
+Assumption: that FAIL is the right severity for "config not scanned", i.e. the operator acts on such a line rather than tuning it out. Settled by asking the operator; if a FAIL with no pasteable remedy gets ignored, the remedy must be a command or the severity `doctor_warn`.
+Disposition:
+
+### Risk
+
+Finding: the NUL detector is not portable. With `LC_ALL=C` on grep only, BSD `tr` on the Studio in `en_US.UTF-8` aborts on an invalid byte: a no-NUL file holding one `\xff` gave `tr: Illegal byte sequence`, rc 1, so `tr | cmp -s` reports "has NUL" and the file is tagged `binary` on macOS only (GNU `tr` on `claude` returned 0). Fail-closed, so nothing is corrupted, but test 2 (a NUL fixture) would not catch it. Separately, the problem statement is Linux-only: BSD `/usr/bin/grep -oE` prints `Binary file nul.json matches` on **stdout**, rc 0, so on macOS today the binary case yields a bogus pin line, not a false PASS. 0 of 131 Studio configs are affected.
+Assumption: that `tr -d '\000' | cmp -s` answers only "is there a NUL?" on every platform. Refuted on macOS by the probe above.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
