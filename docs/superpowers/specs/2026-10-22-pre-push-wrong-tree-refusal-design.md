@@ -240,3 +240,25 @@ Disposition: Addressed (operator, 2026-10-22: "Addressed, approve spec"). Twelft
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-22-pre-push-wrong-tree-refusal-design.md
+- anchor: 7f85a7a550fbd9b32e3b5dbbb06664710ce4972a
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test at cefdb069: rc 0, 3373 ok, 0 not ok (worktree, foreground, < /dev/null).
+- V2: Refusal half run 2026-10-22 from the main checkout (on master 0e5ec4d) with -c core.hooksPath=<worktree>/scripts: PUSH_RC=1, printed 'pre-push: the suite tests this checkout's working tree, not the pushed commit.' naming refs/heads/feat/pre-push-wrong-tree at cefdb06 vs 0e5ec4d and the exact remedy; ls-remote showed the branch absent afterwards. Pass half is the PR's own push from the worktree with the same core.hooksPath; both outputs go in the PR body.
+- V3: ai-config#325 merged 2026-10-22 as 6918b938: core.md git-workflow-043, its knowledge entry and ai-config-bats-testing-pitfalls.md rewritten to push-from-worktree / strip GIT_*; finishing-a-development-branch push step amended. terraform_ansible Backlog row added by its session in cfa94d01 (requested from here; that repo is the ansible session's).
