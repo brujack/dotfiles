@@ -1263,6 +1263,7 @@ _run_pre_push_at() {
   [[ "$output" == *"not the pushed commit"* ]]
   [[ "$output" == *"${sha1:0:7}"* ]]
   [[ "$output" == *"${sha2:0:7}"* ]]
+  [[ "$output" == *"this checkout ($(cd "${REPO_DIR}" && pwd -P))"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
@@ -1342,6 +1343,29 @@ _run_pre_push_at() {
   "
   _write_make_mock 0
   run _run_pre_push_at "${second}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unresolved"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wrong-tree: an unborn HEAD and an unpeelable ref are refused, not matched as equal" {
+  # Both reads fail here, and two empty values compare equal: only the -z
+  # guards keep this fail-closed.
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "a.sh" "echo 1" "feat: a" > /dev/null
+  _git_clean "tag -a t -m t \"\$(git -C '${REPO_DIR}' rev-parse 'HEAD^{tree}')\""
+  tag_sha=$(_git_clean "rev-parse t")
+  second="${BATS_TEST_TMPDIR}/repo2"
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    git clone --quiet '${REPO_DIR}' '${second}'
+    git -C '${second}' fetch --quiet origin 'refs/tags/t:refs/tags/t'
+    git -C '${second}' checkout --quiet --orphan empty
+    git -C '${second}' rm -rf --quiet --cached .
+  "
+  _write_make_mock 0
+  run _run_pre_push_at "${second}" "refs/tags/t ${tag_sha} refs/tags/t ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"unresolved"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]

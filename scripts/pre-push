@@ -211,7 +211,8 @@ fi
 # Name the remote only when it is a configured remote name: git passes $1 as a
 # URL for a URL push, and a URL can carry a token that must never be printed.
 remote_name="<remote>"
-# Exact line comparison (grep -x treats a newline in $1 as several patterns).
+# Exact whole-line comparison, never a pattern match; a $1 holding a newline
+# cannot be a remote name, so it is never printed.
 if [[ -n "${1:-}" && "${1}" != *$'\n'* ]]; then
     while IFS= read -r _name; do
         if [[ "${_name}" == "${1}" ]]; then
