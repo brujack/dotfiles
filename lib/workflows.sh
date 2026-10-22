@@ -580,7 +580,7 @@ run_setup_or_developer() {
   local _plugin_node_rc=0
   repair_plugin_node_paths || _plugin_node_rc=$?
   if [[ ${_plugin_node_rc} -eq 1 ]]; then
-    log_warn "plugin node paths: some pins could not be repaired — see the 'cannot repair' lines above"
+    log_warn "plugin node paths: some configs could not be checked or repaired — see the 'cannot repair' lines above"
   fi
 
   # Same degrade-not-abort shape as install_aws_tools below: an absent
@@ -942,7 +942,7 @@ run_update() {
       cat "${_DOTFILES_RUN_TMPDIR}/err_plugin-node"
       _update_record_end "plugin-node" 0
       if [[ ${_plugin_node_rc} -ne 0 ]]; then
-        _update_warn "plugin-node" "stale node path(s) could not be repaired — see detail"
+        _update_warn "plugin-node" "plugin config(s) could not be checked or repaired — see detail"
         _update_write_detail_from_err "plugin-node" "repair output"
       fi
     fi
