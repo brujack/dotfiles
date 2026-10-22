@@ -208,7 +208,14 @@ if ! tree_head="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX
     git -C "${REPO_ROOT}" rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null)"; then
     tree_head=""
 fi
+# Name the remote only when it is a configured remote name: git passes $1 as a
+# URL for a URL push, and a URL can carry a token that must never be printed.
+remote_name="<remote>"
+if git remote 2>/dev/null | grep -qxF -- "${1:-}"; then
+    remote_name="${1}"
+fi
 wrong_tree_lines=""
+remedy_lines=""
 while read -r _ref _sha _remote_ref; do
     [[ -z "${_ref}" ]] && continue
     if ! _peeled="$(git rev-parse --verify --quiet "${_sha}^{commit}" 2>/dev/null)"; then
@@ -219,12 +226,20 @@ while read -r _ref _sha _remote_ref; do
         [[ -n "${_peeled}" ]] && _ref_at="${_peeled:0:7}"
         _tree_at="unresolved"
         [[ -n "${tree_head}" ]] && _tree_at="${tree_head:0:7}"
-        wrong_tree_lines="${wrong_tree_lines}  ${_ref} is at ${_ref_at}; this checkout (${REPO_ROOT}) is at ${_tree_at}."$'\n'
+        # A non-refs/ local_ref (HEAD~1, a bare sha) means nothing in another
+        # checkout, so the full sha is the source there.
+        _src="${_ref}"
+        [[ "${_ref}" == refs/* ]] || _src="${_sha}"
+        remedy_lines="${remedy_lines}  git push ${remote_name} ${_src}:${_remote_ref}"$'\n'
+        wrong_tree_lines="${wrong_tree_lines}  ${_src} is at ${_ref_at}; this checkout (${REPO_ROOT}) is at ${_tree_at}."$'\n'
     fi
 done <<< "${pushed_refs}"
 if [[ -n "${wrong_tree_lines}" ]]; then
     printf "pre-push: the suite tests this checkout's working tree, not the pushed commit.\n" >&2
     printf '%s' "${wrong_tree_lines}" >&2
+    printf 'Push each ref from a checkout whose HEAD is that commit:\n' >&2
+    printf '%s' "${remedy_lines}" >&2
+    printf 'Re-add any flags the original push used (-u, --force-with-lease).\n' >&2
     exit 1
 fi
 

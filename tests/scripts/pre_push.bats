@@ -56,7 +56,7 @@ _run_pre_push() {
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${_path_with_make}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
+    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push' ${_hook_args}
   "
 }
 
@@ -1242,13 +1242,13 @@ SHIM
 # Run the hook from <cwd>. <extra> is shell text run after the GIT_* unset, so
 # a case can deliberately export one (as git does for a push from a worktree).
 _run_pre_push_at() {
-  local _cwd="${1}" _stdin="${2}" _extra="${3:-}"
+  local _cwd="${1}" _stdin="${2}" _extra="${3:-}" _hook_args="${4:-}"
   local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${_path_with_make}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     ${_extra}
-    cd '${_cwd}' && bash '${REPO_ROOT}/scripts/pre-push'
+    cd '${_cwd}' && bash '${REPO_ROOT}/scripts/pre-push' ${_hook_args}
   "
 }
 
@@ -1384,4 +1384,37 @@ _run_pre_push_at() {
     "export GIT_WORK_TREE='${wt}'"
   [ "$status" -eq 0 ]
   grep -qF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+}
+
+@test "wrong-tree: the remedy is the exact push command, with a sha source when the ref is not a refs/ name" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  bare="${BATS_TEST_TMPDIR}/origin.git"
+  _git_clean "init --quiet --bare '${bare}'"
+  _git_clean "remote add origin '${bare}'"
+  _write_make_mock 0
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" "" "origin"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Push each ref from a checkout whose HEAD is that commit:"* ]]
+  [[ "$output" == *"  git push origin refs/heads/feat:refs/heads/feat"* ]]
+  [[ "$output" == *"Re-add any flags the original push used (-u, --force-with-lease)."* ]]
+  run _run_pre_push_at "${REPO_DIR}" "HEAD~1 ${sha1} refs/heads/feat ${base_sha}\n" "" "origin"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"  ${sha1} is at ${sha1:0:7};"* ]]
+  [[ "$output" == *"  git push origin ${sha1}:refs/heads/feat"* ]]
+  [[ "$output" != *"HEAD~1"* ]]
+}
+
+@test "wrong-tree: a URL remote is withheld and the placeholder printed" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
+  _write_make_mock 0
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" "" \
+    "'https://token@example.invalid/r.git'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"<remote>"* ]]
+  [[ "$output" != *"example.invalid"* ]]
+  [[ "$output" != *"token"* ]]
 }
