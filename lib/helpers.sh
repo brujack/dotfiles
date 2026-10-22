@@ -1550,20 +1550,37 @@ _claude_plugin_cache_dir() {
   printf '%s' "${_OVERRIDE_CLAUDE_PLUGIN_CACHE:-${HOME}/.claude/plugins/cache}"
 }
 
-# Prints "<config file>\t<node path>" for every versioned Homebrew node a
-# plugin config names that is no longer executable. rc 2 when there is no
+# Prints one "<config file>\t<tag>" line per finding. <tag> is the absolute
+# path of a versioned Homebrew node the config names that is no longer
+# executable, or "unreadable" (grep could not read the file) or "nontext"
+# (grep printed something that is not a match, e.g. "Binary file ... matches"
+# or a diagnostic). A tagged file was not scanned, so callers must never treat
+# it as clean. Each file is grepped on its own under LC_ALL=C, so a byte that
+# is invalid in the caller's locale cannot hide a pin. rc 2 when there is no
 # plugin cache at all, so callers can tell "nothing to check" from "clean".
 _plugin_stale_node_paths() {
   local _cache
   _cache="$(_claude_plugin_cache_dir)"
   [[ -d "${_cache}" ]] || return 2
 
-  local _file _node
+  local _file _node _out _rc
+  # "${_cache}/": find does not descend a symlinked starting point without it.
   while IFS= read -r -d '' _file; do
+    _out="$(LC_ALL=C grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" 2>&1)"
+    _rc=$?
+    if [[ ${_rc} -ge 2 ]]; then
+      printf '%s\tunreadable\n' "${_file}"
+      continue
+    fi
+    if [[ -n "${_out}" && "$(printf '%s\n' "${_out}" | LC_ALL=C grep -vc '^/')" -ne 0 ]]; then
+      printf '%s\tnontext\n' "${_file}"
+      continue
+    fi
+    [[ -n "${_out}" ]] || continue
     while IFS= read -r _node; do
       [[ -x "${_node}" ]] || printf '%s\t%s\n' "${_file}" "${_node}"
-    done < <(grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" | LC_ALL=C sort -u)
-  done < <(find "${_cache}" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
+    done < <(printf '%s\n' "${_out}" | LC_ALL=C sort -u)
+  done < <(find "${_cache}/" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
   return 0
 }
 
@@ -1572,7 +1589,8 @@ _plugin_stale_node_paths() {
 # .../opt/node/bin/node. The write is atomic (temp file beside the config,
 # then rename), so a failed write never leaves a truncated config. rc 0 when
 # nothing was stale or everything was repaired, 1 when any pin could not be
-# repaired, 2 when there is no cache.
+# repaired, 2 when there is no cache. A config the finder tagged "unreadable"
+# or "nontext" is never written: the line names the remedy and rc is 1.
 repair_plugin_node_paths() {
   local _stale _rc
   _stale="$(_plugin_stale_node_paths)"
@@ -1580,8 +1598,22 @@ repair_plugin_node_paths() {
   [[ ${_rc} -ne 0 ]] && return "${_rc}"
   [[ -z "${_stale}" ]] && return 0
 
-  local _file _node _formula _stable _content _tmp _failed=0
+  local _file _node _formula _stable _content _tmp _failed=0 _cache _rel _plugin
+  _cache="$(_claude_plugin_cache_dir)"
   while IFS=$'\t' read -r _file _node; do
+    if [[ "${_node}" == "unreadable" ]]; then
+      printf "cannot repair %s: cannot be read — run: chmod u+r %s\n" "${_file}" "${_file}" >&2
+      _failed=1
+      continue
+    fi
+    if [[ "${_node}" == "nontext" ]]; then
+      _rel="${_file#"${_cache}/"}"
+      _plugin="${_rel#*/}"
+      _plugin="${_plugin%%/*}@${_rel%%/*}"
+      printf "cannot repair %s: contains non-text data — reinstall plugin %s\n" "${_file}" "${_plugin}" >&2
+      _failed=1
+      continue
+    fi
     _formula="${_node#*/Cellar/}"
     _formula="${_formula%%/*}"
     _stable="${_node%%/Cellar/*}/opt/${_formula}/bin/node"
@@ -1614,6 +1646,8 @@ repair_plugin_node_paths() {
   return "${_failed}"
 }
 
+# FAILs each stale pin, and each config the scan could not read ("unreadable")
+# or parse ("nontext"); any such tag means no PASS line.
 _doctor_check_plugin_node_paths() {
   local _stale _rc _cache
   _stale="$(_plugin_stale_node_paths)"
@@ -1628,9 +1662,22 @@ _doctor_check_plugin_node_paths() {
   fi
 
   _cache="$(_claude_plugin_cache_dir)"
-  local _file _node
+  local _file _node _label _plugin
   while IFS=$'\t' read -r _file _node; do
-    doctor_fail "${_file#"${_cache}/"}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+    _label="${_file#"${_cache}/"}"
+    case "${_node}" in
+      unreadable)
+        doctor_fail "${_label}" "cannot be read — run: chmod u+r ${_file}"
+        ;;
+      nontext)
+        _plugin="${_label#*/}"
+        _plugin="${_plugin%%/*}@${_label%%/*}"
+        doctor_fail "${_label}" "contains non-text data — reinstall plugin ${_plugin}"
+        ;;
+      *)
+        doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
+        ;;
+    esac
   done <<< "${_stale}"
 }
 
