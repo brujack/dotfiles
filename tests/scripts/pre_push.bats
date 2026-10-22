@@ -1257,7 +1257,8 @@ _run_pre_push_at() {
   sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
   sha2=$(_commit_file "b.sh" "echo 2" "feat: b")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n"
+  # New branch (remote_sha all zeros): the commonest real wrong-tree push.
+  run _run_pre_push "refs/heads/feat ${sha1} refs/heads/feat ${ZERO_SHA}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"not the pushed commit"* ]]
   [[ "$output" == *"${sha1:0:7}"* ]]
@@ -1301,12 +1302,16 @@ _run_pre_push_at() {
 
 @test "wrong-tree: a mixed push is refused and names only the stale ref" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  old_sha=$(_commit_file "docs/a.md" "a" "docs: a")
+  old1=$(_commit_file "docs/a.md" "a" "docs: a")
+  old2=$(_commit_file "docs/b.md" "b" "docs: b")
   sha2=$(_commit_file "a.sh" "echo 1" "feat: a")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/feat ${sha2} refs/heads/feat ${base_sha}\nrefs/heads/docs ${old_sha} refs/heads/docs ${base_sha}\n"
+  # Both stale refs precede the HEAD ref, so a refusal that overwrote rather
+  # than appended its per-ref lines would name only the last stale one.
+  run _run_pre_push "refs/heads/docs1 ${old1} refs/heads/docs1 ${base_sha}\nrefs/heads/docs2 ${old2} refs/heads/docs2 ${base_sha}\nrefs/heads/feat ${sha2} refs/heads/feat ${base_sha}\n"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"refs/heads/docs"* ]]
+  [[ "$output" == *"refs/heads/docs1"* ]]
+  [[ "$output" == *"refs/heads/docs2"* ]]
   [[ "$output" != *"refs/heads/feat"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
