@@ -180,6 +180,12 @@ setup seam:
 - **N2.** No change to `run_setup_or_developer` or `run_update`'s `plugin-node` section beyond the two warning strings in R8.
 - **N3.** A config tagged `unreadable` or `nontext` is never written.
 
+## Amendments
+
+- R3 -> For a tagged line, `repair_plugin_node_paths` leaves the file unchanged, returns 1, and prints `cannot repair <file>: cannot be read — run: chmod u+r '<file>'` (`unreadable`) or `cannot repair <file>: contains non-text data — reinstall plugin <plugin>@<marketplace>` (`nontext`), with plugin and marketplace taken from the cache-relative path. — Task 1 code review: a pasted remedy must survive a path containing a space, so the path is single-quoted.
+- R4 -> For a tagged line, `_doctor_check_plugin_node_paths` calls `doctor_fail` with `cannot be read — run: chmod u+r '<file>'` or `contains non-text data — reinstall plugin <plugin>@<marketplace>`, and does not print `no plugin pins a missing node binary`. — Task 1 code review: the pasted path is single-quoted, as in R3.
+- R6 -> For a stale pin, doctor's remedy is `run: brew install <formula>` when the `opt/` node is not executable, else `run: chmod u+w '<file>' && setup_env.sh -t update --brew-only` when the config is not writable, else `run: setup_env.sh -t update --brew-only`. — Task 1 code review: the pasted path is single-quoted, as in R3.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `8c4e1119` (Step 7 self-review commit, before Step 8 dispatch)
