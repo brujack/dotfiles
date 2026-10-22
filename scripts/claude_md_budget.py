@@ -78,7 +78,11 @@ def main(argv: list[str]) -> int:
 
     size = len(shown.stdout)
     if size > CEILING:
-        print(f"CLAUDE.md is {size} bytes, ceiling {CEILING}; move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047)", file=sys.stderr)
+        print(
+            f"CLAUDE.md is {size} bytes, ceiling {CEILING}; "
+            "move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047)",
+            file=sys.stderr,
+        )
         return 1
     print(f"CLAUDE.md at {rev} is {size} bytes (ceiling {CEILING}).")
     return 0

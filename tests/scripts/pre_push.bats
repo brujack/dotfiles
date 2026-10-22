@@ -1114,6 +1114,8 @@ _budget_commit() {
   [[ "$output" == *"dotfiles-*.md"* ]]
   # The checker itself refused, not a git step failing first.
   [[ "$output" == *"bytes, ceiling 85000"* ]]
+  [[ "$output" == *"Any message from git or the checker is above."* ]]
+  [[ "$output" != *"105,0"* ]]
   [[ "$output" == *"refs/heads/feat/x"* ]]
 }
 
