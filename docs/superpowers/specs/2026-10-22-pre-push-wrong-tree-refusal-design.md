@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-22
 - **Backlog row:** `docs/superpowers/README.md` P2, "`scripts/pre-push` gates the wrong tree when the push comes from the main checkout"
+- **Approved:** 2026-10-22
 - **Operator decision (2026-10-22):** refuse with a message, rather than testing in the owning worktree or testing an archive of the pushed commit.
 
 ## Problem
@@ -230,7 +231,7 @@ Reviewed at commit: `ef3dbe07`. One Risk lens on the sections the round-2 revisi
 
 Finding: No load-bearing defect. Prototyped steps 1-3 and drove real `git -c core.hooksPath=... push` calls against a local bare remote with a worktree. Decoy `GIT_DIR` (cwd main, `GIT_DIR=<main>/.git/worktrees/wt`): refused, `make` not called, as the case expects. No false refusal: ordinary worktree push, `git -C wt push`, a push from a subdirectory, and the reverse decoy all match, because `make` and the `HEAD` read now take the same directory. `git remote` lists `origin` under a worktree `GIT_DIR`; a URL push prints `<remote>`. Existing suite against the prototype: 108/109, only #83, as stated. Three gaps, all in the test apparatus: (1) no case pins `-C "${REPO_ROOT}"`: a stripped read from the hook's cwd also passes the decoy case; they diverge with `GIT_WORK_TREE=<wt>` exported and cwd in main (`--show-toplevel` is wt, a cwd read gives master, a false refusal). (2) "unborn HEAD" expects only exit 1, so a bare `$(...)` dying silently under `set -e` passes it; require `unresolved`. (3) "remedy is the exact command" needs the fixture to add `origin` and the runner to pass `$1`; `_run_pre_push` passes no arguments today (plan note).
 Assumption: no uncertain assumption found (candidate: `REPO_ROOT` always holds its own `.git` entry; breaks only on a separated `--git-dir`/`--work-tree` layout this repo does not use).
-Disposition:
+Disposition: Addressed (operator, 2026-10-22: "Addressed, approve spec"). Twelfth case "work tree elsewhere" pins the `-C "${REPO_ROOT}"` read; "unborn HEAD" now requires `unresolved`; the fixture/runner note is in the Testing prose for the plan.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
