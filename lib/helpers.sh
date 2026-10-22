@@ -1563,10 +1563,11 @@ _plugin_cache_id() {
 # path of a versioned Homebrew node the config names that is no longer
 # executable, or "unreadable" (grep could not read the file) or "nontext"
 # (grep printed something that is not a match, e.g. "Binary file ... matches"
-# or a diagnostic). A tagged file was not read as clean text, so callers must
-# never treat it as clean. Each file is grepped on its own under LC_ALL=C, so a byte that
-# is invalid in the caller's locale cannot hide a pin. rc 2 when there is no
-# plugin cache at all, so callers can tell "nothing to check" from "clean".
+# or a diagnostic). A file tagged unreadable or nontext was not read as clean
+# text, so callers must never treat it as clean. Each file is grepped on its
+# own under LC_ALL=C, so a byte that is invalid in the caller's locale cannot
+# hide a pin. rc 2 when there is no plugin cache at all, so callers can tell
+# "nothing to check" from "clean".
 _plugin_stale_node_paths() {
   local _cache
   _cache="$(_claude_plugin_cache_dir)"
