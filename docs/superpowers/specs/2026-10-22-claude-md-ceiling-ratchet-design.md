@@ -50,7 +50,13 @@ said anything.
 A second copy of the ceiling has already appeared. `scripts/pre-push:179` hard-codes
 "The ceiling is 105,000 bytes" in its own failure message, and nothing ties it to
 `CEILING` in `scripts/claude_md_budget.py:20`. The checker's own message, printed just above
-it, already names the ceiling (`CLAUDE.md at <rev> is <n> bytes, ceiling <CEILING>`).
+it, already names the ceiling (`CLAUDE.md is <n> bytes, ceiling <CEILING>`).
+
+The remedy is in the wrong place too. Only the hook prints it. The same checker also runs
+in `make test` (`Makefile:163`, through `check-claude-md-budget`) and in CI (`make test` on
+the PR's merge ref), and both print only the bare figure. `make test` is usually where a
+session meets the limit first, and a branch cut before a ceiling change passes its own
+pre-push (the hook runs the pushed commit's checker) and then fails in CI with no remedy.
 
 ## Design
 
@@ -60,13 +66,19 @@ it, already names the ceiling (`CLAUDE.md at <rev> is <n> bytes, ceiling <CEILIN
    `CLAUDE.md` moves detail out to a knowledge file in the same change, which is ADR-0047's
    remedy. 80,000 B was offered and declined as too tight; the operator chose 85,000 on
    2026-10-22.
-2. **One copy of the number.** The `scripts/pre-push` failure line stops stating a figure.
-   It points at the checker's message above it and keeps the remedy text. Bats assertions
-   that match the hook's `105,000 bytes` text are removed. Assertions on the checker's
-   `bytes, ceiling <n>` text move to 85000.
+2. **One copy of the number, and the remedy where every caller sees it.** The checker's
+   refusal message carries both: `CLAUDE.md is <n> bytes, ceiling <CEILING>; move detail to
+   ai-config/docs/knowledge/dotfiles-*.md (ADR-0047)`. The `scripts/pre-push` failure line
+   keeps its first sentence ("The checker's own message is above.") and drops the figure and
+   the remedy. The hook's `105,000 bytes` assertions in `tests/scripts/pre_push.bats` are
+   replaced by assertions that the output names `ADR-0047` and `dotfiles-*.md`, so deleting
+   the remedy fails a test; the `nochecker` case asserts the output does not contain
+   `ADR-0047`. `tests/test_claude_md_budget.py` asserts the remedy in the refusal message.
+   The test file's own `CEILING = 85_000` stays a literal and is never imported from the
+   script: it is the independent oracle the boundary tests compare against.
 3. **Tests pin the new boundary.** In `tests/test_claude_md_budget.py` and
    `tests/scripts/pre_push.bats`, every 105,000 boundary fixture moves to 85,000: exactly
-   85,000 B allowed, 85,001 B refused. The multibyte case becomes `"é" * 42_501`
+   85,000 B allowed, 85,001 B refused, and the 105,002-byte fixture moves to 85,002. The multibyte case becomes `"é" * 42_501`
    (42,501 characters, 85,002 bytes) and still shows bytes are counted, not characters. The
    red step runs the moved tests against the unchanged 105,000 constant: the 85,001-byte
    refusal cases must fail first.
@@ -77,7 +89,12 @@ it, already names the ceiling (`CLAUDE.md at <rev> is <n> bytes, ceiling <CEILIN
 5. **Close the row.** In `docs/superpowers/README.md`, "Move CLAUDE.md reference text to
    knowledge files" moves to the closed table, titled
    `— CLOSED 2026-10-22, superseded by ADR-0047`, with the evidence above. Index rows for
-   this spec and its plan are added.
+   this spec and its plan are added. A new P3 row records the open question two reviewers
+   raised: whether the post-ceiling rate (about 214 B per commit) or the pre-ceiling rate
+   (about 600 B per commit, 1.5 KB/day) is the real one. Re-measure after the next 10
+   `CLAUDE.md` commits with
+   `for c in $(git log --format=%h 48087820..master -- CLAUDE.md); do git show $c:CLAUDE.md | wc -c; done`,
+   and record whether the first PR to reach 85,000 relocated text or raised the ceiling.
 6. **Notice.** Lowering a ceiling can turn another session's push red. Before merge, any
    other session working in dotfiles is told the new figure (git-workflow-020).
 
@@ -90,14 +107,42 @@ it, already names the ceiling (`CLAUDE.md at <rev> is <n> bytes, ceiling <CEILIN
 ## Requirements
 
 - **R1.** `[PR1]` `scripts/claude_md_budget.py` sets `CEILING = 85_000`, and `claude_md_budget.py <rev>` exits 1 for an 85,001-byte `CLAUDE.md` and 0 for an 85,000-byte one.
-- **R2.** `[PR1]` `scripts/pre-push`'s budget-failure line contains no ceiling figure and still names `ai-config/docs/knowledge/dotfiles-*.md` and ADR-0047.
-- **R3.** `[PR1]` No tracked file outside `docs/superpowers/specs/`, `docs/superpowers/plans/` and `docs/adr/` contains `105,000`, `105_000`, `105000` or `105001`.
-- **R4.** `[PR1]` `tests/test_claude_md_budget.py` and `tests/scripts/pre_push.bats` test 85,000 B allowed, 85,001 B refused and an 85,002-byte multibyte file refused, and assert the checker's output names `85000`.
+- **R2.** `[PR1]` `claude_md_budget.py`'s over-ceiling message names the size, the ceiling, `ai-config/docs/knowledge/dotfiles-*.md` and `ADR-0047`, and `scripts/pre-push`'s budget-failure line contains no ceiling figure.
+- **R3.** `[PR1]` No tracked file outside `docs/superpowers/specs/`, `docs/superpowers/plans/` and `docs/adr/` contains `105,000`, `105_000`, `105000`, `105001` or `105002`.
+- **R4.** `[PR1]` `tests/test_claude_md_budget.py` and `tests/scripts/pre_push.bats` test 85,000 B allowed, 85,001 B refused and an 85,002-byte multibyte file refused, and assert the refusal output names `85000`, `ADR-0047` and `dotfiles-*.md`.
 - **R5.** `[PR1]` ADR-0047 carries an `## Amendments` entry dated 2026-10-22 stating the 85,000-byte ceiling, the measured 74,272 to 75,341 B growth, and that lowering needs an amendment as raising does; decision 2 states 85,000.
 - **R6.** `[PR1]` `docs/superpowers/README.md` has the relocation row in the closed table with `CLOSED 2026-10-22, superseded by ADR-0047`, not in any open table, and indexes this spec and its plan.
+- **R7.** `[PR1]` `tests/test_claude_md_budget.py` defines `CEILING = 85_000` as a literal and does not import it from `scripts/claude_md_budget.py`.
+- **R8.** `[PR1]` `docs/superpowers/README.md` carries a P3 row to re-measure the `CLAUDE.md` growth rate after the next 10 commits, naming the command and both rates.
 - **V1.** The red step's output shows the 85,001-byte refusal tests failing against `CEILING = 105_000` before the constant changes.
 - **V2.** `make test` exits 0 on the branch, and `claude_md_budget.py HEAD` reports a size at or below 85,000.
 - **V3.** Every other session working in dotfiles has been sent the new figure before merge.
 - **N1.** No `CLAUDE.md` content changes.
 - **N2.** No flag, environment variable or trailer that skips or changes the ceiling (ADR-0047 decision 3 stands).
 - **N3.** No ai-config file changes.
+
+## Multi-Lens Review
+
+Reviewed at commit: `d1065025` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building and near-minimal. One risk: design item 2's "one copy of the number" could lead an implementer to import `CEILING` into `tests/test_claude_md_budget.py`, making the boundary tests tautological; the test copy should stay an independent oracle.
+Assumption: That `CLAUDE.md` still holds relocatable text when the ceiling bites. Measured about 21 KB of non-pointer prose (GitHub MCP, Profile Model, PowerShell prereqs, CI section). Settled by whether the first PR to reach 85,000 relocates text or raises the ceiling.
+Disposition: Addressed — operator 2026-10-22: R7 keeps the test's literal; the assumption is accepted and tracked by the R8 re-measure row.
+
+### Ergonomics
+
+Finding: The remedy is printed only by the hook, while `make test` and CI print a bare figure; and R2 had no test once the `105,000 bytes` assertions were deleted.
+Assumption: That the post-ceiling rate (about 360 B/day over 3 days) holds rather than the pre-ceiling 1.5 KB/day, which would exhaust the headroom in about 6 days.
+Disposition: Addressed — operator 2026-10-22: the remedy moves into the checker's refusal message (design 2, R2), assertions on `ADR-0047` and `dotfiles-*.md` replace the deleted ones (R4); the rate assumption is accepted and tracked by the R8 re-measure row.
+
+### Risk
+
+Finding: Deleting the hook's `105,000 bytes` assertions leaves the remedy line untested; R3 misses `105002` at `tests/scripts/pre_push.bats:1224`. Checked and not raised: stale branches fail closed in CI, no open PR or branch exceeds 85,000 B, R3's scope is otherwise complete.
+Assumption: No uncertain assumption found (no in-flight branch exceeds 85,000 B, settled by command); the growth rate changes only when the gate bites.
+Disposition: Addressed — operator 2026-10-22: R3 adds `105002` and the fixture moves to 85,002; R4 asserts the remedy.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
