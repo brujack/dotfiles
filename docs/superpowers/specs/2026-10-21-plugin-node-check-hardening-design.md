@@ -242,3 +242,23 @@ Finding: test 3 could pass without the fix: under BSD grep in a UTF-8 locale a `
 Assumption: that `macos-latest`'s `/usr/bin/grep` drops a match after an invalid byte as the Studio's 2.6.0-FreeBSD does; if not, test 3 guards nothing in CI. Settled by the first test-macos run of test 3 against the pre-fix code (Phase 2 RED step).
 Disposition: Addressed (operator, 2026-10-21) — test 3 fixes the byte position and asserts the locale exists; test 2 uses `mkt/plg/1.0.0`; §1 states `<file>` in `chmod` remedies is absolute. Findings have moved from design to test apparatus, so review stops here. Assumption to be checked by Phase 2's RED run on the macOS leg.
 
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-21-plugin-node-check-hardening-design.md
+- anchor: e4af6415d0479989c276121e73cfcd126733e729
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
