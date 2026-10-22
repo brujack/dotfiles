@@ -1,5 +1,7 @@
 # Plugin node-path check: no false PASS, cause-specific doctor remedy, symlinked cache root
 
+- **Approved:** 2026-10-21
+
 ## Problem
 
 Three backlog rows, all about the plugin node-path check (`_plugin_stale_node_paths`,
@@ -232,5 +234,5 @@ Reviewed at commit: `b31da998`.
 
 Finding: test 3 could pass without the fix: under BSD grep in a UTF-8 locale a `\xff` before or inside the match drops the pin, but one as the last byte before `\n` or on another line does not, and the spec did not fix the position; a missing locale also falls back to C silently. Test 2's `ctx/ctx` fixture cannot catch a swapped `<plugin>@<marketplace>` derivation. The `chmod` remedies must name the absolute path, since doctor's label is cache-relative. Clean probes: real cache depth (131 configs at depth 5, one at depth 7, components 1/2 always marketplace/plugin); `LC_ALL=C` still flags NUL and rc-2 files on both greps; bare `setup_env.sh` matches existing remedies; no rc-2-with-pins case.
 Assumption: that `macos-latest`'s `/usr/bin/grep` drops a match after an invalid byte as the Studio's 2.6.0-FreeBSD does; if not, test 3 guards nothing in CI. Settled by the first test-macos run of test 3 against the pre-fix code (Phase 2 RED step).
-Disposition: (pending operator) proposed Addressed — test 3 fixes the byte position and asserts the locale exists; test 2 uses `mkt/plg/1.0.0`; §1 states `<file>` in `chmod` remedies is absolute. Findings have moved from design to test apparatus, so review stops here. Assumption to be checked by Phase 2's RED run on the macOS leg.
+Disposition: Addressed (operator, 2026-10-21) — test 3 fixes the byte position and asserts the locale exists; test 2 uses `mkt/plg/1.0.0`; §1 states `<file>` in `chmod` remedies is absolute. Findings have moved from design to test apparatus, so review stops here. Assumption to be checked by Phase 2's RED run on the macOS leg.
 
