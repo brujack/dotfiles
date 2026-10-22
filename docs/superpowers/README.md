@@ -6,7 +6,6 @@ Master status index for all specs and implementation plans in this directory.
 
 | Status      | Meaning                                                                 |
 | ----------- | ----------------------------------------------------------------------- |
-| 2026-10-21 | [plugin node check hardening](plans/2026-10-21-plugin-node-check-hardening.md) | [Plugin node-path check: no false PASS, cause-specific doctor remedy, symlinked cache root](specs/2026-10-21-plugin-node-check-hardening-design.md) | In Progress |
 | Done        | Implemented and merged to master                                        |
 | In Progress | Currently being implemented                                             |
 | Pending     | Not yet started                                                         |
@@ -18,6 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2026-10-21 | [plugin node check hardening](plans/2026-10-21-plugin-node-check-hardening.md) | [Plugin node-path check: no false PASS, cause-specific doctor remedy, symlinked cache root](specs/2026-10-21-plugin-node-check-hardening-design.md) | In Progress |
 | 2026-10-21 | [plugin node repair setup](plans/2026-10-21-plugin-node-repair-setup.md) | [Plugin node-path repair: atomic rewrite, and run it from setup/developer](specs/2026-10-21-plugin-node-repair-setup-design.md) | Done — merged as dotfiles#361 |
 | 2026-10-21 | [gh cli keyring](plans/2026-10-21-gh-cli-keyring.md) | [install_github_cli_linux: no clobber, seamed paths, run first](specs/2026-10-21-gh-cli-keyring-design.md) | Done — merged as dotfiles#360 |
 | 2026-10-20 | [doctor brew links](plans/2026-10-20-doctor-brew-links.md) | [doctor: report dangling Homebrew links and unlinked kegs](specs/2026-10-20-doctor-brew-links-design.md) | Done — merged as dotfiles#358; log follow-up dotfiles#359 |
