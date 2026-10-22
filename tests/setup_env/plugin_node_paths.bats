@@ -314,6 +314,48 @@ _make_plugin() {
   [[ "$output" == *"setup_env.sh -t update --brew-only"* ]]
 }
 
+@test "_plugin_stable_node prints the formula and its opt path for a Cellar node" {
+  run _plugin_stable_node /x/Cellar/node@22/22.1.0/bin/node
+  [ "$status" -eq 0 ]
+  [ "$output" = "node@22"$'\t'"/x/opt/node@22/bin/node" ]
+}
+
+@test "_doctor_check_plugin_node_paths names brew install when the opt link is missing" {
+  # No _make_brew_node: the stable path does not exist.
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: brew install node"* ]]
+  [[ "$output" != *"setup_env.sh"* ]]
+}
+
+@test "_doctor_check_plugin_node_paths names chmod u+w then update for a read-only config" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _file="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks/hooks.json"
+  chmod 444 "${_file}"
+
+  run _doctor_check_plugin_node_paths
+  chmod 644 "${_file}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: chmod u+w '${_file}' && setup_env.sh -t update --brew-only"* ]]
+  # The writable sibling gets the plain update remedy.
+  [[ "$output" == *"plugin.json: pins missing ${STALE_NODE} — run: setup_env.sh -t update --brew-only"* ]]
+}
+
+@test "_doctor_check_plugin_node_paths names only update when link is present and config writable" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: setup_env.sh -t update --brew-only"* ]]
+  [[ "$output" != *"brew install"* ]]
+  [[ "$output" != *"chmod"* ]]
+}
+
 @test "_doctor_check_plugin_node_paths sets the doctor failure flag" {
   _make_brew_node
   _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
