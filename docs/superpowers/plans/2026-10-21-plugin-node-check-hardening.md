@@ -1,5 +1,7 @@
 # Plugin node-path check hardening Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#362 (958ee7c0), 2026-10-22.
+
 spec: docs/superpowers/specs/2026-10-21-plugin-node-check-hardening-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
