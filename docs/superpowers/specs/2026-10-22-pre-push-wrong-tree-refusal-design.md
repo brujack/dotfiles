@@ -168,6 +168,28 @@ Finding: (1) V2 as Goal-Fit. (2) core.md `git-workflow-043` and its knowledge en
 Assumption: no skill pushes a needs-suite ref from a cwd other than the branch's worktree. Checked 2026-10-22: `grep -rn 'git -C [^|]*push' ~/.claude/skills/*/SKILL.md` finds `add-claude-plugin:171` (`git -C ~/git-repos/personal/dotfiles push`), which pushes the main checkout's current branch, so HEAD equals the pushed commit and it passes. Refuted for skills; the fleet rule in (2) is the live conflict.
 Disposition: Addressed (operator, 2026-10-22). git-workflow-043 amended in ai-config in the same release (V3; operator: "Amend it in ai-config now"); the remedy tells the reader to push each ref alone; the prunable-entry edge went with the worktree lookup; every git read is required inside a conditional.
 
+### Round 2
+
+Reviewed at commit: `c7df2897` (all three lenses re-run: the round-1 revision changed design substance). Each lens was told the round-1 record is history, not findings.
+
+#### Goal-Fit (round 2)
+
+Finding: (1) The "unpeelable ref" case cannot pass as written: a tag at a blob fails the budget step's `git ls-tree` (`pre-push:117`) and is refused there, so `unresolved` is never printed; R5 keeps that order. A tag at a tree passes the loop (today it runs `make`) and fails `^{commit}`; use that. `--quiet` still prints `error: ... expected commit type` on stderr. (2) V3's justification holds for dotfiles (hook `unset`) and ai-config (`Makefile` `unexport`), not terraform_ansible, whose hook strips `GIT_*` only for the `REPO_ROOT` read and whose Makefiles have no `unexport`; amending 043 fleet-wide removes a workaround that may still be needed there. "Same release" is undefined for dotfiles. Verdict count 6 refuse / 3 pass; an empty HEAD read or empty ref record fails at least two cases each.
+Assumption: no fleet repo other than dotfiles still needs the 043 workaround; refuted for terraform_ansible by `grep -nE 'unexport|unset GIT_DIR'` over its Makefiles and hook at origin/master (no hit on a `test-*` path).
+Disposition:
+
+#### Ergonomics (round 2)
+
+Finding: (1) Unpeelable case as Goal-Fit; measured a raw tree / tag-to-tree passes `ls-tree` and the diff, and fails the peel. (2) R4's command is wrong for a `local_ref` outside `refs/`: `HEAD~1:refs/heads/x` hands the hook the literal `HEAD~1`, which re-run elsewhere pushes a different commit; print `local_ref` only when it starts with `refs/`, else the full `local_sha`. The command also drops `-u` and `--force-with-lease`/`+`, so after a rebase the pasted command is rejected; add a line to re-add the original flags. (3) V3 deletes the workaround with no replacement; name it (push from the branch's own worktree; if tests fail only during push, strip `GIT_*` in that repo's hook or Makefile) and backlog terraform_ansible's missing `unexport`. (4) Testing prose inverted: an implementation recording no ref lines exits 0 and so fails "mismatch refused", not passes it.
+Assumption: every suite-needing push is issued from a shell whose cwd is the branch's worktree. `finishing-a-development-branch` pushes `git push -u origin "${BRANCH}"` with no `cd`/`-C` (`SKILL.md:457`), and 12 dotfiles transcript pushes name a branch other than the recorded `gitBranch` with no `cd` (cwd may be stale). Any such push today tests the wrong tree; after this change it is refused, which is the intended behaviour but a habit change for the orchestrator.
+Disposition:
+
+#### Risk (round 2)
+
+Finding: (1) Unpeelable case as above. (2) R1 reads the wrong HEAD when the caller exported `GIT_DIR`, and fails open. Measured: `GIT_DIR=<main>/.git/worktrees/wt` with cwd=main, push `feat`: hook HEAD is `feat` (match) while `REPO_ROOT` is main, so master's tree is tested; the reverse gives a false refusal. Read step 1 as `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" rev-parse --verify --quiet 'HEAD^{commit}'` (shell-007), and add a decoy-`GIT_DIR` case. (3) A second copy of the workaround is at `ai-config/docs/knowledge/ai-config-bats-testing-pitfalls.md:104`; V3 misses it. (4) Every-ref matching also refuses `--follow-tags` or a named tag at another commit; dotfiles has 0 tags and `push.followTags` unset, so say so rather than claim stacked pushes are the only shape. (5) `$1` is the literal URL when a push names a URL; an https URL with a token would be echoed into stderr and transcripts.
+Assumption: dotfiles pushes never run with a caller-exported `GIT_DIR` that disagrees with the hook's cwd; finding 2 removes the dependence by reading HEAD from `REPO_ROOT` with the environment stripped.
+Disposition:
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
