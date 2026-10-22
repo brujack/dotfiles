@@ -141,17 +141,20 @@ synthetic ref line:
 | tag peeled                  | annotated tag object at HEAD, non-inert change                                           | exit 0, `make` called                                                     |
 | mixed refs refused          | non-inert ref at HEAD plus an inert ref at another commit                                | exit 1, names only the ref not at HEAD                                    |
 | unpeelable ref              | non-inert ref whose `local_sha` is a tag object pointing at a tree                       | exit 1, `unresolved` in the message, no `expected commit type` text       |
-| unborn HEAD                 | fixture with no commit checked out, non-inert ref                                        | exit 1, `make` never called                                               |
+| unborn HEAD                 | fixture with no commit checked out, non-inert ref                                        | exit 1, `unresolved` in the message, `make` never called                  |
 | master refusal wins         | non-inert ref to `refs/heads/master` at a non-HEAD commit                                | exit 1 with the existing direct-to-master text, not this one's            |
 | remedy is the exact command | mismatch on `refs/heads/feat`, hook `$1` = `origin`; and a `local_ref` of `HEAD~1`       | `origin refs/heads/feat:refs/heads/feat`; the second prints the full SHA  |
 | remote URL withheld         | mismatch, hook `$1` = an https URL not listed by `git remote`                            | message contains the literal `<remote>` and not the URL                   |
 | decoy GIT_DIR               | hook run from the main checkout with `GIT_DIR` exported to a worktree holding the pushed commit | exit 1 (the tested tree is the main checkout's), `make` never called |
+| work tree elsewhere         | hook cwd in the main checkout, `GIT_WORK_TREE` exported to a worktree at the pushed commit | exit 0, `make -C <worktree>` called (a read from cwd would falsely refuse) |
 
 "Match runs suite" and "tag peeled" prove the `HEAD` read computes: a check whose read returns
 nothing refuses both. "Mismatch refused" and "mixed refs refused" prove the ref record
 computes: a check that records no ref lines has nothing to compare, exits 0, and fails both.
-"Decoy GIT_DIR" is the only case that distinguishes a stripped `HEAD` read from an inherited
-one. "Inert-only mismatch" and "master refusal wins" pass against no implementation at all;
+"Decoy GIT_DIR" distinguishes a stripped `HEAD` read from an inherited one, and "work tree
+elsewhere" distinguishes a read from `REPO_ROOT` from a read from the hook's cwd. The
+"remedy is the exact command" case needs the fixture to add an `origin` remote and the runner
+to pass the hook's `$1`; `_run_pre_push` passes no arguments today. "Inert-only mismatch" and "master refusal wins" pass against no implementation at all;
 they guard R3 and R5 against regression.
 
 Existing cases, measured by two round-1 lenses on a prototype: 109 cases, 108 pass, one is
@@ -167,7 +170,7 @@ still carries `deploy.sh`, the master range stays `.md`-only).
 - **R4.** The refusal names each offending ref (`local_ref` if it starts with `refs/`, else the full `local_sha`) with its short SHA (or `unresolved`), the checkout path and its `HEAD` short SHA (or `unresolved`); prints `git push <remote> <src>:<remote_ref>` with the same source rule; and tells the reader to re-add the original push's flags.
 - **R5.** The R1/R2 check runs after the unresolved-range, CLAUDE.md budget and direct-to-master refusals, so each of those keeps its existing message when it also applies.
 - **R6.** The refusal prints the hook's first argument only when it equals a name listed by `git remote`, and the literal `<remote>` otherwise.
-- **R7.** `tests/scripts/pre_push.bats` carries the eleven cases in the Testing table.
+- **R7.** `tests/scripts/pre_push.bats` carries the twelve cases in the Testing table.
 - **V1.** `make test` exits 0 on the branch.
 - **V2.** Before merge, run the branch's own hook on real pushes by passing `-c core.hooksPath=<worktree>/scripts` to git: from the feature worktree it passes; from the main checkout (on master) the same branch push is refused with the R4 message. Record both outputs in the PR body.
 - **V3.** One ai-config change, merged before or with the dotfiles PR and linked from its body, rewrites core.md `git-workflow-043`, its knowledge entry and `ai-config-bats-testing-pitfalls.md:104` from "push from main" to "push from the branch's own worktree; if tests fail only during push, strip `GIT_*` in that repo's hook or Makefile"; tells `finishing-a-development-branch`'s push step to push from the branch's worktree; and adds a terraform_ansible backlog row for its missing `GIT_*` strip.
@@ -220,6 +223,14 @@ Disposition: Addressed (operator, 2026-10-22). R4 prints `local_ref` only under 
 Finding: (1) Unpeelable case as above. (2) R1 reads the wrong HEAD when the caller exported `GIT_DIR`, and fails open. Measured: `GIT_DIR=<main>/.git/worktrees/wt` with cwd=main, push `feat`: hook HEAD is `feat` (match) while `REPO_ROOT` is main, so master's tree is tested; the reverse gives a false refusal. Read step 1 as `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" rev-parse --verify --quiet 'HEAD^{commit}'` (shell-007), and add a decoy-`GIT_DIR` case. (3) A second copy of the workaround is at `ai-config/docs/knowledge/ai-config-bats-testing-pitfalls.md:104`; V3 misses it. (4) Every-ref matching also refuses `--follow-tags` or a named tag at another commit; dotfiles has 0 tags and `push.followTags` unset, so say so rather than claim stacked pushes are the only shape. (5) `$1` is the literal URL when a push names a URL; an https URL with a token would be echoed into stderr and transcripts.
 Assumption: dotfiles pushes never run with a caller-exported `GIT_DIR` that disagrees with the hook's cwd; finding 2 removes the dependence by reading HEAD from `REPO_ROOT` with the environment stripped.
 Disposition: Addressed (operator, 2026-10-22). R1 reads `HEAD` from `REPO_ROOT` with `GIT_*` stripped, plus a decoy-`GIT_DIR` case; V3 covers the bats-pitfalls copy; the limitation names `--follow-tags`/tags with the measured zero; new R6 withholds a non-remote `$1`.
+
+### Round 3 (scoped Risk)
+
+Reviewed at commit: `ef3dbe07`. One Risk lens on the sections the round-2 revision rewrote (The check, The refusal message, The fleet rule, Testing, R1/R2/R4/R6/R7/V3), told the earlier record is history.
+
+Finding: No load-bearing defect. Prototyped steps 1-3 and drove real `git -c core.hooksPath=... push` calls against a local bare remote with a worktree. Decoy `GIT_DIR` (cwd main, `GIT_DIR=<main>/.git/worktrees/wt`): refused, `make` not called, as the case expects. No false refusal: ordinary worktree push, `git -C wt push`, a push from a subdirectory, and the reverse decoy all match, because `make` and the `HEAD` read now take the same directory. `git remote` lists `origin` under a worktree `GIT_DIR`; a URL push prints `<remote>`. Existing suite against the prototype: 108/109, only #83, as stated. Three gaps, all in the test apparatus: (1) no case pins `-C "${REPO_ROOT}"`: a stripped read from the hook's cwd also passes the decoy case; they diverge with `GIT_WORK_TREE=<wt>` exported and cwd in main (`--show-toplevel` is wt, a cwd read gives master, a false refusal). (2) "unborn HEAD" expects only exit 1, so a bare `$(...)` dying silently under `set -e` passes it; require `unresolved`. (3) "remedy is the exact command" needs the fixture to add `origin` and the runner to pass `$1`; `_run_pre_push` passes no arguments today (plan note).
+Assumption: no uncertain assumption found (candidate: `REPO_ROOT` always holds its own `.git` entry; breaks only on a separated `--git-dir`/`--work-tree` layout this repo does not use).
+Disposition:
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
