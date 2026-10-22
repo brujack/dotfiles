@@ -78,7 +78,7 @@ _make_stale_plugin() {
   export UPDATE_BREW=1
   run_update
   grep -q '^WARN$' "${_DOTFILES_RUN_TMPDIR}/status_plugin-node"
-  grep -q 'could not be repaired' "${_DOTFILES_RUN_TMPDIR}/result_plugin-node"
+  grep -q 'plugin config(s) could not be checked or repaired — see detail' "${_DOTFILES_RUN_TMPDIR}/result_plugin-node"
   grep -qF "${PLUGIN_JSON}" "${_DOTFILES_RUN_TMPDIR}/detail_plugin-node"
   grep -qF "${STALE_NODE}" "${PLUGIN_JSON}"
 }
