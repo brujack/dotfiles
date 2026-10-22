@@ -1,5 +1,7 @@
 # Plugin node repair: atomic rewrite and setup call Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#361 (ebe61cbb), 2026-10-22.
+
 spec: docs/superpowers/specs/2026-10-21-plugin-node-repair-setup-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
