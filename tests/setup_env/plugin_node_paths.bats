@@ -330,6 +330,17 @@ _make_plugin() {
   [[ "$output" != *"setup_env.sh"* ]]
 }
 
+@test "_doctor_check_plugin_node_paths names the pinned versioned formula and a cache-relative label" {
+  # No opt link for node@22, so the remedy must name that formula, not node.
+  local _pin="${BREW_PREFIX}/Cellar/node@22/22.1.0/bin/node"
+  _make_plugin "ctx/ctx/1.0.169" "${_pin}"
+
+  run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ctx/ctx/1.0.169/hooks/hooks.json: pins missing ${_pin} — run: brew install node@22"* ]]
+  [[ "$output" != *"${_OVERRIDE_CLAUDE_PLUGIN_CACHE}"* ]]
+}
+
 @test "_doctor_check_plugin_node_paths names chmod u+w then update for a read-only config" {
   [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
   _make_brew_node
@@ -492,6 +503,7 @@ _make_plugin() {
   run repair_plugin_node_paths
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot repair ${_file}: contains non-text data — reinstall plugin plg@mkt"* ]]
+  printf '%s\n' "$output" | command grep -q 'reinstall plugin plg@mkt$'
   [[ "$output" != *"brew install"* ]]
   cmp "${_file}" "${BATS_TEST_TMPDIR}/saved"
 
@@ -499,6 +511,7 @@ _make_plugin() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"[FAIL]"* ]]
   [[ "$output" == *"mkt/plg/1.0.0/hooks/hooks.json: contains non-text data — reinstall plugin plg@mkt"* ]]
+  printf '%s\n' "$output" | command grep -q 'reinstall plugin plg@mkt$'
   [[ "$output" != *"no plugin pins a missing node binary"* ]]
 }
 
