@@ -16,8 +16,8 @@ import os
 import subprocess
 import sys
 
-# Set by ADR-0047 from the spec's dry runs; raising it needs an amendment to that ADR.
-CEILING = 105_000
+# Set by ADR-0047 (amended 2026-10-22); changing it needs another amendment to that ADR.
+CEILING = 85_000
 
 _REGULAR_MODES = ("100644", "100755")
 _MODE_DESCRIPTIONS = {
@@ -78,7 +78,7 @@ def main(argv: list[str]) -> int:
 
     size = len(shown.stdout)
     if size > CEILING:
-        print(f"CLAUDE.md is {size} bytes, ceiling {CEILING}", file=sys.stderr)
+        print(f"CLAUDE.md is {size} bytes, ceiling {CEILING}; move detail to ai-config/docs/knowledge/dotfiles-*.md (ADR-0047)", file=sys.stderr)
         return 1
     print(f"CLAUDE.md at {rev} is {size} bytes (ceiling {CEILING}).")
     return 0
