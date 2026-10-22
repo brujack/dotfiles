@@ -128,6 +128,10 @@ its docs-only early exit, or a post-commit `make test`, or CI. This spec keeps t
 - **N2.** No flag, environment variable or trailer that skips or changes the ceiling (ADR-0047 decision 3 stands).
 - **N3.** No ai-config file changes.
 
+## Amendments
+
+- R4 -> `tests/test_claude_md_budget.py` tests 85,000 B allowed, 85,001 B refused and an 85,002-byte multibyte file refused; `tests/scripts/pre_push.bats` tests 85,000 B allowed and 85,001 B refused; both assert the refusal output names `85000`, `ADR-0047` and `dotfiles-*.md`; the pre-push `nochecker` case asserts the output lacks `CLAUDE.md budget check failed`; and the 85,001-byte pre-push refusal asserts the hook's closing line `Any message from git or the checker is above.` with no `105,0` figure. — the multibyte case belongs to the checker's own suite (design 3), and Task 1 review found the hook's closing line untested.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `d1065025` (Step 7 self-review commit, before Step 8 dispatch)
