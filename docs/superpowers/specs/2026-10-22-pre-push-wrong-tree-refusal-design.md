@@ -121,3 +121,29 @@ them and changes each to push the fixture's HEAD, never weakening an assertion.
 - **N2.** No `REPO_ROOT` override seam is added.
 - **N3.** No existing pre_push.bats assertion is deleted or weakened; an existing case is changed only to push its fixture's HEAD.
 - **N4.** ai-config's and terraform_ansible's hooks are not changed.
+
+## Multi-Lens Review
+
+Reviewed at commit: `d9e42816` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building at this size; a ~15-line prototype of R1 refused 1 of the 109 existing cases (not 110): #83 "live_paths is reset per ref" (`pre_push.bats:884`), fixable under N3. (1) V2 cannot produce its evidence before merge: `.git/hooks/pre-push` symlinks the main checkout's `scripts/pre-push`, which is master's, so both pushes run the old hook; run them with `git -c core.hooksPath=<worktree>/scripts push`. (2) R7 is unobservable: in a worktree-push fixture `git rev-parse HEAD` returned the same commit before and after the `unset`, because discovery from cwd finds the worktree's `.git` file. (3) R2 and R6 have no test case (unborn HEAD, unpeelable `local_sha`, a push that also hits the master refusal). (4) R5's worktree listing changes no verdict and its output is stderr only; R4's two SHAs plus path already tell the reader what to do.
+Assumption: no routine workflow pushes a non-inert ref other than the issuing checkout's HEAD; settle by tallying push commands in dotfiles transcripts.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) R1's per-ref scoping is untested: an implementation that checks every ref whenever the aggregate `needs_test=1` passes all seven cases yet refuses an inert ref at a non-HEAD commit pushed with a non-inert ref at HEAD. (2) R2/R7 as Goal-Fit. (3) Remedies are not pasteable: print the exact `git push <remote> <local_ref>:<remote_ref>` instead of `...`; drop `git switch` (contradicts git-workflow-019 and fails "already checked out"); give `git worktree add` a concrete path. (4) Breakage measured: 108/109, #83 fails; it pushes feat/x at sha1 and master at sha2, so "push its fixture's HEAD" may not keep its subject, and N3 should also allow moving the fixture's HEAD. (5) Transcript tally across dotfiles sessions: ~300 inert `HEAD:master` pushes and ~40 single-ref `push -u origin <branch>` from the branch's worktree; zero multi-ref, sha-refspec, `--tags` or `--all` pushes. Stacked multi-branch pushes are the only legitimate shape refused, and their only escape is `--no-verify`; say so.
+Assumption: no uncertain assumption found (the transcript tally settles the push-shape question on current habits).
+Disposition:
+
+### Risk
+
+Finding: (1) V2 as Goal-Fit. (2) core.md `git-workflow-043` and its knowledge entry (`ai-config-standards-core.md:418`) tell sessions "Tests failing only in push: push from main" (`git -C /path/to/main/repo push origin branch-name`); after this change that workaround is refused for any branch needing the suite, and the 2026-09-11 incident looks like it being followed. (3) R7 as Goal-Fit. (4) 109 cases, #83 the only breakage. (5) A multi-ref remedy that replays the same push can never pass: tell the reader to push each ref alone. `git worktree list --porcelain` lists `prunable` entries, so skip them. A bare `$(git rev-parse ...)` under `set -e` exits silently: the spec should require each read inside a conditional. Checked clean: paths with spaces, worktree `GIT_DIR`, deletions, tag peel, R6 order, no R/N contradiction.
+Assumption: no skill pushes a needs-suite ref from a cwd other than the branch's worktree. Checked 2026-10-22: `grep -rn 'git -C [^|]*push' ~/.claude/skills/*/SKILL.md` finds `add-claude-plugin:171` (`git -C ~/git-repos/personal/dotfiles push`), which pushes the main checkout's current branch, so HEAD equals the pushed commit and it passes. Refuted for skills; the fleet rule in (2) is the live conflict.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
