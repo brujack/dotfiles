@@ -1,6 +1,7 @@
 # CLAUDE.md ceiling ratchet: 105,000 to 85,000 bytes, and close the relocation row
 
-- **Status:** Draft
+- **Approved:** 2026-10-22
+- **Status:** Approved
 - **Follows:** ADR-0047 (CLAUDE.md size ceiling), ADR-0036 (relocation with pointers),
   `specs/2026-10-17-claude-md-budget-design.md`.
 
