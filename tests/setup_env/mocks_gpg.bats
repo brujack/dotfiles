@@ -36,7 +36,8 @@ _open_fifo() {
 _assert_consumed() {
   exec 8< "${DATA}"
   run "${REAL_TIMEOUT}" 5 "${GPG_MOCK}" "$@" <&8
-  [ "$status" -eq 0 ]
+  # Explicit return: a caller's `||` turns errexit off inside this function.
+  [ "$status" -eq 0 ] || return 1
   # `! cmd` never trips bats' errexit, so test the read explicitly.
   if read -r _line <&8; then
     return 1
