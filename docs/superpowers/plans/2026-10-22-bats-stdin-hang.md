@@ -99,3 +99,9 @@ depends_on: []
 ---
 
 ## Non-goal check
+
+Run 2026-10-23 inline by the planning session against N1-N3 (the reviewer dispatch was refused by the harness; the operator chose an inline check): 3 CLEAR, 0 CONFLICT, 0 UNCLEAR. No resolution needed. This is the author's own reading, not an independent one.
+
+- N1 CLEAR: Task 1's only edit to an existing assertion is the `grep -qx` expected string in "a carved-out file leaves the parallel pool and runs alone afterwards", gaining the redirect and keeping `-x`, which N1 permits; every other test is new.
+- N2 CLEAR: `files_touched` names one mock, `tests/mocks/gpg`; Task 1 reuses the existing mock `parallel` setup without editing it, and `tests/mocks/gpg-dearmor` is untouched.
+- N3 CLEAR: the only time bound is coreutils `timeout 5` around FIFO cases in the new `tests/setup_env/mocks_gpg.bats`; no step sets `BATS_TEST_TIMEOUT`, and nothing under `Makefile`, `scripts/` or `tests/helpers/` gains one.
