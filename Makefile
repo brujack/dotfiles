@@ -107,8 +107,8 @@ help:
 	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES, lib EXIT-trap ratchet\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
-	@printf "  make sync-requirements-ci  Render both CI requirements files from uv.lock\n"
-	@printf "  make check-requirements-ci Fail if either rendering has drifted from uv.lock\n"
+	@printf "  make sync-requirements-ci  Render the five CI requirements files from uv.lock\n"
+	@printf "  make check-requirements-ci Fail if any rendering has drifted from uv.lock\n"
 	@printf "  make help              Show this help\n"
 
 # shellcheck is single-threaded, so both passes fan the file list out through

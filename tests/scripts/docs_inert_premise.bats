@@ -170,7 +170,7 @@ _check_prereqs() {
   if [[ ${#_extra[@]} -gt 0 ]]; then
     printf 'FAIL: make test gained prerequisite(s) not in ALLOWED_TEST_PREREQS: %s\n' "${_extra[*]}" >&2
     printf 'Check whether each reads a tracked .md; if not, add it to ALLOWED_TEST_PREREQS.\n' >&2
-    printf 'A target that reads a tracked .md (CLAUDE.md included) must not be a prerequisite.\n' >&2
+    printf 'A target that reads a tracked .md from the working tree must not be a prerequisite (check-claude-md-budget is allowed: it reads via git show).\n' >&2
     _fail=1
   fi
   return "${_fail}"
