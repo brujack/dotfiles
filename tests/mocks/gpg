@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 # Mock gpg for testing
 printf "gpg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
-# Handle stdin
-while IFS= read -r _; do
-  :
+# Handle stdin: drain it only when real gpg would read it (--dearmor/--enarmor
+# with no file operand, or a "-" operand). Draining unconditionally blocks
+# forever when stdin is an open socket or FIFO that is never closed.
+_armor=0
+_file_operand=0
+_stdin_operand=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    # Options that take an argument: the next word is never an operand.
+    -o | --output | --homedir | --status-fd | --keyring) shift ;;
+    --dearmor | --enarmor) _armor=1 ;;
+    -) _stdin_operand=1 ;;
+    -*) ;;
+    *) _file_operand=1 ;;
+  esac
+  shift
 done
+if [[ ${_stdin_operand} -eq 1 ]] || [[ ${_armor} -eq 1 && ${_file_operand} -eq 0 ]]; then
+  while IFS= read -r _; do
+    :
+  done
+fi
 exit 0
