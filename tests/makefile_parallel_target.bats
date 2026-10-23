@@ -196,7 +196,7 @@ _run_make_dry() {
     printf 'carved-out file is still in the parallel pool: %s\n' "$jobs_line" >&2
     return 1
   fi
-  printf '%s\n' "$output" | grep -qx 'bats --print-output-on-failure tests/setup_env/git_hooks.bats'
+  printf '%s\n' "$output" | grep -qx 'bats --print-output-on-failure tests/setup_env/git_hooks.bats < /dev/null'
 }
 
 @test "serial path plus a carve-out does not run the carved-out file twice" {
@@ -294,4 +294,54 @@ _bats_lines_all_print_output() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"env -u COVERAGE_BATS_JOBS"* ]]
   ! command grep -q 'COVERAGE_BATS_JOBS=' <<< "${output}"
+}
+
+# A bats run that inherits a shared stdin can hang on a descendant that
+# reads it. Every bats recipe line must therefore end with `< /dev/null`.
+# Anchored to `^bats` so a printf notice that merely mentions bats is not
+# mistaken for a command line.
+_assert_bats_lines_redirect_stdin() {
+  local bats_lines line count=0
+  bats_lines="$(printf '%s\n' "$output" | grep '^bats ')" || true
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    count=$((count + 1))
+    if [[ "$line" != *' < /dev/null' ]]; then
+      printf 'bats line does not end with the stdin redirect: %s\n' "$line" >&2
+      return 1
+    fi
+  done <<< "$bats_lines"
+  [ "$count" -ge 1 ]
+}
+
+@test "stdin: --jobs line redirects stdin" {
+  _enable_parallel
+  _run_make_dry JOBS=12
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep -q '^bats --jobs 12 '
+  _assert_bats_lines_redirect_stdin
+}
+
+@test "stdin: serial line redirects stdin" {
+  _enable_parallel
+  _run_make_dry JOBS=12 HAVE_PARALLEL=
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"running bats serially"* ]]
+  _assert_bats_lines_redirect_stdin
+}
+
+@test "stdin: carve-out line redirects stdin" {
+  _enable_parallel
+  _run_make_dry JOBS=12 BATS_SERIAL_FILES=tests/setup_env/git_hooks.bats
+  [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep -q '^bats --print-output-on-failure tests/setup_env/git_hooks.bats'
+  _assert_bats_lines_redirect_stdin
+}
+
+@test "stdin: test-unit line redirects stdin" {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory \
+    -C "${REPO_ROOT}" -n test-unit
+  [ "$status" -eq 0 ]
+  _assert_bats_lines_redirect_stdin
 }
