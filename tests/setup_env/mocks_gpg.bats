@@ -9,8 +9,14 @@ load '../helpers/common.bash'
 setup() {
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
-  # Absolute paths: the test's own primitives must not resolve through PATH mocks.
-  REAL_TIMEOUT=/usr/bin/timeout
+  # Resolve the test's own timeout primitive portably (coreutils gtimeout on
+  # macOS). tests/mocks has no timeout; if one is ever added this resolution
+  # would pick up the mock and a mocked timeout would give a false pass.
+  REAL_TIMEOUT="$(command -v timeout || command -v gtimeout)"
+  [[ -n "${REAL_TIMEOUT}" ]] || {
+    printf 'no timeout/gtimeout on PATH\n' >&2
+    return 1
+  }
   GPG_MOCK="${REPO_ROOT}/tests/mocks/gpg"
   FIFO="${BATS_TEST_TMPDIR}/f"
   DATA="${BATS_TEST_TMPDIR}/data"
