@@ -52,3 +52,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0046](0046-release-asset-pins-from-the-github-api-digest.md) | Release asset pins come from the GitHub API digest | 2026-10-14 | Accepted |
 | [0047](0047-claude-md-size-ceiling.md) | CLAUDE.md has a hard size ceiling, one line per rule | 2026-10-18 | Accepted |
 | [0048](0048-tmp-mount-inode-ceiling.md) | tmp.mount inode ceiling via drop-in | 2026-10-20 | Accepted |
+| [0049](0049-pre-push-refuses-a-push-not-at-the-tested-tree.md) | pre-push refuses a push whose refs are not at the tested tree | 2026-10-22 | Accepted |

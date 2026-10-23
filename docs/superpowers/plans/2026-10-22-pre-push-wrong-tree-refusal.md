@@ -1,5 +1,7 @@
 # pre-push Wrong-Tree Refusal Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#365 (c82078be), 2026-10-22.
+
 spec: docs/superpowers/specs/2026-10-22-pre-push-wrong-tree-refusal-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

@@ -184,6 +184,7 @@ still carries `deploy.sh`, the master range stays `.md`-only).
 ## Amendments
 
 - R7 -> `tests/scripts/pre_push.bats` carries the twelve cases in the Testing table plus a thirteenth, "an unborn HEAD and an unpeelable ref are refused, not matched as equal". — Phase 3 test-quality-review found that deleting both `-z` guards survived every test: with both reads failing, two empty values compare equal and the push would run the suite.
+- V2 -> Before merge, run the branch's own hook on real pushes: from the main checkout (on master) with `-c core.hooksPath=<worktree>/scripts`, the branch push is refused with the R4 message; from the feature worktree, `bash scripts/pre-push origin <url>` fed the branch's real ref line exits 0 and runs the suite. Record both outputs in the PR body. — `-c` exports `GIT_CONFIG_PARAMETERS` to the hook, so every fixture `git commit` in the suite runs this repo's hooks: `tests/test_claude_md_budget.py` gave 18 errors with it set and OK without, so the pass half cannot be run through `-c` (dotfiles#365).
 
 ## Multi-Lens Review
 

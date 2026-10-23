@@ -236,6 +236,7 @@ Renderings: `requirements-ci.txt` (`test-lint`, full local/dev set), `requiremen
 
 - Refuse any push to `refs/heads/master` whose range carries a path `_path_is_inert` rejects (`ci.yml` triggers on `pull_request` only); only inert `.md` and the root `LICENSE` go to master directly.
 - Accumulate the refusal inside the stdin loop and read it after (never exit mid-loop); evaluate it before the `needs_test` early-exit and against the whole RANGE, not the tip; if it names a file you did not touch, run `git diff --name-only <remote-sha>..HEAD`.
+- Once the suite would run, every non-deletion pushed ref must be at `HEAD` of `REPO_ROOT` (read with the four `GIT_*` stripped) or the push is refused before `make test`: push a branch from its own worktree, one ref per push when refs differ.
 - Emergency route (`hotfix-cycle`, `rollback-cycle`): open the PR and `gh pr merge --admin`; never bypass the hook. `.git/hooks/pre-push` symlinks the main checkout's copy, so a broken hook blocks every worktree; the one sanctioned recovery is a fix branch pushed with `--no-verify`, then a PR.
 - `tests/scripts/docs_inert_premise.bats` pins that no test reads a tracked `.md` outside `tests/`; keep inert-set tests in `pre_push.bats` on feature refs and guard tests on master refs. → `dotfiles-bats-test-infrastructure.md` § `Testing: pre-commit and pre-push hooks`
 
