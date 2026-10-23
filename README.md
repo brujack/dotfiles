@@ -482,8 +482,6 @@ make test-python   # the vendored .claude/scripts/triage_log.py suite only
 make lint          # syntax + shellcheck only (shellcheck runs JOBS parallel workers)
 make bash-coverage # measure bash line coverage (PS4 xtrace, parallel under JOBS); CI gates at 91%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
-make sync-agent-guidance  # regenerate .cursor guidance from CLAUDE.md's ~/.claude/standards imports
-make check-agent-guidance # fail if generated guidance is out of sync
 make sync-requirements-ci  # render the five requirements-ci*.txt files from uv.lock's groups
 make check-requirements-ci # fail if any of the five renderings has drifted from uv.lock
 ```

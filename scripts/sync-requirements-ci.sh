@@ -15,8 +15,7 @@
 # packages, not the 80 the full test-lint set renders. See pyproject.toml for
 # the boundary rule governing what may enter ci-test.
 #
-# `sync` writes them; `check` fails if a committed copy has drifted. Same shape
-# as sync-agent-guidance.sh.
+# `sync` writes them; `check` fails if a committed copy has drifted.
 #
 # uv's own two-line header is stripped and replaced. It echoes the exact argv,
 # including `--project /abs/path` when passed -- so a file rendered on a dev

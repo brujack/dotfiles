@@ -201,8 +201,6 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - `scripts/phrase_check.py` matches anchors whitespace-normalised, never line-oriented, and rejects anchors that open a sentence or paragraph; `test-python` runs only the checker's own unit tests, so it is no evidence the manifest is enforced. → `dotfiles-bats-test-infrastructure.md` § `Testing: make test parallelism and lint targets`
 
 **Install hooks:** `make install-hooks` (installs pre-commit and pre-push hooks; run once per checkout)
-**Sync agent guidance:** `make sync-agent-guidance` (regenerates `.cursor/rules/global-claude-standards.mdc` from root `CLAUDE.md`'s `@~/.claude/standards/*.md` imports, resolved against the global symlinked standards dir)
-**Check agent guidance drift:** `make check-agent-guidance` (fails when generated Cursor guidance is stale)
 
 - The venv is snapshotted (`pip freeze`) before every sync and that is the only rollback — `uv sync` prunes/downgrades and `uv.lock` cannot reproduce the old state. Roll back with `"$(pyenv which python)" -m pip install --no-deps -r ~/.local/share/dotfiles/venv-snapshots/ansible-<UTC>.txt`. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 

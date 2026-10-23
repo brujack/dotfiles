@@ -98,7 +98,7 @@ BATS_PARALLEL_FILES := $(filter-out $(BATS_SERIAL_FILES),$(BATS_ALL_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan sync-agent-guidance check-agent-guidance check-claude-md-budget
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget
 
 help:
 	@printf "Available targets:\n"
@@ -107,8 +107,6 @@ help:
 	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES, lib EXIT-trap ratchet\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
-	@printf "  make sync-agent-guidance  Regenerate .cursor/rules/global-claude-standards.mdc from CLAUDE.md\n"
-	@printf "  make check-agent-guidance Fail if the generated Cursor rule has drifted from CLAUDE.md\n"
 	@printf "  make sync-requirements-ci  Render both CI requirements files from uv.lock\n"
 	@printf "  make check-requirements-ci Fail if either rendering has drifted from uv.lock\n"
 	@printf "  make help              Show this help\n"
@@ -247,12 +245,6 @@ endif
 
 changelog:
 	git-cliff -o CHANGELOG.md
-
-sync-agent-guidance:
-	./scripts/sync-agent-guidance.sh sync
-
-check-agent-guidance:
-	./scripts/sync-agent-guidance.sh check
 
 sync-requirements-ci:
 	./scripts/sync-requirements-ci.sh sync
