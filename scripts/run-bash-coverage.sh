@@ -804,7 +804,7 @@ printf "Running %d tests with coverage tracer...\n" "${test_count}"
 export BASH_ENV="${TRACER}"
 export _COV_TRACE_FILE="${TRACE_FIFO}"
 bats_log="${OUTPUT_DIR}/bats_run.log"
-"${_bats_bin}" "${_bats_args[@]}" > "${bats_log}" 2>&1
+"${_bats_bin}" "${_bats_args[@]}" > "${bats_log}" 2>&1 < /dev/null
 bats_status=$?
 unset BASH_ENV _COV_TRACE_FILE
 

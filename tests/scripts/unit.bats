@@ -2087,3 +2087,11 @@ FIXTURE
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
 }
+
+@test "stdin: run-bash-coverage.sh bats call redirects stdin" {
+  local script="${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  local call_lines
+  call_lines="$(command grep -F '"${_bats_bin}" "${_bats_args[@]}"' "${script}")"
+  [ "$(printf '%s\n' "${call_lines}" | wc -l)" -eq 1 ]
+  [[ "${call_lines}" == *'< /dev/null'* ]]
+}
