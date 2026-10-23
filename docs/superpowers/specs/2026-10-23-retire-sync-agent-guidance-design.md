@@ -1,6 +1,7 @@
 # Retire sync-agent-guidance
 
 - **Date:** 2026-10-23
+- **Approved:** 2026-10-23
 - **Backlog rows closed:** "sync-agent-guidance with zero standards imports" (P2 bugs and security) and "`check-agent-guidance` cannot pass in a worktree" (P2 CI).
 
 ## Problem
@@ -48,7 +49,7 @@ The change removes behaviour and adds none, so there is no RED test. Evidence:
 - **R2.** `[PR1]` `Makefile` has no `sync-agent-guidance` or `check-agent-guidance` target, `.PHONY` entry or help line.
 - **R3.** `[PR1]` `README.md` and `CLAUDE.md` contain neither `sync-agent-guidance` nor `check-agent-guidance`.
 - **R4.** `[PR1]` `scripts/sync-requirements-ci.sh` does not mention `sync-agent-guidance.sh`.
-- **R5.** `[PR1]` Neither the FAIL hint nor the header comment in `tests/scripts/docs_inert_premise.bats` names `sync-agent-guidance.sh` or describes `check-agent-guidance` as an existing target; the prerequisite guard's logic and every existing test in that file are unchanged.
+- **R5.** `[PR1]` In `tests/scripts/docs_inert_premise.bats`, the FAIL hint does not describe `check-agent-guidance` as an existing target, and the header comment's blind-spot example (lines 35-36 on master) names no script or seam the PR deletes (`sync-agent-guidance.sh`, `_OVERRIDE_CLAUDE_MD_PATH`); the prerequisite guard's logic and every existing test in that file are unchanged.
 - **R6.** `[PR1]` `docs/superpowers/README.md` no longer has the Backlog rows "sync-agent-guidance with zero standards imports" and "`check-agent-guidance` cannot pass in a worktree".
 - **V1.** `make test` on the branch passes with a plan count equal to master's minus 17.
 - **V2.** `make check-agent-guidance` on the branch exits 2 with `No rule to make target`.
@@ -84,3 +85,9 @@ Disposition: Addressed — V3 reworded as a sanity check with the figures; R5 co
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Risk (round 2, scoped re-review at `958275a5`)
+
+Finding: R5 was imprecise: the blind-spot example spans lines 35-36, and line 36 names `_OVERRIDE_CLAUDE_MD_PATH`, a seam whose only consumer is the deleted script; a diff rewording only line 35 would have passed R5. No R/N conflict; the `git grep` expectation is closed (every hit classified); R6 row names match; 17 tests confirmed. `AGENTS.md:10` also depends on the open Cursor question, outside this spec.
+Assumption: no uncertain assumption found.
+Disposition: Addressed — R5 now names lines 35-36 and both deleted identifiers (wording-level fix, no further round).
