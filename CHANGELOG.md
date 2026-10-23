@@ -3,106 +3,112 @@
 
 ## Bug Fixes
 
-- point the Linux shellcheck hint at the pinned install (#287)
+- no-clobber keyring, seamed paths, run first (#360)
 
-- repair Claude plugin configs pinning a deleted brew node (#288)
+- atomic repair, run from setup/developer (#361)
+
+- no false PASS, cause-specific remedies (#362)
+
+- bump certifi, gitpython and pillow for CVEs (#364)
 
 
 
 ## Documentation
 
-- descope shellcheck pin rows to a platform-aware install hint
+- gh cli step exits 0 on partial, ledger records 2
 
-- scope the Linux hint to Ubuntu, name CLEAN_PATH in tests
+- approve gh cli keyring spec
 
-- approve shellcheck hint spec, backlog absent-tool gap
+- gh cli keyring implementation plan
 
-- shellcheck install hint plan
+- mark gh cli keyring plan done
 
-- mark shellcheck install hint Done (#287)
+- replace stale workflows.sh line cites
 
-- stop hand-listing _update_warn callers (#289)
+- one-line gh seam rule with knowledge pointer
 
-- record missing fleet host keys on new boxes
+- plugin node repair atomic write and setup call
 
-- claude plugin provisioning from settings.json
+- plugin node repair round-1 dispositions
 
-- multi-lens review of plugin provisioning spec
+- approve plugin node repair spec
 
-- revise plugin provisioning after lens review
+- plugin node repair setup implementation plan
 
-- revise plugin provisioning after round 2 review
+- mark plugin node repair setup done
 
-- replace settings guard with git status check
+- file -w refusal absence-check gap
 
-- close round 4 review gaps in plugin provisioning spec
+- plugin node check hardening
 
-- approve claude plugin provisioning spec
+- plugin node check round-1 lens review
 
-- record registration and cwd-scope measurements
+- plugin node check round-1 dispositions
 
-- add fourth plugin list copy and third caller
+- plugin node check round-2 revisions
 
-- claude plugin provisioning plan
+- plugin node check round-3 apparatus fixes
 
-- provision GNU parallel on Linux
+- approve plugin node check hardening spec
 
-- mark claude plugin provisioning Done
+- plugin node check hardening implementation plan
 
-- add Anthropic weekly features digest 2026-09-21
+- mark plugin node check hardening done
 
-- add Claude Code weekly features digest 2026-09-21
+- close 8 resolved rows after re-audit
 
-- move the JOBS measurements out of CLAUDE.md into ADR-0035
+- close maintainability re-scope and argv note rows
 
-- record CLAUDE.md/source comment duplication
+- CLAUDE.md ceiling ratchet to 85,000 bytes
 
-- four-class re-sort of dotfiles CLAUDE.md
+- move ceiling remedy into checker, round 1 review
 
-- Step 8 multi-lens review, three findings
+- record ceiling ratchet round 2 dispositions
 
-- address round-1 lens findings
+- approve CLAUDE.md ceiling ratchet spec
 
-- address external review, three findings
+- CLAUDE.md ceiling ratchet implementation plan
 
-- restore deleted review record, fix cross-references
+- mark CLAUDE.md ceiling ratchet done
 
-- void round-2 review, fix two transferable findings
+- pre-push wrong-tree refusal design
 
-- round-2 lens findings, gate mechanism rewritten
+- pre-push wrong-tree round 1 multi-lens review
 
-- replace estimated headroom with a measurement
+- pre-push wrong-tree round 1 dispositions
 
-- separate the ratio from the residual, disclose scope
+- pre-push wrong-tree round 2 multi-lens review
 
-- third probe tests the context model out of sample
+- pre-push wrong-tree round 2 dispositions
 
-- four repos measured, the fitted model is misspecified
+- pre-push wrong-tree round 3 scoped review
 
-- retire the bytes-to-tokens model, probe instead
+- approve pre-push wrong-tree refusal spec
 
-- widen scope to the whole CLAUDE.md
+- pre-push wrong-tree refusal implementation plan
 
-- review the approved parent spec, adopt five findings
+- record pre-push wrong-tree refusal as shipped
 
-- four-class re-sort of CLAUDE.md, 13 tasks
+- bats stdin hang design
 
-- escalate task 13 off haiku on measured headroom
+- descope bats stdin to redirect and gpg fix
 
-- record three run_update piped-section findings
+- bats stdin round 2 scoped review
 
-- sync CLAUDE.md and the plan index after #293
+- bats stdin goal-fit record and wording
+
+- approve bats stdin hang spec
+
+- bats stdin hang implementation plan
+
+- bats stdin non-goal check (inline)
 
 
 
 ## Features
 
-- provision Claude plugins from ai-config settings.json (#290)
+- lower CLAUDE.md ceiling to 85,000 bytes (#363)
 
-- run bats in parallel under a validated JOBS knob (#291)
-
-- whitespace-normalised phrase manifest checker
-
-- four-class re-sort with a manifest checker (#293)
+- refuse a push whose tested tree is not the pushed commit (#365)
 
 
