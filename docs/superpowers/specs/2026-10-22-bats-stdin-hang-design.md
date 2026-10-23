@@ -176,3 +176,25 @@ Disposition: Addressed — carve-out case and "at least one `bats` line" added t
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-23)
+
+- spec: docs/superpowers/specs/2026-10-22-bats-stdin-hang-design.md
+- anchor: 5382c2f0836798c2b7ba3536d2c4bf4f1b50a8dd
+- in scope: R1, R2, R3, R4
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test on the branch: 1..3386, 3386 ok, 0 not ok, rc 0 (at e2bb52f0; fdb2be6c changes one test-helper line, mocks_gpg.bats 8/8)
+- V2: mkfifo f; exec 3<>f; timeout 600 bats tests/setup_env/check_versions_feeds.bats tests/setup_env/workflows.bats <&3 at 9b6131de: rc 0, 1..393, 393 ok, 0 not ok, 299 s
+- V3: post-merge on master: P2 backlog row narrowed to the timeout remainder
