@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-22
 - **Backlog row:** `docs/superpowers/README.md` P2, "A bats run that inherits a live stdin socket hangs at 0% CPU indefinitely, and nothing detects or bounds it"
-- **Operator decisions (2026-10-22):** redirect stdin on the bats recipe lines and add a per-test timeout; also fix the mock that actually reads stdin.
+- **Operator decisions (2026-10-22):** redirect stdin on the bats recipe lines and fix the mock that actually reads stdin; the per-test timeout first proposed is descoped to the backlog after Step 8 round 1.
 
 ## Problem
 
@@ -30,6 +30,7 @@ serial paths have no such protection.
 
 Exposed paths on master `f5d7bfcb`:
 
+- `Makefile` `test-unit` (`bats $(BATS_FLAGS) tests/setup_env/unit.bats …`), the quickest loop and the one most often run by hand.
 - `Makefile` serial recipe lines: `bats $(BATS_FLAGS) $(BATS_PARALLEL_FILES)` (no GNU parallel)
   and `bats $(BATS_FLAGS) $(BATS_SERIAL_FILES)`. The parallel line
   `bats --jobs $(JOBS) …` is protected by parallel today but has no redirect of its own.
@@ -45,66 +46,103 @@ recipe redirect or a test timeout (grep of `docs/adr` and `docs/superpowers/spec
 
 ## Design
 
+Operator decision 2026-10-22, after round 1 of Step 8: ship the stdin redirect and the gpg
+mock fix; the per-test timeout is not part of this change (see "Why no timeout").
+
 ### 1. Recipes never pass an inherited stdin to bats
 
-Append `< /dev/null` to each of the three `bats` recipe lines in `Makefile` (the
-`--jobs` line, the serial `BATS_PARALLEL_FILES` line, the `BATS_SERIAL_FILES` line) and to the
-bats invocation at `scripts/run-bash-coverage.sh:807`. A test that needs stdin must supply its
-own (a heredoc, a pipe, a file); none should depend on the caller's.
+Append `< /dev/null` to every `bats` recipe line in the `Makefile`: the three in the `test`
+recipe (the `--jobs` line, the serial `BATS_PARALLEL_FILES` line, the `BATS_SERIAL_FILES`
+line) and the one in `test-unit`. Do the same for the bats invocation in
+`scripts/run-bash-coverage.sh` (the `"${_bats_bin}" "${_bats_args[@]}" > "${bats_log}" 2>&1`
+line). A test that needs stdin supplies its own (a heredoc, a pipe, a file); none may depend on
+the caller's. This is already the condition `scripts/pre-push` runs the suite under: the hook
+drains git's ref list before `make test`, so its stdin is at EOF and no test can rely on a live
+one.
 
-### 2. Every test is bounded
-
-Export `BATS_TEST_TIMEOUT` from the `Makefile` for the `test` and `bash-coverage` targets, from
-one variable `BATS_TEST_TIMEOUT ?= 300` so a caller can override it per call. bats then fails
-an over-running test with `not ok N <name> # timeout after 300s` and continues with the next,
-so a hang becomes a named failure. Probed 2026-10-22 on bats 1.13.0: a `sleep 10` test under
-`BATS_TEST_TIMEOUT=2` reported `# timeout after 2s` and the following test still ran.
-
-The value: measured 2026-10-22 with `make test BATS_FLAGS="--print-output-on-failure --timing"`
-on `claude` (3370 timed tests, `bats --jobs 24`, no other session's suite running, untraced), the slowest test took 66.45 s
-(`makefile_lint_scope.bats` "every stdout-capturing make -C invocation in-domain is guarded or
-measuring, both sets nonempty"), the next 15.26 s, and every other test under 5.1 s. 300 s is
-4.5x the slowest, leaving room for tracing overhead under `bash-coverage` and for contention
-from concurrent sessions. The same measurement is not available for CI's runners or the
-traced coverage run; V2 records them.
-
-### 3. The gpg mock reads stdin only when gpg would
+### 2. The gpg mock reads stdin only when gpg would
 
 `tests/mocks/gpg` keeps logging every call, and drains stdin only when the invocation is one
-that reads it: `--dearmor` or `--enarmor` with no file operand, or an operand of `-`. Every
-other call returns without touching fd0. The production call sites that feed gpg stdin are
-`lib/linux_ubuntu.sh` `--dearmor < "${_key}"` and `--batch --yes --dearmor -o … < key`; both
-stay drained. `tests/mocks/gpg-dearmor` is only reached through `_APT_KEY_GPG_BIN`, whose
-caller always redirects stdin from a file, and is left alone. The `ledger` mock and the other
-stdin-reading mocks stay on their P3 row.
+that reads it: `--dearmor` or `--enarmor` with no file operand, or an operand of `-`. An
+option's argument (for example the file after `-o`) is not an operand. Every other call returns
+without touching fd0. The production call sites that feed gpg stdin are `lib/linux_ubuntu.sh`
+`--dearmor < "${_key}"` and `--batch --yes --dearmor -o … < key`; both stay drained. Every
+other production call (`--import`, `--verify`, `--show-keys`) takes a file operand. No test pipes
+into `tests/mocks/gpg`. `tests/mocks/gpg-dearmor` is only reached through `_APT_KEY_GPG_BIN`,
+whose caller always redirects stdin from a file, and is left alone. The `ledger` mock and the
+other stdin-reading mocks stay on their P3 row.
+
+This is the fix that reaches a direct `bats <file>` run, which no `Makefile` change can.
+
+### Why no timeout
+
+`BATS_TEST_TIMEOUT` was in the first draft and is moved to the backlog, because round 1
+measured three defects in it:
+
+- On bats 1.10.0 (CI's `test` and `bash-coverage` jobs install it from apt), the watchdog
+  sends `kill -ABRT $$` then `pkill -P`, direct children only; 1.13 kills the descendant tree.
+  A fixture `run f` whose `f` blocks in a `while read` on an open FIFO never timed out on 1.10
+  (killed by an outer `timeout`, rc 124) and timed out in 7 s on 1.13. The stalled test above
+  is that `run` shape.
+- The slowest test (`makefile_lint_scope.bats` "every stdout-capturing make -C …") took
+  232.6 s under `taskset -c 0-3 make test JOBS=24` and 210.8 s alone on two pinned cores,
+  against 66.45 s on `claude`'s 48 threads; under the coverage tracer it ran 1.8x slower. 300 s
+  would fail `bash-coverage` on every PR.
+- `tests/scripts/unit.bats` defines and exports a `kill()` function in two tests; bats stops
+  its watchdog with a plain `kill`, so the watchdog survives and each run of that file waits out
+  the full timeout (8 s measured under `BATS_TEST_TIMEOUT=8` with both tests passing in 3 ms).
 
 ## Testing
 
-| Case                                                                             | Expect                                                                                                   |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `make -n test` (parallel and `HAVE_PARALLEL=` forms) and `make -n bash-coverage` | every `bats` command line carries `< /dev/null`; the `bash-coverage` recipe's runner line carries it too |
-| `scripts/run-bash-coverage.sh` source                                            | the bats exec line redirects stdin from `/dev/null`                                                      |
-| `make -n test`                                                                   | `BATS_TEST_TIMEOUT=300` reaches the bats environment; `make -n test BATS_TEST_TIMEOUT=7` shows 7         |
-| a fixture bats file whose test sleeps longer than a small `BATS_TEST_TIMEOUT`    | the run reports `timeout after`, names the test, and the next test still runs                            |
-| `tests/mocks/gpg --homedir x --list-keys` with stdin an open FIFO                | returns within 5 s, logs the call                                                                        |
-| `tests/mocks/gpg --dearmor` with stdin a file                                    | drains it (the file's bytes are consumed) and logs the call                                              |
-| the reproduction above (serial direct bats of the two files, stdin an open FIFO) | completes, 393 tests, no `timeout`                                                                       |
+| Case | Expect |
+| --- | --- |
+| `make -n test` with GNU parallel, `make -n test HAVE_PARALLEL=`, and `make -n test-unit` | every line starting `bats` ends with `< /dev/null` |
+| `scripts/run-bash-coverage.sh` | its bats invocation line redirects stdin from `/dev/null` |
+| `tests/mocks/gpg --homedir x --list-keys` with stdin an open FIFO | returns within 5 s and logs the call |
+| `tests/mocks/gpg --dearmor` with stdin a file of known bytes | consumes the file (a following read of the same fd sees EOF) and logs the call |
+| `tests/mocks/gpg --batch --yes --dearmor -o out` with stdin a file | consumes it (the `-o` argument is not an operand) |
+| `tests/mocks/gpg --dearmor key.asc` with stdin an open FIFO | returns within 5 s (a file operand means stdin is not read) |
 
-The gpg cases and the reproduction pin the cause; the `make -n` cases pin the containment. A
-mock that drained nothing at all would fail the `--dearmor` case; a recipe that dropped the
-redirect would fail the `make -n` cases.
+A mock that never drained would fail the two "consumes" cases; one that always drained would
+fail the two FIFO cases; a recipe that dropped a redirect would fail the `make -n` case. The
+serial reproduction is not a suite case (it nests a 393-test run); it is V2.
 
 ## Requirements
 
-- **R1.** Each `bats` command line in the `Makefile` `test` recipe (the `--jobs` line and both serial lines) redirects stdin from `/dev/null`.
+- **R1.** Every `bats` command line in the `Makefile` `test` and `test-unit` recipes redirects stdin from `/dev/null`.
 - **R2.** The bats invocation in `scripts/run-bash-coverage.sh` redirects stdin from `/dev/null`.
-- **R3.** `BATS_TEST_TIMEOUT` reaches every bats run started by `make test` and `make bash-coverage`, with default 300 set once in the `Makefile` and overridable per call (`make test BATS_TEST_TIMEOUT=<n>`).
-- **R4.** `tests/mocks/gpg` reads stdin only when invoked with `--dearmor` or `--enarmor` and no file operand, or with a `-` operand; otherwise it returns without reading fd0, and it logs every call as before.
-- **R5.** Tests in the repo's bats suite cover the Testing table's cases.
+- **R3.** `tests/mocks/gpg` reads stdin only when invoked with `--dearmor` or `--enarmor` and no file operand (an option's argument is not an operand), or with a `-` operand; otherwise it returns without reading fd0, and it logs every call as before.
+- **R4.** Tests in the repo's bats suite cover the Testing table's cases.
 - **V1.** `make test` exits 0 on the branch.
-- **V2.** CI's `test`, `test-macos` and `bash-coverage` jobs pass with the timeout in force; record each job's bats version and whether any test came within 50% of 300 s, from the job logs, in the PR body.
-- **V3.** The serial direct reproduction (`bats tests/setup_env/check_versions_feeds.bats tests/setup_env/workflows.bats` with stdin an open FIFO) completes on the branch; record the output in the PR body.
+- **V2.** The serial direct reproduction (`bats tests/setup_env/check_versions_feeds.bats tests/setup_env/workflows.bats` with stdin an open FIFO, under `timeout 600`) completes on the branch with 393 tests; record the output in the PR body.
+- **V3.** The P2 backlog row is narrowed to the timeout remainder, carrying the round-1 measurements (bats 1.10 direct-child watchdog, 232.6 s / 1.8x tracer, `kill()`-shadowing stall).
 - **N1.** No test's assertion is weakened or removed.
 - **N2.** No mock other than `tests/mocks/gpg` changes behaviour.
-- **N3.** `BATS_TEST_TIMEOUT` is not set inside test files or `tests/helpers/`.
-- **N4.** The timeout is not used to hide a known slow test: no test is skipped or split to fit under it.
+- **N3.** No `BATS_TEST_TIMEOUT` is set by the `Makefile`, `scripts/` or `tests/helpers/`.
+
+
+## Multi-Lens Review
+
+Reviewed at commit: `3f2fb6b3` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: pending at the time of the descope revision (see the round-1 record appended below when it reports).
+Assumption: pending.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) R3's timeout does not bound the motivating hang on bats 1.10.0 (CI `test`/`bash-coverage`, apt): its watchdog sends `kill -ABRT $$` then `pkill -P` (direct children only), so a `run f` whose `f` blocks reading an open FIFO never timed out (outer `timeout` rc 124); 1.13 timed it out in 7 s. The stalled test is `run`-wrapped; the sleep fixture passes on 1.10 regardless. (2) 300 s is past V2's 50% line: the slowest test took 210.8 s on two pinned cores (`taskset -c 0,1`), 3.2x the 66 s figure. (3) `make test-unit` (`Makefile:246`) gets neither redirect nor timeout. (4) `make -n` cannot show a Makefile `export`, and inlining the variable breaks seven anchored `'^bats --jobs N '` greps in `tests/makefile_parallel_target.bats`. (5) `BATS_TEST_TIMEOUT=0` means immediate timeout; off is the empty value, undocumented.
+Assumption: 300 s stays above the slowest test on CI's 2-vCPU `test` job and the traced `bash-coverage` job; settle with a CI run under `--timing`.
+Disposition: Addressed (operator, 2026-10-22: "Ship redirect + gpg fix, backlog timeout"). Timeout removed (new N3), its measurements carried to the backlog (V3); `test-unit` added to R1; the `make -n` timeout case is gone with it.
+
+### Risk
+
+Finding: (1) 300 s fails CI: `taskset -c 0-3 make test JOBS=24 --timing` put the slowest test at 232.6 s (next 92.8 s); under the coverage tracer it ran 1.8x slower (112 s vs 61 s alone), projecting about 420 s for `bash-coverage`. (2) `tests/scripts/unit.bats:192/206` define and export `kill()`; bats stops its watchdog with a plain `kill`, so the watchdog survives and the file waits out the full timeout (8 s measured at `BATS_TEST_TIMEOUT=8`, tests passing in 3 ms). (3) N3 (no timeout in test files) contradicted the timeout fixture row. (4) The fixture row could pass vacuously if the inner bats inherits `tests/mocks/sleep`. (5) The `make -n` timeout row is unobservable under `export`. (6) `test-unit` missed. (7) The serial reproduction as a suite case nests a 393-test run. Checked clean: `< /dev/null` is safe (`scripts/pre-push` already runs the suite at stdin EOF); R4's gpg rule matches every production call, no producer pipes into gpg, no SIGPIPE.
+Assumption: the slowest test stays under 300 s on CI runners and the tracer; emulation says false for `bash-coverage`.
+Disposition: Addressed (operator, 2026-10-22: "Ship redirect + gpg fix, backlog timeout"). Timeout and its fixture, export and N3-conflict findings removed with it; `kill()`-stall carried to the backlog row; `test-unit` added; reproduction moved from the suite to V2.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
