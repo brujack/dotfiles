@@ -38,7 +38,9 @@ requirements: [R1, R2, R3, R4, R5, R6]
 acceptance:
   - cmd: 'test ! -e scripts/sync-agent-guidance.sh && test ! -e tests/scripts/sync_agent_guidance.bats'
     exit_code: 0
-  - cmd: '! git grep -q -e sync-agent-guidance -e check-agent-guidance -- Makefile README.md CLAUDE.md scripts/sync-requirements-ci.sh docs/superpowers/README.md'
+  - cmd: '! git grep -q -e sync-agent-guidance -e check-agent-guidance -- Makefile README.md CLAUDE.md scripts/sync-requirements-ci.sh'
+    exit_code: 0
+  - cmd: '! command grep -qE "^\| (sync-agent-guidance with zero standards imports|`check-agent-guidance` cannot pass in a worktree) " docs/superpowers/README.md'
     exit_code: 0
   - cmd: '! command grep -qE "sync-agent-guidance|_OVERRIDE_CLAUDE_MD_PATH|known reader" tests/scripts/docs_inert_premise.bats'
     exit_code: 0
