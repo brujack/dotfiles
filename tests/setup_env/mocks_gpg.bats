@@ -45,17 +45,18 @@ _assert_consumed() {
 
 @test "stdin: --list-keys with an open FIFO returns without reading" {
   _open_fifo
-  run "${REAL_TIMEOUT}" 5 "${GPG_MOCK}" --list-keys <&7
+  run "${REAL_TIMEOUT}" 5 "${GPG_MOCK}" --homedir x --list-keys <&7
   [ "$status" -eq 0 ]
-  grep -q -- '^gpg --list-keys$' "${MOCK_CALLS_FILE}"
+  grep -q -- '^gpg --homedir x --list-keys$' "${MOCK_CALLS_FILE}"
 }
 
 @test "stdin: --dearmor consumes a file on stdin" {
   _assert_consumed --dearmor
+  grep -q -- '^gpg --dearmor$' "${MOCK_CALLS_FILE}"
 }
 
 @test "stdin: --dearmor -o out consumes stdin (-o's argument is not an operand)" {
-  _assert_consumed --dearmor -o "${BATS_TEST_TMPDIR}/out"
+  _assert_consumed --batch --yes --dearmor -o "${BATS_TEST_TMPDIR}/out"
 }
 
 @test "stdin: --dearmor key.asc with an open FIFO returns (file operand)" {
