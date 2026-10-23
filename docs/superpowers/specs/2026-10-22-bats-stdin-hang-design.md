@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-22
 - **Backlog row:** `docs/superpowers/README.md` P2, "A bats run that inherits a live stdin socket hangs at 0% CPU indefinitely, and nothing detects or bounds it"
+- **Approved:** 2026-10-22
 - **Operator decisions (2026-10-22):** redirect stdin on the bats recipe lines and fix the mock that actually reads stdin; the per-test timeout first proposed is descoped to the backlog after Step 8 round 1.
 
 ## Problem
@@ -150,7 +151,7 @@ Reviewed at commit: `3f2fb6b3` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Reported after the descope, against `3f2fb6b3`. (1) The gpg fix carries nearly all the value: with a real unix socket as stdin (`socketpair`, whole suite, plain `bats` in six groups) the patched mock gave 3373/3373 ok and the original hung only "run_setup_or_developer calls apt-get on Ubuntu"; the recipe redirects change an outcome only on serial paths, since GNU parallel already withholds stdin; the spec gave no reason for rejecting the row's own `exec 0</dev/null` in `common.bash` candidate (56 of 80 files load it). (2) The FIFO stand-in is not the socket: `argv_probe_stub_path` drains on `[[ -p /dev/stdin ]]`, so a whole-suite FIFO run gave 5 false hangs; V2's two files are unaffected. (3) The timeout cases were textual or tested upstream bats, not the Makefile wiring (moot after the descope). (4) R4's operand clause over-specifies: no production `--dearmor` call passes a file operand. Also measured: `BATS_TEST_TIMEOUT` timed out a direct child blocked on stdin on 1.10.0 and 1.13.0.
 Assumption: 300 s clears the slowest test on CI's traced `bash-coverage` (moot after the descope; carried to the backlog row).
-Disposition:
+Disposition: Addressed (operator, 2026-10-22). Findings 1-2: rejected-alternative line, defence-in-depth statement and FIFO-vs-socket caveat added; 3 moot after the descope; 4 kept deliberately: the operand clause mirrors real gpg and round 2 verified it misclassifies no call.
 
 ### Ergonomics
 
@@ -170,7 +171,7 @@ Reviewed at commit: `13d4891d`, scoped to the descoped Design, Testing and Requi
 
 Finding: No design defect. Two apparatus gaps, both measured on a prototype from `git archive 13d4891d` with the redirects added: (1) `tests/makefile_parallel_target.bats` "a carved-out file leaves the parallel pool and runs alone afterwards" uses `grep -qx` on the carve-out line and went `not ok 9`; its expected string must gain the redirect, not lose `-x`. (2) `BATS_SERIAL_FILES` is empty, so `make -n test` never prints the carve-out line: with its redirect removed, all three table cases still found zero missing lines; setting `BATS_SERIAL_FILES=tests/setup_env/git_hooks.bats` found it. The gpg rule misclassifies none of the repo's real call shapes provided `-o` is an argument-taking option; V2 with a prototype mock passed (393 ok, 0 not ok, 305 s on an open FIFO). Checked clean: other anchored greps, `tests/scripts/unit.bats:1132`, the pre-push EOF claim, the coverage runner's FIFO read by path.
 Assumption: no uncertain assumption found (best candidate, that the gpg mock is the only stdin reader those two files reach, was settled true by the prototype V2 run).
-Disposition: Addressed — carve-out case and "at least one `bats` line" added to the Testing table, the exact-match edit named in Design §1 and N1, the argument-taking option list put in §2 and R3, and an `-o -` row added.
+Disposition: Addressed — carve-out case and "at least one `bats` line" added to the Testing table, the exact-match edit named in Design §1 and N1, the argument-taking option list put in §2 and R3, and an `-o -` row added (operator, 2026-10-22: "Addressed, approve spec").
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
