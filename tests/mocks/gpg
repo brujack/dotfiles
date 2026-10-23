@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Mock gpg for testing
 printf "gpg %s\n" "$*" >> "${MOCK_CALLS_FILE}"
-# Handle stdin: drain it only when real gpg would read it (--dearmor/--enarmor
-# with no file operand, or a "-" operand). Draining unconditionally blocks
+# Handle stdin: drain it only for the stdin forms this repo's callers use,
+# --dearmor/--enarmor with no file operand, or a "-" operand. Real gpg also
+# reads stdin for other operand-less commands (--import, --verify); add them
+# here if a caller ever pipes into one. Draining unconditionally blocks
 # forever when stdin is an open socket or FIFO that is never closed.
 _armor=0
 _file_operand=0

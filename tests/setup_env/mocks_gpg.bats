@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
-# Contract of tests/mocks/gpg's stdin handling. Real gpg reads stdin only for
-# --dearmor/--enarmor without a file operand, or with a "-" operand. The mock
-# drains stdin in exactly those cases: an unconditional drain blocks forever when
-# stdin is an open socket or FIFO whose writer never closes it.
+# Contract of tests/mocks/gpg's stdin handling. The mock drains stdin only for
+# the forms this repo's callers use: --dearmor/--enarmor without a file operand,
+# or with a "-" operand. An unconditional drain blocks forever when stdin is an
+# open socket or FIFO whose writer never closes it.
 
 load '../helpers/common.bash'
 
