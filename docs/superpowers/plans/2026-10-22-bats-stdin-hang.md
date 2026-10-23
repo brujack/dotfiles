@@ -1,5 +1,7 @@
 # bats stdin hang Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#366 (e45f96ce), 2026-10-23.
+
 spec: docs/superpowers/specs/2026-10-22-bats-stdin-hang-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
