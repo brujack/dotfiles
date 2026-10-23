@@ -38,6 +38,12 @@ Exposed paths on master `f5d7bfcb`:
   serial whenever `COVERAGE_BATS_JOBS` is unset or parallel is absent.
 - Any direct `bats <file>` an operator or agent runs.
 
+The FIFO stands in for the socket only for readers that drain unconditionally. A FIFO satisfies
+`[[ -p /dev/stdin ]]`, which `argv_probe_stub_path` (`tests/helpers/common.bash`) uses to decide
+whether a generated stub drains stdin, and a socket does not: over the whole suite a FIFO stdin
+produced 5 false hangs in such stubs (round-1 Goal-Fit lens). The two files in V2 reach none of
+them. Any whole-suite claim needs a socket.
+
 Prior art: `tests/setup_env/ledger_integration.bats` carries `exec < /dev/null` for the same
 class (a `cat` in the `ledger` mock); the P3 row "A mock that `cat`s stdin blocks forever on a
 non-EOF fd0" tracks the other stdin-reading mocks. No spec or ADR has proposed or rejected a
@@ -76,7 +82,17 @@ into `tests/mocks/gpg`. `tests/mocks/gpg-dearmor` is only reached through `_APT_
 whose caller always redirects stdin from a file, and is left alone. The `ledger` mock and the
 other stdin-reading mocks stay on their P3 row.
 
-This is the fix that reaches a direct `bats <file>` run, which no `Makefile` change can.
+This is the fix that reaches a direct `bats <file>` run, which no `Makefile` change can, and it
+carries most of the value. Measured by the round-1 Goal-Fit lens with a real unix socket as stdin
+(Python `socketpair`, plain `bats` over the whole suite in six groups): with this mock change,
+3373/3373 ok; with the original mock, only "run_setup_or_developer calls apt-get on Ubuntu"
+hung. The §1 redirects are defence in depth for the serial `make` paths (`HAVE_PARALLEL=`,
+`BATS_SERIAL_FILES`, `test-unit`, a serial coverage run): GNU parallel already withholds stdin
+from `--jobs` runs.
+
+Rejected: `exec 0</dev/null` in `tests/helpers/common.bash`, the backlog row's own candidate.
+Only 56 of the 80 `.bats` files load that helper, so it would protect a subset by accident of
+which files load it, and the cause would remain in the mock.
 
 ### Why no timeout
 
@@ -132,8 +148,8 @@ Reviewed at commit: `3f2fb6b3` (Step 7 self-review commit, before Step 8 dispatc
 
 ### Goal-Fit
 
-Finding: pending at the time of the descope revision (see the round-1 record appended below when it reports).
-Assumption: pending.
+Finding: Reported after the descope, against `3f2fb6b3`. (1) The gpg fix carries nearly all the value: with a real unix socket as stdin (`socketpair`, whole suite, plain `bats` in six groups) the patched mock gave 3373/3373 ok and the original hung only "run_setup_or_developer calls apt-get on Ubuntu"; the recipe redirects change an outcome only on serial paths, since GNU parallel already withholds stdin; the spec gave no reason for rejecting the row's own `exec 0</dev/null` in `common.bash` candidate (56 of 80 files load it). (2) The FIFO stand-in is not the socket: `argv_probe_stub_path` drains on `[[ -p /dev/stdin ]]`, so a whole-suite FIFO run gave 5 false hangs; V2's two files are unaffected. (3) The timeout cases were textual or tested upstream bats, not the Makefile wiring (moot after the descope). (4) R4's operand clause over-specifies: no production `--dearmor` call passes a file operand. Also measured: `BATS_TEST_TIMEOUT` timed out a direct child blocked on stdin on 1.10.0 and 1.13.0.
+Assumption: 300 s clears the slowest test on CI's traced `bash-coverage` (moot after the descope; carried to the backlog row).
 Disposition:
 
 ### Ergonomics
