@@ -68,3 +68,21 @@ _assert_consumed() {
 @test "stdin: --dearmor -o - consumes stdin (- is -o's argument)" {
   _assert_consumed --dearmor -o -
 }
+
+@test "stdin: --dearmor key.asc - consumes stdin (- operand)" {
+  _assert_consumed --dearmor key.asc -
+}
+
+@test "stdin: --enarmor consumes a file on stdin" {
+  _assert_consumed --enarmor
+}
+
+@test "stdin: argument-taking options do not create a file operand" {
+  local opt
+  for opt in -o --output --homedir --status-fd --keyring; do
+    _assert_consumed --dearmor "${opt}" x || {
+      printf '%s x was read as a file operand\n' "${opt}" >&2
+      return 1
+    }
+  done
+}
