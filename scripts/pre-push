@@ -94,8 +94,10 @@ refuse_paths=""
 refuse_local_ref=""
 unresolved_refs=""
 budget_refs=""
+pushed_refs=""
 while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]] && continue
+    pushed_refs="${pushed_refs}${local_ref} ${local_sha} ${remote_ref}"$'\n'
 
     if [[ "${remote_sha}" == "0000000000000000000000000000000000000000" ]]; then
         # No shared history with origin/master (first push to an empty remote):
@@ -195,6 +197,58 @@ if [[ -n "${refuse_paths}" ]]; then
 fi
 
 [[ "${needs_test}" -eq 0 ]] && exit 0
+
+# The suite below tests REPO_ROOT's working tree, so a green run says nothing
+# about a pushed ref unless that ref is at the tree's HEAD. HEAD is read from
+# that tree with the git environment stripped (an exported GIT_DIR from a
+# worktree push would otherwise name a different HEAD than the one make tests).
+# Each git read sits in a conditional: this hook runs under set -e. A failed
+# read or peel leaves the value empty and the ref is refused (fail closed).
+if ! tree_head="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${REPO_ROOT}" rev-parse --verify --quiet 'HEAD^{commit}' 2>/dev/null)"; then
+    tree_head=""
+fi
+# Name the remote only when it is a configured remote name: git passes $1 as a
+# URL for a URL push, and a URL can carry a token that must never be printed.
+remote_name="<remote>"
+# Exact whole-line comparison, never a pattern match; a $1 holding a newline
+# cannot be a remote name, so it is never printed.
+if [[ -n "${1:-}" && "${1}" != *$'\n'* ]]; then
+    while IFS= read -r _name; do
+        if [[ "${_name}" == "${1}" ]]; then
+            remote_name="${1}"
+            break
+        fi
+    done < <(git remote 2>/dev/null)
+fi
+wrong_tree_lines=""
+remedy_lines=""
+while read -r _ref _sha _remote_ref; do
+    [[ -z "${_ref}" ]] && continue
+    if ! _peeled="$(git rev-parse --verify --quiet "${_sha}^{commit}" 2>/dev/null)"; then
+        _peeled=""
+    fi
+    if [[ -z "${_peeled}" || -z "${tree_head}" || "${_peeled}" != "${tree_head}" ]]; then
+        _ref_at="unresolved"
+        [[ -n "${_peeled}" ]] && _ref_at="${_peeled:0:7}"
+        _tree_at="unresolved"
+        [[ -n "${tree_head}" ]] && _tree_at="${tree_head:0:7}"
+        # A non-refs/ local_ref (HEAD~1, a bare sha) means nothing in another
+        # checkout, so the full sha is the source there.
+        _src="${_ref}"
+        [[ "${_ref}" == refs/* ]] || _src="${_sha}"
+        remedy_lines="${remedy_lines}  git push ${remote_name} ${_src}:${_remote_ref}"$'\n'
+        wrong_tree_lines="${wrong_tree_lines}  ${_src} is at ${_ref_at}; this checkout (${REPO_ROOT}) is at ${_tree_at}."$'\n'
+    fi
+done <<< "${pushed_refs}"
+if [[ -n "${wrong_tree_lines}" ]]; then
+    printf "pre-push: the suite tests this checkout's working tree, not the pushed commit.\n" >&2
+    printf '%s' "${wrong_tree_lines}" >&2
+    printf 'Push each ref from a checkout whose HEAD is that commit:\n' >&2
+    printf '%s' "${remedy_lines}" >&2
+    printf 'Re-add any flags the original push used (-u, --force-with-lease).\n' >&2
+    exit 1
+fi
 
 # Git exports GIT_DIR into this hook's environment when the push originates
 # from a worktree (git-workflow.md's measured table); every suite below that

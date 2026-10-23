@@ -134,20 +134,20 @@ the branch's worktree, and add a terraform_ansible backlog row for its missing s
 New cases in `tests/scripts/pre_push.bats`, each building a fixture repo and feeding a
 synthetic ref line:
 
-| Case                        | Ref lines                                                                                | Expect                                                                    |
-| --------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| mismatch refused            | non-inert change, `local_sha` = an older commit, HEAD ahead                              | exit 1, message names both short SHAs, `make` never called                |
-| match runs suite            | same change, `local_sha` = HEAD                                                          | exit 0, `make` called once                                                |
-| inert-only mismatch         | `.md`-only change, `local_sha` != HEAD                                                   | exit 0, no refusal text, `make` not called                                |
-| tag peeled                  | annotated tag object at HEAD, non-inert change                                           | exit 0, `make` called                                                     |
-| mixed refs refused          | non-inert ref at HEAD plus an inert ref at another commit                                | exit 1, names only the ref not at HEAD                                    |
-| unpeelable ref              | non-inert ref whose `local_sha` is a tag object pointing at a tree                       | exit 1, `unresolved` in the message, no `expected commit type` text       |
-| unborn HEAD                 | fixture with no commit checked out, non-inert ref                                        | exit 1, `unresolved` in the message, `make` never called                  |
-| master refusal wins         | non-inert ref to `refs/heads/master` at a non-HEAD commit                                | exit 1 with the existing direct-to-master text, not this one's            |
-| remedy is the exact command | mismatch on `refs/heads/feat`, hook `$1` = `origin`; and a `local_ref` of `HEAD~1`       | `origin refs/heads/feat:refs/heads/feat`; the second prints the full SHA  |
-| remote URL withheld         | mismatch, hook `$1` = an https URL not listed by `git remote`                            | message contains the literal `<remote>` and not the URL                   |
-| decoy GIT_DIR               | hook run from the main checkout with `GIT_DIR` exported to a worktree holding the pushed commit | exit 1 (the tested tree is the main checkout's), `make` never called |
-| work tree elsewhere         | hook cwd in the main checkout, `GIT_WORK_TREE` exported to a worktree at the pushed commit | exit 0, `make -C <worktree>` called (a read from cwd would falsely refuse) |
+| Case                        | Ref lines                                                                                       | Expect                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| mismatch refused            | non-inert change, `local_sha` = an older commit, HEAD ahead                                     | exit 1, message names both short SHAs, `make` never called                 |
+| match runs suite            | same change, `local_sha` = HEAD                                                                 | exit 0, `make` called once                                                 |
+| inert-only mismatch         | `.md`-only change, `local_sha` != HEAD                                                          | exit 0, no refusal text, `make` not called                                 |
+| tag peeled                  | annotated tag object at HEAD, non-inert change                                                  | exit 0, `make` called                                                      |
+| mixed refs refused          | non-inert ref at HEAD plus an inert ref at another commit                                       | exit 1, names only the ref not at HEAD                                     |
+| unpeelable ref              | non-inert ref whose `local_sha` is a tag object pointing at a tree                              | exit 1, `unresolved` in the message, no `expected commit type` text        |
+| unborn HEAD                 | fixture with no commit checked out, non-inert ref                                               | exit 1, `unresolved` in the message, `make` never called                   |
+| master refusal wins         | non-inert ref to `refs/heads/master` at a non-HEAD commit                                       | exit 1 with the existing direct-to-master text, not this one's             |
+| remedy is the exact command | mismatch on `refs/heads/feat`, hook `$1` = `origin`; and a `local_ref` of `HEAD~1`              | `origin refs/heads/feat:refs/heads/feat`; the second prints the full SHA   |
+| remote URL withheld         | mismatch, hook `$1` = an https URL not listed by `git remote`                                   | message contains the literal `<remote>` and not the URL                    |
+| decoy GIT_DIR               | hook run from the main checkout with `GIT_DIR` exported to a worktree holding the pushed commit | exit 1 (the tested tree is the main checkout's), `make` never called       |
+| work tree elsewhere         | hook cwd in the main checkout, `GIT_WORK_TREE` exported to a worktree at the pushed commit      | exit 0, `make -C <worktree>` called (a read from cwd would falsely refuse) |
 
 "Match runs suite" and "tag peeled" prove the `HEAD` read computes: a check whose read returns
 nothing refuses both. "Mismatch refused" and "mixed refs refused" prove the ref record
@@ -180,6 +180,10 @@ still carries `deploy.sh`, the master range stays `.md`-only).
 - **N3.** No existing pre_push.bats assertion is deleted or weakened; an existing case is changed only in the commit its ref line pushes or the commit its fixture has at `HEAD`.
 - **N4.** ai-config's and terraform_ansible's hooks are not changed.
 - **N5.** The hook does not read `git worktree list`.
+
+## Amendments
+
+- R7 -> `tests/scripts/pre_push.bats` carries the twelve cases in the Testing table plus a thirteenth, "an unborn HEAD and an unpeelable ref are refused, not matched as equal". — Phase 3 test-quality-review found that deleting both `-z` guards survived every test: with both reads failing, two empty values compare equal and the push would run the suite.
 
 ## Multi-Lens Review
 
@@ -236,3 +240,25 @@ Disposition: Addressed (operator, 2026-10-22: "Addressed, approve spec"). Twelft
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-22)
+
+- spec: docs/superpowers/specs/2026-10-22-pre-push-wrong-tree-refusal-design.md
+- anchor: 7f85a7a550fbd9b32e3b5dbbb06664710ce4972a
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test at cefdb069: rc 0, 3373 ok, 0 not ok (worktree, foreground, < /dev/null).
+- V2: Refusal half run 2026-10-22 from the main checkout (on master 0e5ec4d) with -c core.hooksPath=<worktree>/scripts: PUSH_RC=1, printed 'pre-push: the suite tests this checkout's working tree, not the pushed commit.' naming refs/heads/feat/pre-push-wrong-tree at cefdb06 vs 0e5ec4d and the exact remedy; ls-remote showed the branch absent afterwards. Pass half is the PR's own push from the worktree with the same core.hooksPath; both outputs go in the PR body.
+- V3: ai-config#325 merged 2026-10-22 as 6918b938: core.md git-workflow-043, its knowledge entry and ai-config-bats-testing-pitfalls.md rewritten to push-from-worktree / strip GIT_*; finishing-a-development-branch push step amended. terraform_ansible Backlog row added by its session in cfa94d01 (requested from here; that repo is the ansible session's).
