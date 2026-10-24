@@ -59,25 +59,12 @@ function Set-ClaudeConfig {
     $null = New-Item -ItemType Directory -Path $claudeDir -Force
   }
 
-  foreach ($file in @("settings.json", "CLAUDE.md", "mcp.json.template")) {
+  foreach ($file in @("settings.json", "CLAUDE.md")) {
     New-SafeLink -Target "$aiClaude/$file" -Link "$claudeDir/$file" -Junction:$false
   }
 
   foreach ($dir in @("skills", "commands", "standards")) {
     New-SafeLink -Target "$aiClaude/$dir" -Link "$claudeDir/$dir" -Junction
-  }
-
-  $templatePath = "$claudeDir/mcp.json.template"
-  $outputPath   = "$claudeDir/mcp.json"
-  if (Test-Path $templatePath) {
-    $content = Get-Content $templatePath -Raw
-    $pat = $env:GITHUB_PAT
-    if ([string]::IsNullOrEmpty($pat)) {
-      Write-Warning "GITHUB_PAT not set - writing mcp.json without substitution"
-    } else {
-      $content = $content -replace '\$\{GITHUB_PAT\}', $pat
-    }
-    Set-Content -Path $outputPath -Value $content
   }
 }
 

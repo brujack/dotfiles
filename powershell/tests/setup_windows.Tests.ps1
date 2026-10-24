@@ -634,18 +634,12 @@ Describe "Install-AiConfig" {
 
 Describe "Set-ClaudeConfig" {
   BeforeEach {
-    $script:savedPAT = $env:GITHUB_PAT
-    $env:GITHUB_PAT  = $null
     Mock New-SafeLink  { }
     Mock New-Item      { }
     Mock Test-Path     { $true }
-    Mock Get-Content   { '{"token":"${GITHUB_PAT}"}' }
     Mock Set-Content   { }
     Mock Write-Output  { }
     Mock Write-Warning { }
-  }
-  AfterEach {
-    $env:GITHUB_PAT = $script:savedPAT
   }
 
   It "creates ~/.claude when it does not exist" {
@@ -676,21 +670,6 @@ Describe "Set-ClaudeConfig" {
     Should -Invoke New-SafeLink -ParameterFilter {
       $Link -like '*/standards' -and $Junction -eq $true
     } -Times 1
-  }
-
-  It "writes mcp.json with GITHUB_PAT substituted" {
-    $env:GITHUB_PAT = "ghp_test123"
-    Set-ClaudeConfig
-    Should -Invoke Set-Content -ParameterFilter {
-      $Value -like '*ghp_test123*' -and $Path -like '*/mcp.json'
-    } -Times 1
-  }
-
-  It "warns and writes template unchanged when GITHUB_PAT is unset" {
-    $env:GITHUB_PAT = $null
-    Set-ClaudeConfig
-    Should -Invoke Write-Warning -Times 1
-    Should -Invoke Set-Content   -ParameterFilter { $Path -like '*/mcp.json' } -Times 1
   }
 }
 
