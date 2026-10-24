@@ -518,7 +518,6 @@ run_doctor() {
   _doctor_check_hooks_path
   _doctor_check_versions
   _doctor_check_aws_key_expiry
-  _doctor_check_github_mcp
   _doctor_check_gnu_coreutils
   _doctor_check_brew_links
   _doctor_check_conffile_dist
@@ -828,10 +827,9 @@ _doctor_check_versions() {
 # download on that date until someone refreshes the key -- this arm exists
 # to give advance notice before that happens, not to detect it after.
 #
-# 90 days, not GITHUB_PAT_EXPIRY's 30: a PAT is rotated in seconds from a web
-# UI, but refreshing this key means AWS publishing a new one, verifying its
+# 90 days: refreshing this key means AWS publishing a new one, verifying its
 # fingerprint out of band, updating AWSCLI_GPG_FPR in lib/constants.sh, and
-# shipping that through review -- a slower process needs a longer lead time.
+# shipping that through review -- a slow process needs a long lead time.
 #
 # Gated on HAS_AWS -- MUST run first, before anything that could exit early
 # for another reason. install_aws_tools/update_aws_cli are themselves
@@ -923,80 +921,6 @@ _github_auth_header() {
       ;;
   esac
   printf 'Authorization: Bearer %s\n' "${_token}"
-}
-
-_doctor_check_github_mcp() {
-  printf "\nGitHub MCP:\n"
-  local _mcp_file="${HOME}/.claude/mcp.json"
-
-  # Check generated file exists (not a broken symlink)
-  if [[ -L "${_mcp_file}" ]] && [[ ! -e "${_mcp_file}" ]]; then
-    doctor_fail "${HOME}/.claude/mcp.json" "broken symlink — run: setup_env.sh -t setup_user"
-    return
-  fi
-  if [[ ! -f "${_mcp_file}" ]]; then
-    doctor_fail "${HOME}/.claude/mcp.json" "missing — run: setup_env.sh -t setup_user"
-    return
-  fi
-  doctor_pass "${HOME}/.claude/mcp.json (generated)"
-
-  # Check PAT is set
-  if [[ -z "${GITHUB_PAT:-}" ]]; then
-    doctor_fail "GITHUB_PAT" "unset — add to config/local.sh: https://github.com/settings/tokens?type=beta"
-    return
-  fi
-  doctor_pass "GITHUB_PAT (set)"
-
-  # Token goes to curl on stdin: argv is readable by every uid. Capture first so
-  # a refused token returns before curl runs -- a pipe could not stop it.
-  local _hdr
-  if ! _hdr=$(_github_auth_header "${GITHUB_PAT}"); then
-    doctor_fail "GITHUB_PAT" "contains a line break — fix config/local.sh"
-    return
-  fi
-
-  local _curl_rc=0
-  # --noproxy: a proxy env var would otherwise carry the token in cleartext to the proxy on the 127.0.0.1 seam form.
-  printf '%s\n' "${_hdr}" | curl --max-time 5 --silent --fail --noproxy 127.0.0.1 -H @- \
-    "$(_github_api_base)/user" > /dev/null 2>&1 || _curl_rc=$?
-
-  if [[ ${_curl_rc} -eq 22 ]]; then
-    doctor_fail "GitHub PAT" "invalid or revoked — rotate at https://github.com/settings/tokens"
-  elif [[ ${_curl_rc} -eq 28 ]] || [[ ${_curl_rc} -eq 6 ]]; then
-    doctor_warn "GitHub PAT" "network unreachable (offline?) — skipping live check"
-  elif [[ ${_curl_rc} -ne 0 ]]; then
-    doctor_warn "GitHub PAT" "curl error ${_curl_rc} — skipping live check"
-  else
-    doctor_pass "GitHub PAT (live)"
-  fi
-
-  # Check expiry
-  if [[ -z "${GITHUB_PAT_EXPIRY:-}" ]]; then
-    log_info "  [INFO] Set GITHUB_PAT_EXPIRY in config/local.sh to enable expiry checks"
-    return 0
-  fi
-
-  local _expiry_epoch _today_epoch _diff_days
-  if [[ -n "${MACOS:-}" ]]; then
-    _expiry_epoch=$(date -j -f "%Y-%m-%d" "${GITHUB_PAT_EXPIRY}" +%s 2>/dev/null) || true
-  else
-    _expiry_epoch=$(date -d "${GITHUB_PAT_EXPIRY}" +%s 2>/dev/null) || true
-  fi
-  _today_epoch=$(date +%s)
-
-  if [[ -z "${_expiry_epoch:-}" ]]; then
-    doctor_warn "GITHUB_PAT_EXPIRY" "could not parse '${GITHUB_PAT_EXPIRY}' — use format YYYY-MM-DD"
-    return 0
-  fi
-
-  _diff_days=$(( (_expiry_epoch - _today_epoch) / 86400 ))
-  if [[ ${_diff_days} -le 0 ]]; then
-    doctor_fail "GITHUB_PAT_EXPIRY" "PAT expired on ${GITHUB_PAT_EXPIRY} — rotate at https://github.com/settings/tokens"
-  elif [[ ${_diff_days} -le 30 ]]; then
-    doctor_warn "GITHUB_PAT_EXPIRY" "expires in ${_diff_days} days (${GITHUB_PAT_EXPIRY}) — rotate at https://github.com/settings/tokens"
-  else
-    doctor_pass "GITHUB_PAT_EXPIRY (${GITHUB_PAT_EXPIRY}, ${_diff_days} days)"
-  fi
 }
 
 # Print the live value of a sysctl proc file, or nothing and return 1. The

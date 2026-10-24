@@ -419,7 +419,6 @@ _make_plugin() {
   _doctor_check_hooks_path()     { :; }
   _doctor_check_versions()       { :; }
   _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_github_mcp()     { :; }
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist() { :; }

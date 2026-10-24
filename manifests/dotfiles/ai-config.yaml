@@ -16,10 +16,6 @@ actions:
     target: "{{ user.home_dir }}/.claude/hooks"
 
   - action: file.link
-    source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/mcp.json.template"
-    target: "{{ user.home_dir }}/.claude/mcp.json.template"
-
-  - action: file.link
     source: "{{ user.home_dir }}/git-repos/personal/ai-config/.claude/settings.json"
     target: "{{ user.home_dir }}/.claude/settings.json"
 

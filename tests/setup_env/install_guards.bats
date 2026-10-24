@@ -920,26 +920,6 @@ _gnubin_present() {
   grep -q "stub-ensure-state-ledger-called" "${MOCK_CALLS_FILE}"
 }
 
-# ── setup_claude_mcp (AI_CONFIG_DIR seam) ────────────────────────────────────
-
-@test "setup_claude_mcp uses template from AI_CONFIG_DIR" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-pat-value"
-  # Prevent config/local.sh from overriding GITHUB_PAT by pointing PERSONAL_GITREPOS
-  # to a temp dir where no config/local.sh exists
-  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
-  export DOTFILES="dotfiles"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"token": "${GITHUB_PAT}"}\n' > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/.claude"
-  export HOME="${_home}"
-
-  run setup_claude_mcp
-  [ "${status}" -eq 0 ]
-  grep -q "test-pat-value" "${_home}/.claude/mcp.json"
-}
-
 # ── setup_dotfile_symlinks (AI_CONFIG_DIR seam) ──────────────────────────────
 
 @test "setup_dotfile_symlinks creates .claude symlinks from AI_CONFIG_DIR" {
@@ -1312,31 +1292,4 @@ _gnubin_present() {
   "
   [ "${status}" -ne 0 ]
   ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
-}
-
-@test "run_setup_user: setup_claude_mcp fails → returns non-zero, setup_claude_plugins not called" {
-  local _home="${BATS_TEST_TMPDIR}/home"
-  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
-  mkdir -p "${_home}" "${_git_repos}"
-  run bash -c "
-    export PATH='${PATH}'
-    export HOME='${_home}'
-    export PERSONAL_GITREPOS='${_git_repos}'
-    export DOTFILES='dotfiles'
-    export LINUX=1
-    unset MACOS UBUNTU
-    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
-    source '${REPO_ROOT}/setup_env.sh'
-    install_bats() { return 0; }
-    clone_or_update_dotfiles() { return 0; }
-    setup_ai_config() { return 0; }
-    setup_dotfile_symlinks() { return 0; }
-    install_terraform_skill() { return 0; }
-    setup_zsh_as_default_shell() { return 0; }
-    setup_claude_mcp() { return 1; }
-    setup_claude_plugins() { printf 'PLUGINS_CALLED\n'; return 0; }
-    run_setup_user
-  "
-  [ "${status}" -ne 0 ]
-  ! [[ "${output}" == *"PLUGINS_CALLED"* ]]
 }
