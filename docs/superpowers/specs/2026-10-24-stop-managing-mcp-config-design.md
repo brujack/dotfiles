@@ -96,3 +96,26 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 Finding: no load-bearing issue; every new factual claim verified (etch-config readers and lines, write-through guard, ai-config `dotfiles-conventions.md` lines 208/246/317/321, the `plugin_node_paths.bats:422` stub, the coverage estimate). Minor: R7's row should name the test (`unit.bats:1055` is unanchored, `:2969` is anchored); `lib/helpers.sh:831` keeps a `GITHUB_PAT_EXPIRY` comparison no step removed.
 Assumption: the etch-config exposure is latent on every machine. Checked by the orchestrator 2026-10-24 on `claude`, the Studio and the workstation: `ai-config/.claude/mcp.json` has empty `git status`, 0 token-shaped strings, and 0 in `git log -p --all`.
 Disposition: Addressed — R7 and step 8 name the test; step 2 and R6 cover the `helpers.sh` comment (wording-level, no further round).
+
+## Spec alignment (2026-10-24)
+
+- spec: docs/superpowers/specs/2026-10-24-stop-managing-mcp-config-design.md
+- anchor: 4e357640e9236a23630fcb23ca5b671898597f1f
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test at bb8808e8 (rebased on origin/master): 1..3337, 3337 ok, 0 not ok; master at the same base runs 3372 (3372 - 35 = 3337).
+- V2: ./setup_env.sh -t doctor on claude from the branch worktree: '42 checks passed, 0 failed, 1 warnings', 0 lines matching 'GitHub MCP'.
+- V3: no evidence recorded
+- V4: no evidence recorded
