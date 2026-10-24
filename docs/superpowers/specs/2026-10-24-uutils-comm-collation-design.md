@@ -1,6 +1,7 @@
 # makefile_lint_scope.bats: C collation for sort and comm, and a CI coreutils probe
 
 - **Date:** 2026-10-24
+- **Approved:** 2026-10-24
 - **Backlog rows:** "`makefile_lint_scope.bats` disjointness tests fail under uutils `sort`/`comm`" (P2 — test gaps); "`sort -u` over names is lossy on Ubuntu 26.04" (P2 — bugs and security)
 
 ## Problem
