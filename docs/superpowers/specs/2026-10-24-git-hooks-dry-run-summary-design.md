@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-24
 - **Backlog row:** "`git-repos` and `git-hooks` render `[OK] … updated` in the summary table over a dry run that did nothing" (P2 — bugs and security)
+- **Approved:** 2026-10-24
 
 ## Problem
 
