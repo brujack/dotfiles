@@ -382,6 +382,16 @@ _update_record_end() {
         _result="updated"
       fi
       ;;
+    git-hooks)
+      # Hook installs go through run_cmd, which only prints under DRY_RUN,
+      # so "updated" would claim installs that never ran. The checks did
+      # run, so this is OK, not SKIP.
+      if _dry_run_active; then
+        _result="dry run: install skipped"
+      else
+        _result="updated"
+      fi
+      ;;
     *)
       _result="updated"
       ;;
