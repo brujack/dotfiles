@@ -1,5 +1,7 @@
 # Retire sync-agent-guidance Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#367 (6093ef4a), 2026-10-24.
+
 spec: docs/superpowers/specs/2026-10-23-retire-sync-agent-guidance-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
