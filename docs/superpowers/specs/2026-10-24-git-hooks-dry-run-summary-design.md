@@ -72,7 +72,7 @@ is run only if the operator asks for it. The dry-run sweep itself returns 0 on a
 - **R2.** `_update_record_end` still writes status `OK` for `git-hooks` with exit 0, dry run or not.
 - **R3.** `tests/setup_env/update_summary.bats` has a test asserting `result_git-hooks` equals `dry run: install skipped` and `status_git-hooks` equals `OK` after `_update_record_end "git-hooks" 0` with `DRY_RUN=1`, and a test that runs `unset DRY_RUN` itself and asserts `result_git-hooks` equals `updated`.
 - **R4.** The Backlog row "`git-repos` and `git-hooks` render `[OK] … updated` …" is removed from the open P2 table.
-- **R5.** A new P3 Backlog row records that a non-dry run still renders `git-hooks` as `updated` when the sweep installed 0 hooks, and that fixing it needs `install_git_hooks_all_repos` to hand its counts to the table.
+- **R5.** The existing Backlog row "no-op update sections render `updated`" gains one sentence saying that for `git-hooks` the file `err_git-hooks` already holds the sweep's `<N> checked, <M> updated` summary line (written by the `tee` in `run_update`), so a count-reading arm needs no change to `lib/git_hooks.sh`. No new Backlog row is added for this gap.
 - **V1.** The R3 dry-run test fails on `origin/master` before the R1 change and passes after it.
 - **V2.** Optional, only if the operator asks: `./setup_env.sh -t update --dry-run` on `claude` shows the `git-hooks` row result `dry run: install skipped`.
 - **N1.** No change to how `git-repos` renders, dry run or not.
@@ -89,7 +89,7 @@ Reviewed at commit: `d60fdce1`
 
 Finding: No blocking issues; premise verified on `origin/master`. Non-blocking: a non-dry run still says `updated` when the sweep installed 0 hooks (needs `lib/git_hooks.sh`, outside N3), worth a Backlog row so R4 does not drop it; V2 costs a real update run to check a label the unit test pins, so make it optional.
 Assumption: no uncertain assumption found (probe on `claude`: sweep under `DRY_RUN=1` returns 0, no gaps, no `core.hooksPath` pin).
-Disposition: Addressed (operator, 2026-10-24) — R5 adds the P3 row; V2 is optional.
+Disposition: Addressed (operator, 2026-10-24) — V2 is optional. The R5 part was revised in round 2: the gap is already the open row "no-op update sections render `updated`", and the claim that the fix needs `lib/git_hooks.sh` is false (see Round 2).
 
 #### Ergonomics
 
@@ -102,6 +102,16 @@ Disposition: Addressed (operator, 2026-10-24) — text changed to `dry run: inst
 Finding: No blocking issues. Arm ordering, SKIP/FAIL/WARN paths, ledger and width all unaffected; the spec should say `unset DRY_RUN` literally. Minor, accepted by design: under `--dry-run` an rc-2 WARN row does not say its gaps are pre-run state (the detail block does).
 Assumption: no uncertain assumption found.
 Disposition: Addressed (operator, 2026-10-24) — `unset DRY_RUN` written into R3; the WARN-row point stays accepted as already stated in Design.
+
+### Round 2
+
+Reviewed at commit: `e52391a8` (scoped re-check of the round-1 changes)
+
+#### Ergonomics
+
+Finding: R5 duplicates the open Backlog row "no-op update sections render `updated`", which already names `git-hooks` and proposes a `mas)`-shaped arm counting lines in `err_<section>`. R5's premise is also false: `run_update` pipes the sweep through `tee "${_DOTFILES_RUN_TMPDIR}/err_git-hooks"`, so the `<N> checked, <M> updated` summary line is already in that file, and N3 does not block the fix. The text change, `unset DRY_RUN` in R3 and the optional V2 read correctly.
+Assumption: no uncertain assumption found (both claims verified by grep on `e52391a8`: the row in `docs/superpowers/README.md`, the `tee` in `lib/workflows.sh`, the summary line in `lib/git_hooks.sh`).
+Disposition: Addressed (operator, 2026-10-24) — R5 now edits the existing row instead of adding one, and records the `err_git-hooks` route.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
