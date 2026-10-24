@@ -41,9 +41,22 @@ closed as not reproducible with this measurement attached (operator decision 202
 ### What CI runs is unknown
 
 The CI `test` job ran on `Image: ubuntu-26.04` for dotfiles#369 (run 40050513754) and both
-disjointness tests passed (`ok 245`, `ok 259`). That is consistent with GNU coreutils ahead of
-uutils on the runner image, or with uutils tools that happen to agree on these inputs. Nothing in
-the job prints which. The `powershell` backlog row names this as the open question.
+disjointness tests passed (`ok 245`, `ok 259`). Three explanations fit, and nothing in the job
+prints which holds (the run's log carries no `LANG`/`LC_*` line):
+
+- GNU coreutils ahead of uutils on the runner's `PATH`;
+- uutils first, but the job runs under `C`/`C.UTF-8`/`POSIX` collation. Measured 2026-10-24 on
+  `claude`: the same uutils pipeline over the real lists gives 0 `not in sorted order` lines under
+  `LC_ALL=C.UTF-8` and 3 under `LC_ALL=en_US.UTF-8`. GitHub's Ubuntu runners usually set
+  `LANG=C.UTF-8`, a prior, not a measurement;
+- uutils tools that happen to agree on these inputs.
+
+Locale, not binary order, is what decides whether the defect shows. The `powershell` backlog row
+names the runner's coreutils as the open question.
+
+Measured 2026-10-24 on `claude`, same lists: under `en_US.UTF-8`, uutils `comm` accepts
+C-sorted input (rc 0), so uutils `comm` compares bytes and the `sort` prefix carries the fix. The
+`comm` prefix still matters for GNU `comm`, which honours locale.
 
 ## Design
 
@@ -55,8 +68,8 @@ Prefix `LC_ALL=C` to every `sort` and `comm` invocation in
 Every one, not only those feeding `comm`: helper output is compared for equality with other
 `sort -u` output in the same file (for example `:147` against `:148`, `:791` against `:786`), so
 converting only the helper would mix collations on the two sides of an equality. The set is
-enumerated at plan time with `grep -nE '(^|[^_a-z])(sort|comm)( |$)'`; at spec time it is 13
-`sort` lines and 4 `comm` lines.
+enumerated at plan time with `grep -nE '(^|[^_a-z])(sort|comm)( |$)'`; at spec time it is 14
+lines: 10 `sort` invocations and 4 `comm` invocations.
 
 Rejected: `export LC_ALL=C` in `setup()`. It would also put the `make print-*` and `git ls-files`
 calls under test into C locale, so a locale-dependent defect in the production derivation would
@@ -67,21 +80,31 @@ be masked. The fix changes only the test's own comparison tools.
 A green CI run cannot gate this fix if the runner has GNU coreutils first. Add one test that:
 
 - skips unless `/usr/bin/sort --version` and `/usr/bin/comm --version` both report `uutils`;
+- skips unless `locale -a` lists `en_US.utf8` (case-insensitive, either `utf8` or `UTF-8`);
 - obtains `SHELL_FILES`/`ZSH_FILES` through the existing `_make_print` with the normal `PATH`;
-- then, with `PATH="/usr/bin:${PATH}"`, runs `_sorted_lines_from_space_list` on each and the same
-  `comm -12` / `comm -23` pipeline the disjointness tests use;
+- then, with `PATH="/usr/bin:${PATH}"` and a test-scoped `LC_ALL=en_US.UTF-8`, runs
+  `_sorted_lines_from_space_list` on each and the same `comm -12` / `comm -23` pipeline the
+  disjointness tests use. The locale is pinned because under `C.UTF-8` the unfixed pipeline also
+  passes; the per-command `LC_ALL=C` prefixes inside the helper and on `comm` override it, so the
+  fixed code still runs in C collation;
+- writes the sorted lists to files under `BATS_TEST_TMPDIR` and runs `comm -12` on those files
+  directly, capturing its exit status and its stderr in a file, not through `$(...)` inside a
+  process substitution. A failing uutils `comm` still prints the correct overlap
+  (`config/profiles.sh` alongside rc 1), so the overlap check alone passes on the broken tree;
 - asserts `comm` exits 0, its stderr contains no `not in sorted order`, and the overlap equals
   `_KNOWN_SHELL_ZSH_OVERLAP` (a specific non-empty value, so a pipeline producing nothing fails).
 
-Accepted trade-off: on macOS, the Studio and any GNU-first runner this test skips, and a bats skip
-counts as a pass (the existing "collation assertion never runs in CI" row). It discriminates on
-`claude` and `workstation`, which is where the defect occurs.
+Accepted trade-off: on macOS, the Studio, any GNU-first runner and any box without the
+`en_US.UTF-8` locale this test skips, and a bats skip counts as a pass (the existing "collation
+assertion never runs in CI" row). It discriminates on `claude` and `workstation`, which is where
+the defect occurs.
 
 ### 3. CI coreutils probe
 
 Add a `Tool versions` step to the `test` job before `Run tests`, mirroring `test-macos`'s step of
-the same name. It prints `command -v sort comm`, `sort --version | head -1` and
-`comm --version | head -1`. It never fails the job on content.
+the same name. It prints `locale`, `command -v sort comm`, `sort --version | head -1` and
+`comm --version | head -1`. It never fails the job on content. `locale` is what separates the
+first two explanations above; the versions alone cannot.
 
 ### 4. Backlog
 
@@ -89,7 +112,7 @@ the same name. It prints `command -v sort comm`, `sort --version | head -1` and
 - Close the `sort -u` lossy row as not reproducible under uutils 0.10.0, with the measurement above.
 - Add a P3 row: `pyenv.d/rehash/dotfiles-register-all-executables.bash` exists for the 0.8.0
   `sort -u` defect; re-measure `pyenv versions --executables` under 0.10.0 and retire it if clean.
-- After CI runs, record the runner's `sort --version` on the `powershell` row.
+- After CI runs, record the runner's `sort --version` and `locale` on the `powershell` row.
 
 ## Verification
 
@@ -104,13 +127,43 @@ the same name. It prints `command -v sort comm`, `sort --version | head -1` and
 
 - **R1.** Every `sort` and `comm` invocation in `tests/scripts/makefile_lint_scope.bats` is prefixed with `LC_ALL=C`.
 - **R2.** No `setup()` or file-level code in `tests/scripts/makefile_lint_scope.bats` exports or sets `LC_ALL`, `LC_COLLATE` or `LANG`.
-- **R3.** A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils`, and otherwise runs `_sorted_lines_from_space_list` and the `comm -12`/`comm -23` pipeline with `/usr/bin` first on `PATH`.
-- **R4.** The R3 test asserts `comm` exit 0, no `not in sorted order` on stderr, and an overlap equal to `_KNOWN_SHELL_ZSH_OVERLAP`.
-- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `command -v sort comm`, `sort --version | head -1` and `comm --version | head -1`.
+- **R3.** A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils` and `locale -a` lists `en_US.utf8`, and otherwise runs `_sorted_lines_from_space_list` and the `comm -12`/`comm -23` pipeline with `/usr/bin` first on `PATH` under a test-scoped `LC_ALL=en_US.UTF-8`.
+- **R4.** The R3 test runs `comm -12` on files, captures its exit status and stderr directly (not via `$(...)` inside a process substitution), and asserts exit 0, no `not in sorted order` on stderr, and an overlap equal to `_KNOWN_SHELL_ZSH_OVERLAP`.
+- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `locale`, `command -v sort comm`, `sort --version | head -1` and `comm --version | head -1`.
 - **R6.** The `makefile_lint_scope.bats` uutils Backlog row and the `sort -u` lossy row are removed from their open tables, and a P3 row for retiring the pyenv rehash hook is added.
 - **V1.** On `claude`, `PATH="/usr/bin:${PATH}" bats tests/scripts/makefile_lint_scope.bats` shows 3 `not ok` before the fix and 0 after.
 - **V2.** Deleting `LC_ALL=C` from `_sorted_lines_from_space_list` turns the R3 test red on `claude`.
-- **V3.** The CI `test` job log for the PR shows the `Tool versions` output, and its `sort --version` line is recorded on the `powershell` Backlog row.
+- **V3.** The CI `test` job log for the PR shows the `Tool versions` output, and its `sort --version` and `locale` lines are recorded on the `powershell` Backlog row.
 - **N1.** No change to any file under `lib/`.
 - **N2.** No change to `pyenv.d/`.
 - **N3.** The `Tool versions` step does not fail the job on any version string.
+
+## Multi-Lens Review
+
+Reviewed at commit: `e042053f` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Round 1
+
+All three lenses independently reached the same finding; it is recorded once per lens.
+
+#### Goal-Fit
+
+Finding: Section 1 fixes the problem, but the spec omits locale as an explanation for green CI. If the runner is uutils under `C.UTF-8`, the R3 test runs on CI and passes with or without the fix, and the R5 probe answers nothing because it prints no locale. Fix: print `locale` in R5; pin a test-scoped `en_US.UTF-8` in R3, skipping if absent.
+Assumption: CI is green because the runner's locale is `C.UTF-8`, not because GNU coreutils come first. Settled by one CI run printing `locale` and `sort --version`.
+Disposition: Addressed (operator, 2026-10-24) — locale named as the third explanation; R3 pins `LC_ALL=en_US.UTF-8` and skips without it; R5 prints `locale`.
+
+#### Ergonomics
+
+Finding: Same locale gap. Day-to-day cost otherwise low; the only manual chore is copying the V3 values onto the `powershell` row.
+Assumption: same as Goal-Fit.
+Disposition: Addressed (operator, 2026-10-24) — as Goal-Fit.
+
+#### Risk
+
+Finding: Same locale gap, plus an implementation trap: a failing uutils `comm` still prints the correct overlap, so the overlap assertion alone passes on the broken tree; the test must capture `comm`'s rc and stderr directly. Spec-time count is 10 `sort` + 4 `comm`, not 13 + 4.
+Assumption: same as Goal-Fit.
+Disposition: Addressed (operator, 2026-10-24) — R4 now runs `comm` on files and captures rc and stderr directly; count corrected.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
