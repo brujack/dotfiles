@@ -278,7 +278,7 @@ Rules for any new suppression:
 
 CI requirements:
 
-- `lint-macos` and `test-macos` run on `macos-latest` and every other job on `ubuntu-latest`; every job sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+- `lint-macos` and `test-macos` run on `macos-latest`, `powershell` on `ubuntu-24.04` (Microsoft's 26.04 repo has no `powershell` package; `tests/scripts/ci_runner_pins.bats` pins it), and every other job on `ubuntu-latest`; every job sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
 
 ### Testing Rules
 
