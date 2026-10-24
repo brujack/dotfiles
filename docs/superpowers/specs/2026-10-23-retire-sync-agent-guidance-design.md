@@ -91,3 +91,27 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 Finding: R5 was imprecise: the blind-spot example spans lines 35-36, and line 36 names `_OVERRIDE_CLAUDE_MD_PATH`, a seam whose only consumer is the deleted script; a diff rewording only line 35 would have passed R5. No R/N conflict; the `git grep` expectation is closed (every hit classified); R6 row names match; 17 tests confirmed. `AGENTS.md:10` also depends on the open Cursor question, outside this spec.
 Assumption: no uncertain assumption found.
 Disposition: Addressed — R5 now names lines 35-36 and both deleted identifiers (wording-level fix, no further round).
+
+## Spec alignment (2026-10-23)
+
+- spec: docs/superpowers/specs/2026-10-23-retire-sync-agent-guidance-design.md
+- anchor: 77df6402d53f278f62ba8a2dc705f72a23e899ca
+- in scope: R1, R2, R3, R4, R5, R6
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test at c4ed736e: 1..3369, 3369 ok, 0 not ok, rc 0 (master 1..3386, minus 17)
+- V2: make check-agent-guidance at c4ed736e: make: *** No rule to make target 'check-agent-guidance'. Stop. (exit 2)
+- V3: no evidence recorded
+- V4: no evidence recorded
+- V5: no evidence recorded

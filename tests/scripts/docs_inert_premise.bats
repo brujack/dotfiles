@@ -32,8 +32,8 @@ setup() {
 #   - Path(__file__).parents[N] and $(dirname "$BATS_TEST_FILENAME") forms
 #   - `cd "$ROOT" && cat X.md` and globs
 #   - tests/mocks/ is not scanned (only *.bats, *.py and helpers/*)
-#   - reads done by scripts a test invokes, e.g. sync-agent-guidance.sh defaults
-#     to the real CLAUDE.md when _OVERRIDE_CLAUDE_MD_PATH is unset
+#   - reads done by scripts a test invokes, e.g. a script that falls back to the
+#     real CLAUDE.md when its override seam is unset
 #   - BATS_TEST_DIRNAME inside a tests/helpers/ file: the scanner resolves it
 #     against the helper's own directory, while at run time it is the calling
 #     test's directory
@@ -170,7 +170,7 @@ _check_prereqs() {
   if [[ ${#_extra[@]} -gt 0 ]]; then
     printf 'FAIL: make test gained prerequisite(s) not in ALLOWED_TEST_PREREQS: %s\n' "${_extra[*]}" >&2
     printf 'Check whether each reads a tracked .md; if not, add it to ALLOWED_TEST_PREREQS.\n' >&2
-    printf 'check-agent-guidance is the known reader (it reads CLAUDE.md), so it must not be a prerequisite.\n' >&2
+    printf 'A target that reads a tracked .md from the working tree must not be a prerequisite (check-claude-md-budget is allowed: it reads via git show).\n' >&2
     _fail=1
   fi
   return "${_fail}"
