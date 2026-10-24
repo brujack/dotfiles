@@ -124,7 +124,7 @@ requirements: [R5]
 acceptance:
   - cmd: 'python3 -c ''import yaml,sys; j=yaml.safe_load(open(".github/workflows/ci.yml"))["jobs"]["test"]["steps"]; n=[s.get("name") for s in j]; i=n.index("Tool versions"); assert i < n.index("Run tests"), n; r=j[i]["run"]; [sys.exit("missing "+t) for t in ("locale\n","locale -a","command -v sort comm || true","/usr/bin/sort --version | head -1","/usr/bin/comm --version | head -1") if t not in r]'''
     exit_code: 0
-  - cmd: 'bash -c ''python3 -c "import yaml; print([s for s in yaml.safe_load(open(\".github/workflows/ci.yml\"))[\"jobs\"][\"test\"][\"steps\"] if s.get(\"name\")==\"Tool versions\"][0][\"run\"])" > "${BATS_TMPDIR:-/tmp}/tv.sh" && env PATH=/nonexistent:/bin LC_ALL=xx_XX.UTF-8 /bin/bash -e "${BATS_TMPDIR:-/tmp}/tv.sh"'''
+  - cmd: 'bash -c ''t=$(mktemp -d) && python3 -c "import yaml; print([s for s in yaml.safe_load(open(\".github/workflows/ci.yml\"))[\"jobs\"][\"test\"][\"steps\"] if s.get(\"name\")==\"Tool versions\"][0][\"run\"])" > "${t}/tv.sh" && for b in locale head; do ln -s "$(command -v "$b")" "${t}/$b"; done && env PATH="${t}" LC_ALL=xx_XX.UTF-8 /bin/bash -e "${t}/tv.sh"'''
     exit_code: 0
   - cmd: bats tests/scripts/ci_runner_pins.bats tests/scripts/ci_test_macos_log.bats tests/setup_env/shellcheck_pin.bats tests/setup_env/requirements_ci.bats tests/scripts/makefile_lint_scope.bats tests/scripts/auto_merge_gate.bats
     exit_code: 0
@@ -152,7 +152,7 @@ TDD waiver: the step is diagnostic output with no behaviour a test could pin bey
     /usr/bin/comm --version | head -1
 ```
 
-- [ ] **Step 2:** run the gates. The second gate runs the body under `bash -e` with no `sort`/`comm` on `PATH` and a missing locale; it must exit 0 (N3). `/bin` on Ubuntu holds `/usr/bin` via usrmerge, so `PATH=/nonexistent:/bin` still reaches `locale` and `head`; if `command -v` there finds `sort`, that is fine, the gate's point is that nothing fails.
+- [ ] **Step 2:** run the gates. The second gate runs the body under `bash -e` (CI's own shell: the `test` job log shows `shell: /usr/bin/bash -e {0}`, no pipefail) with a `PATH` holding only `locale` and `head`, so `sort`/`comm` are absent from `PATH`, and with a missing locale; it must exit 0 (N3).
 - [ ] **Step 3: commit** via `caveman:caveman-commit`, exact path staged.
 
 ### Task 3: backlog bookkeeping
@@ -194,3 +194,13 @@ Edit with a short Python line-based script, not the Edit tool (Edit reflows whol
 1. `make test </dev/null` once in the worktree, uncontended; paste the summary line. Re-verify `git branch --show-current` before and after.
 2. Phase 3 (`finishing-a-development-branch`); PR body carries the V1 before/after counts and the V2 mutation result.
 3. After CI's `test` job runs: copy its `Tool versions` output (`LANG`/`LC_ALL` lines, `command -v` paths, both `sort --version` lines) onto the `powershell` Backlog row as a direct-to-master docs commit (V3).
+
+## Non-goal check
+
+Reviewer verdicts over N1-N3, plan at `7185f3c4`:
+
+- N1 CLEAR: "the plan only touches `tests/scripts/makefile_lint_scope.bats`, `.github/workflows/ci.yml` and `docs/superpowers/README.md`."
+- N2 CLEAR: "`pyenv.d/` appears only as the text of a Backlog row."
+- N3 CLEAR: "the `Tool versions` step only prints output and never branches on a version string."
+
+Side note raised, not a verdict: (a) GitHub's default `run` shell is `bash -e -o pipefail`; (b) Task 2 gate 2's `PATH=/nonexistent:/bin` still finds `sort` through usrmerge, so it never exercises an absent `sort`. Resolution: (a) is false for this workflow, since run 40050513754's `test` job log shows `shell: /usr/bin/bash -e {0}`; no change. (b) is right; the gate now runs the step with `PATH` set to a temp dir holding only `locale` and `head`. Before: `env PATH=/nonexistent:/bin LC_ALL=xx_XX.UTF-8 /bin/bash -e ...`. After: `env PATH="${t}" LC_ALL=xx_XX.UTF-8 /bin/bash -e ...`, with `${t}` populated by `ln -s` of `locale` and `head`.
