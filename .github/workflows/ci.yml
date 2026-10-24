@@ -52,6 +52,16 @@ jobs:
           sudo install -m755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
           uv --version | grep -q "uv ${UV_VER}"
 
+      - name: Tool versions
+        run: |
+          locale
+          locale -a
+          command -v sort comm || true
+          sort --version | head -1
+          comm --version | head -1
+          /usr/bin/sort --version | head -1
+          /usr/bin/comm --version | head -1
+
       - name: Run tests
         run: make test
 

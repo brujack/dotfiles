@@ -206,3 +206,34 @@ Disposition: Addressed (operator, 2026-10-24) — R5 also prints `/usr/bin/sort 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- finding R1 (2026-10-24, reviewer A): DIFFERS — Every pipeline sort/comm the diff touches is prefixed with LC_ALL=C (e.g. :132, :838-839, :876, :882), but the new test's probes `/usr/bin/sort --version` and `/usr/bin/comm --version` (:858-859) are sort/comm invocations with no LC_ALL=C prefix, so 'every invocation' does not hold literally; unchanged lines outside the hunks cannot be checked from this diff.
+- R1 -> Every `sort -u` and `comm -NN` invocation in `tests/scripts/makefile_lint_scope.bats` is prefixed with `LC_ALL=C`. — the `/usr/bin/sort --version` and `/usr/bin/comm --version` skip probes R3 requires neither order nor compare anything, so collation cannot affect them; the requirement meant the ordering and comparing calls.
+- finding R3 (2026-10-24, reviewer A): DIFFERS — The skips and the subshell (/usr/bin first, LC_ALL=en_US.UTF-8) match for the helper and `comm -12`, but `comm -23` (:882) runs outside the subshell under the ambient PATH, not with /usr/bin first; also the locale probe is `grep -qiE '^en_US\.utf-?8$'`, which accepts en_US.UTF-8/en_US.UTF8 case-insensitively rather than only en_US.utf8.
+- R3 -> A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils` and `locale -a` lists `en_US.utf8` (matched case-insensitively, `utf8` or `utf-8`), and otherwise runs `_sorted_lines_from_space_list` and `comm -12` with `/usr/bin` first on `PATH` under a test-scoped `LC_ALL=en_US.UTF-8`, then checks the overlap with `comm -23`. — `comm -12` on the uutils-sorted files is the call the defect breaks; `comm -23` only subtracts the one-line known overlap after the R4 equality check, so its `PATH` is immaterial, and `locale -a` spells the name `en_US.utf8` on Ubuntu, the tolerant match only avoids a false skip.
+
+## Spec alignment (2026-10-24)
+
+- spec: docs/superpowers/specs/2026-10-24-uutils-comm-collation-design.md
+- anchor: 9cb694f30ac3e9ed64484620ff5687a4980b33e7
+- in scope: R1, R2, R3, R4, R5, R6
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R1 | A | DIFFERS | Every pipeline sort/comm the diff touches is prefixed with LC_ALL=C (e.g. :132, :838-839, :876, :882), but the new test's probes `/usr/bin/sort --version` and `/usr/bin/comm --version` (:858-859) are sort/comm invocations with no LC_ALL=C prefix, so 'every invocation' does not hold literally; unchanged lines outside the hunks cannot be checked from this diff. | - R1 -> Every `sort -u` and `comm -NN` invocation in `tests/scripts/makefile_lint_scope.bats` is prefixed with `LC_ALL=C`. — the `/usr/bin/sort --version` and `/usr/bin/comm --version` skip probes R3 requires neither order nor compare anything, so collation cannot affect them; the requirement meant the ordering and comparing calls. |
+| R3 | A | DIFFERS | The skips and the subshell (/usr/bin first, LC_ALL=en_US.UTF-8) match for the helper and `comm -12`, but `comm -23` (:882) runs outside the subshell under the ambient PATH, not with /usr/bin first; also the locale probe is `grep -qiE '^en_US\\.utf-?8$'`, which accepts en_US.UTF-8/en_US.UTF8 case-insensitively rather than only en_US.utf8. | - R3 -> A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils` and `locale -a` lists `en_US.utf8` (matched case-insensitively, `utf8` or `utf-8`), and otherwise runs `_sorted_lines_from_space_list` and `comm -12` with `/usr/bin` first on `PATH` under a test-scoped `LC_ALL=en_US.UTF-8`, then checks the overlap with `comm -23`. — `comm -12` on the uutils-sorted files is the call the defect breaks; `comm -23` only subtracts the one-line known overlap after the R4 equality check, so its `PATH` is immaterial, and `locale -a` spells the name `en_US.utf8` on Ubuntu, the tolerant match only avoids a false skip. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: On claude, PATH=/usr/bin first: before the fix not ok 3, 17 and the new test (18); after, 0 not ok of 33 (Task 1 implementer, independently reproduced by the spec reviewer and the orchestrator).
+- V2: Mutation gate (Task 1 acceptance 5): removing LC_ALL=C from the helper's sort -u, cmp-checked as applied, made the new test fail with rc 1 and 'comm: file 1 is not in sorted order'; re-run independently by the orchestrator.
+- V3: no evidence recorded
