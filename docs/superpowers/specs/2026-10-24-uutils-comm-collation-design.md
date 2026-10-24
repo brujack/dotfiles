@@ -102,9 +102,12 @@ the defect occurs.
 ### 3. CI coreutils probe
 
 Add a `Tool versions` step to the `test` job before `Run tests`, mirroring `test-macos`'s step of
-the same name. It prints `locale`, `command -v sort comm`, `sort --version | head -1` and
-`comm --version | head -1`. It never fails the job on content. `locale` is what separates the
-first two explanations above; the versions alone cannot.
+the same name. It prints `locale`, `locale -a`, `command -v sort comm || true`,
+`sort --version | head -1` and `comm --version | head -1`. It never fails the job on content:
+`command -v` exits 1 when either tool is missing, which would fail the step under the runner's
+default `bash -e`, hence `|| true`. `locale` is what separates the first two explanations above;
+the versions alone cannot. `locale -a` shows whether the section 2 test can run on the runner at
+all, since it skips without `en_US.utf8`.
 
 ### 4. Backlog
 
@@ -129,7 +132,7 @@ first two explanations above; the versions alone cannot.
 - **R2.** No `setup()` or file-level code in `tests/scripts/makefile_lint_scope.bats` exports or sets `LC_ALL`, `LC_COLLATE` or `LANG`.
 - **R3.** A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils` and `locale -a` lists `en_US.utf8`, and otherwise runs `_sorted_lines_from_space_list` and the `comm -12`/`comm -23` pipeline with `/usr/bin` first on `PATH` under a test-scoped `LC_ALL=en_US.UTF-8`.
 - **R4.** The R3 test runs `comm -12` on files, captures its exit status and stderr directly (not via `$(...)` inside a process substitution), and asserts exit 0, no `not in sorted order` on stderr, and an overlap equal to `_KNOWN_SHELL_ZSH_OVERLAP`.
-- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `locale`, `command -v sort comm`, `sort --version | head -1` and `comm --version | head -1`.
+- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `locale`, `locale -a`, `command -v sort comm || true`, `sort --version | head -1` and `comm --version | head -1`.
 - **R6.** The `makefile_lint_scope.bats` uutils Backlog row and the `sort -u` lossy row are removed from their open tables, and a P3 row for retiring the pyenv rehash hook is added.
 - **V1.** On `claude`, `PATH="/usr/bin:${PATH}" bats tests/scripts/makefile_lint_scope.bats` shows 3 `not ok` before the fix and 0 after.
 - **V2.** Deleting `LC_ALL=C` from `_sorted_lines_from_space_list` turns the R3 test red on `claude`.
@@ -163,6 +166,28 @@ Disposition: Addressed (operator, 2026-10-24) — as Goal-Fit.
 Finding: Same locale gap, plus an implementation trap: a failing uutils `comm` still prints the correct overlap, so the overlap assertion alone passes on the broken tree; the test must capture `comm`'s rc and stderr directly. Spec-time count is 10 `sort` + 4 `comm`, not 13 + 4.
 Assumption: same as Goal-Fit.
 Disposition: Addressed (operator, 2026-10-24) — R4 now runs `comm` on files and captures rc and stderr directly; count corrected.
+
+### Round 2
+
+Reviewed at commit: `cd753b23` (all three lenses, re-run after the round-1 revision changed design substance)
+
+#### Goal-Fit
+
+Finding: No issues. Measured on a scratch clone: before the fix, `PATH="/usr/bin:${PATH}" bats tests/scripts/makefile_lint_scope.bats` gives `not ok 3` and `not ok 17` of 32; with `LC_ALL=C` on all 14 lines, 0 of 32 under `LC_ALL=en_US.UTF-8`. `locale` exits 0 under a missing locale.
+Assumption: no uncertain assumption found — the CI runner's coreutils and locale decide only whether R3 skips there, and both outcomes are covered.
+Disposition: N/A — clean, no action needed
+
+#### Ergonomics
+
+Finding: R5 does not print `locale -a`, so one CI run cannot show whether the R3 test can ever run there; and `command -v sort comm` exits 1 if either tool is missing, failing the step under `bash -e` against N3.
+Assumption: no uncertain assumption found.
+Disposition: Addressed (operator, 2026-10-24) — R5 prints `locale -a` and appends `|| true` to `command -v`. Wording-level; re-run scoped to the ergonomics lens on section 3 and R5.
+
+#### Risk
+
+Finding: No issues. Locale pin verified (mutation still red), empty input fails, `CLEAN_PATH` keeps the `/usr/bin`-first `PATH` out of `make`/`git`, no `tests/mocks/` shadowing, `workstation` has uutils 0.10.0 and `en_US.utf8`.
+Assumption: no uncertain assumption found.
+Disposition: N/A — clean, no action needed
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
