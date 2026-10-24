@@ -129,7 +129,7 @@ _git_ls_clean() {
 }
 
 _sorted_lines_from_space_list() {
-  printf '%s\n' "${1}" | tr ' ' '\n' | sort -u
+  printf '%s\n' "${1}" | tr ' ' '\n' | LC_ALL=C sort -u
 }
 
 # config/profiles.sh is a deliberate, single exception to the SHELL_FILES/
@@ -145,7 +145,7 @@ readonly _KNOWN_SHELL_ZSH_OVERLAP="config/profiles.sh"
   run _make_print ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | LC_ALL=C sort -u)"
   if [ "${resolved}" != "${expected}" ]; then
     printf 'ZSH_FILES resolved:\n%s\n--- expected:\n%s\n' "${resolved}" "${expected}" >&2
   fi
@@ -174,7 +174,7 @@ readonly _KNOWN_SHELL_ZSH_OVERLAP="config/profiles.sh"
   # Union, not either arm alone: .zshrc has no shebang, so the shebang arm
   # by itself would miss it -- the same lesson in the other direction from
   # the filename arm missing an extensionless script.
-  broad="$(printf '%s\n%s\n' "${by_name}" "${by_shebang}" | grep -v '^$' | sort -u)"
+  broad="$(printf '%s\n%s\n' "${by_name}" "${by_shebang}" | grep -v '^$' | LC_ALL=C sort -u)"
   [ -n "${broad}" ]
 
   missing=""
@@ -198,8 +198,8 @@ readonly _KNOWN_SHELL_ZSH_OVERLAP="config/profiles.sh"
   [ "${status}" -eq 0 ]
   zsh_files="$(_sorted_lines_from_space_list "${output}")"
 
-  overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
-  unexpected_overlap="$(comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
+  overlap="$(LC_ALL=C comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
+  unexpected_overlap="$(LC_ALL=C comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
   if [ -n "${unexpected_overlap}" ]; then
     printf 'unexpected SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${unexpected_overlap}" >&2
   fi
@@ -245,8 +245,8 @@ _extract_ci_zsh_pathspec() {
 }
 
 @test "config/profiles.sh is in the zsh pathspec, and the pathspec agrees between the Makefile and ci.yml" {
-  makefile_pathspec="$(_extract_makefile_zsh_pathspec | sort -u)"
-  ci_pathspec="$(_extract_ci_zsh_pathspec | sort -u)"
+  makefile_pathspec="$(_extract_makefile_zsh_pathspec | LC_ALL=C sort -u)"
+  ci_pathspec="$(_extract_ci_zsh_pathspec | LC_ALL=C sort -u)"
   [ -n "${makefile_pathspec}" ]
   [ -n "${ci_pathspec}" ]
 
@@ -282,7 +282,7 @@ _extract_ci_zsh_pathspec() {
     make --no-print-directory -C "${REPO_ROOT}" print-ZSH_FILES
   [ "${status}" -eq 0 ]
   resolved="$(_sorted_lines_from_space_list "${output}")"
-  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | sort -u)"
+  expected="$(_git_ls_clean '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' '.zshenv' 'config/profiles.sh' | LC_ALL=C sort -u)"
   if [[ "${resolved}" != "${expected}" ]]; then
     printf 'resolved:\n%s\nexpected:\n%s\n' "${resolved}" "${expected}" >&2
   fi
@@ -783,7 +783,7 @@ _is_make_c_candidate() {
 # behavior.md's "a check derived from the same decision as the thing it
 # checks cannot falsify it".
 @test "oracle case 2: every file matched by the old SHELL_FILES pathspec is present in SHELL_FILES" {
-  name_oracle="$(_git_ls_clean '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg' | sort -u)"
+  name_oracle="$(_git_ls_clean '*.sh' '*.bash' 'scripts/pre-push' 'scripts/commit-msg' | LC_ALL=C sort -u)"
   [ -n "${name_oracle}" ]
 
   run _make_print SHELL_FILES
@@ -835,12 +835,49 @@ _is_make_c_candidate() {
   zsh_files="$(_sorted_lines_from_space_list "${output}")"
   [ -n "${zsh_files}" ]
 
-  overlap="$(comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
-  unexpected_overlap="$(comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
+  overlap="$(LC_ALL=C comm -12 <(printf '%s\n' "${shell_files}") <(printf '%s\n' "${zsh_files}"))"
+  unexpected_overlap="$(LC_ALL=C comm -23 <(printf '%s\n' "${overlap}") <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
   if [ -n "${unexpected_overlap}" ]; then
     printf 'unexpected SHELL_FILES/ZSH_FILES overlap:\n%s\n' "${unexpected_overlap}" >&2
   fi
   [ -z "${unexpected_overlap}" ]
+}
+
+# uutils regression guard. Ubuntu 26.04's /usr/bin/sort and /usr/bin/comm are
+# uutils, and uutils comm rejects uutils sort output collated under
+# en_US.UTF-8 (C and C.UTF-8 collate bytewise and hide it). The tests above
+# resolve sort and comm through the session PATH, which puts GNU gnubin first
+# on claude and workstation, so they cannot see a dropped LC_ALL=C. This one
+# forces /usr/bin first and pins en_US.UTF-8; the per-command LC_ALL=C
+# prefixes override that pin. A failing uutils comm still prints the right
+# overlap, so its exit status and stderr are asserted directly.
+@test "disjointness pipeline holds under uutils sort and comm in en_US.UTF-8" {
+  /usr/bin/sort --version 2>/dev/null | grep -q uutils || skip "/usr/bin/sort is not uutils"
+  /usr/bin/comm --version 2>/dev/null | grep -q uutils || skip "/usr/bin/comm is not uutils"
+  locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$' || skip "en_US.UTF-8 locale not generated"
+
+  run _make_print SHELL_FILES
+  [ "${status}" -eq 0 ]
+  local shell_list="${output}"
+  run _make_print ZSH_FILES
+  [ "${status}" -eq 0 ]
+  local zsh_list="${output}"
+
+  local dir="${BATS_TEST_TMPDIR}/uutils"
+  mkdir -p "${dir}"
+  local rc=0
+  (
+    export PATH="/usr/bin:${PATH}" LC_ALL=en_US.UTF-8
+    _sorted_lines_from_space_list "${shell_list}" > "${dir}/shell"
+    _sorted_lines_from_space_list "${zsh_list}" > "${dir}/zsh"
+    LC_ALL=C comm -12 "${dir}/shell" "${dir}/zsh" > "${dir}/overlap" 2> "${dir}/comm.err"
+  ) || rc=$?
+  cat "${dir}/comm.err" >&2
+  [ "${rc}" -eq 0 ]
+  run -1 grep -q 'not in sorted order' "${dir}/comm.err"
+  [ "$(cat "${dir}/overlap")" = "${_KNOWN_SHELL_ZSH_OVERLAP}" ]
+  unexpected="$(LC_ALL=C comm -23 "${dir}/overlap" <(printf '%s\n' "${_KNOWN_SHELL_ZSH_OVERLAP}"))"
+  [ -z "${unexpected}" ]
 }
 
 # Oracle case 5: the shebang-form matrix, built in a fixture repo rather than
@@ -878,7 +915,7 @@ _is_make_c_candidate() {
 
   run bash -c "cd '${fixture}' && PATH='${CLEAN_PATH}' '${REPO_ROOT}/scripts/list-shell-files.sh'"
   [ "${status}" -eq 0 ]
-  resolved="$(printf '%s\n' "${output}" | sort -u)"
+  resolved="$(printf '%s\n' "${output}" | LC_ALL=C sort -u)"
 
   missing_accepted=""
   for f in accept-env-bash accept-bin-bash accept-bin-bash-flag accept-bin-sh \
@@ -1049,7 +1086,7 @@ _is_make_c_candidate() {
 
   run bash -c "cd '${fixture}' && PATH='${CLEAN_PATH}' '${REPO_ROOT}/scripts/list-shell-files.sh'"
   [ "${status}" -eq 0 ]
-  content_derived="$(printf '%s\n' "${output}" | sort -u)"
+  content_derived="$(printf '%s\n' "${output}" | LC_ALL=C sort -u)"
 
   # Positive control: the real bash mock must still be found, so an empty
   # or broken derivation cannot masquerade as correct exclusion below.
@@ -1071,7 +1108,7 @@ _is_make_c_candidate() {
   # cannot distinguish, because all of them stay green under this same wide
   # pathspec on the real repo.
   wide_pathspec="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    PATH="${CLEAN_PATH}" git -C "${fixture}" ls-files '*.sh' '*.bash' 'tests/mocks/*' | sort -u)"
+    PATH="${CLEAN_PATH}" git -C "${fixture}" ls-files '*.sh' '*.bash' 'tests/mocks/*' | LC_ALL=C sort -u)"
   printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/fixture-data"
   printf '%s\n' "${wide_pathspec}" | grep -qxF "tests/mocks/python-helper"
 }
