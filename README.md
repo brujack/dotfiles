@@ -94,8 +94,6 @@ Copy the example and add secrets/overrides that should not be committed:
 cp config/local.sh.example config/local.sh
 ```
 
-At minimum, set `GITHUB_PAT` if you want the GitHub MCP server configured automatically (see [Claude Code Integration](#claude-code-integration)).
-
 ### 4. Bootstrap and run setup
 
 **macOS:**
@@ -401,42 +399,6 @@ Dotfiles live at the repo root. `.claude/` and `.cursor/` live in the ai-config 
 6. Inside WSL, run `./setup_env.sh -t setup`
 
 ## Claude Code Integration
-
-### GitHub MCP
-
-Claude Code is configured with the GitHub MCP server for native GitHub operations
-(PR review, issue management, repo browsing) across all projects.
-
-**One-time setup per machine:**
-
-1. Create a fine-grained PAT at <https://github.com/settings/tokens?type=beta>
-   - Resource owner: your account
-   - Repository access: All repositories (or specific repos)
-   - Permissions: `Metadata` (read), `Contents` (read), `Issues` (read+write),
-     `Pull requests` (read+write)
-   - Set expiry: maximum 1 year
-
-2. Add to `config/local.sh`:
-
-   ```bash
-   export GITHUB_PAT="github_pat_..."
-   export GITHUB_PAT_EXPIRY="2027-04-14"   # your actual expiry date
-   ```
-
-3. Run setup:
-
-   ```bash
-   ./setup_env.sh -t setup_user
-   ```
-
-4. Verify:
-
-   ```bash
-   ./setup_env.sh -t doctor
-   ```
-
-The generated `~/.claude/mcp.json` is not tracked in git — it is regenerated
-from `.claude/mcp.json.template` on each `setup_user` run.
 
 ### Troubleshooting: Claude Code plugins after `brew upgrade node` (Linux)
 

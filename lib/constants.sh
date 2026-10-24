@@ -222,7 +222,7 @@ readonly TMP_NR_INODES=16777216 # written as 16m in TMP_MOUNT_OPTIONS
 readonly TMP_MOUNT_OPTIONS='Options=mode=1777,strictatime,nosuid,nodev,size=50%%,nr_inodes=16m,x-systemd.graceful-option=usrquota'
 readonly SYSTEMD_RUN_DIR=/run/systemd/system
 readonly AI_CONFIG="ai-config"
-# read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_claude_mcp/setup_ai_config
+# read by lib/helpers.sh:setup_dotfile_symlinks and lib/workflows.sh:setup_ai_config
 readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 
 # read by lib/developer.sh:_aws_verify_zip and lib/helpers.sh:_doctor_check_aws_key_expiry

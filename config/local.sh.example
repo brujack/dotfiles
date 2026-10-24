@@ -25,10 +25,3 @@
 # export NTFY_URL="https://ntfy.conecrazy.ca"  # default; override if needed
 # export NTFY_USER="bruce"
 # export NTFY_PASSWORD=""  # ntfy user password; required when auth-default-access: deny-all
-
-# GitHub PAT for Claude Code GitHub MCP server
-# Create at: https://github.com/settings/tokens?type=beta (fine-grained PAT)
-# Required permissions: metadata:read, contents:read, issues:read+write, pull-requests:read+write
-# Repository access: all repos (or specific repos if preferred)
-# export GITHUB_PAT=""
-# export GITHUB_PAT_EXPIRY=""  # ISO date e.g. 2027-04-14 — doctor warns 30 days before expiry

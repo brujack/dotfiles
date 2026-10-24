@@ -1,64 +1,6 @@
 #!/usr/bin/env bash
 # lib/workflows.sh — top-level workflow functions dispatched by setup_env.sh
 
-setup_claude_mcp() {
-  local _ai_config_dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
-  local _template="${_ai_config_dir}/.claude/mcp.json.template"
-  local _output="${HOME}/.claude/mcp.json"
-  local _local_config="${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
-
-  # Source config/local.sh to pick up GITHUB_PAT if not already in environment
-  if [[ -f "${_local_config}" ]]; then
-    # shellcheck disable=SC1090 # path is built from PERSONAL_GITREPOS/DOTFILES constants, not a literal — shellcheck cannot resolve it statically
-    source "${_local_config}" || true
-  fi
-
-  if [[ -z "${GITHUB_PAT:-}" ]]; then
-    log_warn "GITHUB_PAT not set — GitHub MCP not configured"
-    log_warn "Add GITHUB_PAT to config/local.sh and re-run: setup_env.sh -t setup_user"
-    return 0
-  fi
-
-  if ! command -v envsubst &>/dev/null; then
-    log_error "envsubst not found — install gettext: brew install gettext or apt-get install gettext-base"
-    return 1
-  fi
-
-  # Remove broken symlink from old setup if present
-  if [[ -L "${_output}" ]] && [[ ! -e "${_output}" ]]; then
-    rm -f "${_output}"
-  fi
-
-  # Skip if mcp.json is a valid symlink — writing through it would inject credentials into the symlink target (e.g. a tracked git file)
-  if [[ -L "${_output}" ]] && [[ -e "${_output}" ]]; then
-    log_warn "${_output} is a symlink — skipping template generation to avoid writing credentials into the target"
-    log_warn "To use template-generated mcp.json, remove the symlink first: rm ${_output}"
-    return 0
-  fi
-
-  mkdir -p "$(dirname "${_output}")"
-  # The output holds the expanded PAT. Render into a same-directory mktemp file
-  # (always 0600, whatever the umask) and mv it over the target: a redirect would
-  # take the caller's umask for a new file and keep an existing file's looser mode.
-  local _tmp
-  if ! _tmp="$(mktemp "${_output}.XXXXXX")"; then
-    log_error "Failed to create a temp file beside ${_output}"
-    return 1
-  fi
-  # shellcheck disable=SC2016 # single quotes intentional — envsubst variable list, not shell expansion
-  if ! GITHUB_PAT="${GITHUB_PAT}" envsubst '${GITHUB_PAT}' < "${_template}" > "${_tmp}"; then
-    rm -f "${_tmp}"
-    log_error "Failed to generate ${_output} from template"
-    return 1
-  fi
-  if ! mv -f "${_tmp}" "${_output}"; then
-    rm -f "${_tmp}"
-    log_error "Failed to move the rendered file into ${_output}"
-    return 1
-  fi
-  log_info "GitHub MCP configured (${_output})"
-}
-
 # Single source of truth for where the plugin manifest lives — every reader
 # below and the write guard (a later task) resolve the path through this one
 # helper rather than repeating the fallback chain.
@@ -493,7 +435,6 @@ run_setup_user() {
     printf "Created %s/go-work\\n" "${HOME}"
   fi
 
-  setup_claude_mcp || return 1
   # rc 1 (unreadable/unparsable settings.json, or no python3) means
   # provisioning cannot proceed from a settings file it cannot read, so
   # that still aborts setup_user. rc 2 (a partial reconcile -- e.g. one
@@ -528,7 +469,7 @@ run_setup_user() {
   # to return 2 would abort as a raw, unexplained failure instead of
   # exercising the intended log_warn branch below. The `||` form never
   # triggers errexit regardless of the command's exit status, matching the
-  # pre-existing `setup_claude_mcp || return 1` style used everywhere else
+  # pre-existing `setup_ai_config || return 1` style used everywhere else
   # in this function.
   local _hooks_rc=0
   install_git_hooks_all_repos || _hooks_rc=$?

@@ -57,9 +57,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
 - Repo-root dotfiles: symlink each individually into `$HOME`, `.zshenv` included (an existing regular `~/.zshenv` is adopted as `~/.zshenv.local`; if both exist setup warns and leaves both).
-- `.claude/`: symlink each ai-config `.claude/` item individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below); `mcp.json.template` is linked read-only. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
-
-- `~/.claude/mcp.json` is a symlink into `ai-config/.claude/mcp.json`, never generated: `setup_claude_mcp` finds the symlink and returns 0 with two WARN lines instead of writing credentials into a tracked file (its `-L` guard), and `-t doctor`'s `[PASS] ~/.claude/mcp.json (generated)` only tested existence, so do not read it as proof. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink mcp.json is a symlink`
+- `.claude/`: symlink each ai-config `.claude/` item individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below). → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
 
 - `projects/` IS symlinked wholesale, so `~/.claude/projects/<encoded-repo>/memory/` is inside ai-config's working tree and `make test` scope: before writing scratch state under `~/.claude/`, know you are writing into another repo, and promote or delete any draft, since a leftover one hard-fails `validate-memory` for every session committing to ai-config. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink projects is linked wholesale`
 
@@ -70,25 +68,6 @@ Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate sy
 ### Cursor ↔ Claude Code Parity
 
 When adding or updating a Claude Code plugin, skill or MCP server, check whether `.cursor/` needs the same change: plugins and skills are shared by symlink, but Cursor rules, model settings and MCP registration live in `.cursor/User/` and need separate updates. → `dotfiles-conventions.md` § `CLAUDE.md budget: Cursor Claude Code parity`
-
-## GitHub MCP
-
-The GitHub MCP server is configured globally (user scope) via `~/.claude/mcp.json`.
-It provides native GitHub operations — PR review, issue management, repo browsing,
-diff access — across all projects without copy-pasting into chat.
-
-Requires `GITHUB_PAT` to be set in `~/git-repos/personal/dotfiles/config/local.sh`.
-If it isn't set, run `setup_env.sh -t setup_user` after adding the token.
-Verify with `setup_env.sh -t doctor`.
-
-Use it for:
-
-- Fetching PR diffs and changed files
-- Reading and creating issues
-- Posting structured review comments
-- Browsing repo contents
-
-Do not use it to push directly to main/master — normal PR workflow still applies.
 
 ## Code Standards
 
@@ -147,13 +126,13 @@ See `~/.claude/standards/powershell.md` for the full PowerShell coding and testi
 
 ### Windows AI Config Setup
 
-- `setup_windows.ps1 -setup` links ai-config into `~/.claude/`, `~/.cursor/` and `$env:APPDATA\Cursor\User\`; set `GITHUB_PAT` in the system environment first (it fills `mcp.json`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Windows AI config link targets`
+- `setup_windows.ps1 -setup` links ai-config into `~/.claude/`, `~/.cursor/` and `$env:APPDATA\Cursor\User\`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Windows AI config link targets`
 
 **Hooks gap:** `.claude/hooks/` bash scripts are not linked on native Windows — they run only in WSL2 via `setup_env.sh`.
 
 `setup_windows.ps1 -update` pulls the latest ai-config (`Install-AiConfig`) and updates npm globals (`Set-NpmGlobalPackages` → `firecrawl-cli`).
 
-Requires: admin terminal (symlinks need elevation), `GITHUB_PAT` env var for MCP config, Node.js (installed via Chocolatey `nodejs`).
+Requires: admin terminal (symlinks need elevation), Node.js (installed via Chocolatey `nodejs`).
 
 ### Version Pinning
 

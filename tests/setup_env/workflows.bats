@@ -66,188 +66,6 @@ teardown() {
   return 0
 }
 
-# ── setup_claude_mcp ─────────────────────────────────────────────────────────
-
-@test "setup_claude_mcp generates mcp.json when GITHUB_PAT is set" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token-abc"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"mcpServers":{"github":{"headers":{"Authorization":"Bearer ${GITHUB_PAT}"}}}}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  setup_claude_mcp
-  [[ -f "${HOME}/.claude/mcp.json" ]]
-  grep -q "test-token-abc" "${HOME}/.claude/mcp.json"
-  ! grep -q '\${GITHUB_PAT}' "${HOME}/.claude/mcp.json"
-}
-
-# The file holds the expanded PAT, so its mode must not follow the caller's
-# umask. GNU stat first: BSD stat rejects -c cleanly with nothing on stdout.
-_mode_of() {
-  stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
-}
-
-@test "setup_claude_mcp writes mcp.json mode 600 under a permissive umask" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token-abc"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  umask 0002
-  setup_claude_mcp
-  grep -q "test-token-abc" "${HOME}/.claude/mcp.json"
-  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "600" ]
-}
-
-@test "setup_claude_mcp tightens a pre-existing world-readable mcp.json to 600" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="new-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
-  chmod 666 "${HOME}/.claude/mcp.json"
-  # Positive control: the fixture really is loose before the call.
-  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "666" ]
-  setup_claude_mcp
-  grep -q "new-token" "${HOME}/.claude/mcp.json"
-  [ "$(_mode_of "${HOME}/.claude/mcp.json")" = "600" ]
-}
-
-@test "setup_claude_mcp keeps the existing mcp.json and no temp file when envsubst fails" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="new-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
-  envsubst() { printf 'partial'; return 1; }
-  run setup_claude_mcp
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Failed to generate"* ]]
-  grep -q "old-token" "${HOME}/.claude/mcp.json"
-  [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
-}
-
-@test "setup_claude_mcp keeps the existing mcp.json and no temp file when mv fails" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="new-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  printf '{"auth":"Bearer old-token"}\n' > "${HOME}/.claude/mcp.json"
-  # Record the source mv was given: the temp file must sit beside the target,
-  # or the rename is not atomic and the token lingers in a shared temp dir --
-  # and the find below would then look in the wrong directory.
-  mv() { printf '%s\n' "$@" > "${BATS_TEST_TMPDIR}/mv.args"; return 1; }
-  run setup_claude_mcp
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"Failed to move the rendered file"* ]]
-  local _src
-  _src="$(sed -n 2p "${BATS_TEST_TMPDIR}/mv.args")"
-  [[ "${_src}" == "${HOME}/.claude/mcp.json."?????? ]]
-  grep -q "old-token" "${HOME}/.claude/mcp.json"
-  [ "$(find "${HOME}/.claude" -name 'mcp.json.*' | wc -l | tr -d ' ')" = "0" ]
-}
-
-@test "setup_claude_mcp returns 1 when a temp file cannot be created beside mcp.json" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="new-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${HOME}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  mktemp() { return 1; }
-  run setup_claude_mcp
-  [ "$status" -eq 1 ]
-  # The envsubst branch also returns 1 on an empty _tmp, so status alone
-  # cannot tell the mktemp guard fired.
-  [[ "$output" == *"Failed to create a temp file"* ]]
-  [[ "$output" != *"Failed to generate"* ]]
-  [[ ! -e "${HOME}/.claude/mcp.json" ]]
-}
-
-@test "setup_claude_mcp returns 0 when GITHUB_PAT is unset" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  unset GITHUB_PAT
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"mcpServers":{"github":{"headers":{"Authorization":"Bearer ${GITHUB_PAT}"}}}}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  local _rc=0
-  setup_claude_mcp || _rc=$?
-  [ "${_rc}" -eq 0 ]
-}
-
-@test "setup_claude_mcp does not create mcp.json when GITHUB_PAT is unset" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  unset GITHUB_PAT
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"test":"${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  setup_claude_mcp
-  [[ ! -f "${HOME}/.claude/mcp.json" ]]
-}
-
-@test "setup_claude_mcp removes broken symlink before generating file" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  mkdir -p "${HOME}/.claude"
-  # Create broken symlink (points to non-existent file)
-  ln -s "${BATS_TEST_TMPDIR}/nonexistent_target" "${HOME}/.claude/mcp.json"
-  setup_claude_mcp
-  [[ -f "${HOME}/.claude/mcp.json" ]]
-  [[ ! -L "${HOME}/.claude/mcp.json" ]]
-}
-
-@test "setup_claude_mcp skips generation when mcp.json is a valid symlink" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  # Sentinel proves target was NOT overwritten by template generation
-  local _real_target="${BATS_TEST_TMPDIR}/real-mcp.json"
-  printf '{"mcpServers":{"exa":"SENTINEL"}}\n' > "${_real_target}"
-  mkdir -p "${HOME}/.claude"
-  ln -s "${_real_target}" "${HOME}/.claude/mcp.json"
-  local _rc=0
-  setup_claude_mcp || _rc=$?
-  [ "${_rc}" -eq 0 ]
-  # Symlink must still exist
-  [[ -L "${HOME}/.claude/mcp.json" ]]
-  # Sentinel must still be present — proves template did not overwrite target
-  run grep "SENTINEL" "${_real_target}"
-  [ "$status" -eq 0 ]
-  # PAT must NOT be in the target file
-  run grep "test-token" "${_real_target}"
-  [ "$status" -ne 0 ]
-}
-
-@test "setup_claude_mcp returns 1 when envsubst fails" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  envsubst() { return 1; }
-  run setup_claude_mcp
-  [ "$status" -eq 1 ]
-}
-
-@test "setup_claude_mcp sources config/local.sh to read GITHUB_PAT" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}/config"
-  printf 'export GITHUB_PAT="pat-from-local-sh"\n' \
-    > "${PERSONAL_GITREPOS}/${DOTFILES}/config/local.sh"
-  unset GITHUB_PAT
-  setup_claude_mcp
-  grep -q "pat-from-local-sh" "${HOME}/.claude/mcp.json"
-}
-
 # ── _cheat_fetch ──────────────────────────────────────────────────────────────
 
 # Prints the -o path curl was given for URL $1, read from the recorded call.
@@ -748,28 +566,11 @@ _cheat_su_curl() {
   export MACOS=1
   unset LINUX UBUNTU
   install_bats() { printf 'BATS_STUB\n'; return 1; }
-  setup_claude_mcp() { printf 'MCP_CALLED\n'; return 0; }
+  clone_or_update_dotfiles() { printf 'LATER_STEP_CALLED\n'; return 0; }
   run run_setup_user
   [ "$status" -ne 0 ]
   [[ "$output" == *BATS_STUB* ]]
-  [[ "$output" != *MCP_CALLED* ]]
-}
-
-@test "run_setup_user calls setup_claude_mcp" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  local _called=0
-  setup_claude_mcp() { _called=1; return 0; }
-  run_setup_user
-  [ "${_called}" -eq 1 ]
-}
-
-@test "run_setup_user returns non-zero when setup_claude_mcp fails" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  setup_claude_mcp() { return 1; }
-  run run_setup_user
-  [ "$status" -ne 0 ]
+  [[ "$output" != *LATER_STEP_CALLED* ]]
 }
 
 # ── setup_claude_plugins ──────────────────────────────────────────────────────
@@ -4379,27 +4180,6 @@ _stub_cv_callees() {
   export UPDATE_VERSIONS=1
   run_check_versions || true
   [[ "${_latest_received}" == "9.8.7" ]]
-}
-
-# ── setup_claude_mcp: envsubst not installed ──────────────────────────────────
-
-@test "setup_claude_mcp returns 1 when envsubst is not installed" {
-  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
-  export GITHUB_PAT="test-token"
-  mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude"
-  printf '{"auth":"Bearer ${GITHUB_PAT}"}\n' \
-    > "${_OVERRIDE_AI_CONFIG_DIR}/.claude/mcp.json.template"
-  # Use only tests/mocks/ in PATH — no envsubst mock exists there, so command -v envsubst fails.
-  # Simple PATH stripping fails on Ubuntu Noble (/bin → /usr/bin symlink; stripping one leaves the other).
-  # Restore PATH after run so BATS cleanup can still find bash.
-  local _saved_path="$PATH"
-  local _mocks_dir
-  _mocks_dir="$(cd "${BATS_TEST_DIRNAME}/../mocks" && pwd)"
-  export PATH="${_mocks_dir}"
-  run setup_claude_mcp
-  export PATH="${_saved_path}"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"envsubst not found"* ]]
 }
 
 # ── run_setup_user: install_zsh failure ───────────────────────────────────────

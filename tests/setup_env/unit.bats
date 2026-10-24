@@ -1007,31 +1007,6 @@ EOF
   [[ "$output" == *"HAS_GUI="* ]]
 }
 
-@test "run_doctor calls _doctor_check_github_mcp" {
-  local _called=0
-  _doctor_check_github_mcp() { _called=1; }
-  # Stub all other sub-checks to avoid side effects
-  _doctor_check_profile()       { :; }
-  _doctor_check_symlinks()      { :; }
-  _doctor_check_symlink_roots() { :; }
-  _doctor_check_tools()         { :; }
-  _doctor_check_dev_tools()     { :; }
-  _doctor_check_login_shell()   { :; }
-  _doctor_check_cred_dirs()     { :; }
-  _doctor_check_hooks_path()    { :; }
-  _doctor_check_versions()      { :; }
-  _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_gnu_coreutils() { :; }
-  _doctor_check_pyenv_shims()   { :; }
-  _doctor_check_conffile_dist() { :; }
-  _doctor_check_flatpak_gl() { :; }
-  _doctor_check_inotify_limits() { :; }
-  _doctor_check_kernel_keys() { :; }
-  _doctor_check_plugin_node_paths() { :; }
-  run_doctor
-  [ "${_called}" -eq 1 ]
-}
-
 @test "run_doctor summary includes warnings count" {
   _doctor_check_profile()       { :; }
   _doctor_check_symlinks()      { :; }
@@ -1042,8 +1017,7 @@ EOF
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
-  _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_github_mcp()    { doctor_warn "test" "a warning"; }
+  _doctor_check_aws_key_expiry() { doctor_warn "test" "a warning"; }
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
@@ -1455,7 +1429,6 @@ EOF
   _doctor_check_cred_dirs()     { :; }
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
-  _doctor_check_github_mcp()    { :; }
   _doctor_check_gnu_coreutils() { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
@@ -2240,116 +2213,6 @@ STUB
   [ -z "${_out}" ]
 }
 
-# ── _doctor_check_github_mcp ─────────────────────────────────────────────────
-
-@test "_doctor_check_github_mcp fails when ~/.claude/mcp.json is missing" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  unset GITHUB_PAT GITHUB_PAT_EXPIRY
-  # HOME is BATS_TEST_TMPDIR — no .claude/mcp.json exists
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 1 ]
-  [ "${_DOCTOR_FAILED}" -eq 1 ]
-}
-
-@test "_doctor_check_github_mcp fails when mcp.json is a broken symlink" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  unset GITHUB_PAT GITHUB_PAT_EXPIRY
-  local _saved_home="${HOME}"
-  export HOME="${BATS_TEST_TMPDIR}/symlink_home"
-  mkdir -p "${HOME}/.claude"
-  ln -s "${HOME}/.claude/nonexistent_target" "${HOME}/.claude/mcp.json"
-  _doctor_check_github_mcp
-  export HOME="${_saved_home}"
-  [ "${_DOCTOR_FAIL}" -eq 1 ]
-  [ "${_DOCTOR_FAILED}" -eq 1 ]
-}
-
-@test "_doctor_check_github_mcp fails when GITHUB_PAT is unset" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  unset GITHUB_PAT GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 1 ]
-}
-
-@test "_doctor_check_github_mcp fails when curl exits 22 (invalid token)" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=22
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 1 ]
-}
-
-@test "_doctor_check_github_mcp warns when curl exits 28 (timeout)" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=28
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
-  [ "${_DOCTOR_WARN}" -ge 1 ]
-}
-
-@test "_doctor_check_github_mcp warns when curl exits 6 (DNS failure)" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=6
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
-  [ "${_DOCTOR_WARN}" -ge 1 ]
-}
-
-@test "_doctor_check_github_mcp warns for other curl errors" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=7  # CURLE_COULDNT_CONNECT — not 22/28/6, hits the catch-all warn branch
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
-  [ "${_DOCTOR_WARN}" -ge 1 ]
-}
-
-@test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY within 30 days" {
-  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  # Set expiry to 5 days from now (within 30-day warning window)
-  if [[ -n "${MACOS:-}" ]]; then
-    GITHUB_PAT_EXPIRY=$(date -v+5d +%Y-%m-%d)
-    export GITHUB_PAT_EXPIRY
-  else
-    GITHUB_PAT_EXPIRY=$(date -d "+5 days" +%Y-%m-%d)
-    export GITHUB_PAT_EXPIRY
-  fi
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_WARN}" -ge 1 ]
-}
-
-@test "_doctor_check_github_mcp prints INFO when GITHUB_PAT_EXPIRY not set" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  run _doctor_check_github_mcp
-  [[ "$output" == *"GITHUB_PAT_EXPIRY"* ]]
-}
-
 @test "_github_api_base defaults when _GITHUB_API is unset" {
   unset _GITHUB_API
   # The warn branch prints the same default URL, so stdout alone cannot tell
@@ -2484,121 +2347,6 @@ STUB
   _err="$(_github_api_base 2>&1 >/dev/null)"
   [ "${_out}" = "https://api.github.com" ]
   [[ "${_err}" == *ignoring* ]]
-}
-
-@test "_doctor_check_github_mcp ignores an off-host _GITHUB_API" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="host-tok-1" _GITHUB_API="https://evil.example"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  _doctor_check_github_mcp > /dev/null 2>&1
-  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
-  ! grep -q 'evil.example' "${MOCK_CALLS_FILE}"
-}
-
-@test "_doctor_check_github_mcp keeps the token out of argv" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="argv-tok-77"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
-  _doctor_check_github_mcp
-  # Positive control: curl was called for the live check.
-  grep -q 'api.github.com/user' "${MOCK_CALLS_FILE}"
-  grep -q -- '-H @-' "${MOCK_CALLS_FILE}"
-  ! grep -q 'argv-tok-77' "${MOCK_CALLS_FILE}"
-}
-
-@test "_doctor_check_github_mcp sends the Authorization header on stdin" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="argv-tok-77"
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0 MOCK_CURL_STDIN_FILE="${BATS_TEST_TMPDIR}/stdin"
-  _doctor_check_github_mcp
-  [ "$(cat "${MOCK_CURL_STDIN_FILE}")" = "Authorization: Bearer argv-tok-77" ]
-}
-
-@test "_doctor_check_github_mcp refuses a token with a line break without calling curl" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT=$'a\nb'
-  unset GITHUB_PAT_EXPIRY
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 1 ]
-  # Control for the absence: the argv test above uses this harness and records a curl call.
-  ! grep -q 'curl' "${MOCK_CALLS_FILE}" 2>/dev/null
-}
-
-@test "_doctor_check_github_mcp real curl delivers the header on stdin" {
-  source "${REPO_ROOT}/tests/helpers/http_listener.bash"
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="real-tok-55"
-  unset GITHUB_PAT_EXPIRY MOCK_CURL_EXIT
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  local _clean_path
-  _clean_path="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
-  start_http_listener "${BATS_TEST_TMPDIR}"
-  export _GITHUB_API="${HTTP_LISTENER_URL}"
-  # A dead-port proxy: without --noproxy the token would go to it, not the listener.
-  export http_proxy="http://127.0.0.1:9" HTTP_PROXY="http://127.0.0.1:9"
-  # An inherited no_proxy naming 127.0.0.1 would bypass the dead proxy by itself.
-  unset no_proxy NO_PROXY all_proxy ALL_PROXY
-  local _out
-  _out="$(PATH="${_clean_path}" _doctor_check_github_mcp 2>&1)"
-  [[ "${_out}" == *"[PASS]"*"GitHub PAT (live)"* ]]
-  [[ "${_out}" != *FAIL* ]]
-  grep -q 'Authorization: Bearer real-tok-55' "${HTTP_LISTENER_HEADERS}"
-}
-
-@test "_doctor_check_github_mcp passes when all checks pass" {
-  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  # Set expiry 90 days out (outside warning window)
-  if [[ -n "${MACOS:-}" ]]; then
-    GITHUB_PAT_EXPIRY=$(date -v+90d +%Y-%m-%d)
-    export GITHUB_PAT_EXPIRY
-  else
-    GITHUB_PAT_EXPIRY=$(date -d "+90 days" +%Y-%m-%d)
-    export GITHUB_PAT_EXPIRY
-  fi
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
-  [ "${_DOCTOR_FAILED}" -eq 0 ]
-}
-
-@test "_doctor_check_github_mcp warns when GITHUB_PAT_EXPIRY cannot be parsed" {
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  export GITHUB_PAT_EXPIRY="not-a-date"
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_WARN}" -ge 1 ]
-}
-
-@test "_doctor_check_github_mcp fails when GITHUB_PAT has expired" {
-  if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
-  _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
-  export GITHUB_PAT="fake-token"
-  mkdir -p "${HOME}/.claude"
-  printf '{"mcpServers":{}}\n' > "${HOME}/.claude/mcp.json"
-  export MOCK_CURL_EXIT=0
-  export GITHUB_PAT_EXPIRY="2020-01-01"
-  _doctor_check_github_mcp
-  [ "${_DOCTOR_FAILED}" -ge 1 ]
 }
 
 # ── _doctor_check_gnu_coreutils ───────────────────────────────────────────────
@@ -2795,8 +2543,7 @@ STUB
 @test "run_doctor calls _doctor_check_gnu_coreutils" {
   local _called=0
   _doctor_check_gnu_coreutils() { _called=1; }
-  # Stub all other sub-checks to avoid side effects — mirrors "run_doctor
-  # calls _doctor_check_github_mcp" above.
+  # Stub all other sub-checks to avoid side effects.
   _doctor_check_profile()       { :; }
   _doctor_check_symlinks()      { :; }
   _doctor_check_symlink_roots() { :; }
@@ -2807,7 +2554,6 @@ STUB
   _doctor_check_hooks_path()    { :; }
   _doctor_check_versions()      { :; }
   _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_github_mcp()    { :; }
   _doctor_check_pyenv_shims()   { :; }
   _doctor_check_conffile_dist() { :; }
   _doctor_check_flatpak_gl() { :; }
@@ -2834,7 +2580,6 @@ STUB
   _doctor_check_hooks_path()     { :; }
   _doctor_check_versions()       { :; }
   _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_github_mcp()     { :; }
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist()  { :; }
@@ -2955,7 +2700,6 @@ _inotify_doctor_conf() { printf 'fs.inotify.max_user_instances = %s\n' "$1" > "$
   _doctor_check_hooks_path()     { :; }
   _doctor_check_versions()       { :; }
   _doctor_check_aws_key_expiry() { :; }
-  _doctor_check_github_mcp()     { :; }
   _doctor_check_gnu_coreutils()  { :; }
   _doctor_check_pyenv_shims()    { :; }
   _doctor_check_conffile_dist()  { :; }
@@ -3290,7 +3034,7 @@ _keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
   export LINUX=1 HAS_DOCKER=1
   local _f
   for _f in profile symlinks symlink_roots tools dev_tools login_shell cred_dirs hooks_path versions \
-    aws_key_expiry github_mcp gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
+    aws_key_expiry gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
     renovate_cadence ledger_drift_cadence inotify_limits; do
     eval "_doctor_check_${_f}() { :; }"
   done
