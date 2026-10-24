@@ -848,9 +848,12 @@ _is_make_c_candidate() {
 # en_US.UTF-8 (C and C.UTF-8 collate bytewise and hide it). The tests above
 # resolve sort and comm through the session PATH, which puts GNU gnubin first
 # on claude and workstation, so they cannot see a dropped LC_ALL=C. This one
-# forces /usr/bin first and pins en_US.UTF-8; the per-command LC_ALL=C
-# prefixes override that pin. A failing uutils comm still prints the right
-# overlap, so its exit status and stderr are asserted directly.
+# forces /usr/bin first and pins en_US.UTF-8; the helper's LC_ALL=C prefix on
+# sort overrides that pin and is what this test guards. uutils comm compares
+# bytes in any locale, so the comm prefix is for GNU comm, which honours
+# locale, and this test cannot see it dropped. A failing uutils comm still
+# prints the right overlap, so its exit status and stderr are asserted
+# directly.
 @test "disjointness pipeline holds under uutils sort and comm in en_US.UTF-8" {
   /usr/bin/sort --version 2>/dev/null | grep -q uutils || skip "/usr/bin/sort is not uutils"
   /usr/bin/comm --version 2>/dev/null | grep -q uutils || skip "/usr/bin/comm is not uutils"
