@@ -1,5 +1,7 @@
 # Stop managing MCP configuration Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#371 (18baf396) on 2026-10-24.
+
 spec: docs/superpowers/specs/2026-10-24-stop-managing-mcp-config-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
