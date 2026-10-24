@@ -37,7 +37,7 @@ A SKIP would deny that the checks ran.
 
 Add a `git-hooks)` arm to the `case "${_section}"` in `_update_record_end`:
 
-- under `_dry_run_active`: `_result="dry run: hooks not installed"`;
+- under `_dry_run_active`: `_result="dry run: install skipped"`;
 - otherwise: `_result="updated"`, unchanged from today.
 
 The status stays `OK` in both cases. The arm sits after the early-return `FAIL` branch, so a
@@ -53,27 +53,56 @@ Backlog row stays open).
 Two cases in `tests/setup_env/update_summary.bats`, written RED first:
 
 1. `DRY_RUN=1`, `_update_record_end "git-hooks" 0`: `status_git-hooks` is `OK` and
-   `result_git-hooks` is exactly `dry run: hooks not installed`.
-2. `DRY_RUN` unset, `_update_record_end "git-hooks" 0`: `result_git-hooks` is exactly `updated`.
+   `result_git-hooks` is exactly `dry run: install skipped`.
+2. `unset DRY_RUN` in the test itself (bats inherits the caller's environment), then `_update_record_end "git-hooks" 0`: `result_git-hooks` is exactly `updated`.
 
 Case 2 stops an arm that always prints the dry-run text from passing; case 1 fails on today's
 code, which writes `updated`. The existing test "_update_summary prints a git-hooks row with the
 literal result production writes, not a fabricated counts string" seeds its own result file and
 is unaffected.
 
-Verification beyond the suite: `./setup_env.sh -t update --dry-run` on `claude` prints
-`git-hooks` with `dry run: hooks not installed` in the summary table. That run is not offline:
+Optional verification beyond the suite: `./setup_env.sh -t update --dry-run` on `claude` prints
+`git-hooks` with `dry run: install skipped` in the summary table. That run is not offline:
 it fetches, pulls `--ff-only` and installs packages for real (see `CLAUDE.md` `--dry-run`), so it
-is run only with the operator's go-ahead.
+is run only if the operator asks for it. The dry-run sweep itself returns 0 on all three development boxes (measured 2026-10-24: `9 checked, n/a updated, 0 gaps`, rc 0 on `claude`, `workstation` and the Studio), so the new text is what those machines would show; on a machine with gaps the WARN replaces it, as today.
 
 ## Requirements
 
-- **R1.** `_update_record_end` in `lib/update_summary.sh` has a `git-hooks)` case arm that sets `_result` to `dry run: hooks not installed` when `_dry_run_active` succeeds and to `updated` otherwise.
+- **R1.** `_update_record_end` in `lib/update_summary.sh` has a `git-hooks)` case arm that sets `_result` to `dry run: install skipped` when `_dry_run_active` succeeds and to `updated` otherwise.
 - **R2.** `_update_record_end` still writes status `OK` for `git-hooks` with exit 0, dry run or not.
-- **R3.** `tests/setup_env/update_summary.bats` has a test asserting `result_git-hooks` equals `dry run: hooks not installed` and `status_git-hooks` equals `OK` after `_update_record_end "git-hooks" 0` with `DRY_RUN=1`, and a test asserting `result_git-hooks` equals `updated` with `DRY_RUN` unset.
+- **R3.** `tests/setup_env/update_summary.bats` has a test asserting `result_git-hooks` equals `dry run: install skipped` and `status_git-hooks` equals `OK` after `_update_record_end "git-hooks" 0` with `DRY_RUN=1`, and a test that runs `unset DRY_RUN` itself and asserts `result_git-hooks` equals `updated`.
 - **R4.** The Backlog row "`git-repos` and `git-hooks` render `[OK] … updated` …" is removed from the open P2 table.
+- **R5.** A new P3 Backlog row records that a non-dry run still renders `git-hooks` as `updated` when the sweep installed 0 hooks, and that fixing it needs `install_git_hooks_all_repos` to hand its counts to the table.
 - **V1.** The R3 dry-run test fails on `origin/master` before the R1 change and passes after it.
-- **V2.** With the operator's go-ahead, `./setup_env.sh -t update --dry-run` on `claude` shows the `git-hooks` row result `dry run: hooks not installed`.
+- **V2.** Optional, only if the operator asks: `./setup_env.sh -t update --dry-run` on `claude` shows the `git-hooks` row result `dry run: install skipped`.
 - **N1.** No change to how `git-repos` renders, dry run or not.
 - **N2.** No change to `run_update`'s rc-2→0 ternary for any section.
 - **N3.** No change to `lib/git_hooks.sh`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `d60fdce1`
+
+### Round 1
+
+#### Goal-Fit
+
+Finding: No blocking issues; premise verified on `origin/master`. Non-blocking: a non-dry run still says `updated` when the sweep installed 0 hooks (needs `lib/git_hooks.sh`, outside N3), worth a Backlog row so R4 does not drop it; V2 costs a real update run to check a label the unit test pins, so make it optional.
+Assumption: no uncertain assumption found (probe on `claude`: sweep under `DRY_RUN=1` returns 0, no gaps, no `core.hooksPath` pin).
+Disposition: Addressed (operator, 2026-10-24) — R5 adds the P3 row; V2 is optional.
+
+#### Ergonomics
+
+Finding: `dry run: hooks not installed` reads two ways in a scanned table (install skipped, or repos have no hooks); `dry run: install skipped` names the suppressed action like `[SKIP] legacy-rsync dry run`. Case 2 should `unset DRY_RUN` itself.
+Assumption: the sweep returns 0, not 2, where `--dry-run` actually runs, else WARN hides the new text. Settled 2026-10-24: rc 0 with `9 checked, n/a updated, 0 gaps` on `claude`, `workstation` and the Studio.
+Disposition: Addressed (operator, 2026-10-24) — text changed to `dry run: install skipped`; R3 and Testing require `unset DRY_RUN`.
+
+#### Risk
+
+Finding: No blocking issues. Arm ordering, SKIP/FAIL/WARN paths, ledger and width all unaffected; the spec should say `unset DRY_RUN` literally. Minor, accepted by design: under `--dry-run` an rc-2 WARN row does not say its gaps are pre-run state (the detail block does).
+Assumption: no uncertain assumption found.
+Disposition: Addressed (operator, 2026-10-24) — `unset DRY_RUN` written into R3; the WARN-row point stays accepted as already stated in Design.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
