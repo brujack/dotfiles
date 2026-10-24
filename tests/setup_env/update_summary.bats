@@ -914,9 +914,9 @@ firefox  124.0"
 }
 
 @test "_update_summary prints a git-hooks row with the literal result production writes, not a fabricated counts string" {
-  # _update_record_end has no git-hooks) case arm -- git-hooks falls
-  # through to the generic `*) _result="updated"` branch like every other
-  # section without special-cased diffing. The sweep's own "N checked, M
+  # _update_record_end's git-hooks) arm writes "updated" outside --dry-run
+  # (the dry-run text is pinned by the two _update_record_end git-hooks
+  # tests below). The sweep's own "N checked, M
   # updated, G gaps" line goes to log_info (~/.dotfiles-update.log), never
   # into this table -- do NOT restore a counts-string fixture here; that
   # only round-trips a fabricated literal through pre-existing generic
@@ -931,6 +931,22 @@ firefox  124.0"
   local _row
   _row=$(grep 'git-hooks' <<< "$output")
   [[ "${_row}" == "[OK]"*"git-hooks"*"updated" ]]
+}
+
+@test "_update_record_end git-hooks under DRY_RUN records OK and dry run: install skipped" {
+  export DRY_RUN=1
+  _update_record_end "git-hooks" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_git-hooks")" = "dry run: install skipped" ]
+}
+
+@test "_update_record_end git-hooks without DRY_RUN records updated" {
+  # bats inherits the caller's environment; a DRY_RUN exported by the
+  # invoking shell would otherwise turn this into a second dry-run case.
+  unset DRY_RUN
+  _update_record_end "git-hooks" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-hooks")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_git-hooks")" = "updated" ]
 }
 
 # ── _update_record_start legacy-rsync ─────────────────────────────────────────

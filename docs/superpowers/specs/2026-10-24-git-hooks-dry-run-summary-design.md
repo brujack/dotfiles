@@ -117,3 +117,24 @@ Disposition: Addressed (operator, 2026-10-24) — R5 now edits the existing row 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-24)
+
+- spec: docs/superpowers/specs/2026-10-24-git-hooks-dry-run-summary-design.md
+- anchor: d07cb79fda2957f66924faa222281e9684ce6181
+- in scope: R1, R2, R3, R4, R5
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Orchestrator, 2026-10-24: the two R3 tests added to a git archive of origin/master 76cd6095 gave 'not ok 1 ... under DRY_RUN' (result_git-hooks was 'updated') and 'ok 2'; on branch 1f006b92 both ok (bats -f filter 1..2).
+- V2: Not run: optional, operator did not ask.
