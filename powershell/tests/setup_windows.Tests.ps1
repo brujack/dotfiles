@@ -637,9 +637,7 @@ Describe "Set-ClaudeConfig" {
     Mock New-SafeLink  { }
     Mock New-Item      { }
     Mock Test-Path     { $true }
-    Mock Set-Content   { }
     Mock Write-Output  { }
-    Mock Write-Warning { }
   }
 
   It "creates ~/.claude when it does not exist" {

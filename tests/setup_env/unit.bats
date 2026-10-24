@@ -3034,7 +3034,7 @@ _keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
   export LINUX=1 HAS_DOCKER=1
   local _f
   for _f in profile symlinks symlink_roots tools dev_tools login_shell cred_dirs hooks_path versions \
-    aws_key_expiry github_mcp gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
+    aws_key_expiry gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
     renovate_cadence ledger_drift_cadence inotify_limits; do
     eval "_doctor_check_${_f}() { :; }"
   done
