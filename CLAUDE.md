@@ -257,7 +257,7 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test` job: pinned, checksum-verified shellcheck plus bats, runs `make test`, then verifies test count >= 840 (regression proxy)
+- `test` job: pinned, checksum-verified shellcheck plus bats, prints `locale` and the `sort`/`comm` it resolves (`Tool versions`), runs `make test`, then verifies test count >= 840 (regression proxy)
 - `lint-macos` (blocks auto-merge): `bash -n` over the derived `SHELL_FILES` via `make print-SHELL_FILES | tr ' ' '\n' | xargs` (the `tr` is load-bearing: `xargs -I` does not split on blanks), and `zsh -n` over `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh'`, which must stay in step with `Makefile`'s `ZSH_FILES`; each step refuses an empty list.
 - `test-macos` (blocks auto-merge; must stay in `auto-merge`'s `needs:` because the merge is a plain `gh pr merge --squash`): `make test` under GNU Make 3.81 with four unpinned Homebrew packages (bash, bats-core, parallel, coreutils for `timeout`); shellcheck and uv are pinned and checksum-verified; `scripts/ci-suite-report.sh <log> tests` fails unless the executed count equals the declared count and is above zero; on failure or cancellation the full log is uploaded as the artifact `test-macos-make-test-log`, since the 40-line tail can miss the cause; download it before re-running, because a re-run attempt replaces it; `permissions: contents: read`. Reasoning: ADR-0037.
   - A macOS failure cannot be reproduced on the Linux development box. Reproduce it on the Studio, in a bare environment like the runner's: → `dotfiles-bats-test-infrastructure.md` § `Testing: CI workflow jobs`
@@ -284,6 +284,7 @@ CI requirements:
 - `run_update` tests stay off real pip because `load_mocks` (`tests/helpers/common.bash`) exports `MOCK_PYENV_WHICH_STDOUT` by default; a file calling `load_setup_env` without `load_mocks` loses it and a pip-section test then runs a real `pip install` (1–3 min).
 - Every new function in `setup_env.sh` needs a test in `tests/setup_env/unit.bats` (pure logic) or `tests/setup_env/install_guards.bats` (side effects, mocks); every modified function updates its test; new shell scripts get their own `tests/` directory (e.g. `tests/scripts/`).
 - Never modify real system state in tests — use PATH-based mocks from `tests/mocks/`.
+- A test that feeds `sort` output to `comm`, or compares two sorted lists, prefixes every `sort` and `comm` with `LC_ALL=C`: `claude`, `workstation` and `ubuntu-latest` resolve uutils 0.10.0 first, and uutils `comm` rejects uutils `sort` output collated under `en_US.UTF-8` (CI passes only because it runs `C.UTF-8`).
 - `tests/helpers/common.bash` unsets `GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE` when sourced (`git -C` does not override an exported `GIT_DIR`; #308); a bats file building git fixtures without that helper must strip the same four itself.
 - `make test` must exit 0 before committing.
 - When moving or renaming a directory tests reference, run `grep -r "<old-path>" tests/` first — hardcoded fixture paths break even when production code uses `$PERSONAL_GITREPOS/$DOTFILES/` prefixes. → `dotfiles-bats-test-infrastructure.md` § `Testing: Testing Rules detail`
