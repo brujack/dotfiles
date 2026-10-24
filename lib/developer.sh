@@ -558,9 +558,6 @@ _ensure_pyenv_python() {
       pyenv update
     fi
 
-    # zsh-safe cleanup (avoids: zsh: no matches found)
-    rm -rf "/tmp/python-build.*" 2>/dev/null || true
-
     # brew install pyenv puts the binary in the brew prefix, not ~/.pyenv/bin/pyenv.
     # The env -i subprocess below resolves pyenv only via $PYENV_ROOT/bin, so create
     # a symlink when the expected path is absent (e.g. fresh machine, brew install).
