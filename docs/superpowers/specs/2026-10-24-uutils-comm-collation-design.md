@@ -103,7 +103,10 @@ the defect occurs.
 
 Add a `Tool versions` step to the `test` job before `Run tests`, mirroring `test-macos`'s step of
 the same name. It prints `locale`, `locale -a`, `command -v sort comm || true`,
-`sort --version | head -1` and `comm --version | head -1`. It never fails the job on content:
+`sort --version | head -1`, `comm --version | head -1`, `/usr/bin/sort --version | head -1` and
+`/usr/bin/comm --version | head -1`. The `/usr/bin` pair is what the section 2 test's skip
+condition reads; the `PATH`-resolved pair can differ (on `claude`, `command -v sort` is linuxbrew
+GNU 9.12 while `/usr/bin/sort` is uutils). It never fails the job on content:
 `command -v` exits 1 when either tool is missing, which would fail the step under the runner's
 default `bash -e`, hence `|| true`. `locale` is what separates the first two explanations above;
 the versions alone cannot. `locale -a` shows whether the section 2 test can run on the runner at
@@ -132,11 +135,11 @@ all, since it skips without `en_US.utf8`.
 - **R2.** No `setup()` or file-level code in `tests/scripts/makefile_lint_scope.bats` exports or sets `LC_ALL`, `LC_COLLATE` or `LANG`.
 - **R3.** A new test in `tests/scripts/makefile_lint_scope.bats` skips unless both `/usr/bin/sort --version` and `/usr/bin/comm --version` contain `uutils` and `locale -a` lists `en_US.utf8`, and otherwise runs `_sorted_lines_from_space_list` and the `comm -12`/`comm -23` pipeline with `/usr/bin` first on `PATH` under a test-scoped `LC_ALL=en_US.UTF-8`.
 - **R4.** The R3 test runs `comm -12` on files, captures its exit status and stderr directly (not via `$(...)` inside a process substitution), and asserts exit 0, no `not in sorted order` on stderr, and an overlap equal to `_KNOWN_SHELL_ZSH_OVERLAP`.
-- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `locale`, `locale -a`, `command -v sort comm || true`, `sort --version | head -1` and `comm --version | head -1`.
+- **R5.** `.github/workflows/ci.yml`'s `test` job has a `Tool versions` step before `Run tests` that prints `locale`, `locale -a`, `command -v sort comm || true`, `sort --version | head -1`, `comm --version | head -1`, `/usr/bin/sort --version | head -1` and `/usr/bin/comm --version | head -1`.
 - **R6.** The `makefile_lint_scope.bats` uutils Backlog row and the `sort -u` lossy row are removed from their open tables, and a P3 row for retiring the pyenv rehash hook is added.
 - **V1.** On `claude`, `PATH="/usr/bin:${PATH}" bats tests/scripts/makefile_lint_scope.bats` shows 3 `not ok` before the fix and 0 after.
 - **V2.** Deleting `LC_ALL=C` from `_sorted_lines_from_space_list` turns the R3 test red on `claude`.
-- **V3.** The CI `test` job log for the PR shows the `Tool versions` output, and its `sort --version` and `locale` lines are recorded on the `powershell` Backlog row.
+- **V3.** The CI `test` job log for the PR shows the `Tool versions` output, and its `PATH`-resolved and `/usr/bin` `sort --version` lines and `locale` lines are recorded on the `powershell` Backlog row.
 - **N1.** No change to any file under `lib/`.
 - **N2.** No change to `pyenv.d/`.
 - **N3.** The `Tool versions` step does not fail the job on any version string.
@@ -188,6 +191,16 @@ Disposition: Addressed (operator, 2026-10-24) — R5 prints `locale -a` and appe
 Finding: No issues. Locale pin verified (mutation still red), empty input fails, `CLEAN_PATH` keeps the `/usr/bin`-first `PATH` out of `make`/`git`, no `tests/mocks/` shadowing, `workstation` has uutils 0.10.0 and `en_US.utf8`.
 Assumption: no uncertain assumption found.
 Disposition: N/A — clean, no action needed
+
+### Round 3 (scoped: section 3 and R5)
+
+#### Ergonomics
+
+Reviewed at commit: `d6078a9e`
+
+Finding: N3 holds (step body exits 0 under `bash -e` with a normal environment, a missing locale, and no `sort`/`comm` on `PATH`). But the probe prints only the `PATH`-resolved `sort`/`comm`, while the R3 skip reads `/usr/bin`'s; on a GNU-first runner the probe cannot say whether R3 runs.
+Assumption: the 26.04 runner's `/usr/bin/sort` is uutils, as on stock 26.04; if the image swaps it to GNU, R3 always skips in CI, which section 2 already accepts. Settled by one CI run with the `/usr/bin` lines.
+Disposition: Addressed (operator, 2026-10-24) — R5 also prints `/usr/bin/sort --version` and `/usr/bin/comm --version`; V3 records both pairs. Review closed here: remaining findings concern one diagnostic step's output, which one CI run settles.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
