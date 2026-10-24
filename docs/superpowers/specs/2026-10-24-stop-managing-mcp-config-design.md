@@ -1,6 +1,7 @@
 # Stop managing MCP configuration
 
 - **Date:** 2026-10-24
+- **Approved:** 2026-10-24
 - **Backlog rows closed:** "`setup_claude_mcp`'s template generation is unreachable on every machine" and "`doctor` reports `mcp.json (generated)` for a file it only tested for existence" (both P2 bugs and security).
 
 ## Problem
@@ -20,7 +21,7 @@ So the mechanism is dead twice over. `setup_claude_mcp` never writes the file, b
 Delete the generation, the check and the documentation of both. Nothing replaces them.
 
 1. `lib/workflows.sh`: delete `setup_claude_mcp` and its call `setup_claude_mcp || return 1` in `run_setup_user`, and update the comment that cites that call as a style precedent.
-2. `lib/helpers.sh`: delete `_doctor_check_github_mcp` and its call in `run_doctor`. `_github_auth_header` and `_github_api_base` stay, because `_fetch_github_latest` uses them.
+2. `lib/helpers.sh`: delete `_doctor_check_github_mcp` and its call in `run_doctor`. `_github_auth_header` and `_github_api_base` stay, because `_fetch_github_latest` uses them. Reword the `_doctor_check_aws_key_expiry` header comment that compares its 90 days to "GITHUB_PAT_EXPIRY's 30" so it names no removed check.
 3. `lib/constants.sh`: drop `setup_claude_mcp` from the comment naming the readers of `AI_CONFIG_DIR`.
 4. Tests: delete the 35 tests whose name names either function (15 in `tests/setup_env/workflows.bats`, 2 in `tests/setup_env/install_guards.bats`, 18 in `tests/setup_env/unit.bats`). Delete each remaining no-op stub of a deleted function, in `unit.bats`, `workflows.bats`, `install_guards.bats` and `tests/setup_env/plugin_node_paths.bats`. Where a surviving test uses one as more than a stub, give it a surviving function instead:
    - `workflows.bats` "run_setup_user calls install_bats on macOS, and aborts when it returns non-zero" uses `setup_claude_mcp` as the "a later step did not run" sentinel; it takes the next step `run_setup_user` calls after `install_bats`.
@@ -28,7 +29,7 @@ Delete the generation, the check and the documentation of both. Nothing replaces
 5. `powershell/setup_windows.ps1` `Set-ClaudeConfig`: stop linking `mcp.json.template` and delete the block that writes `mcp.json` from it; delete the two Pester tests for that block.
 6. `manifests/dotfiles/ai-config.yaml`: delete the `mcp.json.template` link entry.
 7. Docs: delete `CLAUDE.md`'s "GitHub MCP" section, its `~/.claude/mcp.json` symlink bullet, and the `GITHUB_PAT` mentions in its Windows section; delete `README.md`'s GitHub MCP section and its line-97 `GITHUB_PAT` pointer; delete the `GITHUB_PAT`/`GITHUB_PAT_EXPIRY` lines from `config/local.sh.example`.
-8. `docs/superpowers/README.md`: delete the two Backlog rows above, and add one P2 test-gaps row: the `run_doctor` warning-count test asserts the substring `*"1 warnings"*`, which also matches "11 warnings" (pre-existing; this change moves its warning, not its assertion).
+8. `docs/superpowers/README.md`: delete the two Backlog rows above, and add one P2 test-gaps row: `tests/setup_env/unit.bats` "run_doctor summary includes warnings count" asserts the substring `*"1 warnings"*`, which also matches "11 warnings" (pre-existing; this change moves its warning, not its assertion).
 
 Left as they are:
 
@@ -53,8 +54,8 @@ The change removes behaviour and adds none; there is no RED test. Evidence:
 - **R3.** `[PR1]` No file under `tests/` defines, stubs or names `setup_claude_mcp` or `_doctor_check_github_mcp`, and the `run_setup_user` abort-ordering test and the `run_doctor` warning test each still assert their original behaviour through a surviving function.
 - **R4.** `[PR1]` `powershell/setup_windows.ps1` neither links `mcp.json.template` nor writes `mcp.json`, and `powershell/tests/setup_windows.Tests.ps1` has no test for either.
 - **R5.** `[PR1]` `manifests/dotfiles/ai-config.yaml` has no `mcp.json.template` entry.
-- **R6.** `[PR1]` `CLAUDE.md`, `README.md` and `config/local.sh.example` contain neither `GITHUB_PAT` nor a claim that dotfiles configures an MCP server, and `lib/constants.sh` does not name `setup_claude_mcp`.
-- **R7.** `[PR1]` `docs/superpowers/README.md` no longer has the two Backlog rows this spec closes, and has a Backlog row for the `*"1 warnings"*` substring assertion.
+- **R6.** `[PR1]` `CLAUDE.md`, `README.md` and `config/local.sh.example` contain neither `GITHUB_PAT` nor a claim that dotfiles configures an MCP server, `lib/constants.sh` does not name `setup_claude_mcp`, and `lib/helpers.sh` does not mention `GITHUB_PAT_EXPIRY`.
+- **R7.** `[PR1]` `docs/superpowers/README.md` no longer has the two Backlog rows this spec closes, and has a Backlog row naming `unit.bats` "run_doctor summary includes warnings count" and its `*"1 warnings"*` substring assertion.
 - **V1.** `make test` on the branch passes with a plan count equal to master's minus 35.
 - **V2.** `setup_env.sh -t doctor` on the branch prints no "GitHub MCP:" heading.
 - **V3.** CI `bash-coverage` reads at least 91% and CI `powershell` coverage at least 90%.
@@ -89,3 +90,9 @@ Disposition: Addressed — Problem names both etch-config readers and the write-
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Risk (round 2, scoped re-review at `c8a27f4c`)
+
+Finding: no load-bearing issue; every new factual claim verified (etch-config readers and lines, write-through guard, ai-config `dotfiles-conventions.md` lines 208/246/317/321, the `plugin_node_paths.bats:422` stub, the coverage estimate). Minor: R7's row should name the test (`unit.bats:1055` is unanchored, `:2969` is anchored); `lib/helpers.sh:831` keeps a `GITHUB_PAT_EXPIRY` comparison no step removed.
+Assumption: the etch-config exposure is latent on every machine. Checked by the orchestrator 2026-10-24 on `claude`, the Studio and the workstation: `ai-config/.claude/mcp.json` has empty `git status`, 0 token-shaped strings, and 0 in `git log -p --all`.
+Disposition: Addressed — R7 and step 8 name the test; step 2 and R6 cover the `helpers.sh` comment (wording-level, no further round).
