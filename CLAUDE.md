@@ -312,8 +312,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - A test seam is a variable with a production default — `local _file="${VAR:-<real path>}"` — not a naming rule: seams below are named `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_CARGO_BIN`, and more.
 - In tests, set the seam variable to a writable temp copy; leave it unset in production code. → `dotfiles-test-seams.md` § `Test seam idiom and override pattern`
 
-- `_AI_CONFIG_GIT` (`lib/helpers.sh:_ai_config_tracked_items`): `load_mocks` points it at the real git because `tests/mocks/git` answers `ls-files` with nothing; never point it at the mock.
-- `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a per-test git fixture (`track_ai_config_fixture`, `tests/helpers/common.bash`); a test needing other ai-config contents overrides it and calls `track_ai_config_fixture` on its own fixture.
+- Never point `_AI_CONFIG_GIT` (`lib/helpers.sh:_ai_config_tracked_items`) at `tests/mocks/git`; `load_mocks` sets it to the real git. → `dotfiles-test-seams.md` § `_AI_CONFIG_GIT seam`
+- `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a tracked fixture; a test needing other ai-config contents overrides it and calls `track_ai_config_fixture`. → `dotfiles-test-seams.md` § `load_mocks _OVERRIDE_AI_CONFIG_DIR default`
 
 - `tests/mocks/pyenv install` creates its version dir only when `HOME` matches `*/bats-run-*` (keyed on `HOME`, never `PYENV_ROOT`); inject failure with `${HOME}/.mock-pyenv-install-exit`, not an env var; assert effects on disk or in `${HOME}/.mock_calls`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pyenv mock install under env -i`
 
