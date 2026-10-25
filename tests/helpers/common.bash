@@ -13,6 +13,22 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
 # Prepend tests/mocks/ to PATH so mock executables shadow real ones
 load_mocks() {
+  # _ai_config_tracked_items needs a git that really answers ls-files, but
+  # tests/mocks/git answers it with rc 0 and empty output. Resolve the real git
+  # with tests/mocks removed from PATH, before the prepend below.
+  local _clean_path _entry _real_git
+  local -a _entries
+  IFS=: read -r -a _entries <<< "${PATH}"
+  for _entry in "${_entries[@]}"; do
+    [[ ${_entry} == "${REPO_ROOT}/tests/mocks" ]] && continue
+    _clean_path+="${_clean_path:+:}${_entry}"
+  done
+  _real_git="$(PATH="${_clean_path}" command -v git)"
+  if [[ -z ${_real_git} ]]; then
+    printf 'load_mocks: no real git outside tests/mocks on PATH\n' >&2
+    return 1
+  fi
+  export _AI_CONFIG_GIT="${_real_git}"
   export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
   # Default pyenv-which to the mock python so run_update's pip section never
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
@@ -277,4 +293,23 @@ setup_run_update_linux() {
   mkdir -p "${PERSONAL_GITREPOS}/${DOTFILES}"
   export TMPDIR="${BATS_TEST_TMPDIR}"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+}
+
+# track_ai_config_fixture <dir> -- make <dir> a git repo whose index holds a
+# minimal ai-config layout (.claude/settings.json, .cursor/rules/.gitkeep) plus
+# every file already there. Empty directories get a .gitkeep, since git cannot
+# track them. No commit: CI has no user.name. Uses the real git load_mocks
+# resolved into _AI_CONFIG_GIT.
+track_ai_config_fixture() {
+  local _dir="$1" _d
+  local -a _git=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null "${_AI_CONFIG_GIT}" -C "${_dir}")
+  mkdir -p "${_dir}/.claude" "${_dir}/.cursor/rules" || return 1
+  [[ -e ${_dir}/.claude/settings.json ]] || : > "${_dir}/.claude/settings.json" || return 1
+  [[ -e ${_dir}/.cursor/rules/.gitkeep ]] || : > "${_dir}/.cursor/rules/.gitkeep" || return 1
+  while IFS= read -r -d '' _d; do
+    : > "${_d}/.gitkeep" || return 1
+  done < <(find "${_dir}/.claude" "${_dir}/.cursor" -type d -empty -print0)
+  "${_git[@]}" init -q || return 1
+  "${_git[@]}" add -A || return 1
 }

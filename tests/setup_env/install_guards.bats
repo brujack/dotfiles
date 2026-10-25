@@ -1389,3 +1389,81 @@ EOF
   [ "${status}" -ne 0 ]
   ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
 }
+
+# ── _ai_config_tracked_items ─────────────────────────────────────────────────
+
+# _tracked_repo <dir> <path>... -- real git repo at <dir> with <path>s added to
+# the index (no commit: CI has no user.name).
+_tracked_repo() {
+  local _dir="$1"; shift
+  local _p
+  mkdir -p "${_dir}"
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    "${_AI_CONFIG_GIT}" -C "${_dir}" init -q || return 1
+  for _p in "$@"; do
+    mkdir -p "${_dir}/$(dirname "${_p}")"
+    : > "${_dir}/${_p}"
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+      "${_AI_CONFIG_GIT}" -C "${_dir}" add -- "${_p}" || return 1
+  done
+}
+
+@test "_ai_config_tracked_items lists first components of tracked paths, sorted" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/c/.gitkeep .claude/b/x .claude/a
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'a\nb\nc' ]
+}
+
+@test "_ai_config_tracked_items omits tracked dot-names" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a .claude/.hidden
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a" ]
+}
+
+@test "_ai_config_tracked_items omits untracked files" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a
+  : > "${BATS_TEST_TMPDIR}/r/.claude/u"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a" ]
+}
+
+@test "_ai_config_tracked_items fails with empty stdout outside a repo" {
+  mkdir -p "${BATS_TEST_TMPDIR}/plain/.claude"
+  : > "${BATS_TEST_TMPDIR}/plain/.claude/a"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/plain" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_ai_config_tracked_items fails when the subdir has no tracked items" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .cursor/x
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_ai_config_tracked_items ignores an exported GIT_DIR" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a .claude/b
+  _tracked_repo "${BATS_TEST_TMPDIR}/decoy" .claude/zzz
+  export GIT_DIR="${BATS_TEST_TMPDIR}/decoy/.git"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  unset GIT_DIR
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'a\nb' ]
+}
+
+@test "track_ai_config_fixture tracks empty directories and the minimum layout" {
+  mkdir -p "${BATS_TEST_TMPDIR}/f/.claude/emptydir"
+  track_ai_config_fixture "${BATS_TEST_TMPDIR}/f"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/f" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'emptydir\nsettings.json' ]
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/f" .cursor
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "rules" ]
+}

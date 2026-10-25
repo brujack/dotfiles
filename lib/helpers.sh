@@ -126,6 +126,32 @@ safe_link() {
   log_info "Linked ${dest} → ${src}"
 }
 
+# _ai_config_tracked_items <repo_dir> <subdir>
+# Prints, one per line and LC_ALL=C sorted, the distinct first path component
+# below <subdir>/ of every file git tracks there, skipping dot-names. Linking
+# only tracked items keeps runtime state (sessions, caches) out of $HOME links.
+# Returns 1 with nothing printed when git fails or tracks nothing, so callers
+# fail closed instead of falling back to a directory glob. git is
+# ${_AI_CONFIG_GIT:-git} with the four repo-location variables stripped: git -C
+# does not override an inherited GIT_DIR (see shell.md).
+_ai_config_tracked_items() {
+  local _repo_dir="$1" _subdir="$2" _git="${_AI_CONFIG_GIT:-git}"
+  local _out _rc _path _rest _names=""
+  _out="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    "${_git}" -C "${_repo_dir}" ls-files -z -- "${_subdir}" 2>/dev/null | tr '\0' '\n'; \
+    exit "${PIPESTATUS[0]}")"
+  _rc=$?
+  [[ ${_rc} -eq 0 ]] || return 1
+  while IFS= read -r _path; do
+    _rest="${_path#"${_subdir}"/}"
+    _rest="${_rest%%/*}"
+    [[ -n ${_rest} && ${_rest} != .* ]] || continue
+    _names+="${_rest}"$'\n'
+  done <<< "${_out}"
+  [[ -n ${_names} ]] || return 1
+  printf '%s' "${_names}" | LC_ALL=C sort -u
+}
+
 quiet_which() {
   which "$1" &>/dev/null
 }
