@@ -12,7 +12,7 @@ Running `setup_env.sh -t setup` on a fresh machine:
 - Creates `~/git-repos/personal/` and clones related repos
 - Installs all tools defined in `Brewfile` (via Homebrew)
 - Symlinks dotfiles from this repo into `$HOME` (`.zshrc`, `.vimrc`, `.tmux.conf`, `.gitconfig_*`, etc.)
-- Symlinks Claude Code and Cursor config from the `ai-config` repo into `~/.claude/` and `~/.cursor/`
+- Symlinks the Claude Code and Cursor config items git tracks in the `ai-config` repo into `~/.claude/` and `~/.cursor/` (see [ADR-0050](docs/adr/0050-ai-config-links-come-from-the-tracked-list.md))
 - Installs Oh-My-Zsh, Starship, tpm (tmux plugins), pyenv, rbenv, and Ansible virtualenv
 - Sets zsh as the default shell
 - Applies macOS system defaults (`.osx.sh`)
