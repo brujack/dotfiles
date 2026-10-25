@@ -1,8 +1,9 @@
-# pre-push: refuse a push whose tested tree has changes not in the pushed commit
+# pre-push: test the pushed commit in a clean checkout when the working tree is dirty
 
 - **Date:** 2026-10-25
 - **Backlog row:** `docs/superpowers/README.md` P2, "`scripts/pre-push` tests uncommitted edits along with the pushed commit"
-- **Operator decision (2026-10-25):** refuse on a dirty tree (fail closed), rather than testing the pushed commit from a clean export. Consistent with the 2026-10-22 decision in `2026-10-22-pre-push-wrong-tree-refusal-design.md`.
+- **Operator decision (2026-10-25, first):** refuse on a dirty tree, rather than testing the pushed commit from a clean export.
+- **Operator decision (2026-10-25, revised after Step 8 round 2):** when the tree is dirty, the hook tests the pushed commit in a temporary clean checkout instead of refusing (option A). This reverses N1 of `2026-10-22-pre-push-wrong-tree-refusal-design.md` for the dirty-tree case only. Neither spec recorded a reason for the earlier preference not to export; none was given when A was chosen.
 
 ## Problem
 
@@ -19,143 +20,158 @@ So an edit that is not in the pushed commit can change the verdict in either dir
 - **False red:** a half-finished edit for the next task fails the suite and blocks a correct
   push.
 
-**The trade this design makes.** It removes the false green and does not remove the false red:
-it widens it. Today a dirty tree blocks a push only when the edit fails the suite; with this
-check any dirty tree blocks every push that would run the suite, pass or fail. In exchange the
-verdict, when the suite runs, is always the pushed commit's. The one design that removes both
-directions (test the pushed commit from a clean export) was declined by the operator on
-2026-10-22 and 2026-10-25. How often a dirty tree has actually produced a false green is
-unmeasured; the operator accepted proceeding without that measurement (Multi-Lens Review,
-Goal-Fit and Ergonomics assumptions).
-
-The hazard includes untracked files, not only edits to tracked ones. The bats file list is a
-filesystem walk (CLAUDE.md, Testing), so an untracked `tests/<x>.bats` that is not ignored is
-run by the suite. Ignored files (`.venv`, coverage output) do not affect the verdict this way
-and are out of scope.
+The hazard includes untracked files, not only edits to tracked ones. `Makefile:92` builds the
+bats file list with a `find tests` walk (deliberately, so new untracked `.bats` files run), so
+an untracked `tests/<x>.bats` that is not ignored is run by the suite. Ignored files do not
+reach the verdict this way.
 
 Premise checked 2026-10-25 against `origin/master` a949f37a: nothing in the hook reads the
 working-tree status (`grep -n 'status' scripts/pre-push` matches one comment, line 35).
 
 **What else already catches it:** CI's `test` job, against the pushed commit. A false green
-therefore cannot merge. Direct-to-master pushes never run the suite (inert paths only), so no
-false green can land on master either. The cost of the gap is a wasted CI round trip (false
-green) or a blocked correct push (false red), which is why this is P2, not P1.
+therefore cannot merge, and direct-to-master pushes never run the suite (inert paths only).
+The cost of the gap is a wasted CI round trip (false green) or a blocked correct push (false
+red), which is why this is P2. How often either has happened is unmeasured; the operator
+accepted proceeding without that measurement.
 
-**No stash in the remedy.** The stash stack is shared by the main checkout and every worktree,
-and `core.md` git-workflow-018 tells every session to drop stashes that look abandoned at
-session start and end. Work parked there for the length of a suite run can be dropped by a
-peer's sweep, and a per-commit tag cannot tell two worktrees at the same `HEAD` apart. The
-remedy therefore never routes work through the stash.
+**Why not refuse.** Step 8 round 2 reviewed a refuse-plus-remedy design and found every
+finding in the remedy: printed lines sharing shell state an agent's Bash calls do not keep, a
+3-minute suite under a 120 s default tool timeout, `-u`/`--force-with-lease` silently dropped,
+unquoted refs pasted into a shell, an untested push line, and a "delete them" line inviting
+an agent to destroy files. The remedy was a hand-run clean checkout; doing the same thing in
+the hook removes the remedy and both verdict errors.
 
-No submodules exist (`git ls-files -s | grep -c '^160000'` → 0), so no submodule handling is
-needed.
+No submodules exist (`git ls-files -s | grep -c '^160000'` → 0). No `post-checkout` hook is
+installed (`.git/hooks` holds `commit-msg`, `pre-commit`, `pre-push` only), so
+`git worktree add` runs no repo hook.
 
 ## Design
 
-One new check in `scripts/pre-push`, placed after the wrong-tree refusal and before the
-`unset GIT_DIR …` line and `make`. Reaching it means the suite would run and every pushed ref
-is at `REPO_ROOT`'s `HEAD`.
+One change in `scripts/pre-push`, after the wrong-tree refusal, replacing the final
+`make -C "${REPO_ROOT}" test`. Reaching it means the suite would run and every pushed ref is at
+`tree_head`, `REPO_ROOT`'s `HEAD`.
 
-1. Read the status of the tree `make` will test, with the git environment stripped exactly as
-   the `tree_head` read is:
+1. **Read the status** of `REPO_ROOT`, with the git environment stripped exactly as the
+   `tree_head` read is:
 
    ```bash
    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
        git -C "${REPO_ROOT}" --no-optional-locks status --porcelain --untracked-files=all
    ```
 
-   The read sits in a conditional (the hook runs under `set -e`). `--no-optional-locks` stops
-   `git status` from refreshing the index's stat cache, so the hook writes nothing to the index
-   (N2) and cannot contend for `index.lock` with a concurrent session in the same checkout.
+   Inside a conditional (the hook runs under `set -e`). `--no-optional-locks` keeps `git status`
+   from rewriting the index's stat cache, so the hook writes nothing to the index and cannot
+   contend for `index.lock` with a concurrent session.
 
-2. If the read fails, refuse: exit 1 with the message below plus a line saying the working-tree
-   status could not be read. Fail closed.
+2. **Clean (read succeeded, output empty):** unchanged path. `unset GIT_DIR …`, then
+   `make -C "${REPO_ROOT}" test`.
 
-3. If the output is non-empty, refuse: exit 1 and print to stderr
+3. **Dirty, or the read failed:** test `tree_head` in a temporary detached worktree. Print one
+   line to stderr, either
 
    ```
-   pre-push: the suite tests this checkout's working tree, which has changes not in the pushed commit:
-     <porcelain line>
-     ...
-   If they belong in this push: commit them, then push again.
-   If they belong nowhere: delete them, or move them out of the repository.
-   To keep them where they are, push from a clean checkout of the pushed commit:
-     d="$(mktemp -d)" && git worktree add --detach "${d}" <sha>
-     git -C "${d}" push <remote> <src>:<remote_ref>
-     git worktree remove "${d}"
+   pre-push: working tree has <N> uncommitted or untracked path(s); testing <sha7> in a clean temporary checkout.
    ```
 
-   `<sha>` is `tree_head` in full; there is one `push` line per pushed ref, built exactly as
-   the wrong-tree remedy builds its lines (`<remote>` only when `$1` is a configured remote
-   name, `<src>` the `local_ref` when it starts with `refs/`, else the full `local_sha`). The
-   wrong-tree check has already established that every pushed ref is at `tree_head`, so one
-   worktree serves all of them. In that worktree `HEAD` is the pushed commit and the tree is
-   clean, so the hook's wrong-tree and dirty-tree checks both pass there and the suite tests
-   exactly what is pushed. Nothing is placed in shared state a peer can remove.
+   or, for a failed read, `pre-push: could not read the working-tree status; testing <sha7> in a clean temporary checkout.`
+   Then run, in a subshell so the traps and variables do not leak:
 
-   The delete-or-move line exists so the easiest way past the refusal is not committing a
-   stray file into the PR.
+   ```bash
+   (
+       _tmp_root="$(mktemp -d)" || { _no_checkout; exit 1; }
+       _tree="${_tmp_root}/tree"
+       trap '_git_stripped worktree remove --force "${_tree}" 2>/dev/null; rm -rf "${_tmp_root}"' EXIT
+       trap 'exit 130' INT TERM
+       _git_stripped worktree add --quiet --detach "${_tree}" "${tree_head}" || { _no_checkout; exit 1; }
+       unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+       make -C "${_tree}" test
+   )
+   ```
 
-   At most 20 porcelain lines are printed; beyond that, one `  … and N more` line.
+   `_git_stripped` is `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}"`.
+   `_no_checkout` prints `pre-push: could not create a temporary checkout of <sha7>; push refused.`
+   The hook's exit status is the subshell's: `make`'s; 1 if `mktemp` or `worktree add` failed
+   (fail closed); 130 on interrupt.
 
-4. Otherwise fall through to `unset` and `make` unchanged.
+   - `mktemp -d` takes no template, so it honours `TMPDIR` on GNU and BSD alike; tests point
+     `TMPDIR` at `BATS_TEST_TMPDIR`.
+   - The trap is installed only after `_tmp_root` is non-empty, and the worktree lives one
+     level below it, so neither cleanup command can receive an empty or foreign path
+     (core.md shell-010).
+   - `--force` is safe: the worktree is detached, created by this run, and holds no work.
+   - `worktree remove --force` deletes both the directory and its registration. The cleanup
+     never runs `git worktree prune`: prune clears every stale registration in the repository,
+     including other sessions', so it would act on paths this run did not create.
+   - Only `kill -9` of the hook skips the trap. The leftover is one directory under `TMPDIR`
+     and its registration; `git worktree list` shows it, and the operator removes it.
+   - Measured 2026-10-25 on a stand-alone script, not the hook itself: a
+     `( mktemp -d; trap … EXIT; trap 'exit 130' INT TERM; sleep )` subshell sent SIGINT ran its
+     EXIT trap and removed the directory. The `interrupt` case measures the hook.
 
-**Order:** the wrong-tree check runs first. A push from the wrong checkout is already explained
-by that refusal; reporting the other checkout's dirtiness would only confuse the remedy.
+**Scope of the change:** the clean path, the inert early exit, the budget check, the master
+guard and the wrong-tree refusal are unchanged. A dirty tree never refuses a push; only a
+failure to create the temporary checkout does.
 
-**Scope of the trigger:** the check only runs when the suite would run. A push whose every path
-is inert exits 0 before it, so docs pushes to master are unaffected by a dirty tree.
+**Cost:** one `git worktree add` of the repo (seconds) on a dirty push only. The suite's own
+time is unchanged. Two Step 8 lenses measured `make test` in a fresh checkout of `25cb6760` /
+`8a2f55fd`: rc 0, about 2.5-3 min, `git status --porcelain --untracked-files=all` empty after.
 
 ## Testing
 
-`tests/scripts/pre_push.bats`, reusing its fixture repo (`setup()`), `_commit_file`,
-`_write_make_mock` and `_run_pre_push`. Every case pushes to a feature ref, per the file's
-existing convention. Each refusal case asserts `make` was never called (no `MOCK_CALLS_FILE`
-line).
+`tests/scripts/pre_push.bats`, reusing its fixture repo, `_commit_file`, `_write_make_mock` and
+`_run_pre_push`, with `TMPDIR` exported to a directory under `BATS_TEST_TMPDIR`. The `make`
+mock already records its arguments; for these cases it also records, at the moment it runs,
+`git -C <dir> rev-parse HEAD` and `git -C <dir> status --porcelain` for its `-C` directory, so
+a case can assert the suite ran in a clean checkout of the pushed commit.
 
-| Case                               | Setup                                                                                         | Expect                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| modified tracked file              | commit `a.sh`, then edit it uncommitted                                                       | exit 1, message names ` M a.sh`, the three remedy lines with the full `HEAD` sha and the pushed ref, and no line containing `git stash`; no `make` |
-| staged-only change                 | edit and `git add`, no commit                                                                 | exit 1, path printed, no `make`                                             |
-| untracked file                     | create `tests/new.bats`, not added                                                            | exit 1, `?? tests/new.bats` printed, no `make`                              |
-| ignored file                       | `.gitignore` lists `cov/`, create `cov/x`                                                     | exit 0, `make test` called                                                  |
-| clean tree                         | committed, nothing else                                                                       | exit 0, `make test` called (positive control; existing cases also cover it) |
-| inert push, dirty tree             | push only a `.md` change, with an uncommitted `a.sh` edit                                     | exit 0, no `make`, no dirty-tree message                                    |
-| worktree push, dirty main checkout | fixture worktree at the pushed commit, clean; main checkout dirty; hook run from the worktree | exit 0, `make -C <worktree> test` called                                    |
-| status read fails                  | corrupt the fixture's `.git/index` (`printf x > .git/index`) after committing                 | exit 1, "could not read" line, no `make`                                    |
-| cap                                | 25 untracked files                                                                            | exactly 20 porcelain lines, then `… and 5 more`                             |
-| decoy `GIT_DIR`                    | main checkout at commit A, dirty; linked worktree at commit B (B changes a tracked file), clean; hook run with cwd in the worktree and `GIT_DIR=<main>/.git` exported, bypassing `_run_pre_push`'s unset | exit 0, `make -C <worktree> test` called (without the `env -u` strip, status reads main's index against the worktree's files and refuses) |
-| remedy works                       | dirty fixture checkout refused; then run the printed `worktree add` line and the hook from that worktree with the same ref line | second run exits 0 and calls `make -C <temp worktree> test`                 |
+| Case | Setup | Expect |
+| ---- | ----- | ------ |
+| clean tree | committed, nothing else | exit 0, `make -C <REPO_DIR> test`; no dirty line; no worktree created |
+| modified tracked file | commit `a.sh`, then edit it uncommitted | exit 0; dirty line names 1 path and the sha7; `make -C <TMPDIR>/…/tree test`, where that directory was at the pushed sha with empty status; afterwards the directory is gone and `git worktree list` lists only `REPO_DIR` |
+| uncommitted edit changes the verdict | committed `tests/x.bats` stub content `A`; working copy content `B`; `make` mock exits 0 only if the `-C` dir's `tests/x.bats` holds `A` | exit 0 (proves the suite saw the commit, not the edit) |
+| staged-only change | edit and `git add`, no commit | temporary checkout used (as above) |
+| untracked file | `tests/new.bats` created, not added | temporary checkout used; the dirty line counts 1 |
+| ignored file | `.gitignore` lists `cov/`, `cov/x` created | clean path: `make -C <REPO_DIR> test` |
+| suite fails in temp checkout | dirty tree, `make` mock exits 2 | exit non-zero; temp directory gone; `git worktree list` lists only `REPO_DIR` |
+| status read fails | corrupt `.git/index` (`printf x > .git/index`) after committing | exit 0 with the "could not read" line; temporary checkout used |
+| mktemp fails | dirty tree; `TMPDIR` names a directory that does not exist | exit 1 with the "could not create" line, `make` never called |
+| worktree add fails | dirty tree; a `PATH` `git` shim that fails only `worktree add` and passes every other call to the real git | exit 1 with the "could not create" line, `make` never called, the `mktemp` directory gone |
+| inert push, dirty tree | push only a `.md` change with an uncommitted `a.sh` edit | exit 0, no `make`, no dirty line |
+| worktree push, dirty main checkout | fixture worktree at the pushed commit, clean; main dirty; hook run from the worktree | clean path: `make -C <worktree> test` |
+| decoy `GIT_DIR` | main at A, dirty; linked worktree at B (B changes a tracked file), clean; hook run in the worktree with `GIT_DIR=<main>/.git` exported, bypassing `_run_pre_push`'s unset | clean path: `make -C <worktree> test` (without the strip, status reads main's index against the worktree's files and takes the temporary-checkout path) |
+| interrupt | dirty tree; `make` mock sleeps; send SIGINT to the hook's process group | non-zero exit; temp directory gone; `git worktree list` lists only `REPO_DIR` |
 
-The status-failure case uses a corrupted index rather than a production seam. Measured
-2026-10-25 in a scratch repo of the fixture's shape (one commit, `printf x > .git/index`):
-`git rev-parse --verify 'HEAD^{commit}'` exits 0 and `git status --porcelain` exits 128
-(`fatal: .git/index: index file smaller than expected`), so the wrong-tree check passes and
-the new branch is the one reached.
+The status-failure case uses a corrupted index. Measured 2026-10-25 in a scratch repo of the
+fixture's shape: `git rev-parse --verify 'HEAD^{commit}'` exits 0 and `git status --porcelain`
+exits 128 (`fatal: .git/index: index file smaller than expected`), so the wrong-tree check
+passes and the new branch is reached. `git worktree add` reads objects, not the index, so the
+temporary checkout still succeeds; if implementation measures otherwise, the expectation
+becomes exit 1 with the "could not create" line and R3 is amended.
 
 ## Docs
 
-- `CLAUDE.md`, Testing, the pre-push bullet list: one bullet stating the refusal and the
-  clean-worktree remedy, with a pointer to the knowledge entry.
+- `CLAUDE.md`, Testing, the pre-push bullet list: one bullet stating that a dirty tree makes the
+  hook test the pushed commit in a temporary clean checkout, with a pointer to the knowledge
+  entry.
 - `ai-config/docs/knowledge/dotfiles-bats-test-infrastructure.md` § `Testing: pre-commit and
-pre-push hooks`: the mechanism, the order relative to the wrong-tree check, and why untracked
-  files count.
+  pre-push hooks`: the mechanism, the cleanup guarantees and their `kill -9` limit, and why
+  untracked files count.
 - `docs/superpowers/README.md`: remove the P2 Backlog row; add the spec and plan rows.
 
 ## Requirements
 
 - **R1.** When the suite would run and every pushed ref is at `REPO_ROOT`'s `HEAD`, the hook runs `git --no-optional-locks status --porcelain --untracked-files=all` in `REPO_ROOT` with `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `GIT_INDEX_FILE` removed from its environment.
-- **R2.** A non-empty status output makes the hook exit 1 before `make` is called, printing to stderr the porcelain lines and a remedy with three options: commit; delete or move out of the repository; or push from a detached worktree at `REPO_ROOT`'s full `HEAD` sha, with one literal `git -C "${d}" push` line per pushed ref. No remedy line names `git stash`.
-- **R3.** A failed status read makes the hook exit 1 before `make` is called, with a line saying the working-tree status could not be read.
-- **R4.** At most 20 porcelain lines are printed; any remainder is reported as one `… and N more` line.
-- **R5.** The dirty-tree check runs after the wrong-tree refusal and after the inert early exit, so neither of those outcomes changes.
-- **R6.** Untracked files that are not ignored count as changes; ignored files do not.
-- **R7.** `tests/scripts/pre_push.bats` gains the eleven cases in the Testing table.
-- **V1.** In a fresh worktree of the branch, run `make test`, `make bash-coverage`, `make -C powershell test` and the `dod_log.py` record and finalize steps of the Phase 3 chain, then `git status --porcelain --untracked-files=all`; the output is empty (else the gate chain refuses its own push). Record the commands and the empty output in the PR body.
-- **V2.** Before merge, from a feature worktree with an uncommitted tracked edit, push the branch with the branch's own hook (`git -c core.hooksPath=<worktree>/scripts push`); it is refused with the R2 message. Running the three printed remedy lines pushes the branch with the suite run in the temporary worktree, and the edit is still present, unchanged, in the feature worktree afterwards. Record both outputs in the PR body.
-- **N1.** The hook itself does not change what the suite runs against: it creates no `git archive`, no temporary checkout and no switch. (The remedy's worktree is created by the operator, not the hook.)
-- **N2.** The hook never modifies the working tree, the index or the stash, and never runs the remedy on the operator's behalf.
-- **N3.** The inert set, the master guard, the budget check and the wrong-tree refusal are unchanged.
+- **R2.** When that read succeeds with empty output, the hook runs `make -C "${REPO_ROOT}" test` exactly as before.
+- **R3.** When the output is non-empty or the read fails, the hook prints one stderr line naming the path count (or the failed read) and the 7-character `HEAD` sha, creates a detached worktree at `HEAD` under a fresh `mktemp -d` directory, runs `make -C <that worktree> test`, and exits with `make`'s status.
+- **R4.** The temporary worktree's directory and its registration are removed on every exit of that step, including a failing suite and SIGINT/SIGTERM; cleanup commands only ever receive the path this run created.
+- **R5.** If the temporary directory or worktree cannot be created, the hook exits 1 without running `make`, printing `pre-push: could not create a temporary checkout of <sha7>; push refused.`
+- **R6.** Untracked files that are not ignored select the temporary-checkout path; ignored files do not.
+- **R7.** `tests/scripts/pre_push.bats` gains the fourteen cases in the Testing table, run with `TMPDIR` under `BATS_TEST_TMPDIR`.
+- **V1.** In a detached worktree under `/tmp` at the branch tip (the shape R3 creates), run the real `make test`; it exits 0. In a fresh feature worktree, after `make test`, `make bash-coverage`, `make -C powershell test` and the `dod_log.py` record and finalize steps, `git status --porcelain --untracked-files=all` is empty, so a gated push takes the clean path. Record commands and outputs in the PR body.
+- **V2.** Before merge, from the feature worktree with an uncommitted tracked edit, run the branch's hook on the branch's real ref line (`printf '<ref line>' | bash scripts/pre-push origin <url>`, not `-c core.hooksPath`, which leaks `GIT_CONFIG_PARAMETERS` into the suite): it prints the dirty line, the suite runs in a `/tmp` worktree and passes, the edit is still present afterwards, and `git worktree list` shows no leftover. Record the output in the PR body.
+- **N1.** The hook never modifies `REPO_ROOT`'s working tree, index or stash, and never commits, stashes or deletes on the operator's behalf.
+- **N2.** A dirty tree alone never refuses a push.
+- **N3.** The inert set, the master guard, the budget check and the wrong-tree refusal are unchanged; the clean path runs `make -C "${REPO_ROOT}" test` as today.
 
 ## Multi-Lens Review
 
@@ -179,3 +195,10 @@ Disposition: Addressed — (1) tenth Testing case `decoy GIT_DIR` added (plus an
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (reviewed at `8a2f55fd`, all three lenses)
+
+Goal-Fit — Finding: (1) The printed remedy was the declined clean-export design done by hand: a temporary detached worktree, safe enough to print, is safe enough for the hook to run, and doing so also removes the false red. (2) V2's pass half ran the installed master hook, not the branch's; `-c core.hooksPath` leaks `GIT_CONFIG_PARAMETERS` into the suite. Assumption: false-green frequency (unmeasured, as round 1).
+Ergonomics — Finding: (1) the remedy dropped `-u`/`--force-with-lease`, and for a `HEAD` local ref could not keep `-u`; (2) the three lines share `d`, and the 2.5-3 min suite exceeds the 120 s default Bash timeout; (3) no case ran the printed push line; (4) `worktree remove` refuses untracked residue. Assumption: sessions run the remedy as one shell unit.
+Risk — Finding: (1) per-call Bash loses `d`, so the push runs from the dirty tree and the worktree leaks; (2) "delete them" invites destructive agent action (behavior-004); (3) dropped flags; (4) no test ran the printed push line; (5) unquoted refs in pasted lines. Assumption: refused sessions follow the remedy rather than `--no-verify`.
+Disposition: Addressed — operator chose option A (2026-10-25): the hook tests the pushed commit in a temporary clean checkout instead of refusing, so the printed remedy and every finding on it are gone; V2 now runs the branch's hook directly with no `core.hooksPath`. The false-green-frequency assumption stays Accepted (round 1). The two remedy-behaviour assumptions no longer apply.
