@@ -74,10 +74,12 @@ own code writes through `~/.claude/<name>` and that must stay machine-local:
 2026-10-25 by `git grep` over ai-config's non-test `*.py`/`*.sh` for `Path.home() / ".claude"
 / "<name>"` and `${HOME}/.claude/<name>` (population: ai-config's tracked scripts and hooks at
 that commit; Claude Code's own `~/.claude` writers are not ai-config items and are not in
-scope). `loop-log` and `dispatch-log` are also written through `~/.claude`
-(`hooks/agent-dispatch-log.sh:36`, `hooks/dispatch-log.sh:64`), but they are tracked and
-linked by design, so their home-path fallback lands in ai-config; they are deliberately not
-in the list. A name in the list is never linked by the loop, tracked or not. A new
+scope). `dispatch-log` (`hooks/dispatch-log.sh:64`) and the four
+`telemetry_path.STREAMS` (`cost-log`, `loop-log`, `review-cycle`, `triage-log`; their
+`Path.home()` fallback is built from a variable, so the grep cannot see it and they were
+enumerated by reading `scripts/telemetry_path.py`) are also written through `~/.claude`, but
+they are tracked and linked by design, so their home-path fallback lands in ai-config; they
+are deliberately not in the list. A name in the list is never linked by the loop, tracked or not. A new
 home-anchored writer must be added to the list by hand; nothing detects the omission.
 
 ### The two loops
@@ -139,13 +141,15 @@ global `commit.gpgsign` or hook), and strips the four `GIT_*` variables, so thei
 stay unchanged.
 
 A second group is affected and is not reached by that builder: `run_setup_user` tests
-(`workflows.bats`, `unit.bats`, `launch_agents.bats`, `developer.bats`) leave
+(`workflows.bats`, `unit.bats`, `developer.bats`) leave
 `AI_CONFIG_DIR` at its source-time default derived from the real `HOME`
 (`lib/constants.sh`). On CI that path does not exist, so the helper fails, the function
 returns 1, and `run_setup_user` stops before the steps those tests assert; on `claude` the
 same path is the real ai-config, so they would pass locally by reading the real index.
 `load_mocks` therefore also defaults `_OVERRIDE_AI_CONFIG_DIR` to a per-test git fixture built
-by the same helper. The plan counts both groups with `grep`, not by estimate.
+by the same helper, rooted under `BATS_TEST_TMPDIR` (never `HOME`: `workflows.bats` calls
+`load_mocks` before it redirects `HOME`) and tracking at least one item under each of
+`.claude` and `.cursor`, so the default never takes the empty-list branch. The plan counts both groups with `grep`, not by estimate.
 
 All new cases in `tests/setup_env/install_guards.bats`, against a fixture ai-config built as a real
 git repo under `BATS_TEST_TMPDIR` (with `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
@@ -194,7 +198,7 @@ red; removing the empty-list check turns case 10 red.
 - **R9.** `[PR1]` The helper resolves git through `_AI_CONFIG_GIT` (default `git`), and `load_mocks` points it at real git so mocked tests query the fixture's real index.
 - **R10.** `[PR1]` `CLAUDE.md` § Symlink Strategy states that only items git tracks in ai-config are linked and that stale links are warned about, not removed.
 - **R11.** `[PR1]` A name in `CLAUDE_HOME_STORES` (`dod-log`, `logs`, `plugin-verdicts.json`, `skill-log`, `skip-ledger.jsonl`) is never linked into `~/.claude`, even when ai-config tracks it.
-- **R12.** `[PR1]` `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a per-test git fixture, so no test reads the real ai-config index.
+- **R12.** `[PR1]` `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a per-test git fixture under `BATS_TEST_TMPDIR` that tracks at least one item under each of `.claude` and `.cursor`, so no test reads the real ai-config index.
 - **V1.** On `claude` after merge, run only the function under dry run (`DRY_RUN=1 bash -c 'source setup_env.sh; detect_env; setup_dotfile_symlinks'` from the main checkout, never a full `-t setup_user`); it warns for the five stale `.claude` links and `.cursor/plugins` and its log names no `Linked` line for an untracked item.
 - **V2.** In ai-config, after notifying its session: update `.claude/memory/ai-config-cursor-plugin-architecture.md` and `docs/knowledge/dotfiles-conventions.md` (both describe `~/.cursor/plugins` as linked) and add a Backlog row correcting `docs/superpowers/specs/2026-07-25-role-model-enforcement-design.md:99`, which claims `~/.claude/settings.local.json` governs all nine repos (Claude Code reads it only for sessions started in `$HOME`, per `code.claude.com/docs/en/permissions.md`).
 - **N1.** No symlink is removed automatically by this change.
@@ -237,3 +241,9 @@ Reviewed at commit: `0df33b5c` (all three lenses re-run: the round-1 revision ch
 **Ergonomics.** Finding: no load-bearing issues; remedies paste-safe on `claude` and `workstation` (`workstation` adds stale `scheduled_tasks.lock`, remedy `rm`). Cases 2 and 5 pass vacuously on a silent helper and need a positive control; case numbering out of order; R7 wording loose on whether the explicit `projects` link survives a helper failure. Assumption: none genuinely uncertain. Disposition: Addressed — positive controls in cases 2 and 5, cases renumbered, R7 failure path now skips the explicit links too.
 
 **Risk.** Finding: about 50 `run_setup_user` tests in `workflows.bats`, `unit.bats`, `launch_agents.bats` and `developer.bats` leave `AI_CONFIG_DIR` at the real-`HOME` default; on CI that path is missing, so the helper fails and `run_setup_user` stops (red on CI, green on `claude` via the real index). The fixture builder's `git commit` fails with no `user.name` on CI; `git add` alone suffices. `cp -a` on a non-empty `worktrees` would duplicate live worktrees. Assumption: nothing writes through the untracked links with cwd=`$HOME` on any machine. Disposition: Addressed — R12 (`load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a git fixture), builder uses `git add` only, `worktrees` and every non-home-store name get `rm <link>`.
+
+### Round 3 (scoped)
+
+Reviewed at commit: `a366a7af`, Risk lens only, scoped to the round-2 diff (`0df33b5c..a366a7af`).
+
+**Risk.** Finding: no load-bearing issues; `CLAUDE_HOME_STORES` re-derived by a wider grep (`Path.home()`, `expanduser`, `${HOME}/.claude`, 47 hits) and found correct and complete. Three precision gaps: the carve-out omitted `telemetry_path.STREAMS` (`cost-log`, `review-cycle`, `triage-log`), correct only because they are tracked; R12 did not fix the fixture's root or minimum contents; `launch_agents.bats` was wrongly listed as affected. Assumption: none genuinely uncertain; future home-anchored writers are a disclosed limit. Disposition: Addressed — wording-level fixes to the carve-out, R12 and the affected-file list; no further round.
