@@ -932,6 +932,7 @@ _make_ledger_stub() {
   [[ "${output}" == *"state-ledger pull failed"* ]]
   [[ "${output}" == *"Permission denied (publickey)"* ]]
   [[ "${output}" == *"fatal: Could not read from remote repository."* ]]
+  [[ "${output}" == *"and the repository exists."* ]]
 }
 
 @test "ensure_state_ledger names cause: init traceback shows git's fatal line" {
@@ -963,6 +964,7 @@ EOF
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"state-ledger clone failed"* ]]
   [[ "${output}" == *"fatal: clone-cause"* ]]
+  [ "$(grep -c 'fatal: clone-cause' <<< "${output}")" -eq 1 ]
 }
 
 @test "ensure_state_ledger names cause: keeps first 3 and last stderr lines only" {
@@ -973,6 +975,17 @@ EOF
   [[ "${output}" == *"line-e1"* && "${output}" == *"line-e2"* ]]
   [[ "${output}" == *"line-e3"* && "${output}" == *"line-e6"* ]]
   [[ "${output}" != *"line-e4"* && "${output}" != *"line-e5"* ]]
+
+  printf 'five-e1\nfive-e2\nfive-e3\nfive-e4\nfive-e5\n' > "${BATS_TEST_TMPDIR}/five.txt"
+  _make_ledger_stub 1 "${BATS_TEST_TMPDIR}/five.txt"
+  run ensure_state_ledger
+  [[ "${output}" == *"five-e5"* ]]
+  [[ "${output}" != *"five-e4"* ]]
+
+  printf 'three-e1\nthree-e2\nthree-e3\n' > "${BATS_TEST_TMPDIR}/three.txt"
+  _make_ledger_stub 1 "${BATS_TEST_TMPDIR}/three.txt"
+  run ensure_state_ledger
+  [ "$(grep -c 'three-e3' <<< "${output}")" -eq 1 ]
 }
 
 @test "ensure_state_ledger names cause: empty stderr says so" {
