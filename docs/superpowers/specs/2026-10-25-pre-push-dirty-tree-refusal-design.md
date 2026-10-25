@@ -133,3 +133,29 @@ pre-push hooks`: the mechanism, the order relative to the wrong-tree check, and 
 - **N1.** The hook does not change what the suite runs against: no `git archive`, no temporary checkout, no switching.
 - **N2.** The hook never modifies the working tree, the index or the stash; it never stashes on the operator's behalf.
 - **N3.** The inert set, the master guard, the budget check and the wrong-tree refusal are unchanged.
+
+## Multi-Lens Review
+
+Reviewed at commit: `25cb6760` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: (1) The Problem section overclaims. The check removes false greens but makes false reds worse: today a half-finished edit blocks a push only when it fails the suite, and under the check any dirty tree blocks every push that runs the suite. The honest trade is that the hook fails closed on every dirty push in exchange for removing the false-green CI round trip. (2) The stash remedy parks uncommitted work in the stash stack, which every worktree shares, and `core.md` git-workflow-018 tells peer sessions to drop stashes that look abandoned at session start and end. A `pre-push-<sha7>` entry sitting there through a multi-minute suite run can be dropped by a peer's sweep. The awk resolver fixes popping the wrong entry; it does nothing about the entry being deleted. (3) The reads-it test passes: the refusal changes a decision (exit 1 before `make`). (4) Of the nine cases, five expect refusal and four expect a pass. A status read that always returned empty, or always returned non-empty, would fail some of them, so the cases discriminate.
+Assumption: false greens caused by a dirty tree happen often enough to justify a hard refusal. Confirm or refute from the CI history: in the `test`-job failures among the last 200 `ci.yml` runs (about 14 branches), check whether the next commit only added content the pusher already had locally.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) The remedy makes committing junk the easiest way past the refusal: "commit them" is one command, while the stash route is three plus a hand re-run. The trigger also fires on stray untracked files the suite never reads. The message needs a delete-or-move option for files that do not belong in the commit, and should print the literal push command, the way the wrong-tree remedy already does, instead of `<re-run the push>`. Measured, no defect: `make test` in a fresh clone of 25cb6760 exits 0 and leaves `git status --porcelain --untracked-files=all` empty (residue only in the ignored `.hypothesis/` and `tests/__pycache__/`). `.claude/*`, `coverage/` and `.coverage` are ignored. The pop line with no matching tag fails with rc 1 and touches nothing.
+Assumption: worktrees are usually clean when a session pushes, so most refusals point at a real hazard. Unmeasured. Confirm or refute from the `git status` output in dotfiles session transcripts just before a `git push`, or from a two-week log of refusals split into suite-read paths and stray files.
+Disposition:
+
+### Risk
+
+Finding: (1) Nothing tests R1's environment strip. Every case runs through `_run_pre_push`, which unsets the `GIT_*` variables first (`pre_push.bats:58`), so a `git status` with no `env -u` prefix passes all nine cases. Measured: with `GIT_DIR=<main>/.git`, `git -C wt status` reads the main checkout's index against wt's files, so when the two HEADs differ it would refuse a clean push. Needs a tenth case: export `GIT_DIR` naming the other checkout, put the worktree at a different commit with a clean tree, and expect exit 0. (2) `pre-push-<sha7>` is unique per commit, not per checkout. Two worktrees at the same HEAD get the same tag, and the pop line takes the newest match (measured: of two entries with the same tag, `stash@{0}` is returned).
+Assumption: the full Phase 3 gate chain leaves the worktree clean under `--untracked-files=all`, not just `make test`. If any gate writes a file that is not ignored, every gated push is refused. Confirm by running `make test`, `make bash-coverage`, `cd powershell && make test` and the `dod_log.py` record and finalize steps in a fresh worktree, then `git status --porcelain --untracked-files=all`.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
