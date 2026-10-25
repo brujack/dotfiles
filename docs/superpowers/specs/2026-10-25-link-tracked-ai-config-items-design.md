@@ -207,6 +207,10 @@ red; removing the empty-list check turns case 10 red.
 - **N3.** `safe_link` is not modified.
 - **N4.** No fallback to the glob when git fails.
 
+## Amendments
+
+- R8 -> An existing symlink in `~/.claude` or `~/.cursor` whose `readlink` text is `<ai_config_dir>/<subdir>/<name>`, where `<name>` is not the name the function links explicitly (`projects` for `.claude`, `rules` for `.cursor`) and is untracked, in `CLAUDE_HOME_STORES`, or a name the loop skips (`rules` for `.claude`, `User` for `.cursor`), produces exactly one warning naming it and a remedy chosen by the name (`rm <link> && mkdir <link> && cp -a <target>/. <link>/` for a `CLAUDE_HOME_STORES` directory with contents, `rm <link> && cp -a <target> <link>` for a `CLAUDE_HOME_STORES` file, `rm <link>` otherwise), and is left in place — a stale `~/.claude/rules` link loads ai-config's project rules as user-level rules, the harm the skip exists to prevent, and the original wording exempted it because `rules` is tracked
+
 ## Multi-Lens Review
 
 Reviewed at commit: `db917b56` (Step 7 self-review commit, before Step 8 dispatch)
