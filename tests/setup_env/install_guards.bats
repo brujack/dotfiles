@@ -1435,7 +1435,7 @@ _tracked_repo() {
 @test "_ai_config_tracked_items fails with empty stdout outside a repo" {
   mkdir -p "${BATS_TEST_TMPDIR}/plain/.claude"
   : > "${BATS_TEST_TMPDIR}/plain/.claude/a"
-  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/plain" .claude
+  run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/plain" .claude
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
 }
@@ -1466,4 +1466,27 @@ _tracked_repo() {
   run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/f" .cursor
   [ "${status}" -eq 0 ]
   [ "${output}" = "rules" ]
+}
+
+@test "_ai_config_tracked_items keeps names containing a space" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" ".claude/sp ace/f" .claude/plain
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'plain\nsp ace' ]
+}
+
+@test "_ai_config_tracked_items fails closed on a name containing a newline" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" $'.claude/a\nb/f' .claude/ok
+  run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_ai_config_tracked_items fails closed when git exits non-zero after printing" {
+  local _stub="${BATS_TEST_TMPDIR}/git-stub"
+  printf '#!/usr/bin/env bash\nprintf ".claude/a\\0.claude/b\\0"\nexit 3\n' > "${_stub}"
+  chmod +x "${_stub}"
+  _AI_CONFIG_GIT="${_stub}" run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
 }
