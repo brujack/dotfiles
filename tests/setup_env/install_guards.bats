@@ -1554,8 +1554,10 @@ _allowlist_env() {
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ "$(readlink "${HOME}/.claude/CLAUDE.md")" = "${AC}/.claude/CLAUDE.md" ]
-  [ ! -e "${HOME}/.claude/sessions" ] && [ ! -L "${HOME}/.claude/sessions" ]
-  [ ! -e "${HOME}/.claude/stray.txt" ] && [ ! -L "${HOME}/.claude/stray.txt" ]
+  [ ! -e "${HOME}/.claude/sessions" ]
+  [ ! -L "${HOME}/.claude/sessions" ]
+  [ ! -e "${HOME}/.claude/stray.txt" ]
+  [ ! -L "${HOME}/.claude/stray.txt" ]
 }
 
 @test "setup_dotfile_symlinks links a directory tracked only by its .gitkeep" {
@@ -1581,7 +1583,8 @@ _allowlist_env() {
 
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
-  [ ! -e "${HOME}/.claude/rules" ] && [ ! -L "${HOME}/.claude/rules" ]
+  [ ! -e "${HOME}/.claude/rules" ]
+  [ ! -L "${HOME}/.claude/rules" ]
   [ "$(readlink "${HOME}/.claude/projects")" = "${AC}/.claude/projects" ]
   [ "$(printf '%s\n' "${output}" | command grep -c "${HOME}/.claude/projects →")" -eq 1 ]
   [ ! -L "${HOME}/.cursor/User" ]
@@ -1598,7 +1601,8 @@ _allowlist_env() {
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ "$(readlink "${HOME}/.cursor/skills-cursor")" = "${AC}/.cursor/skills-cursor" ]
-  [ ! -e "${HOME}/.cursor/plugins" ] && [ ! -L "${HOME}/.cursor/plugins" ]
+  [ ! -e "${HOME}/.cursor/plugins" ]
+  [ ! -L "${HOME}/.cursor/plugins" ]
 }
 
 @test "setup_dotfile_symlinks warns once about a stale link to an untracked item and keeps it" {
@@ -1626,7 +1630,8 @@ _allowlist_env() {
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"ERROR"*"${AC}/.claude"* ]]
   [[ "${output}" == *"setup_user"* ]]
-  [ ! -e "${HOME}/.claude/CLAUDE.md" ] && [ ! -L "${HOME}/.claude/projects" ]
+  [ ! -e "${HOME}/.claude/CLAUDE.md" ]
+  [ ! -L "${HOME}/.claude/projects" ]
   [ ! -L "${HOME}/.cursor/rules" ]
   # the rest of the function still ran
   [ -L "${HOME}/.vimrc" ]
@@ -1655,7 +1660,8 @@ _allowlist_env() {
   run setup_dotfile_symlinks
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"ERROR"*"${AC}/.claude"* ]]
-  [ ! -e "${HOME}/.claude/loose" ] && [ ! -L "${HOME}/.claude/projects" ]
+  [ ! -e "${HOME}/.claude/loose" ]
+  [ ! -L "${HOME}/.claude/projects" ]
   [ "$(readlink "${HOME}/.cursor/x")" = "${AC}/.cursor/x" ]
 }
 
@@ -1676,7 +1682,8 @@ _allowlist_env() {
   _wt="$(printf '%s\n' "${output}" | command grep "WARN.*${HOME}/.claude/worktrees")"
   [[ "${_wt}" == *"rm ${HOME}/.claude/worktrees"* ]]
   [[ "${_wt}" != *"cp -a"* ]]
-  [ -L "${HOME}/.claude/dod-log" ] && [ -L "${HOME}/.claude/worktrees" ]
+  [ -L "${HOME}/.claude/dod-log" ]
+  [ -L "${HOME}/.claude/worktrees" ]
 }
 
 @test "setup_dotfile_symlinks never links a tracked home-store name over a real directory" {
@@ -1690,7 +1697,90 @@ _allowlist_env() {
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ "$(readlink "${HOME}/.claude/CLAUDE.md")" = "${AC}/.claude/CLAUDE.md" ]
-  [ -d "${HOME}/.claude/dod-log" ] && [ ! -L "${HOME}/.claude/dod-log" ]
+  [ -d "${HOME}/.claude/dod-log" ]
+  [ ! -L "${HOME}/.claude/dod-log" ]
   [ -f "${HOME}/.claude/dod-log/live.json" ]
   [ ! -e "${HOME}/.claude/dod-log.bak" ]
+}
+
+@test "setup_dotfile_symlinks warns about a stale ~/.claude/rules link, since rules is never linked" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/rules" "${HOME}/.claude"
+  : > "${AC}/.claude/rules/r.md"
+  track_ai_config_fixture "${AC}"
+  ln -s "${AC}/.claude/rules" "${HOME}/.claude/rules"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/rules")" -eq 1 ]
+  [ -L "${HOME}/.claude/rules" ]
+}
+
+@test "setup_dotfile_symlinks names the file remedy for a stale home-store file link" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude" "${HOME}/.claude"
+  printf '{}\n' > "${AC}/.claude/skip-ledger.jsonl"
+  track_ai_config_fixture "${AC}"
+  ln -s "${AC}/.claude/skip-ledger.jsonl" "${HOME}/.claude/skip-ledger.jsonl"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"rm ${HOME}/.claude/skip-ledger.jsonl && cp -a ${AC}/.claude/skip-ledger.jsonl ${HOME}/.claude/skip-ledger.jsonl"* ]]
+}
+
+@test "setup_dotfile_symlinks names plain rm for a stale link to an empty home-store directory" {
+  _allowlist_env
+  mkdir -p "${HOME}/.claude"
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/logs"
+  ln -s "${AC}/.claude/logs" "${HOME}/.claude/logs"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  local _l
+  _l="$(printf '%s\n' "${output}" | command grep "WARN.*${HOME}/.claude/logs")"
+  [[ "${_l}" == *"Fix by hand: rm ${HOME}/.claude/logs" ]]
+}
+
+@test "setup_dotfile_symlinks does not warn about stale links when the tracked list is unavailable" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/x" "${HOME}/.claude"
+  ln -s "${AC}/.claude/x" "${HOME}/.claude/x"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/x")" -eq 0 ]
+}
+
+@test "setup_dotfile_symlinks compares readlink text exactly, not by prefix" {
+  _allowlist_env
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/bar" "${HOME}/.claude"
+  ln -s "${AC}/.claude/bar" "${HOME}/.claude/foo"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/foo")" -eq 0 ]
+}
+
+@test "setup_dotfile_symlinks skips a tracked item removed from the working tree" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude"
+  : > "${AC}/.claude/gone.md"
+  : > "${AC}/.claude/kept.md"
+  track_ai_config_fixture "${AC}"
+  rm "${AC}/.claude/gone.md"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/kept.md")" = "${AC}/.claude/kept.md" ]
+  [ ! -L "${HOME}/.claude/gone.md" ]
+}
+
+@test "load_mocks defaults _OVERRIDE_AI_CONFIG_DIR to a tracked fixture under BATS_TEST_TMPDIR" {
+  [[ "${_OVERRIDE_AI_CONFIG_DIR}" == "${BATS_TEST_TMPDIR}/"* ]]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude
+  [ "${status}" -eq 0 ]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .cursor
+  [ "${status}" -eq 0 ]
 }

@@ -155,30 +155,35 @@ _ai_config_tracked_items() {
   printf '%s' "${_names}" | LC_ALL=C sort -u
 }
 
-# _is_claude_home_store <name> -- rc 0 when <name> is machine-local state.
-_is_claude_home_store() {
-  local _n
-  for _n in "${CLAUDE_HOME_STORES[@]}"; do
-    [[ ${_n} == "$1" ]] && return 0
+# _in_list <needle> <item...> -- rc 0 when <needle> equals one item exactly.
+_in_list() {
+  local _needle="$1" _item; shift
+  for _item in "$@"; do
+    [[ ${_item} == "${_needle}" ]] && return 0
   done
   return 1
 }
 
-# _link_ai_config_subdir <ai_config_dir> <subdir> <skip...>
-# Links each git-tracked item of <subdir> into $HOME/<subdir>. Returns 1, linking
-# nothing, when the tracked list is unavailable (fail closed, no glob fallback).
+# _is_claude_home_store <name> -- rc 0 when <name> is machine-local state.
+_is_claude_home_store() {
+  _in_list "$1" "${CLAUDE_HOME_STORES[@]}"
+}
+
+# _link_ai_config_subdir <ai_config_dir> <subdir> <tracked-list> <skip...>
+# Links each name in <tracked-list> (newline-separated, from
+# _ai_config_tracked_items) into $HOME/<subdir>, except <skip...>.
 _link_ai_config_subdir() {
-  local _dir="$1" _sub="$2" _name _tracked; shift 2
-  local -a _skip=("$@")
-  _tracked="$(_ai_config_tracked_items "${_dir}" "${_sub}")" || return 1
-  while IFS= read -r _name; do
-    [[ " ${_skip[*]} " == *" ${_name} "* ]] && continue
+  local _dir="$1" _sub="$2" _tracked="$3" _name; shift 3
+  local -a _names
+  mapfile -t _names <<< "${_tracked}"
+  for _name in "${_names[@]}"; do
+    _in_list "${_name}" "$@" && continue
     # Home stores are tracked-but-machine-local; linking one would shadow the real data.
     [[ ${_sub} == .claude ]] && _is_claude_home_store "${_name}" && continue
     [[ -e "${_dir}/${_sub}/${_name}" ]] || continue
     safe_link "${_dir}/${_sub}/${_name}" "${HOME}/${_sub}/${_name}"
-  done <<< "${_tracked}"
-  # A failed safe_link already logged itself; rc 1 is reserved for "list unavailable".
+  done
+  # A failed safe_link already logged itself.
   return 0
 }
 
@@ -194,21 +199,23 @@ _stale_link_remedy() {
   fi
 }
 
-# _warn_stale_ai_config_links <ai_config_dir> <subdir> <tracked-list> <explicit...>
-# Warns (never removes) about $HOME/<subdir> links that safe_link made earlier
-# to ai-config items the allowlist no longer links. Matching the exact readlink
-# text leaves a link the operator pointed elsewhere alone.
+# _warn_stale_ai_config_links <ai_config_dir> <subdir> <tracked-list> <explicit> <skip...>
+# Warns (never removes) about $HOME/<subdir> links, made by an earlier safe_link,
+# to ai-config items this run no longer links: untracked, skipped, or a home
+# store. <explicit> is the one name the caller links itself. Matching the exact
+# readlink text leaves a link the operator pointed elsewhere alone.
 _warn_stale_ai_config_links() {
-  local _dir="$1" _sub="$2" _tracked="$3" _link _name _target; shift 3
-  local -a _explicit=("$@")
+  local _dir="$1" _sub="$2" _tracked="$3" _explicit="$4" _link _name _target; shift 4
+  local -a _names
+  mapfile -t _names <<< "${_tracked}"
   for _link in "${HOME}/${_sub}"/*; do
     [[ -L ${_link} ]] || continue
     _name="${_link##*/}"
     _target="${_dir}/${_sub}/${_name}"
     [[ "$(readlink "${_link}")" == "${_target}" ]] || continue
-    [[ " ${_explicit[*]} " == *" ${_name} "* ]] && continue
-    if [[ $'\n'"${_tracked}"$'\n' == *$'\n'"${_name}"$'\n'* ]]; then
-      # A tracked name is still stale when it is a home store (never linked).
+    [[ ${_name} == "${_explicit}" ]] && continue
+    if _in_list "${_name}" "${_names[@]}" && ! _in_list "${_name}" "$@"; then
+      # Still linked, unless it is a home store (never linked).
       [[ ${_sub} == .claude ]] || continue
       _is_claude_home_store "${_name}" || continue
     fi
@@ -1909,10 +1916,10 @@ setup_dotfile_symlinks() {
   # rules/ would load as user-level Claude Code rules in every repo; projects/
   # is linked explicitly below so memory is version-controlled in ai-config.
   local _claude_tracked _links_failed=0
-  if _link_ai_config_subdir "${_ai_config_dir}" .claude projects rules; then
+  if _claude_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .claude)"; then
+    _link_ai_config_subdir "${_ai_config_dir}" .claude "${_claude_tracked}" projects rules
     safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"
-    _claude_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .claude)"
-    _warn_stale_ai_config_links "${_ai_config_dir}" .claude "${_claude_tracked}" projects rules
+    _warn_stale_ai_config_links "${_ai_config_dir}" .claude "${_claude_tracked}" projects projects rules
   else
     log_error "Cannot list tracked items in ${_ai_config_dir}/.claude (not a git repo, git failed, or nothing tracked); linked nothing from it. The remaining setup_user steps will be skipped."
     _links_failed=1
@@ -1922,10 +1929,10 @@ setup_dotfile_symlinks() {
   mkdir -p "${HOME}/.cursor"
   # User/ is handled separately via CURSOR_USER_DIR symlinks below.
   local _cursor_tracked
-  if _link_ai_config_subdir "${_ai_config_dir}" .cursor User; then
+  if _cursor_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .cursor)"; then
+    _link_ai_config_subdir "${_ai_config_dir}" .cursor "${_cursor_tracked}" User
     safe_link "${_ai_config_dir}/.cursor/rules" "${HOME}/.cursor/rules"
-    _cursor_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .cursor)"
-    _warn_stale_ai_config_links "${_ai_config_dir}" .cursor "${_cursor_tracked}" User rules
+    _warn_stale_ai_config_links "${_ai_config_dir}" .cursor "${_cursor_tracked}" rules User
   else
     log_error "Cannot list tracked items in ${_ai_config_dir}/.cursor (not a git repo, git failed, or nothing tracked); linked nothing from it. The remaining setup_user steps will be skipped."
     _links_failed=1
