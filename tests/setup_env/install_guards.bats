@@ -1440,6 +1440,8 @@ _tracked_repo() {
   run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/plain" .claude
   [ "${status}" -eq 1 ]
   [ -z "${output}" ]
+  # git's own diagnostic must reach the caller, not be discarded.
+  [[ "${stderr}" == *"not a git repository"* ]]
 }
 
 @test "_ai_config_tracked_items fails when the subdir has no tracked items" {
