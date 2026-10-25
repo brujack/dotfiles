@@ -155,6 +155,67 @@ _ai_config_tracked_items() {
   printf '%s' "${_names}" | LC_ALL=C sort -u
 }
 
+# _is_claude_home_store <name> -- rc 0 when <name> is machine-local state.
+_is_claude_home_store() {
+  local _n
+  for _n in "${CLAUDE_HOME_STORES[@]}"; do
+    [[ ${_n} == "$1" ]] && return 0
+  done
+  return 1
+}
+
+# _link_ai_config_subdir <ai_config_dir> <subdir> <skip...>
+# Links each git-tracked item of <subdir> into $HOME/<subdir>. Returns 1, linking
+# nothing, when the tracked list is unavailable (fail closed, no glob fallback).
+_link_ai_config_subdir() {
+  local _dir="$1" _sub="$2" _name _tracked; shift 2
+  local -a _skip=("$@")
+  _tracked="$(_ai_config_tracked_items "${_dir}" "${_sub}")" || return 1
+  while IFS= read -r _name; do
+    [[ " ${_skip[*]} " == *" ${_name} "* ]] && continue
+    # Home stores are tracked-but-machine-local; linking one would shadow the real data.
+    [[ ${_sub} == .claude ]] && _is_claude_home_store "${_name}" && continue
+    [[ -e "${_dir}/${_sub}/${_name}" ]] || continue
+    safe_link "${_dir}/${_sub}/${_name}" "${HOME}/${_sub}/${_name}"
+  done <<< "${_tracked}"
+  # A failed safe_link already logged itself; rc 1 is reserved for "list unavailable".
+  return 0
+}
+
+# _stale_link_remedy <name> <link> <target> -- prints the operator's fix. Never run by us.
+_stale_link_remedy() {
+  local _name="$1" _link="$2" _target="$3"
+  if _is_claude_home_store "${_name}" && [[ -d ${_target} && -n "$(ls -A "${_target}")" ]]; then
+    printf 'rm %s && mkdir %s && cp -a %s/. %s/' "${_link}" "${_link}" "${_target}" "${_link}"
+  elif _is_claude_home_store "${_name}" && [[ -f ${_target} ]]; then
+    printf 'rm %s && cp -a %s %s' "${_link}" "${_target}" "${_link}"
+  else
+    printf 'rm %s' "${_link}"
+  fi
+}
+
+# _warn_stale_ai_config_links <ai_config_dir> <subdir> <tracked-list> <explicit...>
+# Warns (never removes) about $HOME/<subdir> links that safe_link made earlier
+# to ai-config items the allowlist no longer links. Matching the exact readlink
+# text leaves a link the operator pointed elsewhere alone.
+_warn_stale_ai_config_links() {
+  local _dir="$1" _sub="$2" _tracked="$3" _link _name _target; shift 3
+  local -a _explicit=("$@")
+  for _link in "${HOME}/${_sub}"/*; do
+    [[ -L ${_link} ]] || continue
+    _name="${_link##*/}"
+    _target="${_dir}/${_sub}/${_name}"
+    [[ "$(readlink "${_link}")" == "${_target}" ]] || continue
+    [[ " ${_explicit[*]} " == *" ${_name} "* ]] && continue
+    if [[ $'\n'"${_tracked}"$'\n' == *$'\n'"${_name}"$'\n'* ]]; then
+      # A tracked name is still stale when it is a home store (never linked).
+      [[ ${_sub} == .claude ]] || continue
+      _is_claude_home_store "${_name}" || continue
+    fi
+    log_warn "Stale link ${_link} → ${_target}: ai-config no longer links this. Fix by hand: $(_stale_link_remedy "${_name}" "${_link}" "${_target}")"
+  done
+}
+
 quiet_which() {
   which "$1" &>/dev/null
 }
@@ -1843,30 +1904,32 @@ setup_dotfile_symlinks() {
   if mkdir -p "${HOME}"/.claude; then
     log_info "Created ${HOME}/.claude"
   fi
-  for _claude_item in "${_ai_config_dir}/.claude/"*; do
-    [[ -e "${_claude_item}" ]] || continue
-    [[ "$(basename "${_claude_item}")" == "projects" ]] && continue
-    # rules/ would load as user-level Claude Code rules in every repo;
-    # ai-config's .claude/rules is project-scoped to ai-config only.
-    [[ "$(basename "${_claude_item}")" == "rules" ]] && continue
-    _claude_target="${HOME}/.claude/$(basename "${_claude_item}")"
-    safe_link "${_claude_item}" "${_claude_target}"
-  done
-  # projects/ is excluded from the loop above — symlink explicitly so memory
-  # files are version-controlled in ai-config rather than machine-local
-  safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"
+  # Only git-tracked items are linked: the glob also swept up runtime state
+  # (sessions, caches) that Claude Code writes into ai-config's working tree.
+  # rules/ would load as user-level Claude Code rules in every repo; projects/
+  # is linked explicitly below so memory is version-controlled in ai-config.
+  local _claude_tracked _links_failed=0
+  if _link_ai_config_subdir "${_ai_config_dir}" .claude projects rules; then
+    safe_link "${_ai_config_dir}/.claude/projects" "${HOME}/.claude/projects"
+    _claude_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .claude)"
+    _warn_stale_ai_config_links "${_ai_config_dir}" .claude "${_claude_tracked}" projects rules
+  else
+    log_error "Cannot list tracked items in ${_ai_config_dir}/.claude (not a git repo, git failed, or nothing tracked); linked nothing from it. The remaining setup_user steps will be skipped."
+    _links_failed=1
+  fi
 
   log_info "Creating ${HOME}/.cursor"
   mkdir -p "${HOME}/.cursor"
-  # glob * excludes dotfiles (e.g. .gitignore) — intentional
-  for _cursor_item in "${_ai_config_dir}/.cursor/"*; do
-    [[ -e "${_cursor_item}" ]] || continue
-    # Skip User/ — handled separately via CURSOR_USER_DIR symlinks
-    [[ "$(basename "${_cursor_item}")" == "User" ]] && continue
-    _cursor_target="${HOME}/.cursor/$(basename "${_cursor_item}")"
-    safe_link "${_cursor_item}" "${_cursor_target}"
-  done
-  safe_link "${_ai_config_dir}/.cursor/rules" "${HOME}/.cursor/rules"
+  # User/ is handled separately via CURSOR_USER_DIR symlinks below.
+  local _cursor_tracked
+  if _link_ai_config_subdir "${_ai_config_dir}" .cursor User; then
+    safe_link "${_ai_config_dir}/.cursor/rules" "${HOME}/.cursor/rules"
+    _cursor_tracked="$(_ai_config_tracked_items "${_ai_config_dir}" .cursor)"
+    _warn_stale_ai_config_links "${_ai_config_dir}" .cursor "${_cursor_tracked}" User rules
+  else
+    log_error "Cannot list tracked items in ${_ai_config_dir}/.cursor (not a git repo, git failed, or nothing tracked); linked nothing from it. The remaining setup_user steps will be skipped."
+    _links_failed=1
+  fi
 
   safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/config" "${HOME}/.ssh/config"
 
@@ -1924,6 +1987,8 @@ setup_dotfile_symlinks() {
     chmod 700 "${HOME}"/.tsh
     log_info "Created ${HOME}/.tsh"
   fi
+  # 1 when an ai-config subdir could not be listed; run_setup_user then skips the later steps.
+  return "${_links_failed}"
 }
 
 install_terraform_skill() {
