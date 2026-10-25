@@ -124,3 +124,29 @@ red; removing the empty-list check turns case 7's helper assertion red.
 - **N2.** No new doctor check.
 - **N3.** `safe_link` is not modified.
 - **N4.** No fallback to the glob when git fails.
+
+## Multi-Lens Review
+
+Reviewed at commit: `db917b56` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The allowlist is the simplest correct fix and worth building; the stale-link warning is not. (1) Its `rm <link>` remedy destroys data in the cited case: on `workstation` `~/.claude/dod-log` links to `ai-config/.claude/dod-log`, which holds 42 entries, and `dod-log.bak` no longer exists (orchestrator re-measured over `ssh workstation`, 2026-10-25), so `rm` leaves `dod_log.py` an empty directory. For `~/.cursor/plugins` it drops Cursor's live `plugins/cache`. (2) Reads-it test: the warning prints only on `setup_user`/`setup` (sole caller `lib/workflows.sh:402`), with no durable channel, so it does not change a decision in practice. (3) `.cursor/plugins` being linked is documented as deliberate in `ai-config/.claude/memory/ai-config-cursor-plugin-architecture.md:50` and `ai-config/docs/knowledge/dotfiles-conventions.md:341`; the spec reverses that silently and R9 covers only `CLAUDE.md`. (4) Cases 2, 5 and 8 pass on empty helper output; case 8 needs a pinned expected set.
+Assumption: Nothing needs an untracked `~/.claude/<name>` link on a fresh machine; main suspect `settings.local.json`. Settled by the orchestrator: Claude Code docs (`code.claude.com/docs/en/permissions.md`) state "`~/.claude/settings.local.json` is still local scope, so Claude Code reads it only in sessions you start in your home directory itself". The spec's premise holds; ai-config's `2026-07-25-role-model-enforcement-design.md:99` ("governs all nine repos") is wrong.
+Disposition:
+
+### Ergonomics
+
+Finding: Same remedy defect as Goal-fit: the warning must name a data-preserving remedy when the target is non-empty. Its premise that `workstation` still holds `dod-log.bak` is stale (re-measured: absent). Return 1 now skips the rest of `run_setup_user` (`install_terraform_skill`, default shell, cheat.sh, cadence agents, ledger entry) via `_run_or_exit`; the error line should say so. Possible WSL failure: an ai-config checkout under `/mnt/c` trips git's dubious-ownership check (unverified). Not noise: 6 warnings on a rare run on `claude`.
+Assumption: Same `settings.local.json` scope question as Goal-fit; settled by the docs quote above.
+Disposition:
+
+### Risk
+
+Finding: The test plan cannot run as written. `load_mocks` prepends `tests/mocks/` to `PATH` (`tests/helpers/common.bash:16`), and `tests/mocks/git` exits `${MOCK_GIT_EXIT:-0}` with empty stdout for `ls-files` (orchestrator read the mock), so the helper takes the empty-list branch under every mocked test. New cases 1, 3, 4, 6, 8 and 9 go red; 2, 5 and 7 go green vacuously; about 47 existing `setup_dotfile_symlinks` tests asserting `status -eq 0` in `install_guards.bats` and `extracted_functions.bats` flip red. Needs a named git seam (the `_CLAUDE_GUARD_GIT` shape, `lib/workflows.sh:100`) and a fixture decision for the existing tests. Second: the mutation control "removing the empty-list check turns case 7 red" is false, since a non-repo exits 128 and never reaches the empty check; add a case with a valid repo tracking nothing under `.claude`.
+Assumption: Same `settings.local.json` scope question; settled by the docs quote above.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
