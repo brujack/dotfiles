@@ -207,6 +207,14 @@ red; removing the empty-list check turns case 10 red.
 - **N3.** `safe_link` is not modified.
 - **N4.** No fallback to the glob when git fails.
 
+## Amendments
+
+- R8 -> An existing symlink in `~/.claude` or `~/.cursor` whose `readlink` text is `<ai_config_dir>/<subdir>/<name>`, where `<name>` is not the name the function links explicitly (`projects` for `.claude`, `rules` for `.cursor`) and is untracked, in `CLAUDE_HOME_STORES`, or a name the loop skips (`rules` for `.claude`, `User` for `.cursor`), produces exactly one warning naming it and a remedy chosen by the name (`rm <link> && mkdir <link> && cp -a <target>/. <link>/` for a `CLAUDE_HOME_STORES` directory with contents, `rm <link> && cp -a <target> <link>` for a `CLAUDE_HOME_STORES` file, `rm <link>` otherwise), and is left in place — a stale `~/.claude/rules` link loads ai-config's project rules as user-level rules, the harm the skip exists to prevent, and the original wording exempted it because `rules` is tracked
+- finding R2 (2026-10-25, reviewer A): DIFFERS — The loop never links an untracked item, but the explicit `safe_link .claude/projects` (1933) and `safe_link .cursor/rules` (1955) run without any tracked check, so an untracked projects or .cursor/rules is still linked; test 'setup_dotfile_symlinks ignores an exported GIT_DIR when choosing what to link' asserts ~/.claude contains `projects` although the fixture never creates or tracks .claude/projects. R2 as worded admits no exception; R4 requires those two links, so the spec conflicts with itself here.
+- R2 -> The loop never links an untracked file or directory in `ai-config/.claude/` or `ai-config/.cursor/`; the two explicit links R4 requires (`.claude/projects`, `.cursor/rules`) are made whenever that subdir's tracked list can be read, tracked or not, as before this change — R4 mandates those links, and an untracked `projects`/`rules` cannot occur in a real ai-config, which tracks both
+- finding R4 (2026-10-25, reviewer both): DIFFERS — `.cursor/rules` is linked twice when tracked: the .cursor loop skips only `User` (1954), so a tracked `rules` goes through safe_link in the loop and then again through the explicit `safe_link .cursor/rules` (1955). R4 says exactly once. The test 'skips rules and User, links projects once and cursor rules' counts only the projects link, not the cursor rules link. The .claude rules skip, the User skip and the single projects link are met.
+- R4 -> The existing skips are unchanged: `.claude/rules` and `.cursor/User` are never linked by the loop, `.claude/projects` is linked exactly once, and `~/.cursor/rules` ends as one link to `ai-config/.cursor/rules` (the loop links a tracked `rules` and the explicit `safe_link` is then a no-op, as on master) — safe_link returns early on an already-correct link, so the second call creates nothing and logs nothing
+
 ## Multi-Lens Review
 
 Reviewed at commit: `db917b56` (Step 7 self-review commit, before Step 8 dispatch)
@@ -248,3 +256,26 @@ Reviewed at commit: `0df33b5c` (all three lenses re-run: the round-1 revision ch
 Reviewed at commit: `a366a7af`, Risk lens only, scoped to the round-2 diff (`0df33b5c..a366a7af`).
 
 **Risk.** Finding: no load-bearing issues; `CLAUDE_HOME_STORES` re-derived by a wider grep (`Path.home()`, `expanduser`, `${HOME}/.claude`, 47 hits) and found correct and complete. Three precision gaps: the carve-out omitted `telemetry_path.STREAMS` (`cost-log`, `review-cycle`, `triage-log`), correct only because they are tracked; R12 did not fix the fixture's root or minimum contents; `launch_agents.bats` was wrongly listed as affected. Assumption: none genuinely uncertain; future home-anchored writers are a disclosed limit. Disposition: Addressed — wording-level fixes to the carve-out, R12 and the affected-file list; no further round.
+
+## Spec alignment (2026-10-25)
+
+- spec: docs/superpowers/specs/2026-10-25-link-tracked-ai-config-items-design.md
+- anchor: 3305f3f7c3f80e478f6a5f1b426b992952f97fac
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R2 | A | DIFFERS | The loop never links an untracked item, but the explicit `safe_link .claude/projects` (1933) and `safe_link .cursor/rules` (1955) run without any tracked check, so an untracked projects or .cursor/rules is still linked; test 'setup_dotfile_symlinks ignores an exported GIT_DIR when choosing what to link' asserts ~/.claude contains `projects` although the fixture never creates or tracks .claude/projects. R2 as worded admits no exception; R4 requires those two links, so the spec conflicts with itself here. | - R2 -> The loop never links an untracked file or directory in `ai-config/.claude/` or `ai-config/.cursor/`; the two explicit links R4 requires (`.claude/projects`, `.cursor/rules`) are made whenever that subdir's tracked list can be read, tracked or not, as before this change — R4 mandates those links, and an untracked `projects`/`rules` cannot occur in a real ai-config, which tracks both |
+| R4 | both | DIFFERS | `.cursor/rules` is linked twice when tracked: the .cursor loop skips only `User` (1954), so a tracked `rules` goes through safe_link in the loop and then again through the explicit `safe_link .cursor/rules` (1955). R4 says exactly once. The test 'skips rules and User, links projects once and cursor rules' counts only the projects link, not the cursor rules link. The .claude rules skip, the User skip and the single projects link are met. | - R4 -> The existing skips are unchanged: `.claude/rules` and `.cursor/User` are never linked by the loop, `.claude/projects` is linked exactly once, and `~/.cursor/rules` ends as one link to `ai-config/.cursor/rules` (the loop links a tracked `rules` and the explicit `safe_link` is then a no-op, as on master) — safe_link returns early on an already-correct link, so the second call creates nothing and logs nothing |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded

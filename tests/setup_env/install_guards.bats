@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -1027,6 +1029,7 @@ EOF
   mkdir -p "${_home}"
   export HOME="${_home}"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/.claude/CLAUDE.md" ]
@@ -1042,6 +1045,7 @@ EOF
   mkdir -p "${_home}"
   export HOME="${_home}"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/.cursor/testfile" ]
@@ -1056,6 +1060,7 @@ EOF
   mkdir -p "${_home}"
   export HOME="${_home}"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [[ -L "${_home}/.claude/projects" ]]
@@ -1072,6 +1077,7 @@ EOF
   mkdir -p "${_home}"
   export HOME="${_home}"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   # Positive control: the loop ran and linked a sibling item.
@@ -1094,6 +1100,7 @@ EOF
   export MACOS=1
   unset LINUX
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/.gitconfig" ]
@@ -1109,6 +1116,7 @@ EOF
   export MACOS=1
   unset LINUX
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/git-repos/gitlab/.gitconfig" ]
@@ -1124,6 +1132,7 @@ EOF
   export MACOS=1
   unset LINUX
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ ! -L "${_home}/git-repos/gitlab/.gitconfig" ]
@@ -1139,6 +1148,7 @@ EOF
   export LINUX=1
   unset MACOS
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/.gitconfig" ]
@@ -1155,6 +1165,7 @@ EOF
   export HAS_DEVTOOLS=1
   unset MACOS
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/git-repos/gitlab/.gitconfig" ]
@@ -1170,6 +1181,7 @@ EOF
   export LINUX=1
   unset MACOS HAS_DEVTOOLS
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ ! -L "${_home}/git-repos/gitlab/.gitconfig" ]
@@ -1185,6 +1197,7 @@ EOF
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   ! grep -q "ohmyzsh" "${MOCK_CALLS_FILE:-/dev/null}"
@@ -1198,6 +1211,7 @@ EOF
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   grep -q "ohmyzsh" "${MOCK_CALLS_FILE}"
@@ -1210,6 +1224,7 @@ EOF
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   grep -q "git clone.*ohmyzsh" "${MOCK_CALLS_FILE}"
   run grep "curl.*ohmyzsh" "${MOCK_CALLS_FILE:-/dev/null}"
@@ -1223,6 +1238,7 @@ EOF
   export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -d "${_home}/.oh-my-zsh/custom/themes" ]
@@ -1238,6 +1254,7 @@ EOF
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   ! grep -q "tmux-plugins/tpm" "${MOCK_CALLS_FILE:-/dev/null}"
@@ -1251,6 +1268,7 @@ EOF
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   grep -q "tmux-plugins/tpm" "${MOCK_CALLS_FILE}"
@@ -1267,6 +1285,7 @@ EOF
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}/.claude" "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User"
   touch "${_OVERRIDE_AI_CONFIG_DIR}/.cursor/User/settings.json"
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ ! -L "${_home}/.cursor/User" ]
@@ -1285,6 +1304,7 @@ EOF
   export LINUX=1
   unset MACOS
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [ -L "${_home}/.config/Cursor/User/settings.json" ]
@@ -1301,6 +1321,7 @@ EOF
   export LINUX=1
   unset MACOS
 
+  track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}"
   run setup_dotfile_symlinks
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"Skipping Cursor symlinks"* ]]
@@ -1388,4 +1409,392 @@ EOF
   "
   [ "${status}" -ne 0 ]
   ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
+}
+
+# ── _ai_config_tracked_items ─────────────────────────────────────────────────
+
+# _tracked_repo <dir> <path>... -- real git repo at <dir> with <path>s added to
+# the index (no commit: CI has no user.name).
+_tracked_repo() {
+  local _dir="$1"; shift
+  local _p
+  mkdir -p "${_dir}"
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    "${_AI_CONFIG_GIT}" -C "${_dir}" init -q || return 1
+  for _p in "$@"; do
+    mkdir -p "${_dir}/$(dirname "${_p}")"
+    : > "${_dir}/${_p}"
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+      "${_AI_CONFIG_GIT}" -C "${_dir}" add -- "${_p}" || return 1
+  done
+}
+
+@test "_ai_config_tracked_items lists first components of tracked paths, sorted" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/c/.gitkeep .claude/b/x .claude/a
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'a\nb\nc' ]
+}
+
+@test "_ai_config_tracked_items omits tracked dot-names" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a .claude/.hidden
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a" ]
+}
+
+@test "_ai_config_tracked_items omits untracked files" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a
+  : > "${BATS_TEST_TMPDIR}/r/.claude/u"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a" ]
+}
+
+@test "_ai_config_tracked_items fails with empty stdout outside a repo" {
+  mkdir -p "${BATS_TEST_TMPDIR}/plain/.claude"
+  : > "${BATS_TEST_TMPDIR}/plain/.claude/a"
+  run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/plain" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+  # git's own diagnostic must reach the caller, not be discarded.
+  [[ "${stderr}" == *"not a git repository"* ]]
+}
+
+@test "_ai_config_tracked_items fails when the subdir has no tracked items" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .cursor/x
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_ai_config_tracked_items ignores an exported GIT_DIR" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" .claude/a .claude/b
+  _tracked_repo "${BATS_TEST_TMPDIR}/decoy" .claude/zzz
+  export GIT_DIR="${BATS_TEST_TMPDIR}/decoy/.git"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  unset GIT_DIR
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'a\nb' ]
+}
+
+@test "track_ai_config_fixture tracks empty directories and the minimum layout" {
+  mkdir -p "${BATS_TEST_TMPDIR}/f/.claude/emptydir"
+  track_ai_config_fixture "${BATS_TEST_TMPDIR}/f"
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/f" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'emptydir\nsettings.json' ]
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/f" .cursor
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "rules" ]
+}
+
+@test "_ai_config_tracked_items keeps names containing a space" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" ".claude/sp ace/f" .claude/plain
+  run _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'plain\nsp ace' ]
+}
+
+@test "_ai_config_tracked_items fails closed on a name containing a newline" {
+  _tracked_repo "${BATS_TEST_TMPDIR}/r" $'.claude/a\nb/f' .claude/ok
+  run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_ai_config_tracked_items fails closed when git exits non-zero after printing" {
+  local _stub="${BATS_TEST_TMPDIR}/git-stub"
+  printf '#!/usr/bin/env bash\nprintf ".claude/a\\0.claude/b\\0"\nexit 3\n' > "${_stub}"
+  chmod +x "${_stub}"
+  _AI_CONFIG_GIT="${_stub}" run --separate-stderr _ai_config_tracked_items "${BATS_TEST_TMPDIR}/r" .claude
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+# ── setup_dotfile_symlinks tracked allowlist ─────────────────────────────────
+
+# _allowlist_env -- redirect HOME and point the ai-config seam at a fresh,
+# not-yet-tracked fixture dir. Pre-creating oh-my-zsh and tpm keeps the run
+# off git clone.
+_allowlist_env() {
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}/.oh-my-zsh" "${HOME}/.tmux/plugins/tpm"
+  export PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}/git-repos/personal"
+  export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
+  AC="${_OVERRIDE_AI_CONFIG_DIR}"
+  mkdir -p "${AC}"
+  export MACOS=1
+  unset LINUX
+}
+
+@test "setup_dotfile_symlinks links a tracked .claude file and directory" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/skills"
+  : > "${AC}/.claude/skills/s.md"
+  : > "${AC}/.claude/CLAUDE.md"
+  track_ai_config_fixture "${AC}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/CLAUDE.md")" = "${AC}/.claude/CLAUDE.md" ]
+  [ "$(readlink "${HOME}/.claude/skills")" = "${AC}/.claude/skills" ]
+}
+
+@test "setup_dotfile_symlinks does not link untracked .claude items" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude"
+  : > "${AC}/.claude/CLAUDE.md"
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/sessions"
+  : > "${AC}/.claude/stray.txt"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/CLAUDE.md")" = "${AC}/.claude/CLAUDE.md" ]
+  [ ! -e "${HOME}/.claude/sessions" ]
+  [ ! -L "${HOME}/.claude/sessions" ]
+  [ ! -e "${HOME}/.claude/stray.txt" ]
+  [ ! -L "${HOME}/.claude/stray.txt" ]
+}
+
+@test "setup_dotfile_symlinks links a directory tracked only by its .gitkeep" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/keepme"
+  : > "${AC}/.claude/keepme/.gitkeep"
+  track_ai_config_fixture "${AC}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/keepme")" = "${AC}/.claude/keepme" ]
+}
+
+@test "setup_dotfile_symlinks skips rules and User, links projects once and cursor rules" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/rules" "${AC}/.claude/projects" "${AC}/.cursor/User"
+  : > "${AC}/.claude/rules/r.md"
+  : > "${AC}/.claude/projects/p.md"
+  : > "${AC}/.claude/CLAUDE.md"
+  : > "${AC}/.cursor/User/settings.json"
+  : > "${AC}/.cursor/rules.txt"
+  track_ai_config_fixture "${AC}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ ! -e "${HOME}/.claude/rules" ]
+  [ ! -L "${HOME}/.claude/rules" ]
+  [ "$(readlink "${HOME}/.claude/projects")" = "${AC}/.claude/projects" ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "${HOME}/.claude/projects →")" -eq 1 ]
+  [ ! -L "${HOME}/.cursor/User" ]
+  [ "$(readlink "${HOME}/.cursor/rules")" = "${AC}/.cursor/rules" ]
+}
+
+@test "setup_dotfile_symlinks does not link an untracked .cursor directory" {
+  _allowlist_env
+  mkdir -p "${AC}/.cursor/skills-cursor"
+  : > "${AC}/.cursor/skills-cursor/s.md"
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.cursor/plugins"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.cursor/skills-cursor")" = "${AC}/.cursor/skills-cursor" ]
+  [ ! -e "${HOME}/.cursor/plugins" ]
+  [ ! -L "${HOME}/.cursor/plugins" ]
+}
+
+@test "setup_dotfile_symlinks warns once about a stale link to an untracked item and keeps it" {
+  _allowlist_env
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/sessions" "${BATS_TEST_TMPDIR}/elsewhere" "${HOME}/.claude"
+  ln -s "${AC}/.claude/sessions" "${HOME}/.claude/sessions"
+  ln -s "${BATS_TEST_TMPDIR}/elsewhere" "${HOME}/.claude/outside"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/sessions")" -eq 1 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "${HOME}/.claude/outside")" -eq 0 ]
+  [ -L "${HOME}/.claude/sessions" ]
+  [ "$(readlink "${HOME}/.claude/sessions")" = "${AC}/.claude/sessions" ]
+}
+
+@test "setup_dotfile_symlinks fails closed and links nothing from a non-repo ai-config" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/projects" "${AC}/.cursor/rules"
+  : > "${AC}/.claude/CLAUDE.md"
+  : > "${AC}/.cursor/rules/x"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"ERROR"*"${AC}/.claude"* ]]
+  [[ "${output}" == *"setup_user"* ]]
+  [ ! -e "${HOME}/.claude/CLAUDE.md" ]
+  [ ! -L "${HOME}/.claude/projects" ]
+  [ ! -L "${HOME}/.cursor/rules" ]
+  # the rest of the function still ran
+  [ -L "${HOME}/.vimrc" ]
+}
+
+@test "setup_dotfile_symlinks ignores an exported GIT_DIR when choosing what to link" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude" "${BATS_TEST_TMPDIR}/decoy"
+  : > "${AC}/.claude/a"
+  : > "${AC}/.claude/b"
+  track_ai_config_fixture "${AC}"
+  _tracked_repo "${BATS_TEST_TMPDIR}/decoy" .claude/decoy-item
+  export GIT_DIR="${BATS_TEST_TMPDIR}/decoy/.git"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(ls -A "${HOME}/.claude" | LC_ALL=C sort | tr '\n' ' ')" = "a b projects settings.json " ]
+}
+
+@test "setup_dotfile_symlinks fails when the repo tracks nothing under .claude" {
+  _allowlist_env
+  _tracked_repo "${AC}" .cursor/x
+  mkdir -p "${AC}/.claude/projects"
+  : > "${AC}/.claude/loose"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"ERROR"*"${AC}/.claude"* ]]
+  [ ! -e "${HOME}/.claude/loose" ]
+  [ ! -L "${HOME}/.claude/projects" ]
+  [ "$(readlink "${HOME}/.cursor/x")" = "${AC}/.cursor/x" ]
+}
+
+@test "setup_dotfile_symlinks fails when the repo tracks nothing under .cursor" {
+  _allowlist_env
+  _tracked_repo "${AC}" .claude/a
+  mkdir -p "${AC}/.cursor/rules"
+  : > "${AC}/.cursor/loose"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"ERROR"*"${AC}/.cursor"* ]]
+  [ ! -e "${HOME}/.cursor/loose" ]
+  [ ! -L "${HOME}/.cursor/rules" ]
+  [ "$(readlink "${HOME}/.claude/a")" = "${AC}/.claude/a" ]
+}
+
+@test "setup_dotfile_symlinks names the copy remedy for a stale home-store link and rm otherwise" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/dod-log" "${HOME}/.claude"
+  : > "${AC}/.claude/dod-log/entry.json"
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/worktrees/w1"
+  : > "${AC}/.claude/worktrees/w1/f"
+  ln -s "${AC}/.claude/dod-log" "${HOME}/.claude/dod-log"
+  ln -s "${AC}/.claude/worktrees" "${HOME}/.claude/worktrees"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"rm ${HOME}/.claude/dod-log && mkdir ${HOME}/.claude/dod-log && cp -a ${AC}/.claude/dod-log/. ${HOME}/.claude/dod-log/"* ]]
+  local _wt
+  _wt="$(printf '%s\n' "${output}" | command grep "WARN.*${HOME}/.claude/worktrees")"
+  [[ "${_wt}" == *"rm ${HOME}/.claude/worktrees"* ]]
+  [[ "${_wt}" != *"cp -a"* ]]
+  [ -L "${HOME}/.claude/dod-log" ]
+  [ -L "${HOME}/.claude/worktrees" ]
+}
+
+@test "setup_dotfile_symlinks never links a tracked home-store name over a real directory" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/dod-log" "${HOME}/.claude/dod-log"
+  : > "${AC}/.claude/dod-log/.gitkeep"
+  : > "${AC}/.claude/CLAUDE.md"
+  : > "${HOME}/.claude/dod-log/live.json"
+  track_ai_config_fixture "${AC}"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/CLAUDE.md")" = "${AC}/.claude/CLAUDE.md" ]
+  [ -d "${HOME}/.claude/dod-log" ]
+  [ ! -L "${HOME}/.claude/dod-log" ]
+  [ -f "${HOME}/.claude/dod-log/live.json" ]
+  [ ! -e "${HOME}/.claude/dod-log.bak" ]
+}
+
+@test "setup_dotfile_symlinks warns about a stale ~/.claude/rules link, since rules is never linked" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/rules" "${HOME}/.claude"
+  : > "${AC}/.claude/rules/r.md"
+  track_ai_config_fixture "${AC}"
+  ln -s "${AC}/.claude/rules" "${HOME}/.claude/rules"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/rules")" -eq 1 ]
+  [ -L "${HOME}/.claude/rules" ]
+}
+
+@test "setup_dotfile_symlinks names the file remedy for a stale home-store file link" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude" "${HOME}/.claude"
+  printf '{}\n' > "${AC}/.claude/skip-ledger.jsonl"
+  track_ai_config_fixture "${AC}"
+  ln -s "${AC}/.claude/skip-ledger.jsonl" "${HOME}/.claude/skip-ledger.jsonl"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"rm ${HOME}/.claude/skip-ledger.jsonl && cp -a ${AC}/.claude/skip-ledger.jsonl ${HOME}/.claude/skip-ledger.jsonl"* ]]
+}
+
+@test "setup_dotfile_symlinks names plain rm for a stale link to an empty home-store directory" {
+  _allowlist_env
+  mkdir -p "${HOME}/.claude"
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/logs"
+  ln -s "${AC}/.claude/logs" "${HOME}/.claude/logs"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  local _l
+  _l="$(printf '%s\n' "${output}" | command grep "WARN.*${HOME}/.claude/logs")"
+  [[ "${_l}" == *"Fix by hand: rm ${HOME}/.claude/logs" ]]
+}
+
+@test "setup_dotfile_symlinks does not warn about stale links when the tracked list is unavailable" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude/x" "${HOME}/.claude"
+  ln -s "${AC}/.claude/x" "${HOME}/.claude/x"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/x")" -eq 0 ]
+}
+
+@test "setup_dotfile_symlinks compares readlink text exactly, not by prefix" {
+  _allowlist_env
+  track_ai_config_fixture "${AC}"
+  mkdir -p "${AC}/.claude/bar" "${HOME}/.claude"
+  ln -s "${AC}/.claude/bar" "${HOME}/.claude/foo"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(printf '%s\n' "${output}" | command grep -c "WARN.*${HOME}/.claude/foo")" -eq 0 ]
+}
+
+@test "setup_dotfile_symlinks skips a tracked item removed from the working tree" {
+  _allowlist_env
+  mkdir -p "${AC}/.claude"
+  : > "${AC}/.claude/gone.md"
+  : > "${AC}/.claude/kept.md"
+  track_ai_config_fixture "${AC}"
+  rm "${AC}/.claude/gone.md"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${HOME}/.claude/kept.md")" = "${AC}/.claude/kept.md" ]
+  [ ! -L "${HOME}/.claude/gone.md" ]
+}
+
+@test "load_mocks defaults _OVERRIDE_AI_CONFIG_DIR to a tracked fixture under BATS_TEST_TMPDIR" {
+  [[ "${_OVERRIDE_AI_CONFIG_DIR}" == "${BATS_TEST_TMPDIR}/"* ]]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude
+  [ "${status}" -eq 0 ]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .cursor
+  [ "${status}" -eq 0 ]
 }

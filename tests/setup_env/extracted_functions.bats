@@ -53,10 +53,14 @@ _make_fake_dotfiles() {
   # .cursor/ and .claude/ items sourced from AI_CONFIG_DIR (ai-config repo)
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.claude/projects"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/User/snippets"
+  # plugins stays tracked: the fixture models a repo state; plugins being untracked in the real repo is covered by the untracked-item tests.
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/plugins"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/skills-cursor"
   touch "${FAKE_AI_CONFIG_SRC}/.cursor/User/settings.json"
   touch "${FAKE_AI_CONFIG_SRC}/.cursor/User/keybindings.json"
+  # The fixture models a repo, so everything in it is tracked; untracked-item
+  # behaviour has its own tests below.
+  track_ai_config_fixture "${FAKE_AI_CONFIG_SRC}"
 }
 
 # ── clone_or_update_dotfiles ─────────────────────────────────────────────────
@@ -368,6 +372,17 @@ _make_fake_dotfiles() {
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ ! -L "${FAKE_HOME}/.cursor/User" ]]
+}
+
+@test "setup_dotfile_symlinks does not link an untracked ~/.cursor/untracked-cache" {
+  _make_fake_dotfiles
+  mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/untracked-cache"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  [[ ! -e "${FAKE_HOME}/.cursor/untracked-cache" && ! -L "${FAKE_HOME}/.cursor/untracked-cache" ]]
+  [[ "$(readlink "${FAKE_HOME}/.cursor/plugins")" == "${FAKE_AI_CONFIG_SRC}/.cursor/plugins" ]]
 }
 
 @test "setup_dotfile_symlinks symlinks ~/.claude/projects to ai-config projects dir" {
