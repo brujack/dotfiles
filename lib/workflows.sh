@@ -2033,22 +2033,51 @@ run_check_versions() {
 
 # ── Ledger integration ─────────────────────────────────────────────────────────
 
+# Warn, then show the stderr lines that say why. The cause sits near the top
+# (git prints it before "fatal:"; ledger.py's traceback follows git's own
+# "fatal:" line) and ledger.py's own "ERROR:" line comes last, so keep the
+# first 3 non-empty lines and the last one.
+_ledger_warn_with_cause() {
+  local _msg="$1" _err="$2" _line
+  local -a _lines=() _pick=()
+  log_warn "${_msg}"
+  while IFS= read -r _line; do
+    [[ "${_line}" =~ ^[[:space:]]*$ ]] && continue
+    _lines+=("${_line}")
+  done <<< "${_err}"
+  if [[ ${#_lines[@]} -eq 0 ]]; then
+    log_warn "  (no stderr output)"
+    return 0
+  fi
+  if [[ ${#_lines[@]} -le 4 ]]; then
+    _pick=("${_lines[@]}")
+  else
+    _pick=("${_lines[@]:0:3}" "${_lines[${#_lines[@]}-1]}")
+  fi
+  for _line in "${_pick[@]}"; do
+    log_warn "  ${_line}"
+  done
+  return 0
+}
+
 ensure_state_ledger() {
   local _dir="${_OVERRIDE_STATE_LEDGER_DIR:-${HOME}/.local/share/state-ledger}"
   local _url="git@github.com:brujack/state-ledger.git"
+  local _err
 
   if _git_is_valid_repo "${_dir}"; then
-    GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --ff-only >/dev/null 2>&1 \
-      || log_warn "state-ledger pull failed — continuing without ledger sync"
+    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --ff-only 2>&1 >/dev/null) \
+      || _ledger_warn_with_cause "state-ledger pull failed — continuing without ledger sync" "${_err}"
   else
     [[ -d "${_dir}" ]] && rm -rf "${_dir}"
-    GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone "${_url}" "${_dir}" >/dev/null 2>&1 \
-      || { log_warn "state-ledger clone failed — continuing without ledger"; return 0; }
+    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone "${_url}" "${_dir}" 2>&1 >/dev/null) \
+      || { _ledger_warn_with_cause "state-ledger clone failed — continuing without ledger" "${_err}"; return 0; }
   fi
 
-  [[ -x "${_dir}/scripts/ledger.py" ]] && \
-    { "${_dir}/scripts/ledger.py" init >/dev/null 2>&1 \
-      || log_warn "ledger init failed — continuing"; }
+  if [[ -x "${_dir}/scripts/ledger.py" ]]; then
+    _err=$("${_dir}/scripts/ledger.py" init 2>&1 >/dev/null) \
+      || _ledger_warn_with_cause "ledger init failed — continuing" "${_err}"
+  fi
 
   return 0
 }

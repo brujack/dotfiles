@@ -912,6 +912,89 @@ _gnubin_present() {
   grep -q "GIT_SSH_COMMAND=ssh -o BatchMode=yes" "${MOCK_CALLS_FILE}"
 }
 
+# Writes an executable ledger.py stub that prints <file>'s contents to stderr,
+# appends a marker to MOCK_CALLS_FILE, and exits <rc>.
+_make_ledger_stub() {
+  local _rc="$1" _stderr_file="$2"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}/scripts"
+  printf '#!/usr/bin/env bash\ncat "%s" >&2\nprintf "ledger-init-called\\n" >> "%s"\nexit %s\n' \
+    "${_stderr_file}" "${MOCK_CALLS_FILE}" "${_rc}" > "${_OVERRIDE_STATE_LEDGER_DIR}/scripts/ledger.py"
+  chmod +x "${_OVERRIDE_STATE_LEDGER_DIR}/scripts/ledger.py"
+}
+
+@test "ensure_state_ledger names cause: pull failure shows git's cause line" {
+  export MOCK_GIT_EXIT=1
+  export MOCK_GIT_STDERR=$'git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.'
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"state-ledger pull failed"* ]]
+  [[ "${output}" == *"Permission denied (publickey)"* ]]
+  [[ "${output}" == *"fatal: Could not read from remote repository."* ]]
+}
+
+@test "ensure_state_ledger names cause: init traceback shows git's fatal line" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  cat > "${BATS_TEST_TMPDIR}/tb.txt" <<'EOF'
+fatal: cannot change to '/nonexistent-x': No such file or directory
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import subprocess; subprocess.run(["git","-C","/nonexistent-x","pull","--ff-only"], check=True)
+                       ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['git', '-C', '/nonexistent-x', 'pull', '--ff-only']' returned non-zero exit status 128.
+EOF
+  _make_ledger_stub 1 "${BATS_TEST_TMPDIR}/tb.txt"
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"ledger init failed"* ]]
+  [[ "${output}" == *"fatal: cannot change to"* ]]
+  [[ "${output}" == *"CalledProcessError: Command"* ]]
+}
+
+@test "ensure_state_ledger names cause: clone failure shows cause and returns 0" {
+  export MOCK_GIT_CLONE_EXIT=1
+  export MOCK_GIT_STDERR="fatal: clone-cause"
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/nonexistent-state-ledger"
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"state-ledger clone failed"* ]]
+  [[ "${output}" == *"fatal: clone-cause"* ]]
+}
+
+@test "ensure_state_ledger names cause: keeps first 3 and last stderr lines only" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  printf 'line-e1\nline-e2\n\nline-e3\nline-e4\nline-e5\nline-e6\n' > "${BATS_TEST_TMPDIR}/six.txt"
+  _make_ledger_stub 1 "${BATS_TEST_TMPDIR}/six.txt"
+  run ensure_state_ledger
+  [[ "${output}" == *"line-e1"* && "${output}" == *"line-e2"* ]]
+  [[ "${output}" == *"line-e3"* && "${output}" == *"line-e6"* ]]
+  [[ "${output}" != *"line-e4"* && "${output}" != *"line-e5"* ]]
+}
+
+@test "ensure_state_ledger names cause: empty stderr says so" {
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  : > "${BATS_TEST_TMPDIR}/empty.txt"
+  _make_ledger_stub 1 "${BATS_TEST_TMPDIR}/empty.txt"
+  run ensure_state_ledger
+  [[ "${output}" == *"ledger init failed"* ]]
+  [[ "${output}" == *"(no stderr output)"* ]]
+}
+
+@test "ensure_state_ledger names cause: success with stderr chatter stays quiet" {
+  export MOCK_GIT_STDERR="From github.com:brujack/state-ledger"
+  export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
+  printf 'WARNING: `pre-commit` not on PATH\n' > "${BATS_TEST_TMPDIR}/warn.txt"
+  _make_ledger_stub 0 "${BATS_TEST_TMPDIR}/warn.txt"
+  run ensure_state_ledger
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *"[WARN]"* ]]
+  grep -q "ledger-init-called" "${MOCK_CALLS_FILE}"
+}
+
 @test "_dotfiles_run_tmpdir_setup calls ensure_state_ledger" {
   ensure_state_ledger() { printf "stub-ensure-state-ledger-called\n" >> "${MOCK_CALLS_FILE}"; }
 

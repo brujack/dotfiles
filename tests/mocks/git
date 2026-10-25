@@ -3,6 +3,7 @@ printf "git %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 printf "GIT_SSH_COMMAND=%s\n" "${GIT_SSH_COMMAND:-}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 if [[ "$1" == "clone" ]]; then
   mkdir -p "${@: -1}"
+  [[ -n "${MOCK_GIT_STDERR:-}" ]] && printf '%s\n' "${MOCK_GIT_STDERR}" >&2
   exit "${MOCK_GIT_CLONE_EXIT:-0}"
 fi
 if [[ "$*" == *"rev-parse --git-dir"* ]]; then
@@ -19,4 +20,5 @@ fi
 if [[ "$1" == "config" && "$*" == *"--get"* ]]; then
   exit "${MOCK_GIT_CONFIG_EXIT:-1}"
 fi
+[[ -n "${MOCK_GIT_STDERR:-}" ]] && printf '%s\n' "${MOCK_GIT_STDERR}" >&2
 exit "${MOCK_GIT_EXIT:-0}"
