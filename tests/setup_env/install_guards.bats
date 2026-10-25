@@ -1665,6 +1665,20 @@ _allowlist_env() {
   [ "$(readlink "${HOME}/.cursor/x")" = "${AC}/.cursor/x" ]
 }
 
+@test "setup_dotfile_symlinks fails when the repo tracks nothing under .cursor" {
+  _allowlist_env
+  _tracked_repo "${AC}" .claude/a
+  mkdir -p "${AC}/.cursor/rules"
+  : > "${AC}/.cursor/loose"
+
+  run setup_dotfile_symlinks
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"ERROR"*"${AC}/.cursor"* ]]
+  [ ! -e "${HOME}/.cursor/loose" ]
+  [ ! -L "${HOME}/.cursor/rules" ]
+  [ "$(readlink "${HOME}/.claude/a")" = "${AC}/.claude/a" ]
+}
+
 @test "setup_dotfile_symlinks names the copy remedy for a stale home-store link and rm otherwise" {
   _allowlist_env
   mkdir -p "${AC}/.claude/dod-log" "${HOME}/.claude"

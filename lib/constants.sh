@@ -194,7 +194,7 @@ readonly -a APT_CONFFILE_OPTS=(-o Dpkg::Options::=--force-confdef -o Dpkg::Optio
 # Consumed by _apt_stale_signer_hosts (lib/linux_shared.sh): what marks an apt line as a signature failure.
 readonly -a APT_SIGNER_PREFIXES=("W:" "E:" "Warning:" "Error:")
 readonly -a APT_SIGNER_TOKENS=("NO_PUBKEY" "EXPKEYSIG" "EXPSIG" "KEYEXPIRED" "REVKEYSIG" "is not signed" "is no longer signed")
-# read by _link_ai_config_subdir and _warn_stale_ai_config_links (lib/helpers.sh): ai-config code writes
+# read by _is_claude_home_store (lib/helpers.sh): ai-config code writes
 # these through ~/.claude/<name>, so they must stay machine-local and are never linked even when tracked.
 # dispatch-log and the telemetry_path.STREAMS (cost-log, loop-log, review-cycle, triage-log) are tracked and
 # linked by design, so they are deliberately absent. A new home-anchored writer must be added by hand.
