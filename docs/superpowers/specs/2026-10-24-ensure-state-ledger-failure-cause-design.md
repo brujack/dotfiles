@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-24
 - **Backlog row:** "`ensure_state_ledger` hides why `ledger init` failed" (P2 — bugs and security)
+- **Approved:** 2026-10-24
 
 ## Problem
 
@@ -149,7 +150,7 @@ pull fails" keep passing unchanged, because the message text is unchanged.
 - **N1.** No change to the three warning message texts.
 - **N2.** No warning is printed when a step's command exits 0, whatever it wrote to stderr.
 - **N3.** No change to `scripts/ledger.py` or any other file in the state-ledger repo.
-- **N4.** `ensure_state_ledger` runs `ledger.py init` whenever the script is executable, whether or not the pull step failed.
+- **N4.** On every path that reaches the init step, `ensure_state_ledger` runs `ledger.py init` whenever the script is executable, whether or not the pull step failed.
 
 ## Multi-Lens Review
 
@@ -198,6 +199,16 @@ Disposition: Addressed (operator, 2026-10-24) — R5 dropped; test 1 uses the me
 Finding: same vacuous R5 assertion. Checked clean: cmd_init order (skip lost nothing when both pulls fail), selection bounds 1/4/5 lines, trailing blank and CR-only lines, GNU and BSD `sed -E` redaction, `MOCK_GIT_STDERR` scope, `%` safety in `log_warn`.
 Assumption: same BatchMode-divergence doubt, unmeasured on the fleet.
 Disposition: Addressed (operator, 2026-10-24) — R5 dropped, so the assumption no longer carries the design.
+
+### Round 3
+
+Reviewed at commit: `f343ac09` (scoped: Risk lens on the round-2 changes only)
+
+#### Risk
+
+Finding: low. N4's "whenever the script is executable" contradicts R4 on one edge path: a self-heal whose `rm -rf` fails leaves an executable `ledger.py`, the clone then fails on the non-empty directory, and R4 returns before init. Tests 1-6 each can fail (test 4 also fails if every line is printed). Verified: git 2.53 strips userinfo from credentialed https URLs on clone and pull; init's clone branch is unreachable from this caller in production.
+Assumption: no uncertain assumption carries the design; the weakest is that no captured line can carry a credentialed URL, refuted only by a git error path that echoes the raw remote URL.
+Disposition: Addressed (operator, 2026-10-24) — N4 scoped to paths that reach the init step.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
