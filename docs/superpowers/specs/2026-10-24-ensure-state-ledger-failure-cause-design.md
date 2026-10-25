@@ -213,3 +213,30 @@ Disposition: Addressed (operator, 2026-10-24) — N4 scoped to paths that reach 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- finding R2 (2026-10-24, reviewer B): DIFFERS — The filter `[[ "${_line}" =~ ^[[:space:]]*$ ]] && continue` treats whitespace-only lines as empty, so stderr made only of whitespace lines prints ` (no stderr output)`, whereas the requirement prints it only when there is no non-empty line (a whitespace-only line is non-empty); the empty-stderr case itself is met at line 34.
+- R2 -> `_ledger_warn_with_cause` prints `  (no stderr output)` through `log_warn` when its second argument has no line that contains a non-whitespace character. — the Design section drops empty and whitespace-only lines; "non-empty" in the R text was meant as non-blank, and the code is right.
+- R1 -> `lib/workflows.sh` defines `_ledger_warn_with_cause`, which calls `log_warn` with its first argument and then, for the first 3 and the last lines of its second argument that contain a non-whitespace character (each line once, in original order), calls `log_warn` with that line prefixed by two spaces. — same wording fix as R2: the Design drops whitespace-only lines, so "non-empty" means non-blank.
+
+## Spec alignment (2026-10-24)
+
+- spec: docs/superpowers/specs/2026-10-24-ensure-state-ledger-failure-cause-design.md
+- anchor: 92f2369a9eb2ab00bf427fdce1d577b5d98b7222
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R2 | B | DIFFERS | The filter `[[ "${_line}" =~ ^[[:space:]]*$ ]] && continue` treats whitespace-only lines as empty, so stderr made only of whitespace lines prints ` (no stderr output)`, whereas the requirement prints it only when there is no non-empty line (a whitespace-only line is non-empty); the empty-stderr case itself is met at line 34. | - R2 -> `_ledger_warn_with_cause` prints ` (no stderr output)` through `log_warn` when its second argument has no line that contains a non-whitespace character. — the Design section drops empty and whitespace-only lines; "non-empty" in the R text was meant as non-blank, and the code is right. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Orchestrator, 2026-10-24 (plan time): the six tests on a git archive of origin/master gave not ok 1-5 and ok 6; with only the MOCK_GIT_STDERR knob added, tests 1-5 still failed; with the plan code applied, all 114 install_guards tests passed. On the branch: 1..6 all ok, make test 3345/3345.
