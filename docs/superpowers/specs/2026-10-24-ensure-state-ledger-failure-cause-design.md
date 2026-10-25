@@ -37,8 +37,9 @@ Two shapes, both measured on `claude` on 2026-10-24 with git 2.54 and Python 3.1
   `Cloning into '…'...` / `git@github.com: Permission denied (publickey).` /
   `fatal: Could not read from remote repository.` / _(blank)_ /
   `Please make sure you have the correct access rights` / `and the repository exists.`
-  The cause is non-empty line 2 of 5. An offline box's `Could not resolve hostname`
-  sits in the same position.
+  The cause is non-empty line 2 of 5. A `git pull --ff-only` failing the same way prints
+  the same lines without `Cloning into`, so 4 non-empty lines with the cause first. An
+  offline box's `Could not resolve hostname` sits in the same position.
 - **init's own pull failing**
   (`subprocess.run(["git","-C","/nonexistent-x","pull","--ff-only"], check=True)`):
   `fatal: cannot change to '/nonexistent-x': No such file or directory` is the first
@@ -69,16 +70,6 @@ The redirection order matters: `2>&1` first points stderr at the capture, then
 keeps its `return 0`. Command order and the conditions that choose pull or clone are
 unchanged.
 
-### Skip init after this run's pull failed
-
-`ledger.py init` re-pulls with `check=True` before writing the machine-id or the
-`ledger` symlink. If this run's pull just failed, init's pull is expected to fail the
-same way, and it then aborts before doing either of those things. Running it only adds
-a second warning whose cause line is the same git failure already shown under the pull
-warning. So when the pull step fails, `ensure_state_ledger` skips the init step and
-prints nothing more for it. The next run retries both. A clone failure already returns
-before init, unchanged.
-
 ### `_ledger_warn_with_cause <msg> <stderr>`
 
 A new helper in `lib/workflows.sh`, placed directly above `ensure_state_ledger`:
@@ -93,14 +84,18 @@ A new helper in `lib/workflows.sh`, placed directly above `ensure_state_ledger`:
    maintain.
 3. If `<stderr>` has no non-empty line, it prints `log_warn "  (no stderr output)"`, so
    silence reads as a fact rather than as missing output.
-4. Each printed line has every match of the extended regex `://[^/@[:space:]]*@`
-   replaced with `://***@`. That covers `https://user:token@host`, which can reach
-   stderr because `ledger.py init` honours `LEDGER_REPO_URL`. The character class
-   stops at the first `/`, `@` or space, so an `@` later in the line (an email, an ssh
-   `git@host`) is never swallowed.
 
 ### Unchanged
 
+- `ledger.py init` still runs after a failed pull. Its own pull has no `BatchMode`, so
+  on a box where our `BatchMode=yes` pull fails (a passphrase key with no agent, an
+  unknown host key) init's pull can still prompt and succeed, and that path is how such
+  a box gets its machine-id and `ledger` symlink. When both pulls fail, the init warning
+  repeats the cause, which the selection above keeps.
+- Lines are printed as captured. No URL redaction: git strips userinfo from its own
+  messages, and the one Python line that could carry a URL comes from `cmd_init`'s
+  clone branch, which this caller never reaches (dotfiles runs init only when
+  `scripts/ledger.py` already exists in the checkout, so init takes its pull branch).
 - `ensure_state_ledger` still returns 0 on every path, and its caller still runs it as
   `ensure_state_ledger || true`.
 - If init returns 0 after printing its "`pre-commit` not on PATH" WARNING, nothing is
@@ -119,26 +114,21 @@ or `config --get` paths, so `_git_is_valid_repo` and the hooks tests are unaffec
 Fixtures 1 and 2 below reproduce the two measured shapes verbatim, not synthetic lines.
 
 1. **pull, transport shape:** `MOCK_GIT_EXIT=1`, directory present, and
-   `MOCK_GIT_STDERR` set to the 6-line ssh capture above (blank line included). The
-   output contains `state-ledger pull failed`, `Permission denied (publickey)` and
-   `and the repository exists.`, and does not contain `ledger init failed`, which
-   pins the skip.
-2. **init, traceback shape:** pull succeeds, and a stub `ledger.py` prints the measured
+   `MOCK_GIT_STDERR` set to the measured 5-line pull capture (blank line included,
+   no `Cloning into`). The output contains `state-ledger pull failed`,
+   `Permission denied (publickey)` and `fatal: Could not read from remote repository.`
+2. **init, traceback shape:** pull succeeds, and a stub `ledger.py` prints to stderr the measured
    traceback (`fatal: cannot change to …` first, the `CalledProcessError` line last)
    and exits 1. The output contains `ledger init failed`, `fatal: cannot change to`
    and `CalledProcessError`.
 3. **clone:** `MOCK_GIT_CLONE_EXIT=1` with `MOCK_GIT_STDERR="fatal: clone-cause"`, and
    the directory absent. The output contains `state-ledger clone failed` and
    `fatal: clone-cause`, and the function returns 0.
-4. **selection bounds:** a stub `ledger.py` prints 6 lines `e1`..`e6` and exits 1. The
+4. **selection bounds:** a stub `ledger.py` prints to stderr 6 lines `e1`..`e6` and exits 1. The
    output contains `e1`, `e2`, `e3` and `e6`, and neither `e4` nor `e5`.
-5. **empty stderr:** a stub `ledger.py` that exits 1 and prints nothing. The output
+5. **empty stderr:** a stub `ledger.py` that exits 1 and prints nothing to either stream. The output
    contains `(no stderr output)`.
-6. **redaction:** a stub `ledger.py` prints
-   `fatal: https://u:SECRET@example.invalid/x by git@github.com` and exits 1. The
-   output contains `://***@example.invalid` and `git@github.com`, and does not contain
-   `SECRET`.
-7. **quiet success:** pull and init both succeed and both write a line to stderr
+6. **quiet success:** pull and init both succeed and both write a line to stderr
    (`MOCK_GIT_STDERR` set, and a stub that prints to stderr, appends a marker to
    `MOCK_CALLS_FILE` and exits 0). The output contains no `[WARN]`, and the marker is
    present, so the test cannot pass with init never having run.
@@ -150,17 +140,16 @@ pull fails" keep passing unchanged, because the message text is unchanged.
 
 - **R1.** `lib/workflows.sh` defines `_ledger_warn_with_cause`, which calls `log_warn` with its first argument and then, for the first 3 and the last non-empty lines of its second argument (each line once, in original order), calls `log_warn` with that line prefixed by two spaces.
 - **R2.** `_ledger_warn_with_cause` prints `  (no stderr output)` through `log_warn` when its second argument has no non-empty line.
-- **R3.** `_ledger_warn_with_cause` replaces every match of `://[^/@[:space:]]*@` in a printed line with `://***@`.
-- **R4.** `ensure_state_ledger`'s `git pull`, `git clone` and `ledger.py init` calls each capture their stderr (stdout still discarded) and pass it to `_ledger_warn_with_cause` with the step's existing warning text when the command fails.
-- **R5.** `ensure_state_ledger` skips the `ledger.py init` step when its `git pull` step failed in the same call.
-- **R6.** `ensure_state_ledger` returns 0 on every path, and the clone-failure branch still returns before the init step.
-- **R7.** `tests/mocks/git` prints `MOCK_GIT_STDERR`, when set, to stderr on the `clone` path and the final catch-all path only.
-- **R8.** `tests/setup_env/install_guards.bats` contains the seven tests listed under Testing.
-- **R9.** The Backlog row "`ensure_state_ledger` hides why `ledger init` failed" is removed from the open P2 table.
-- **V1.** Tests 1, 2 and 3 fail on `origin/master` before the R4 change and pass after it.
+- **R3.** `ensure_state_ledger`'s `git pull`, `git clone` and `ledger.py init` calls each capture their stderr (stdout still discarded) and pass it to `_ledger_warn_with_cause` with the step's existing warning text when the command fails.
+- **R4.** `ensure_state_ledger` returns 0 on every path, and the clone-failure branch still returns before the init step.
+- **R5.** `tests/mocks/git` prints `MOCK_GIT_STDERR`, when set, to stderr on the `clone` path and the final catch-all path only.
+- **R6.** `tests/setup_env/install_guards.bats` contains the six tests listed under Testing.
+- **R7.** The Backlog row "`ensure_state_ledger` hides why `ledger init` failed" is removed from the open P2 table.
+- **V1.** Tests 1, 2 and 3 fail on `origin/master` before the R3 change and pass after it.
 - **N1.** No change to the three warning message texts.
 - **N2.** No warning is printed when a step's command exits 0, whatever it wrote to stderr.
 - **N3.** No change to `scripts/ledger.py` or any other file in the state-ledger repo.
+- **N4.** `ensure_state_ledger` runs `ledger.py init` whenever the script is executable, whether or not the pull step failed.
 
 ## Multi-Lens Review
 
@@ -185,6 +174,30 @@ Disposition: Addressed (operator, 2026-10-24) — first 3 + last line keeps both
 Finding: same tail-window loss on init's traceback (medium, bounded by call order). Minor: the quiet-success test passes if the init stub never ran; the redaction pattern was unspecified and a greedy glob would over-redact. Checked clean: redirection order, `local _err`, prompt and tty behaviour, no ControlPersist, no `MOCK_GIT_STDERR` leak, scope proportionate.
 Assumption: that init's pull essentially never fails unless the BatchMode pull just before it also failed; refute by any `ledger init failed` without a preceding `state-ledger pull failed`.
 Disposition: Addressed (operator, 2026-10-24) — test 7 asserts the init marker; redaction pinned to `://[^/@[:space:]]*@`; if init fails after a good pull, test 2's shape shows the cause.
+
+### Round 2
+
+Reviewed at commit: `55bfdbe4` (all three lenses, round-1 section framed as history)
+
+R numbers in this round use the `55bfdbe4` text, where R3 was redaction and R5 the init-skip; both were removed and the rest renumbered.
+
+#### Goal-Fit
+
+Finding: test 1 cannot fail on the init-skip (R5): its fixture has no `scripts/ledger.py`, and init runs only behind `[[ -x … ]]`, so the absent-warning assertion passes with or without the skip. Redaction (R3) protects a path this caller cannot reach: git strips userinfo itself (measured, git 2.53), and init's clone branch is unreachable because dotfiles runs init only when `ledger.py` exists. Stubs must write to stderr. Selection checked against unmeasured shapes (divergent `--ff-only`, non-git exception): cause kept.
+Assumption: that init's pull fails whenever dotfiles' BatchMode pull fails; a passphrase key with no agent, or an unknown host key, refutes it.
+Disposition: Addressed (operator, 2026-10-24) — R5 and R3 dropped (N4 added); stubs write to stderr.
+
+#### Ergonomics
+
+Finding: same vacuous R5 assertion. Test 1 used the clone capture on a pull path and pinned the fragment `and the repository exists.`. Cosmetic: a trailing `\r` on ssh's resolve error is printed. Volume acceptable: about 5 `[WARN]` lines only on a failing box.
+Assumption: same BatchMode-divergence doubt; R5 would remove the path that gives such a box its machine-id and `ledger` symlink.
+Disposition: Addressed (operator, 2026-10-24) — R5 dropped; test 1 uses the measured pull capture and asserts the cause line.
+
+#### Risk
+
+Finding: same vacuous R5 assertion. Checked clean: cmd_init order (skip lost nothing when both pulls fail), selection bounds 1/4/5 lines, trailing blank and CR-only lines, GNU and BSD `sed -E` redaction, `MOCK_GIT_STDERR` scope, `%` safety in `log_warn`.
+Assumption: same BatchMode-divergence doubt, unmeasured on the fleet.
+Disposition: Addressed (operator, 2026-10-24) — R5 dropped, so the assumption no longer carries the design.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
