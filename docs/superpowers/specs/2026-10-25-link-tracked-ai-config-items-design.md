@@ -2,6 +2,7 @@
 
 - **Date:** 2026-10-25
 - **Backlog row:** "`setup_dotfile_symlinks` links whatever runtime state the ai-config checkout happens to hold" (P2 — bugs and security)
+- **Approved:** 2026-10-25
 
 ## Problem
 
