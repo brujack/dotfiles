@@ -41,6 +41,12 @@ The fix replaces the default-allow glob with an allowlist derived from git: an a
 
 ### Tracked-item helper
 
+git is resolved through a seam, `_AI_CONFIG_GIT` (default `git`), in the shape of
+`_CLAUDE_GUARD_GIT` (`lib/workflows.sh:100`). Under `load_mocks`, `tests/mocks/git` shadows
+real git and answers `ls-files` with rc 0 and empty stdout, so without the seam every mocked
+test would take the empty-list branch. `load_mocks` points `_AI_CONFIG_GIT` at a private shim
+directory holding a symlink to the real git, so the helper queries the fixture's real index.
+
 `_ai_config_tracked_items <repo_dir> <subdir>` prints, one per line, the distinct first path
 component below `<subdir>/` of every file
 `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C <repo_dir> ls-files -z -- <subdir>`
@@ -64,7 +70,11 @@ glob's `[[ -e ]]` check does today.
 
 If the helper fails for a subdir, that subdir's loop links nothing, `log_error` names the
 directory and the failed command, the rest of the function runs, and the function returns 1
-at its end. It never falls back to the glob. `run_setup_user` already treats 1 as a failure
+at its end. Because `run_setup_user` calls it as `setup_dotfile_symlinks || return 1`, that
+return skips every later `setup_user` step (`install_terraform_skill`, the default-shell
+step, cheat.sh, the cadence agents, the ledger entry), so the error line says the remaining
+setup steps were skipped. The branch is close to unreachable in production:
+`setup_ai_config` clones or updates the same checkout with the same git one line earlier. It never falls back to the glob. `run_setup_user` already treats 1 as a failure
 (`lib/workflows.sh:402`).
 
 ### Stale-link warning
@@ -72,7 +82,17 @@ at its end. It never falls back to the glob. `run_setup_user` already treats 1 a
 After each loop, scan `~/.claude/*` (or `~/.cursor/*`). For each entry that is a symlink whose
 `readlink` text is exactly `<ai_config_dir>/.claude/<name>` (or `.cursor/<name>`), where
 `<name>` is not in the tracked list and is not one of the explicitly-linked names, emit one
-`log_warn` naming the link, its target, and the remedy `rm <link>`. The link is never
+`log_warn` naming the link, its target, and a remedy chosen by what the target holds:
+
+- target is a file, an empty directory, or missing: `rm <link>`;
+- target is a non-empty directory:
+  `rm <link> && mkdir <link> && cp -a <target>/. <link>/`, which leaves ai-config's copy in
+  place as a backup. A bare `rm` there is wrong: on `workstation` `~/.claude/dod-log` links to
+  an ai-config directory holding 42 entries and no `dod-log.bak` exists (measured 2026-10-25),
+  so `rm` alone would hand `dod_log.py` an empty directory.
+
+The warning fires only on `setup_user`/`setup` (the function's sole caller,
+`lib/workflows.sh:402`); a doctor check is out of scope (N2). The link is never
 removed: on `workstation` the stale `dod-log` link holds the live DoD entries, and removing it
 mid-session would hide them from the pre-push gate — the same harm this change exists to stop.
 Matching on the literal `readlink` text is deliberate: `safe_link` writes that exact string, so
@@ -83,7 +103,13 @@ is nothing to compare against.
 
 ## Testing
 
-All cases in `tests/setup_env/install_guards.bats`, against a fixture ai-config built as a real
+Existing tests: about 47 tests in `install_guards.bats` and `extracted_functions.bats` call
+`setup_dotfile_symlinks` against plain-directory ai-config fixtures and assert `status -eq 0`.
+They move to one shared fixture builder in `tests/helpers/common.bash` that `git init`s the
+fixture, commits its `.claude`/`.cursor` contents, and strips the four `GIT_*` variables, so
+their assertions stay unchanged.
+
+All new cases in `tests/setup_env/install_guards.bats`, against a fixture ai-config built as a real
 git repo under `BATS_TEST_TMPDIR` (with `unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
 GIT_INDEX_FILE` in `setup()`), `HOME` redirected to a fixture at `setup()` scope, and
 `_OVERRIDE_AI_CONFIG_DIR` pointing at the fixture.
@@ -101,12 +127,17 @@ GIT_INDEX_FILE` in `setup()`), `HOME` redirected to a fixture at `setup()` scope
    `~/.claude` or `~/.cursor` links into the fixture; links outside ai-config (e.g.
    `~/.vimrc`) are still made.
 8. An exported decoy `GIT_DIR` pointing at a different repo does not change which items are
-   linked.
+   linked: the linked set equals a pinned expected list, not merely the decoy-free run.
+10. A valid repo that tracks nothing under `.claude`: return 1 with the empty-list error and
+    no `.claude` links (this is the case that kills the empty-check mutant; case 7 cannot,
+    because a non-repo exits 128 before the empty check).
+11. A stale link whose target is a non-empty directory names the `cp -a` remedy; one whose
+    target is a file names `rm <link>`.
 9. The helper's output on a fixture with three tracked items is exactly those three names,
    sorted (a pinned non-empty value, so a helper returning nothing cannot pass).
 
 Mutation controls, run during Phase 2 and recorded in the PR: restoring the glob turns case 2
-red; removing the empty-list check turns case 7's helper assertion red.
+red; removing the empty-list check turns case 10 red.
 
 ## Requirements
 
@@ -117,9 +148,11 @@ red; removing the empty-list check turns case 7's helper assertion red.
 - **R5.** `[PR1]` Tracked names starting with `.` are not linked.
 - **R6.** `[PR1]` The tracked list is read with `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `GIT_INDEX_FILE` stripped, so an exported decoy does not change it.
 - **R7.** `[PR1]` When the tracked list cannot be read or is empty, that subdir's loop links nothing, an error names the directory, the remaining links are still made, and the function returns 1.
-- **R8.** `[PR1]` An existing symlink in `~/.claude` or `~/.cursor` whose `readlink` text is `<ai_config_dir>/<subdir>/<name>` for an untracked, non-explicit `<name>` produces exactly one warning naming it and the `rm` remedy, and is left in place.
-- **R9.** `[PR1]` `CLAUDE.md` § Symlink Strategy states that only items git tracks in ai-config are linked and that stale links are warned about, not removed.
+- **R8.** `[PR1]` An existing symlink in `~/.claude` or `~/.cursor` whose `readlink` text is `<ai_config_dir>/<subdir>/<name>` for an untracked, non-explicit `<name>` produces exactly one warning naming it and a remedy chosen by the target (`rm <link>` for a file, empty directory or missing target; `rm <link> && mkdir <link> && cp -a <target>/. <link>/` for a non-empty directory), and is left in place.
+- **R9.** `[PR1]` The helper resolves git through `_AI_CONFIG_GIT` (default `git`), and `load_mocks` points it at real git so mocked tests query the fixture's real index.
+- **R10.** `[PR1]` `CLAUDE.md` § Symlink Strategy states that only items git tracks in ai-config are linked and that stale links are warned about, not removed.
 - **V1.** On `claude` after merge, run only the function under dry run (`DRY_RUN=1 bash -c 'source setup_env.sh; detect_env; setup_dotfile_symlinks'` from the main checkout, never a full `-t setup_user`); it warns for the five stale `.claude` links and `.cursor/plugins` and its log names no `Linked` line for an untracked item.
+- **V2.** In ai-config, after notifying its session: update `.claude/memory/ai-config-cursor-plugin-architecture.md` and `docs/knowledge/dotfiles-conventions.md` (both describe `~/.cursor/plugins` as linked) and add a Backlog row correcting `docs/superpowers/specs/2026-07-25-role-model-enforcement-design.md:99`, which claims `~/.claude/settings.local.json` governs all nine repos (Claude Code reads it only for sessions started in `$HOME`, per `code.claude.com/docs/en/permissions.md`).
 - **N1.** No symlink is removed automatically by this change.
 - **N2.** No new doctor check.
 - **N3.** `safe_link` is not modified.
@@ -133,19 +166,19 @@ Reviewed at commit: `db917b56` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: The allowlist is the simplest correct fix and worth building; the stale-link warning is not. (1) Its `rm <link>` remedy destroys data in the cited case: on `workstation` `~/.claude/dod-log` links to `ai-config/.claude/dod-log`, which holds 42 entries, and `dod-log.bak` no longer exists (orchestrator re-measured over `ssh workstation`, 2026-10-25), so `rm` leaves `dod_log.py` an empty directory. For `~/.cursor/plugins` it drops Cursor's live `plugins/cache`. (2) Reads-it test: the warning prints only on `setup_user`/`setup` (sole caller `lib/workflows.sh:402`), with no durable channel, so it does not change a decision in practice. (3) `.cursor/plugins` being linked is documented as deliberate in `ai-config/.claude/memory/ai-config-cursor-plugin-architecture.md:50` and `ai-config/docs/knowledge/dotfiles-conventions.md:341`; the spec reverses that silently and R9 covers only `CLAUDE.md`. (4) Cases 2, 5 and 8 pass on empty helper output; case 8 needs a pinned expected set.
 Assumption: Nothing needs an untracked `~/.claude/<name>` link on a fresh machine; main suspect `settings.local.json`. Settled by the orchestrator: Claude Code docs (`code.claude.com/docs/en/permissions.md`) state "`~/.claude/settings.local.json` is still local scope, so Claude Code reads it only in sessions you start in your home directory itself". The spec's premise holds; ai-config's `2026-07-25-role-model-enforcement-design.md:99` ("governs all nine repos") is wrong.
-Disposition:
+Disposition: Addressed — remedy is now chosen by target contents (`cp -a` for a non-empty directory); case 8 pins an expected set; V2 updates the two ai-config docs and the wrong 2026-07-25 line. Reads-it: Accepted, operator 2026-10-25 — chose the data-safe-remedy option whose stated cost is that the warning still prints only on setup_user.
 
 ### Ergonomics
 
 Finding: Same remedy defect as Goal-fit: the warning must name a data-preserving remedy when the target is non-empty. Its premise that `workstation` still holds `dod-log.bak` is stale (re-measured: absent). Return 1 now skips the rest of `run_setup_user` (`install_terraform_skill`, default shell, cheat.sh, cadence agents, ledger entry) via `_run_or_exit`; the error line should say so. Possible WSL failure: an ai-config checkout under `/mnt/c` trips git's dubious-ownership check (unverified). Not noise: 6 warnings on a rare run on `claude`.
 Assumption: Same `settings.local.json` scope question as Goal-fit; settled by the docs quote above.
-Disposition:
+Disposition: Addressed — data-safe remedy; error line names the skipped setup steps. WSL `/mnt/c` ownership: not addressed, unverified and not where the WSL checkout lives today.
 
 ### Risk
 
 Finding: The test plan cannot run as written. `load_mocks` prepends `tests/mocks/` to `PATH` (`tests/helpers/common.bash:16`), and `tests/mocks/git` exits `${MOCK_GIT_EXIT:-0}` with empty stdout for `ls-files` (orchestrator read the mock), so the helper takes the empty-list branch under every mocked test. New cases 1, 3, 4, 6, 8 and 9 go red; 2, 5 and 7 go green vacuously; about 47 existing `setup_dotfile_symlinks` tests asserting `status -eq 0` in `install_guards.bats` and `extracted_functions.bats` flip red. Needs a named git seam (the `_CLAUDE_GUARD_GIT` shape, `lib/workflows.sh:100`) and a fixture decision for the existing tests. Second: the mutation control "removing the empty-list check turns case 7 red" is false, since a non-repo exits 128 and never reaches the empty check; add a case with a valid repo tracking nothing under `.claude`.
 Assumption: Same `settings.local.json` scope question; settled by the docs quote above.
-Disposition:
+Disposition: Addressed — `_AI_CONFIG_GIT` seam (R9), shared git fixture builder for the existing tests, case 10 for the empty-check mutant.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
