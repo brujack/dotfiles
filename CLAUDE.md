@@ -57,11 +57,13 @@ When web research (web-research skill) or context-mode fetches produce findings 
 Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
 
 - Repo-root dotfiles: symlink each individually into `$HOME`, `.zshenv` included (an existing regular `~/.zshenv` is adopted as `~/.zshenv.local`; if both exist setup warns and leaves both).
-- `.claude/`: symlink each ai-config `.claude/` item individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below). → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
+- `.claude/`: symlink each ai-config `.claude/` item that git tracks individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below); `CLAUDE_HOME_STORES` names (`lib/constants.sh`) are never linked even when tracked. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
 
 - `projects/` IS symlinked wholesale, so `~/.claude/projects/<encoded-repo>/memory/` is inside ai-config's working tree and `make test` scope: before writing scratch state under `~/.claude/`, know you are writing into another repo, and promote or delete any draft, since a leftover one hard-fails `validate-memory` for every session committing to ai-config. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink projects is linked wholesale`
 
-- **`.cursor/`** — each item (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
+- **`.cursor/`** — each item git tracks (excluding `User/`) symlinked individually into `~/.cursor/` from the ai-config repo; `User/` contents are symlinked into the platform Cursor user settings dir
+
+- Untracked ai-config items are never linked; if ai-config's tracked list cannot be read, `setup_dotfile_symlinks` links nothing from that directory and returns 1 (later `setup_user` steps are skipped); an existing link into ai-config for an untracked, home-store or skipped name gets one WARN with a remedy and is never removed.
 
 Always remove the old file before symlinking (`rm -f` then `ln -s`). Validate symlinks with `[[ -L ${HOME}/.file ]]`.
 
@@ -309,6 +311,9 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - A test seam is a variable with a production default — `local _file="${VAR:-<real path>}"` — not a naming rule: seams below are named `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_CARGO_BIN`, and more.
 - In tests, set the seam variable to a writable temp copy; leave it unset in production code. → `dotfiles-test-seams.md` § `Test seam idiom and override pattern`
+
+- `_AI_CONFIG_GIT` (`lib/helpers.sh:_ai_config_tracked_items`): `load_mocks` points it at the real git because `tests/mocks/git` answers `ls-files` with nothing; never point it at the mock.
+- `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a per-test git fixture (`track_ai_config_fixture`, `tests/helpers/common.bash`); a test needing other ai-config contents overrides it and calls `track_ai_config_fixture` on its own fixture.
 
 - `tests/mocks/pyenv install` creates its version dir only when `HOME` matches `*/bats-run-*` (keyed on `HOME`, never `PYENV_ROOT`); inject failure with `${HOME}/.mock-pyenv-install-exit`, not an env var; assert effects on disk or in `${HOME}/.mock_calls`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pyenv mock install under env -i`
 
