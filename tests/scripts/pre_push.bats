@@ -9,8 +9,10 @@ setup() {
   MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/makebin"
   source "${REPO_ROOT}/tests/helpers/new_session.bash"
-  export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
-  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${TMPDIR}"
+  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${BATS_TEST_TMPDIR}/tmp"
+  # Canonical (symlink-resolved) so the hook's make -C argument equals the mock's pwd -P (/var is a symlink on macOS).
+  TMPDIR="$(_canon "${BATS_TEST_TMPDIR}/tmp")"
+  export TMPDIR
   bash -c "
     export PATH='${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -1688,8 +1690,9 @@ _assert_ran_in_repo() {
 }
 
 @test "dirty-tree: a single quote in TMPDIR still cleans up" {
-  export TMPDIR="${BATS_TEST_TMPDIR}/it's tmp"
-  mkdir -p "${TMPDIR}"
+  mkdir -p "${BATS_TEST_TMPDIR}/it's tmp"
+  TMPDIR="$(_canon "${BATS_TEST_TMPDIR}/it's tmp")"
+  export TMPDIR
   _dirty_fixture
   _dirty_edit "echo 2"
   run _dirty_push
@@ -1745,6 +1748,31 @@ SHIM
   [[ "$output" == *"$(_no_checkout_line)"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
   [ "$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -name 'pre-push.*' | wc -l)" -eq 0 ]
+}
+
+@test "dirty-tree: a failed first worktree remove still clears the registration" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  local _real_git _shim="${BATS_TEST_TMPDIR}/failonce"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [[ "\${_a}" == remove && ! -e "${BATS_TEST_TMPDIR}/failed-once" ]]; then
+    : > "${BATS_TEST_TMPDIR}/failed-once"
+    exit 1
+  fi
+done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [ -e "${BATS_TEST_TMPDIR}/failed-once" ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
 }
 
 # _signal_case <TERM|INT> <expected status> -- the make mock signals its own
