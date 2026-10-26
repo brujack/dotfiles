@@ -41,7 +41,9 @@ _assert_make_ran() {
 
 teardown() {
   # A test may leave a read-only directory under TMPDIR; bats must still clean up.
-  chmod -R u+w "${TMPDIR:-/nonexistent}" 2>/dev/null || :
+  if [[ "${TMPDIR:-}" == "${BATS_TEST_TMPDIR}"/* ]]; then
+    chmod -R u+w "${TMPDIR}" 2>/dev/null || :
+  fi
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -1789,6 +1791,7 @@ WRAP
 }
 
 @test "dirty-tree: an undeletable temp file does not change the verdict" {
+  [[ "${EUID}" -ne 0 ]] || skip "root ignores 0555; case needs a non-root user"
   _dirty_fixture
   _dirty_edit "echo 2"
   export MAKE_MOCK_UNDELETABLE=1

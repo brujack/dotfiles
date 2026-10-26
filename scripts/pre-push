@@ -299,16 +299,15 @@ fi
 # Dirty or unreadable: a subshell so its EXIT trap fires on every way out of
 # this step. The trap is installed only once the temp root exists, so cleanup
 # never receives an empty path, and it removes only what this run created.
-# INT and TERM exit through that trap (130 and 143) in both shells. The hook
-# shell needs its own: untrapped, it dies at once and the caller sees the exit
-# while the subshell is still removing the checkout. Dirty branch only; the
-# clean path creates nothing to clean up.
-trap 'exit 130' INT
+# TERM is trapped in the hook's own shell so bash waits for the cleanup
+# subshell before exiting 143; untrapped, the hook exits at once while the
+# checkout is still being removed. INT needs no trap: bash already waits for a
+# foreground child on SIGINT. A TERM sent only to the hook's own pid (not its
+# process group) therefore waits for the running suite to finish before the
+# hook exits. Dirty branch only; the clean path creates nothing to clean up.
 trap 'exit 143' TERM
 _tmp_status=0
 (
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
     _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || { _no_checkout "${tree_head:0:7}"; exit 1; }
     [[ -n "${_tmp_root}" ]] || { _no_checkout "${tree_head:0:7}"; exit 1; }
     _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
