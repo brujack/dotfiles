@@ -298,3 +298,40 @@ setup() {
   run sync_git_repos
   [ "$status" -eq 0 ]
 }
+
+# A git hook (or any parent that ran inside a worktree) exports GIT_DIR, and
+# git -C does not override it, so every call below would act on that repo.
+# _make_decoy builds a second clone, one commit ahead of its own origin, for
+# the leaked variables to point at.
+_make_decoy() {
+  git init -q --bare "${TESTDIR}/decoy-origin.git"
+  git clone -q "${TESTDIR}/decoy-origin.git" "${TESTDIR}/decoy"
+  git -C "${TESTDIR}/decoy" commit -q --allow-empty -m init
+  git -C "${TESTDIR}/decoy" push -q -u origin HEAD:master
+  printf 'decoy\n' > "${TESTDIR}/decoy/tracked.txt"
+  git -C "${TESTDIR}/decoy" add tracked.txt
+  git -C "${TESTDIR}/decoy" commit -q -m "decoy unpushed"
+}
+
+@test "test_bug_git_sync_leaked_git_dir: sync of a clean repo never pushes the repo GIT_DIR names" {
+  _make_decoy
+  local _decoy_before
+  _decoy_before="$(git -C "${TESTDIR}/decoy-origin.git" rev-parse master)"
+  GIT_DIR="${TESTDIR}/decoy/.git" run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${TESTDIR}/decoy-origin.git" rev-parse master)" = "${_decoy_before}" ]
+}
+
+# GIT_DIR redirects the refs (ahead), and GIT_WORK_TREE and GIT_INDEX_FILE
+# each flip the dirty bit alone (the decoy index and tree hold tracked.txt;
+# CLONE has no files). GIT_COMMON_DIR alone is inert for a discovered repo on
+# git 2.53 (HEAD and @{u} still resolve from CLONE), so no assertion here can
+# fail on its strip; it stays stripped to match the fleet's four-variable rule.
+@test "test_bug_git_sync_leaked_git_dir: status under all four leaked variables describes the repo it was given" {
+  _make_decoy
+  GIT_DIR="${TESTDIR}/decoy/.git" GIT_WORK_TREE="${TESTDIR}/decoy" \
+    GIT_COMMON_DIR="${TESTDIR}/decoy/.git" GIT_INDEX_FILE="${TESTDIR}/decoy/.git/index" \
+    run _git_repo_status "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "dirty=0 ahead=0 behind=0" ]
+}

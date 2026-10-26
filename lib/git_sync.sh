@@ -19,29 +19,36 @@ if ! declare -f _dry_run_active >/dev/null 2>&1; then
   _dry_run_active() { return 0; }
 fi
 
+# git with the four repo-location variables stripped. git -C does not override
+# an inherited GIT_DIR (see shell.md), and a hook or worktree parent exports
+# one, which would point every fetch, status and push below at that repo.
+_git_sync_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
+}
+
 _git_repo_status() {
   local _path="$1"
 
-  if [[ ! -d "${_path}" ]] || ! git -C "${_path}" rev-parse --git-dir >/dev/null 2>&1; then
+  if [[ ! -d "${_path}" ]] || ! _git_sync_git -C "${_path}" rev-parse --git-dir >/dev/null 2>&1; then
     printf "missing\n"
     return 0
   fi
 
-  if ! GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" fetch --quiet 2>/dev/null; then
+  if ! GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_sync_git -C "${_path}" fetch --quiet 2>/dev/null; then
     printf "unreachable\n"
     return 0
   fi
 
-  if ! git -C "${_path}" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  if ! _git_sync_git -C "${_path}" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
     printf "no-upstream\n"
     return 0
   fi
 
   local _dirty=0
-  [[ -n "$(git -C "${_path}" status --porcelain 2>/dev/null)" ]] && _dirty=1
+  [[ -n "$(_git_sync_git -C "${_path}" status --porcelain 2>/dev/null)" ]] && _dirty=1
 
   local _counts _ahead _behind
-  _counts="$(git -C "${_path}" rev-list --left-right --count 'HEAD...@{u}' 2>/dev/null)"
+  _counts="$(_git_sync_git -C "${_path}" rev-list --left-right --count 'HEAD...@{u}' 2>/dev/null)"
   _ahead="$(printf '%s' "${_counts}" | awk '{print $1}')"
   _behind="$(printf '%s' "${_counts}" | awk '{print $2}')"
 
@@ -80,7 +87,7 @@ _git_sync_one_repo() {
           printf "[DRY RUN] git -C %s push --quiet\n" "${_path}"
           return 0
         fi
-        if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" push --quiet; then
+        if GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_sync_git -C "${_path}" push --quiet; then
           return 0
         fi
         log_warn "${_path}: push failed"
@@ -91,7 +98,7 @@ _git_sync_one_repo() {
           log_warn "${_path}: dirty tree, behind — skipping pull (unsafe)"
           return 1
         fi
-        if GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_path}" pull --ff-only --quiet; then
+        if GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_sync_git -C "${_path}" pull --ff-only --quiet; then
           return 0
         fi
         log_warn "${_path}: pull failed"
