@@ -33,7 +33,8 @@ setup() {
 # failure, so the control uses the unpiped form.
 # The leaf signals only once its parent is asleep (ps state S), i.e. blocked in
 # wait4 with its wait handler installed; until then the shell's SIGINT is at
-# the default action. The poll gives up after about 5 s and signals anyway.
+# the default action. The poll gives up after 500 tries and signals anyway:
+# 5 s of sleep, but each try also forks ps, so wall-clock is several times that.
 _signal_fixture() {
   local _install="$1" _sig="$2" _pipe="$3" _f="${BATS_TEST_TMPDIR}/fixture.sh"
   {
