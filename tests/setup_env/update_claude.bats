@@ -229,6 +229,7 @@ PY
   export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"m"}]'
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"good@m","scope":"user"},{"id":"a","scope":"user"}]'
   run run_update
+  [ "$status" -eq 0 ]
   grep -q '^claude plugins update good@m$' "${MOCK_CALLS_FILE}"
   refute_grep '^claude plugins update a$' "${MOCK_CALLS_FILE}"
 }

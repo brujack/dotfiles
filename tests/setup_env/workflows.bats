@@ -1376,6 +1376,7 @@ printf "shims-gem %s\n" "$*" >> "${MOCK_CALLS_FILE}"
 EOF
   chmod +x "${_shims}/gem"
   run run_update
+  [ "$status" -eq 0 ]
   grep -q "shims-gem update" "${MOCK_CALLS_FILE}"
 }
 
@@ -1408,6 +1409,7 @@ EOF
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_MAS_UPGRADE_OUTPUT="==> Updated Windows App (11.3.5)"
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"1 app(s) (Windows App (11.3.5))"* ]]
 }
 
@@ -1420,6 +1422,7 @@ EOF
   MOCK_MAS_UPGRADE_OUTPUT="$(printf '==> Updated App One (1.0)\n==> Updated App Two (2.0)')"
   export MOCK_MAS_UPGRADE_OUTPUT
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"2 app(s)"* ]]
 }
 
@@ -1431,6 +1434,7 @@ EOF
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_MAS_UPGRADE_OUTPUT=""
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"no changes"* ]]
 }
 
@@ -2104,6 +2108,7 @@ _stub_refresher_fail() {
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"Update Summary"* ]]
 }
 
@@ -2113,6 +2118,7 @@ _stub_refresher_fail() {
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"brew"* ]]
 }
 
@@ -2122,6 +2128,7 @@ _stub_refresher_fail() {
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run run_update
+  [ "$status" -eq 0 ]
   [[ "$output" == *"[SKIP]"* ]]
 }
 
@@ -2171,7 +2178,9 @@ _stub_refresher_fail() {
   unset LINUX UBUNTU REDHAT FEDORA CENTOS
   export UPDATE_BREW=1
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  run_update || true
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "FAIL" ]
 }
 
@@ -3103,6 +3112,7 @@ _cheat_mode() {
   export MOCK_CURL_STDOUT=$'#!/bin/bash\nx'
   local _rc=0
   run_update || _rc=$?
+  [ "${_rc}" -eq 0 ]
   grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cht.sh/:cht.sh'
   grep -E -- '--max-time 10( |$)' "${MOCK_CALLS_FILE}" | grep -qF 'https://cheat.sh/:zsh'
 }
@@ -3545,6 +3555,7 @@ _cheat_mode() {
   # everything" (_run_all) path, not a bare UPDATE var (_any_update_flag
   # only checks UPDATE_BREW/PIP/GEMS/MAS/PKGS/CLAUDE, never bare UPDATE).
   run run_update
+  [ "$status" -eq 0 ]
   [ -f "${_marker}" ]
 }
 
@@ -3558,6 +3569,7 @@ _cheat_mode() {
   unset LINUX UBUNTU
   install_git_hooks_all_repos() { printf 'git-hooks\n' >> "${_log}"; return 0; }
   run run_update
+  [ "$status" -eq 0 ]
   [ "$(sed -n '1p' "${_log}")" = "git-repos" ]
   [ "$(sed -n '2p' "${_log}")" = "git-hooks" ]
 }
@@ -3570,6 +3582,7 @@ _cheat_mode() {
   local _marker="${BATS_TEST_TMPDIR}/git_hooks_sweep.ran"
   install_git_hooks_all_repos() { touch "${_marker}"; return 0; }
   run run_update
+  [ "$status" -eq 0 ]
   [ ! -f "${_marker}" ]
 }
 
@@ -3585,6 +3598,7 @@ _cheat_mode() {
   # a subshell, so exports made inside run_update do not survive back into
   # this test body.
   run run_update
+  [ "$status" -eq 1 ]
   [[ "$output" == *"[FAIL] git-hooks"* ]]
 }
 
@@ -4206,6 +4220,7 @@ _stub_cv_callees() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export MOCK_PYTHON_PIP_CHECK_EXIT=0
   run run_update
+  [ "$status" -eq 0 ]
   if [[ "${output}" != *"Updated pip packages"* ]]; then
     printf "pip section never ran; the assertion below would be vacuous\n" >&2
     return 1
@@ -4230,6 +4245,7 @@ _stub_cv_callees() {
   unset UPDATE_BREW UPDATE_CLAUDE UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   run run_update
+  [ "$status" -eq 0 ]
   grep -q "uv sync" "${MOCK_CALLS_FILE}"
   if grep -qE 'pip install -U' "${MOCK_CALLS_FILE}"; then
     printf "still resolving with pip install -U\n" >&2
@@ -4248,6 +4264,7 @@ _stub_cv_callees() {
  + urllib3==2.7.0
 "
   run run_update
+  [ "$status" -eq 0 ]
   [[ "${output}" == *"requests"* ]]
   [[ "${output}" == *"urllib3"* ]]
 }
@@ -4260,6 +4277,7 @@ _stub_cv_callees() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export MOCK_PYTHON_PIP_CHECK_EXIT=1
   run run_update
+  [ "$status" -eq 1 ]
   if [[ "${output}" != *"[FAIL]"*"pip-check"* ]]; then
     printf "conflicts no longer warn but do not fail either\n" >&2
     return 1
@@ -4281,6 +4299,7 @@ _stub_cv_callees() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
   run run_update
+  [ "$status" -eq 0 ]
   if [[ "${output}" != *"Update Summary"* ]]; then
     printf "run aborted before the summary; the run record is lost\n" >&2
     return 1
@@ -4305,6 +4324,7 @@ _stub_cv_callees() {
   export MOCK_PYENV_WHICH_STDOUT="${BATS_TEST_DIRNAME}/../mocks/python"
   export MOCK_PYTHON_FREEZE_OUTPUT="requests==2.34.2"
   run run_update
+  [ "$status" -eq 0 ]
   local _dir="${HOME}/.local/share/dotfiles/venv-snapshots"
   local _n
   _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f 2>/dev/null | wc -l | tr -d ' ')"
@@ -4330,6 +4350,7 @@ _stub_cv_callees() {
     printf 'old\n' > "${_dir}/ansible-2020010${i:0:1}T0000${i}Z.txt"
   done
   run run_update
+  [ "$status" -eq 0 ]
   local _n
   _n="$(find "${_dir}" -maxdepth 1 -name 'ansible-*.txt' -type f | wc -l | tr -d ' ')"
   [ "${_n}" -eq 10 ]

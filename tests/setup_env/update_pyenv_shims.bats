@@ -212,7 +212,7 @@ _path_without_pyenv() {
   # real function's rc 2 is otherwise gated out by the SKIP check at
   # _pyenv_shims_bin before _update_record_start even runs.
   #
-  # Called as `run_update || true`, not bare -- bats runs test bodies under
+  # Called as `run_update || _rc=$?`, not bare -- bats runs test bodies under
   # `set -e`, and a bare `x="$(stubbed_fn)"` assignment where the stub
   # returns 2 aborts the calling shell at that line (bash's own errexit
   # behaviour for a failing command substitution used as an assignment's
@@ -220,13 +220,16 @@ _path_without_pyenv() {
   # unreached'` exits without printing). `run run_update` would dodge that
   # too, but bats forks it into a subshell, and _DOTFILES_RUN_TMPDIR
   # (exported inside run_update) never makes it back -- verified the same
-  # way: the grep below fails on an empty path. `|| true` on the bare call
+  # way: the grep below fails on an empty path. `|| _rc=$?` on the bare call
   # protects the whole chain (a function's internal errexit is suppressed
   # when the call itself sits in a checked context) while staying in this
-  # shell. Production is unaffected either way: lib/workflows.sh declares
-  # no `set -e` of its own (shell.md).
+  # shell, and keeps the rc so a WARN is proven not to fail the run.
+  # Production is unaffected either way: lib/workflows.sh declares no
+  # `set -e` of its own (shell.md).
   _pyenv_missing_shims() { return 2; }
-  run_update || true
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 0 ]
   grep -q '^WARN$' "${_DOTFILES_RUN_TMPDIR}/status_pyenv-shims"
   grep -q 'disappeared' "${_DOTFILES_RUN_TMPDIR}/result_pyenv-shims"
 }
