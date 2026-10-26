@@ -257,6 +257,10 @@ becomes exit 1 with the "could not create" line and R3 is amended.
 - **N2.** A dirty tree alone never refuses a push.
 - **N3.** The inert set, the master guard, the budget check and the wrong-tree refusal are unchanged; the clean path runs `make -C "${REPO_ROOT}" test` as today.
 
+## Amendments
+
+- R7 -> `tests/scripts/pre_push.bats` gains eighteen `dirty-tree:` cases: the fifteen in the Testing table plus `untracked directory counts each file` (pins `--untracked-files=all`), `a single quote in TMPDIR still cleans up` (pins the late-expanding EXIT trap) and `the suite does not inherit an exported GIT_DIR` (pins the subshell's `GIT_*` unset); `setup()` exports `TMPDIR` under `BATS_TEST_TMPDIR` for the whole file; every existing assertion that the suite ran names `make -C ${REPO_DIR} test` exactly; paths compared with `git worktree list` output are canonicalised; `_in_new_session` moves to `tests/helpers/` and `tests/setup_env/update_signals.bats` uses it from there. — Task 2 review found three load-bearing behaviours no table case could fail on; each new case was shown red against the defective code.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `25cb6760` (Step 7 self-review commit, before Step 8 dispatch)
