@@ -27,9 +27,17 @@ _canon() { (cd "$1" && pwd -P); }
 # exact whole-line match. Substitution stays off the grep line so
 # makefile_lint_scope.bats's grep-led-line exemption applies.
 _assert_make_ran() {
-  local _dir
+  local _dir _flag='-C'
   _dir="$(_canon "${REPO_DIR}")"
-  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}"
+  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}" && return 0
+  # _flag keeps "make" and "-C" off one non-grep line (the scanner's rule).
+  printf 'expected: make %s %s test\n' "${_flag}" "${_dir}" >&2
+  if [[ -f "${MOCK_CALLS_FILE}" ]]; then
+    cat "${MOCK_CALLS_FILE}" >&2
+  else
+    printf '<no mock calls file>\n' >&2
+  fi
+  return 1
 }
 
 teardown() {
@@ -1277,7 +1285,8 @@ _run_pre_push_at() {
   [[ "$output" == *"not the pushed commit"* ]]
   [[ "$output" == *"${sha1:0:7}"* ]]
   [[ "$output" == *"${sha2:0:7}"* ]]
-  [[ "$output" == *"this checkout ($(cd "${REPO_DIR}" && pwd -P))"* ]]
+  _repo_canon="$(_canon "${REPO_DIR}")"
+  [[ "$output" == *"this checkout (${_repo_canon})"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
@@ -1416,12 +1425,12 @@ _run_pre_push_at() {
   _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
   wt="${BATS_TEST_TMPDIR}/wt"
   _git_clean "worktree add --quiet --detach '${wt}' ${sha1}"
-  wt="$(cd "${wt}" && pwd -P)"
+  wt="$(_canon "${wt}")"
   _write_make_mock 0
   run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" \
     "export GIT_WORK_TREE='${wt}'"
   [ "$status" -eq 0 ]
-  grep -qF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
 }
 
 @test "wrong-tree: the remedy is the exact push command, with a sha source when the ref is not a refs/ name" {
