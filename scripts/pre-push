@@ -258,6 +258,20 @@ _git_stripped() {
         git -C "${REPO_ROOT}" "$@"
 }
 
+# Messages for the temporary-checkout path: <count> <sha7> <path>, <sha7> <path>.
+_say_dirty() {
+    printf 'pre-push: working tree has %s uncommitted or untracked path(s); testing committed %s in clean checkout %s.\n' \
+        "${1}" "${2}" "${3}" >&2
+}
+_say_unreadable() {
+    printf 'pre-push: could not read the working-tree status; testing committed %s in clean checkout %s.\n' \
+        "${1}" "${2}" >&2
+}
+_say_suite_failed() {
+    printf 'pre-push: suite failed against committed %s (clean checkout %s, now removed); uncommitted changes were not tested.\n' \
+        "${1}" "${2}" >&2
+}
+
 # The suite tests a tree, and uncommitted edits in REPO_ROOT would change the
 # verdict about the pushed commit. A dirty tree (tracked or untracked, not
 # ignored) or an unreadable status therefore tests the commit in a clean
@@ -287,17 +301,18 @@ _tmp_status=0
     _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || exit 1
     [[ -n "${_tmp_root}" ]] || exit 1
     _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
-    # shellcheck disable=SC2064 # expand now: the paths are fixed for this run
-    trap "_git_stripped worktree remove -f -f '${_tree}' 2>/dev/null; rm -rf '${_tmp_root}'" EXIT
+    # Single-quoted: expands when the trap fires, so a quote in TMPDIR cannot
+    # break the parse. The second remove clears a registration left when the
+    # first failed (a locked entry whose directory is gone is never pruned). `|| :` because
+    # the hook runs under set -e: a remove that fails must not abort the cleanup
+    # or replace the suite's exit status.
+    trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}"; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
     _git_stripped worktree add --quiet --detach --lock \
         --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || exit 1
     if [[ ${_status_ok} -eq 1 ]]; then
-        _count="$(printf '%s\n' "${_status}" | awk 'END { print NR }')"
-        printf 'pre-push: working tree has %s uncommitted or untracked path(s); testing committed %s in clean checkout %s.\n' \
-            "${_count}" "${tree_head:0:7}" "${_tree}" >&2
+        _say_dirty "$(printf '%s\n' "${_status}" | awk 'END { print NR }')" "${tree_head:0:7}" "${_tree}"
     else
-        printf 'pre-push: could not read the working-tree status; testing committed %s in clean checkout %s.\n' \
-            "${tree_head:0:7}" "${_tree}" >&2
+        _say_unreadable "${tree_head:0:7}" "${_tree}"
     fi
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
@@ -306,8 +321,7 @@ _tmp_status=0
         exit 0
     else
         _rc=$?
-        printf 'pre-push: suite failed against committed %s (clean checkout %s, now removed); uncommitted changes were not tested.\n' \
-            "${tree_head:0:7}" "${_tree}" >&2
+        _say_suite_failed "${tree_head:0:7}" "${_tree}"
         exit "${_rc}"
     fi
 ) || _tmp_status=$?

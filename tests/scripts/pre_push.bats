@@ -1538,6 +1538,7 @@ _assert_ran_in_repo() {
   [[ "$output" != *"uncommitted"* ]]
   [[ "$output" != *"clean checkout"* ]]
   _assert_ran_in_repo
+  _assert_temp_gone
 }
 
 @test "dirty-tree: modified tracked file" {
@@ -1659,4 +1660,38 @@ _assert_ran_in_repo() {
   [ "$status" -eq 0 ]
   grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
   [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: untracked directory counts each file" {
+  _dirty_fixture
+  mkdir -p "${REPO_DIR}/newdir"
+  printf 'x\n' > "${REPO_DIR}/newdir/one"
+  printf 'y\n' > "${REPO_DIR}/newdir/two"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"working tree has 2 uncommitted or untracked path(s)"* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: a single quote in TMPDIR still cleans up" {
+  export TMPDIR="${BATS_TEST_TMPDIR}/it's tmp"
+  mkdir -p "${TMPDIR}"
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: the suite does not inherit an exported GIT_DIR" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  _git_clean "add a.sh"
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n" \
+    "export GIT_DIR='${REPO_DIR}/.git'"
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
 }
