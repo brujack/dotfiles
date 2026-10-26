@@ -178,7 +178,7 @@ jobs:
   powershell:
     # Pinned: packages.microsoft.com/ubuntu/26.04 has no powershell package, and
     # ubuntu-latest became 26.04 on 2026-10-23. Unpin once it does.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5 # p90 60s, measured 2026-08-27
     permissions:
       contents: write
