@@ -48,6 +48,7 @@
   "labels": [
     "renovate"
   ],
+  "minimumReleaseAge": "14 days",
   "packageRules": [
     {
       "matchManagers": [
