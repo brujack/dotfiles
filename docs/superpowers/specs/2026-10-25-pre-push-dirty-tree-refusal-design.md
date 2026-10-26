@@ -257,6 +257,13 @@ becomes exit 1 with the "could not create" line and R3 is amended.
 - **N2.** A dirty tree alone never refuses a push.
 - **N3.** The inert set, the master guard, the budget check and the wrong-tree refusal are unchanged; the clean path runs `make -C "${REPO_ROOT}" test` as today.
 
+## Amendments
+
+- R7 -> `tests/scripts/pre_push.bats` gains eighteen `dirty-tree:` cases: the fifteen in the Testing table plus `untracked directory counts each file` (pins `--untracked-files=all`), `a single quote in TMPDIR still cleans up` (pins the late-expanding EXIT trap) and `the suite does not inherit an exported GIT_DIR` (pins the subshell's `GIT_*` unset); `setup()` exports `TMPDIR` under `BATS_TEST_TMPDIR` for the whole file; every existing assertion that the suite ran names `make -C ${REPO_DIR} test` exactly; paths compared with `git worktree list` output are canonicalised; `_in_new_session` moves to `tests/helpers/` and `tests/setup_env/update_signals.bats` uses it from there. — Task 2 review found three load-bearing behaviours no table case could fail on; each new case was shown red against the defective code.
+- R7 -> `tests/scripts/pre_push.bats` gains nineteen `dirty-tree:` cases: the eighteen of the previous amendment plus `an undeletable temp file does not change the verdict` (pins `|| :` on the trap's `rm -rf`, since errexit is live inside an EXIT trap); `setup()` exports `TMPDIR` under `BATS_TEST_TMPDIR` for the whole file; every existing assertion that the suite ran names `make -C ${REPO_DIR} test` exactly; paths compared with `git worktree list` output are canonicalised; `_in_new_session` moves to `tests/helpers/` and `tests/setup_env/update_signals.bats` uses it from there. — the Task 2 fix re-review found a failing `rm -rf` in the trap turned a passing suite into exit 1; the case was red before the fix.
+- R4 -> The temporary worktree's directory and its registration are removed (`git worktree remove -f -f`, then `rm -rf` of the `mktemp` root, then `git worktree remove -f -f` again, each tolerating failure) on every exit of that step, including a failing suite and SIGINT/SIGTERM, and finish before the hook exits (the hook's own shell traps TERM, so it waits for the subshell; SIGINT needs no trap because bash already waits for a foreground child); cleanup commands only ever receive the path this run created, and the hook never runs `git worktree prune`. — Task 3 mutation testing at 3381b7f9: only the hook-shell TERM trap was observable; the hook-shell INT trap and both subshell traps were removed.
+- R7 -> `tests/scripts/pre_push.bats` gains twenty `dirty-tree:` cases: the nineteen of the previous amendment plus `a failed first worktree remove still clears the registration` (pins the EXIT trap's second `worktree remove -f -f`); `setup()` exports `TMPDIR` as the canonical (`pwd -P`) path of a directory under `BATS_TEST_TMPDIR` for the whole file, so `make -C` arguments match canonical recorded paths on macOS, where `/var` is a symlink; every existing assertion that the suite ran names `make -C ${REPO_DIR} test` exactly; paths compared with `git worktree list` output are canonicalised; `_in_new_session` moves to `tests/helpers/` and `tests/setup_env/update_signals.bats` uses it from there. — Phase 3 test-quality-review: 9 of 19 cases failed on the Studio from a `/var` vs `/private/var` mismatch, and deleting the second remove left every case green.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `25cb6760` (Step 7 self-review commit, before Step 8 dispatch)
@@ -301,3 +308,24 @@ Ergonomics — Finding: (1) bare `mktemp -d` ignores `TMPDIR` on the Studio's BS
 Risk — Finding: (1) the interrupt race (as Goal-Fit 2); trapping INT and TERM in the hook's own shell defers them until the subshell finishes (measured 0/15 leftovers); (2) `setsid`; (3) the `_budget_commit` premise is false: 0 of 43 suite-reaching runs were dirty or budget cases; (4) a `worktree add` killed mid-write can leave a locked registration `prune` never clears. Assumption: the verdict does not depend on git-ignored files in `REPO_ROOT`; V1 measured `claude` only.
 Proposed revision (applied to the body above, pending operator disposition): explicit `mktemp` template; INT/TERM traps in the hook's shell; `_in_new_session` (moved to `tests/helpers/`) replaces `setsid`, with TERM and INT cases signalled from the `make` mock; canonical-path helper; `.gitignore` committed; `_budget_commit` rewrite dropped, `${REPO_DIR}` anchoring kept; `kill -9` note extended.
 Disposition: Addressed — operator, 2026-10-25, as proposed. Risk assumption: Addressed — operator asked for the Studio run; recorded under Design, Cost (rc 0, 3375 ok, 0 not ok).
+
+## Spec alignment (2026-10-26)
+
+- spec: docs/superpowers/specs/2026-10-25-pre-push-dirty-tree-refusal-design.md
+- anchor: 7525a969a4dafdfab34fef8d1cfc93d451aa0b1b
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-10-25 on claude: real `make test </dev/null` in a detached worktree of 6d54de34 under `mktemp -d /tmp/pre-push.XXXXXX` exited 0 in 158 s, 1..3394, 3394 ok, 0 not ok; `git status --porcelain --untracked-files=all` empty afterwards; cleanup left no worktree. Studio (macOS, bash 5.3.20, make 3.81, bare PATH over ssh) on 2587aa66: rc 0, 3375 ok, 0 not ok. Bug-scan ran the full suite through a real push from a dirty tree at 07bcbf55: 3395 ok, push rc 0, no leftovers. Gate-chain cleanliness: every Phase 3 run left the feature worktree with 0 porcelain lines; bash-coverage is CI-only and measured there.
+- V2: 2026-10-25 at 6d54de34 on claude: tracked README.md edit uncommitted; branch hook run directly on the real ref line (`printf '<ref line>' | bash scripts/pre-push origin <url>`): rc 0; printed `pre-push: working tree has 1 uncommitted or untracked path(s); testing committed 6d54de3 in clean checkout /tmp/pre-push.8uqV8D/pre-push-6d54de3.`; suite 1..3394, 3394 ok, 0 not ok; edit still present afterwards; `git worktree list` 2 entries (no leftover); 0 /tmp/pre-push.* dirs; README restored.

@@ -108,7 +108,7 @@ requirements: [R4, R5, R7]
 acceptance:
   - cmd: make test
     exit_code: 0
-  - cmd: 'test "$(bats --count -f "^dirty-tree: " tests/scripts/pre_push.bats)" = 15'
+  - cmd: 'test "$(bats --count -f "^dirty-tree: " tests/scripts/pre_push.bats)" = 19'
     exit_code: 0
 max_retries: 3
 files_touched: [scripts/pre-push, tests/scripts/pre_push.bats]
@@ -153,3 +153,9 @@ depends_on: [3]
 Reviewer: one fresh subagent, `nongoal-check.md`, 2026-10-25. Verdicts: N1 CLEAR, N2 CLEAR, N3 UNCLEAR.
 
 - **N3 — UNCLEAR.** Quote: Task 3: "Hook: `trap 'exit 130' INT; trap 'exit 143' TERM` in the hook's shell before the subshell, and the same pair inside it". Why: traps installed before the clean/dirty branch would also defer a signal on the clean path until `make -C "${REPO_ROOT}" test` exits. Resolution: plan revised. Before: "in the hook's shell before the subshell, and the same pair inside it;". After: "in the hook's shell inside the dirty/unreadable branch only (after the status read has chosen it, immediately before the subshell), and the same pair inside the subshell; the clean path installs no trap (N3);".
+
+## Re-plan log
+
+- 2026-10-25, after Task 2 review: three `dirty-tree:` cases added in Task 2's fix round (untracked directory, quote in `TMPDIR`, exported `GIT_DIR`), so Task 3's count gate moves from 15 to 18. Spec amendment R7 records the change.
+- 2026-10-25, after the Task 2 fix re-review: Task 3 also owns `|| :` on the trap's `rm -rf` and its test, so its count gate moves from 18 to 19. Spec amendment R7 (second) records it.
+- 2026-10-25, Phase 3 test-quality-review fix cycle 1: canonical `TMPDIR` in `setup()` (macOS `/private/var`) and a case pinning the trap's second remove; `dirty-tree:` count 20. Spec amendment R7 (third) records it.

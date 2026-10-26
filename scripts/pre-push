@@ -250,11 +250,90 @@ if [[ -n "${wrong_tree_lines}" ]]; then
     exit 1
 fi
 
+# git against REPO_ROOT with the git environment stripped: `git -C` does not
+# override an exported GIT_DIR, so a worktree push would otherwise read the
+# wrong repository's index.
+_git_stripped() {
+    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        git -C "${REPO_ROOT}" "$@"
+}
+
+# Messages for the temporary-checkout path: <count> <sha7> <path>, <sha7> <path>.
+_say_dirty() {
+    printf 'pre-push: working tree has %s uncommitted or untracked path(s); testing committed %s in clean checkout %s.\n' \
+        "${1}" "${2}" "${3}" >&2
+}
+_say_unreadable() {
+    printf 'pre-push: could not read the working-tree status; testing committed %s in clean checkout %s.\n' \
+        "${1}" "${2}" >&2
+}
+_say_no_checkout() {
+    printf 'pre-push: could not create a temporary checkout of %s; push refused.\n' "${1}" >&2
+}
+_say_suite_failed() {
+    printf 'pre-push: suite failed against committed %s (clean checkout %s, now removed); uncommitted changes were not tested.\n' \
+        "${1}" "${2}" >&2
+}
+
+# The suite tests a tree, and uncommitted edits in REPO_ROOT would change the
+# verdict about the pushed commit. A dirty tree (tracked or untracked, not
+# ignored) or an unreadable status therefore tests the commit in a clean
+# temporary checkout instead. The read sits in a conditional: set -e.
+_status_ok=0
+if _status="$(_git_stripped --no-optional-locks status --porcelain --untracked-files=all 2>/dev/null)"; then
+    _status_ok=1
+fi
+
 # Git exports GIT_DIR into this hook's environment when the push originates
 # from a worktree (git-workflow.md's measured table); every suite below that
 # builds a git fixture would inherit it. Must stay below the range resolution
 # above, which legitimately wants the git environment.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+if [[ ${_status_ok} -eq 1 && -z "${_status}" ]]; then
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
-printf "Running tests locally (pre-push)...\n"
-make -C "${REPO_ROOT}" test
+    printf "Running tests locally (pre-push)...\n"
+    make -C "${REPO_ROOT}" test
+    exit $?
+fi
+
+# Dirty or unreadable: a subshell so its EXIT trap fires on every way out of
+# this step. The trap is installed only once the temp root exists, so cleanup
+# never receives an empty path, and it removes only what this run created.
+# TERM is trapped in the hook's own shell so bash waits for the cleanup
+# subshell before exiting 143; untrapped, the hook exits at once while the
+# checkout is still being removed. INT needs no trap: bash already waits for a
+# foreground child on SIGINT. A TERM sent only to the hook's own pid (not its
+# process group) therefore waits for the running suite to finish before the
+# hook exits. Dirty branch only; the clean path creates nothing to clean up.
+trap 'exit 143' TERM
+_tmp_status=0
+(
+    _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
+    [[ -n "${_tmp_root}" ]] || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
+    _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
+    # Single-quoted: expands when the trap fires, so a quote in TMPDIR cannot
+    # break the parse. The second remove clears a registration left when the
+    # first failed (a locked entry whose directory is gone is never pruned).
+    # Each command ends `|| :` because errexit is live inside an EXIT trap: a
+    # failed cleanup step would otherwise abort the rest of the cleanup and
+    # replace the suite's exit status.
+    trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}" || :; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
+    _git_stripped worktree add --quiet --detach --lock \
+        --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
+    if [[ ${_status_ok} -eq 1 ]]; then
+        _say_dirty "$(printf '%s\n' "${_status}" | awk 'END { print NR }')" "${tree_head:0:7}" "${_tree}"
+    else
+        _say_unreadable "${tree_head:0:7}" "${_tree}"
+    fi
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+
+    printf "Running tests locally (pre-push)...\n"
+    if make -C "${_tree}" test; then
+        exit 0
+    else
+        _rc=$?
+        _say_suite_failed "${tree_head:0:7}" "${_tree}"
+        exit "${_rc}"
+    fi
+) || _tmp_status=$?
+exit "${_tmp_status}"

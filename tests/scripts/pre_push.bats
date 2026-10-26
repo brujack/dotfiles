@@ -8,7 +8,11 @@ setup() {
   REPO_DIR="${BATS_TEST_TMPDIR}/repo"
   MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/makebin"
-  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}"
+  source "${REPO_ROOT}/tests/helpers/new_session.bash"
+  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${BATS_TEST_TMPDIR}/tmp"
+  # Canonical (symlink-resolved) so the hook's make -C argument equals the mock's pwd -P (/var is a symlink on macOS).
+  TMPDIR="$(_canon "${BATS_TEST_TMPDIR}/tmp")"
+  export TMPDIR
   bash -c "
     export PATH='${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -18,15 +22,63 @@ setup() {
   "
 }
 
+# _canon <dir> -- physical (symlink-resolved) path, as git rev-parse prints it.
+_canon() { (cd "$1" && pwd -P); }
+
+# _assert_make_ran -- the hook ran make against REPO_DIR's canonical path, as an
+# exact whole-line match. Substitution stays off the grep line so
+# makefile_lint_scope.bats's grep-led-line exemption applies.
+_assert_make_ran() {
+  local _dir
+  _dir="$(_canon "${REPO_DIR}")"
+  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}" && return 0
+  printf 'expected the suite to run in %s; mock calls:\n' "${_dir}" >&2
+  if [[ -f "${MOCK_CALLS_FILE}" ]]; then
+    cat "${MOCK_CALLS_FILE}" >&2
+  else
+    printf '<no mock calls file>\n' >&2
+  fi
+  return 1
+}
+
 teardown() {
+  # A test may leave a read-only directory under TMPDIR; bats must still clean up.
+  if [[ "${TMPDIR:-}" == "${BATS_TEST_TMPDIR}"/* ]]; then
+    chmod -R u+w "${TMPDIR}" 2>/dev/null || :
+  fi
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
+# The mock records its arguments. With MAKE_MOCK_RECORD_TREE=1 it also records,
+# for its -C directory, the physical path, HEAD, porcelain status (bracketed)
+# and the locked/listed worktrees of REPO_DIR as seen while it runs. With
+# MAKE_MOCK_REQUIRE_FILE set it exits 1 unless that file in the -C directory
+# holds MAKE_MOCK_REQUIRE_CONTENT.
 _write_make_mock() {
   local _exit="${1:-0}"
   cat > "${MAKE_MOCK_DIR}/make" <<EOF
 #!/usr/bin/env bash
 printf "make %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+if [[ "\${MAKE_MOCK_RECORD_TREE:-}" == 1 && "\$1" == -C ]]; then
+  _d="\$2"
+  printf 'tree_dir %s\n' "\$(cd "\${_d}" && pwd -P)" >> "${MOCK_CALLS_FILE}"
+  printf 'tree_head %s\n' "\$(git -C "\${_d}" rev-parse HEAD)" >> "${MOCK_CALLS_FILE}"
+  printf 'tree_status [%s]\n' "\$(git -C "\${_d}" status --porcelain)" >> "${MOCK_CALLS_FILE}"
+  git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^locked /tree_lock /p' >> "${MOCK_CALLS_FILE}"
+  git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^worktree /tree_listed /p' >> "${MOCK_CALLS_FILE}"
+fi
+if [[ -n "\${MAKE_MOCK_SIGNAL:-}" ]]; then
+  kill -"\${MAKE_MOCK_SIGNAL}" 0
+  sleep 10
+fi
+if [[ -n "\${MAKE_MOCK_UNDELETABLE:-}" && "\$1" == -C ]]; then
+  mkdir -p "\$2/ro"
+  : > "\$2/ro/x"
+  chmod 0555 "\$2/ro"
+fi
+if [[ -n "\${MAKE_MOCK_REQUIRE_FILE:-}" ]]; then
+  [[ "\$(cat "\$2/\${MAKE_MOCK_REQUIRE_FILE}")" == "\${MAKE_MOCK_REQUIRE_CONTENT}" ]] || exit 1
+fi
 exit ${_exit}
 EOF
   chmod +x "${MAKE_MOCK_DIR}/make"
@@ -75,7 +127,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only scripts/pre-push changed" {
@@ -84,7 +136,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only scripts/commit-msg changed" {
@@ -93,7 +145,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only a .zsh file changed" {
@@ -102,7 +154,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only .shellcheckrc changed" {
@@ -111,7 +163,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only .gitignore changed" {
@@ -120,7 +172,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a non-markdown file under docs/, not just .gitignore" {
@@ -129,7 +181,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a root file merely prefixed with .gitignore" {
@@ -138,7 +190,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only Makefile changed" {
@@ -147,7 +199,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only a non-source file under tests/ changed" {
@@ -156,7 +208,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when only .zshrc changed" {
@@ -165,7 +217,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a top-level path merely prefixed with scripts because it is a markdown file" {
@@ -191,7 +243,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feature ${local_sha} refs/heads/feature 0000000000000000000000000000000000000000\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a branch deletion (local_sha all zeros) without running tests" {
@@ -207,7 +259,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/old-feature 0000000000000000000000000000000000000000 refs/heads/old-feature abc123\nrefs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 _write_make_env_mock() {
@@ -239,7 +291,7 @@ _run_pre_push_leaked() {
   _write_make_env_mock
   run _run_pre_push_leaked "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
   run ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
 }
 
@@ -249,7 +301,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only starship.toml changed" {
@@ -258,7 +310,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when only a docs/adr file changed" {
@@ -276,7 +328,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a mixed diff with one inert and one non-inert path" {
@@ -286,7 +338,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a LICENSE outside the repo root" {
@@ -295,7 +347,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .github directory outside the repo root" {
@@ -304,7 +356,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .github file merely suffixed after .yml" {
@@ -313,7 +365,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs the suite for a .github workflow using the .yaml spelling" {
@@ -322,7 +374,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a markdown fixture under tests/" {
@@ -331,7 +383,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when only LICENSE changed" {
@@ -349,7 +401,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .mdx file, not just .md" {
@@ -358,7 +410,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when a shell script exists under docs/" {
@@ -367,7 +419,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when a shell script exists under .github/" {
@@ -376,7 +428,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on CHANGELOG_gen.sh" {
@@ -385,7 +437,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when the diff range contains no changes" {
@@ -402,7 +454,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${bogus_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 # ── default-deny inert predicate (_path_is_inert) ───────────────────────────
@@ -430,7 +482,7 @@ _git_clean() {
 }
 
 _assert_suite_ran() {
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a docs markdown file" {
@@ -568,7 +620,7 @@ _assert_suite_ran() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push still permits a markdown push to master" {
@@ -1263,7 +1315,8 @@ _run_pre_push_at() {
   [[ "$output" == *"not the pushed commit"* ]]
   [[ "$output" == *"${sha1:0:7}"* ]]
   [[ "$output" == *"${sha2:0:7}"* ]]
-  [[ "$output" == *"this checkout ($(cd "${REPO_DIR}" && pwd -P))"* ]]
+  _repo_canon="$(_canon "${REPO_DIR}")"
+  [[ "$output" == *"this checkout (${_repo_canon})"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
@@ -1402,12 +1455,12 @@ _run_pre_push_at() {
   _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
   wt="${BATS_TEST_TMPDIR}/wt"
   _git_clean "worktree add --quiet --detach '${wt}' ${sha1}"
-  wt="$(cd "${wt}" && pwd -P)"
+  wt="$(_canon "${wt}")"
   _write_make_mock 0
   run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat ${sha1} refs/heads/feat ${base_sha}\n" \
     "export GIT_WORK_TREE='${wt}'"
   [ "$status" -eq 0 ]
-  grep -qF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
 }
 
 @test "wrong-tree: the remedy is the exact push command, with a sha source when the ref is not a refs/ name" {
@@ -1444,4 +1497,333 @@ _run_pre_push_at() {
   [[ "$output" == *"<remote>"* ]]
   [[ "$output" != *"example.invalid"* ]]
   [[ "$output" != *"token"* ]]
+}
+
+# --- dirty tree: the suite runs in a locked, temporary, clean checkout of the
+# pushed commit, never in the dirty tree. ---
+
+# Commit README.md and a.sh; sets base_sha and local_sha, installs the make
+# mock (exit ${1:-0}) and turns on its tree recording.
+_dirty_fixture() {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _write_make_mock "${1:-0}"
+  export MAKE_MOCK_RECORD_TREE=1
+}
+
+_dirty_push() {
+  _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+}
+
+# Edit a committed file in place, uncommitted.
+_dirty_edit() {
+  printf '%s\n' "$1" > "${REPO_DIR}/a.sh"
+}
+
+# The temp root is gone and REPO_DIR is the only registered worktree.
+_assert_temp_gone() {
+  local _left _listed
+  _left="$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -name 'pre-push.*' | wc -l)"
+  [ "${_left}" -eq 0 ]
+  _listed="$(git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^worktree //p')"
+  [ "${_listed}" = "$(_canon "${REPO_DIR}")" ]
+}
+
+# The suite ran in the temp checkout of <sha>, recorded at its HEAD, clean.
+_assert_ran_in_temp() {
+  local _sha="${1}" _tmp _dir
+  _tmp="$(_canon "${TMPDIR}")"
+  _dir="$(sed -n 's/^tree_dir //p' "${MOCK_CALLS_FILE}")"
+  [[ "${_dir}" == "${_tmp}"/pre-push.*/pre-push-"${_sha:0:7}" ]]
+  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}"
+  grep -qxF "tree_head ${_sha}" "${MOCK_CALLS_FILE}"
+  grep -qxF "tree_status []" "${MOCK_CALLS_FILE}"
+}
+
+# The suite ran in REPO_DIR itself: no temp checkout was recorded.
+_assert_ran_in_repo() {
+  [ "$(sed -n 's/^tree_dir //p' "${MOCK_CALLS_FILE}")" = "$(_canon "${REPO_DIR}")" ]
+}
+
+@test "dirty-tree: clean tree" {
+  _dirty_fixture
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  [[ "$output" != *"uncommitted"* ]]
+  [[ "$output" != *"clean checkout"* ]]
+  _assert_ran_in_repo
+  _assert_temp_gone
+}
+
+@test "dirty-tree: modified tracked file" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pre-push: working tree has 1 uncommitted or untracked path(s); testing committed ${local_sha:0:7} in clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}."* ]]
+  _assert_ran_in_temp "${local_sha}"
+  grep -qE "^tree_lock pre-push pid [0-9]+ testing ${local_sha:0:7}\$" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${REPO_DIR}/a.sh")" = "echo 2" ]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: uncommitted edit changes the verdict" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "tests/x.bats" "A" "test: x")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1 MAKE_MOCK_REQUIRE_FILE="tests/x.bats" MAKE_MOCK_REQUIRE_CONTENT="A"
+  printf 'B\n' > "${REPO_DIR}/tests/x.bats"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  [ "$(cat "${REPO_DIR}/tests/x.bats")" = "B" ]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: staged-only change" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  _git_clean "add a.sh"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: untracked file" {
+  _dirty_fixture
+  printf 'x\n' > "${REPO_DIR}/new.bats"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"working tree has 1 uncommitted or untracked path(s)"* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: ignored file" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".gitignore" "cov/" "chore: ignore cov")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  mkdir -p "${REPO_DIR}/cov"
+  printf 'x\n' > "${REPO_DIR}/cov/x"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  [[ "$output" != *"uncommitted"* ]]
+  _assert_ran_in_repo
+}
+
+@test "dirty-tree: suite fails in temp checkout" {
+  _dirty_fixture 2
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 2 ]
+  _assert_ran_in_temp "${local_sha}"
+  [[ "$output" == *"pre-push: suite failed against committed ${local_sha:0:7} (clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}, now removed); uncommitted changes were not tested."* ]]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: status read fails" {
+  _dirty_fixture
+  printf 'x' > "${REPO_DIR}/.git/index"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pre-push: could not read the working-tree status; testing committed ${local_sha:0:7} in clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}."* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: inert push dirty tree" {
+  base_sha=$(_commit_file "a.sh" "echo 1" "feat: a")
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: worktree push dirty main checkout" {
+  _dirty_fixture
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${local_sha}"
+  wt="$(_canon "${wt}")"
+  _dirty_edit "echo 2"
+  run _run_pre_push_at "${wt}" "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: decoy GIT_DIR" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha_a=$(_commit_file "a.sh" "echo 1" "feat: a")
+  sha_b=$(_commit_file "a.sh" "echo 2" "feat: a2")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${sha_b}"
+  wt="$(_canon "${wt}")"
+  _git_clean "checkout --quiet --detach ${sha_a}"
+  printf 'x\n' > "${REPO_DIR}/junk"
+  run _run_pre_push_at "${wt}" "refs/heads/feat/x ${sha_b} refs/heads/feat/x ${sha_a}\n" \
+    "export GIT_DIR='${REPO_DIR}/.git'"
+  [ "$status" -eq 0 ]
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: untracked directory counts each file" {
+  _dirty_fixture
+  mkdir -p "${REPO_DIR}/newdir"
+  printf 'x\n' > "${REPO_DIR}/newdir/one"
+  printf 'y\n' > "${REPO_DIR}/newdir/two"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"working tree has 2 uncommitted or untracked path(s)"* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: a single quote in TMPDIR still cleans up" {
+  mkdir -p "${BATS_TEST_TMPDIR}/it's tmp"
+  TMPDIR="$(_canon "${BATS_TEST_TMPDIR}/it's tmp")"
+  export TMPDIR
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: the suite does not inherit an exported GIT_DIR" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  _git_clean "add a.sh"
+  run _run_pre_push_at "${REPO_DIR}" "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n" \
+    "export GIT_DIR='${REPO_DIR}/.git'"
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+_no_checkout_line() {
+  printf 'pre-push: could not create a temporary checkout of %s; push refused.' "${local_sha:0:7}"
+}
+
+@test "dirty-tree: mktemp fails" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export TMPDIR="${BATS_TEST_TMPDIR}/no-such-dir"
+  run _dirty_push
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$(_no_checkout_line)"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "dirty-tree: worktree add fails" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  local _real_git _shim="${BATS_TEST_TMPDIR}/gitshim"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [[ "\${_a}" == worktree ]]; then
+    for _b in "\$@"; do [[ "\${_b}" == add ]] && exit 1; done
+  fi
+done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  run _dirty_push
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$(_no_checkout_line)"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [ "$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -name 'pre-push.*' | wc -l)" -eq 0 ]
+}
+
+@test "dirty-tree: a failed first worktree remove still clears the registration" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  local _real_git _shim="${BATS_TEST_TMPDIR}/failonce"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [[ "\${_a}" == remove && ! -e "${BATS_TEST_TMPDIR}/failed-once" ]]; then
+    : > "${BATS_TEST_TMPDIR}/failed-once"
+    exit 1
+  fi
+done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [ -e "${BATS_TEST_TMPDIR}/failed-once" ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+# _signal_case <TERM|INT> <expected status> -- the make mock signals its own
+# process group while the suite runs in the temp checkout.
+_signal_case() {
+  local _sig="${1}" _want="${2}" _wrapper="${BATS_TEST_TMPDIR}/wrapper.sh"
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export MAKE_MOCK_SIGNAL="${_sig}"
+  # Slow the cleanup's worktree removal so a hook shell that exits without
+  # waiting for the subshell's cleanup is caught, not raced.
+  local _real_git _shim="${BATS_TEST_TMPDIR}/slowgit"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do [[ "\${_a}" == remove ]] && sleep 1; done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  cat > "${_wrapper}" <<WRAP
+#!/usr/bin/env bash
+export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+cd '${REPO_DIR}' || exit 1
+exec bash '${REPO_ROOT}/scripts/pre-push' > '${BATS_TEST_TMPDIR}/hook.out' 2>&1 <<< 'refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}'
+WRAP
+  SECONDS=0
+  run _in_new_session "${_wrapper}"
+  [ "$output" = "${_want}" ]  # stdout of the hook goes to a file: bats waits on a pipe the cleanup would hold open
+  [ "${SECONDS}" -lt 8 ]
+  grep -q '^tree_lock ' "${MOCK_CALLS_FILE}"
+  grep -q '^tree_listed .*pre-push-' "${MOCK_CALLS_FILE}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: interrupt (TERM)" {
+  _signal_case TERM 143
+}
+
+@test "dirty-tree: interrupt (INT)" {
+  _signal_case INT 130
+}
+
+@test "dirty-tree: an undeletable temp file does not change the verdict" {
+  [[ "${EUID}" -ne 0 ]] || skip "root ignores 0555; case needs a non-root user"
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export MAKE_MOCK_UNDELETABLE=1
+  run _dirty_push
+  chmod -R u+w "${TMPDIR}"
+  [ "$status" -eq 0 ]
 }
