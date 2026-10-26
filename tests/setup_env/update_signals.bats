@@ -83,11 +83,19 @@ _skip_unless_strace() {
   [ -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
+# The delay holds the gap for 20 ms; a leaf starved of CPU for longer misses
+# it, so this control takes up to three tries. The test above needs no retry:
+# its leaf waits for the parent however long scheduling takes.
 @test "control: with the delay and no wait, the leaf's SIGINT kills the fixture shell" {
   _skip_unless_strace
-  run _in_new_session "$(_signal_fixture 0 INT 0 0)" "${_DELAY_SIGACTION[@]}"
-  [ "$status" -eq 0 ]
-  [ "$output" = "130" ]
+  local _fixture _try _rc=""
+  _fixture="$(_signal_fixture 0 INT 0 0)"
+  for _try in 1 2 3; do
+    rm -f "${BATS_TEST_TMPDIR}/after"
+    _rc="$(_in_new_session "${_fixture}" "${_DELAY_SIGACTION[@]}")"
+    [[ ${_rc} == 130 ]] && break
+  done
+  [ "${_rc}" = "130" ]
   [ ! -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
