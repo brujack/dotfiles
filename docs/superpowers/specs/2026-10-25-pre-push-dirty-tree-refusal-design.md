@@ -1,6 +1,7 @@
 # pre-push: test the pushed commit in a clean checkout when the working tree is dirty
 
 - **Date:** 2026-10-25
+- **Approved:** 2026-10-25
 - **Backlog row:** `docs/superpowers/README.md` P2, "`scripts/pre-push` tests uncommitted edits along with the pushed commit"
 - **Operator decision (2026-10-25, first):** refuse on a dirty tree, rather than testing the pushed commit from a clean export.
 - **Operator decision (2026-10-25, revised after Step 8 round 2):** when the tree is dirty, the hook tests the pushed commit in a temporary clean checkout instead of refusing (option A). This reverses N1 of `2026-10-22-pre-push-wrong-tree-refusal-design.md` for the dirty-tree case only. Neither spec recorded a reason for the earlier preference not to export; none was given when A was chosen.
