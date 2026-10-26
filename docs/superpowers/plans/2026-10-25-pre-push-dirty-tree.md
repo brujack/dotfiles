@@ -158,3 +158,4 @@ Reviewer: one fresh subagent, `nongoal-check.md`, 2026-10-25. Verdicts: N1 CLEAR
 
 - 2026-10-25, after Task 2 review: three `dirty-tree:` cases added in Task 2's fix round (untracked directory, quote in `TMPDIR`, exported `GIT_DIR`), so Task 3's count gate moves from 15 to 18. Spec amendment R7 records the change.
 - 2026-10-25, after the Task 2 fix re-review: Task 3 also owns `|| :` on the trap's `rm -rf` and its test, so its count gate moves from 18 to 19. Spec amendment R7 (second) records it.
+- 2026-10-25, Phase 3 test-quality-review fix cycle 1: canonical `TMPDIR` in `setup()` (macOS `/private/var`) and a case pinning the trap's second remove; `dirty-tree:` count 20. Spec amendment R7 (third) records it.
