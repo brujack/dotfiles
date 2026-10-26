@@ -39,7 +39,9 @@ setup() {
 @test "run_update apt section: failed apt keeps FAIL with error tail before the stale line" {
   setup_run_update_linux
   export MOCK_APT_STDOUT_FILE="${STALE}" MOCK_APT_FAIL_SUBCMD=full-upgrade
-  run_update || true
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "FAIL" ]
   local _err _stale
   _err="$(grep -n 'nala full-upgrade failed' "${_DOTFILES_RUN_TMPDIR}/detail_apt" | head -1 | cut -d: -f1)"
@@ -92,7 +94,9 @@ setup() {
   setup_run_update_linux
   export MOCK_APT_STDOUT_FILE="${STALE}" MOCK_APT_FAIL_SUBCMD=full-upgrade
   _apt_stale_signer_hosts() { log_error "boom"; return 1; }
-  run_update || true
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "FAIL" ]
   local _err _boom
   _err="$(grep -n 'nala full-upgrade failed' "${_DOTFILES_RUN_TMPDIR}/detail_apt" | head -1 | cut -d: -f1)"
