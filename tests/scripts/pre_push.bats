@@ -8,7 +8,9 @@ setup() {
   REPO_DIR="${BATS_TEST_TMPDIR}/repo"
   MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/makebin"
-  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}"
+  source "${REPO_ROOT}/tests/helpers/new_session.bash"
+  export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
+  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${TMPDIR}"
   bash -c "
     export PATH='${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -16,6 +18,18 @@ setup() {
     git -C '${REPO_DIR}' config user.email 'test@test.com'
     git -C '${REPO_DIR}' config user.name 'Test'
   "
+}
+
+# _canon <dir> -- physical (symlink-resolved) path, as git rev-parse prints it.
+_canon() { (cd "$1" && pwd -P); }
+
+# _assert_make_ran -- the hook ran make against REPO_DIR's canonical path, as an
+# exact whole-line match. Substitution stays off the grep line so
+# makefile_lint_scope.bats's grep-led-line exemption applies.
+_assert_make_ran() {
+  local _dir
+  _dir="$(_canon "${REPO_DIR}")"
+  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}"
 }
 
 teardown() {
@@ -75,7 +89,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only scripts/pre-push changed" {
@@ -84,7 +98,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only scripts/commit-msg changed" {
@@ -93,7 +107,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only a .zsh file changed" {
@@ -102,7 +116,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only .shellcheckrc changed" {
@@ -111,7 +125,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only .gitignore changed" {
@@ -120,7 +134,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a non-markdown file under docs/, not just .gitignore" {
@@ -129,7 +143,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a root file merely prefixed with .gitignore" {
@@ -138,7 +152,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only Makefile changed" {
@@ -147,7 +161,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only a non-source file under tests/ changed" {
@@ -156,7 +170,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when only .zshrc changed" {
@@ -165,7 +179,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a top-level path merely prefixed with scripts because it is a markdown file" {
@@ -191,7 +205,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feature ${local_sha} refs/heads/feature 0000000000000000000000000000000000000000\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a branch deletion (local_sha all zeros) without running tests" {
@@ -207,7 +221,7 @@ _run_pre_push() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/old-feature 0000000000000000000000000000000000000000 refs/heads/old-feature abc123\nrefs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 _write_make_env_mock() {
@@ -239,7 +253,7 @@ _run_pre_push_leaked() {
   _write_make_env_mock
   run _run_pre_push_leaked "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
   run ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
 }
 
@@ -249,7 +263,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs make test when only starship.toml changed" {
@@ -258,7 +272,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when only a docs/adr file changed" {
@@ -276,7 +290,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a mixed diff with one inert and one non-inert path" {
@@ -286,7 +300,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a LICENSE outside the repo root" {
@@ -295,7 +309,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .github directory outside the repo root" {
@@ -304,7 +318,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .github file merely suffixed after .yml" {
@@ -313,7 +327,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push runs the suite for a .github workflow using the .yaml spelling" {
@@ -322,7 +336,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a markdown fixture under tests/" {
@@ -331,7 +345,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when only LICENSE changed" {
@@ -349,7 +363,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a .mdx file, not just .md" {
@@ -358,7 +372,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when a shell script exists under docs/" {
@@ -367,7 +381,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers when a shell script exists under .github/" {
@@ -376,7 +390,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push triggers on CHANGELOG_gen.sh" {
@@ -385,7 +399,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips when the diff range contains no changes" {
@@ -402,7 +416,7 @@ _run_pre_push_leaked() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${bogus_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 # ── default-deny inert predicate (_path_is_inert) ───────────────────────────
@@ -430,7 +444,7 @@ _git_clean() {
 }
 
 _assert_suite_ran() {
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push skips a docs markdown file" {
@@ -568,7 +582,7 @@ _assert_suite_ran() {
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
-  grep -qE "^make -C .* test$" "${MOCK_CALLS_FILE}"
+  _assert_make_ran
 }
 
 @test "pre-push still permits a markdown push to master" {

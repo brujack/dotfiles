@@ -14,6 +14,7 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  source "${REPO_ROOT}/tests/helpers/new_session.bash"
   load_mocks
   load_setup_env
   export HOME="${BATS_TEST_TMPDIR}"
@@ -44,26 +45,6 @@ _signal_fixture() {
     printf 'touch %q\n' "${BATS_TEST_TMPDIR}/after"
   } > "${_f}"
   printf '%s' "${_f}"
-}
-
-# _in_new_session <script> -- runs `bash <script>` as the leader of its own
-# process group, so `kill -SIG 0` cannot reach bats, with INT and TERM at their
-# default action (a child spawned from a non-interactive shell can inherit
-# them ignored). Prints the exit as a shell reports it: 128+N for a signal.
-# The child's stderr is dropped: bash reports a killed job there
-# ("Terminated ..."), and it would otherwise land in $output.
-# python3 rather than setsid, which macOS does not ship.
-_in_new_session() {
-  python3 - "$1" <<'PY'
-import signal, subprocess, sys
-def reset():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    signal.signal(signal.SIGTERM, signal.SIG_DFL)
-p = subprocess.run(["bash", sys.argv[1]], stdin=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, start_new_session=True,
-                   preexec_fn=reset)
-print(128 - p.returncode if p.returncode < 0 else p.returncode)
-PY
 }
 
 @test "control: without the handler, a SIGINT-catching leaf lets the run continue" {
