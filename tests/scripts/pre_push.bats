@@ -43,11 +43,27 @@ teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
+# The mock records its arguments. With MAKE_MOCK_RECORD_TREE=1 it also records,
+# for its -C directory, the physical path, HEAD, porcelain status (bracketed)
+# and the locked/listed worktrees of REPO_DIR as seen while it runs. With
+# MAKE_MOCK_REQUIRE_FILE set it exits 1 unless that file in the -C directory
+# holds MAKE_MOCK_REQUIRE_CONTENT.
 _write_make_mock() {
   local _exit="${1:-0}"
   cat > "${MAKE_MOCK_DIR}/make" <<EOF
 #!/usr/bin/env bash
 printf "make %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+if [[ "\${MAKE_MOCK_RECORD_TREE:-}" == 1 && "\$1" == -C ]]; then
+  _d="\$2"
+  printf 'tree_dir %s\n' "\$(cd "\${_d}" && pwd -P)" >> "${MOCK_CALLS_FILE}"
+  printf 'tree_head %s\n' "\$(git -C "\${_d}" rev-parse HEAD)" >> "${MOCK_CALLS_FILE}"
+  printf 'tree_status [%s]\n' "\$(git -C "\${_d}" status --porcelain)" >> "${MOCK_CALLS_FILE}"
+  git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^locked /tree_lock /p' >> "${MOCK_CALLS_FILE}"
+  git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^worktree /tree_listed /p' >> "${MOCK_CALLS_FILE}"
+fi
+if [[ -n "\${MAKE_MOCK_REQUIRE_FILE:-}" ]]; then
+  [[ "\$(cat "\$2/\${MAKE_MOCK_REQUIRE_FILE}")" == "\${MAKE_MOCK_REQUIRE_CONTENT}" ]] || exit 1
+fi
 exit ${_exit}
 EOF
   chmod +x "${MAKE_MOCK_DIR}/make"
@@ -1466,4 +1482,181 @@ _run_pre_push_at() {
   [[ "$output" == *"<remote>"* ]]
   [[ "$output" != *"example.invalid"* ]]
   [[ "$output" != *"token"* ]]
+}
+
+# --- dirty tree: the suite runs in a locked, temporary, clean checkout of the
+# pushed commit, never in the dirty tree. ---
+
+# Commit README.md and a.sh; sets base_sha and local_sha, installs the make
+# mock (exit ${1:-0}) and turns on its tree recording.
+_dirty_fixture() {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _write_make_mock "${1:-0}"
+  export MAKE_MOCK_RECORD_TREE=1
+}
+
+_dirty_push() {
+  _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+}
+
+# Edit a committed file in place, uncommitted.
+_dirty_edit() {
+  printf '%s\n' "$1" > "${REPO_DIR}/a.sh"
+}
+
+# The temp root is gone and REPO_DIR is the only registered worktree.
+_assert_temp_gone() {
+  local _left _listed
+  _left="$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -name 'pre-push.*' | wc -l)"
+  [ "${_left}" -eq 0 ]
+  _listed="$(git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^worktree //p')"
+  [ "${_listed}" = "$(_canon "${REPO_DIR}")" ]
+}
+
+# The suite ran in the temp checkout of <sha>, recorded at its HEAD, clean.
+_assert_ran_in_temp() {
+  local _sha="${1}" _tmp _dir
+  _tmp="$(_canon "${TMPDIR}")"
+  _dir="$(sed -n 's/^tree_dir //p' "${MOCK_CALLS_FILE}")"
+  [[ "${_dir}" == "${_tmp}"/pre-push.*/pre-push-"${_sha:0:7}" ]]
+  grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}"
+  grep -qxF "tree_head ${_sha}" "${MOCK_CALLS_FILE}"
+  grep -qxF "tree_status []" "${MOCK_CALLS_FILE}"
+}
+
+# The suite ran in REPO_DIR itself: no temp checkout was recorded.
+_assert_ran_in_repo() {
+  [ "$(sed -n 's/^tree_dir //p' "${MOCK_CALLS_FILE}")" = "$(_canon "${REPO_DIR}")" ]
+}
+
+@test "dirty-tree: clean tree" {
+  _dirty_fixture
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  [[ "$output" != *"uncommitted"* ]]
+  [[ "$output" != *"clean checkout"* ]]
+  _assert_ran_in_repo
+}
+
+@test "dirty-tree: modified tracked file" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pre-push: working tree has 1 uncommitted or untracked path(s); testing committed ${local_sha:0:7} in clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}."* ]]
+  _assert_ran_in_temp "${local_sha}"
+  grep -qE "^tree_lock pre-push pid [0-9]+ testing ${local_sha:0:7}\$" "${MOCK_CALLS_FILE}"
+  [ "$(cat "${REPO_DIR}/a.sh")" = "echo 2" ]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: uncommitted edit changes the verdict" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "tests/x.bats" "A" "test: x")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1 MAKE_MOCK_REQUIRE_FILE="tests/x.bats" MAKE_MOCK_REQUIRE_CONTENT="A"
+  printf 'B\n' > "${REPO_DIR}/tests/x.bats"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  [ "$(cat "${REPO_DIR}/tests/x.bats")" = "B" ]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: staged-only change" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  _git_clean "add a.sh"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: untracked file" {
+  _dirty_fixture
+  printf 'x\n' > "${REPO_DIR}/new.bats"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"working tree has 1 uncommitted or untracked path(s)"* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: ignored file" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file ".gitignore" "cov/" "chore: ignore cov")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  mkdir -p "${REPO_DIR}/cov"
+  printf 'x\n' > "${REPO_DIR}/cov/x"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  [[ "$output" != *"uncommitted"* ]]
+  _assert_ran_in_repo
+}
+
+@test "dirty-tree: suite fails in temp checkout" {
+  _dirty_fixture 2
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 2 ]
+  _assert_ran_in_temp "${local_sha}"
+  [[ "$output" == *"pre-push: suite failed against committed ${local_sha:0:7} (clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}, now removed); uncommitted changes were not tested."* ]]
+  _assert_temp_gone
+}
+
+@test "dirty-tree: status read fails" {
+  _dirty_fixture
+  printf 'x' > "${REPO_DIR}/.git/index"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pre-push: could not read the working-tree status; testing committed ${local_sha:0:7} in clean checkout ${TMPDIR}/pre-push."*"/pre-push-${local_sha:0:7}."* ]]
+  _assert_ran_in_temp "${local_sha}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: inert push dirty tree" {
+  base_sha=$(_commit_file "a.sh" "echo 1" "feat: a")
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  _dirty_edit "echo 2"
+  run _dirty_push
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: worktree push dirty main checkout" {
+  _dirty_fixture
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${local_sha}"
+  wt="$(_canon "${wt}")"
+  _dirty_edit "echo 2"
+  run _run_pre_push_at "${wt}" "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"uncommitted"* ]]
+}
+
+@test "dirty-tree: decoy GIT_DIR" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  sha_a=$(_commit_file "a.sh" "echo 1" "feat: a")
+  sha_b=$(_commit_file "a.sh" "echo 2" "feat: a2")
+  _write_make_mock 0
+  export MAKE_MOCK_RECORD_TREE=1
+  wt="${BATS_TEST_TMPDIR}/wt"
+  _git_clean "worktree add --quiet --detach '${wt}' ${sha_b}"
+  wt="$(_canon "${wt}")"
+  _git_clean "checkout --quiet --detach ${sha_a}"
+  printf 'x\n' > "${REPO_DIR}/junk"
+  run _run_pre_push_at "${wt}" "refs/heads/feat/x ${sha_b} refs/heads/feat/x ${sha_a}\n" \
+    "export GIT_DIR='${REPO_DIR}/.git'"
+  [ "$status" -eq 0 ]
+  grep -qxF "make -C ${wt} test" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"uncommitted"* ]]
 }
