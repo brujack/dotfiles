@@ -1,5 +1,7 @@
 # pre-push Dirty-Tree Clean Checkout Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#376 (b6da44d9), 2026-10-26.
+
 spec: docs/superpowers/specs/2026-10-25-pre-push-dirty-tree-refusal-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
