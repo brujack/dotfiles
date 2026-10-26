@@ -267,7 +267,7 @@ _say_unreadable() {
     printf 'pre-push: could not read the working-tree status; testing committed %s in clean checkout %s.\n' \
         "${1}" "${2}" >&2
 }
-_no_checkout() {
+_say_no_checkout() {
     printf 'pre-push: could not create a temporary checkout of %s; push refused.\n' "${1}" >&2
 }
 _say_suite_failed() {
@@ -308,8 +308,8 @@ fi
 trap 'exit 143' TERM
 _tmp_status=0
 (
-    _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || { _no_checkout "${tree_head:0:7}"; exit 1; }
-    [[ -n "${_tmp_root}" ]] || { _no_checkout "${tree_head:0:7}"; exit 1; }
+    _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
+    [[ -n "${_tmp_root}" ]] || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
     _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
     # Single-quoted: expands when the trap fires, so a quote in TMPDIR cannot
     # break the parse. The second remove clears a registration left when the
@@ -319,7 +319,7 @@ _tmp_status=0
     # replace the suite's exit status.
     trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}" || :; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
     _git_stripped worktree add --quiet --detach --lock \
-        --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || { _no_checkout "${tree_head:0:7}"; exit 1; }
+        --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || { _say_no_checkout "${tree_head:0:7}"; exit 1; }
     if [[ ${_status_ok} -eq 1 ]]; then
         _say_dirty "$(printf '%s\n' "${_status}" | awk 'END { print NR }')" "${tree_head:0:7}" "${_tree}"
     else
