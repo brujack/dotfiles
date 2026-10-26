@@ -40,6 +40,8 @@ _assert_make_ran() {
 }
 
 teardown() {
+  # A test may leave a read-only directory under TMPDIR; bats must still clean up.
+  chmod -R u+w "${TMPDIR:-/nonexistent}" 2>/dev/null || :
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -60,6 +62,15 @@ if [[ "\${MAKE_MOCK_RECORD_TREE:-}" == 1 && "\$1" == -C ]]; then
   printf 'tree_status [%s]\n' "\$(git -C "\${_d}" status --porcelain)" >> "${MOCK_CALLS_FILE}"
   git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^locked /tree_lock /p' >> "${MOCK_CALLS_FILE}"
   git -C "${REPO_DIR}" worktree list --porcelain | sed -n 's/^worktree /tree_listed /p' >> "${MOCK_CALLS_FILE}"
+fi
+if [[ -n "\${MAKE_MOCK_SIGNAL:-}" ]]; then
+  kill -"\${MAKE_MOCK_SIGNAL}" 0
+  sleep 10
+fi
+if [[ -n "\${MAKE_MOCK_UNDELETABLE:-}" && "\$1" == -C ]]; then
+  mkdir -p "\$2/ro"
+  : > "\$2/ro/x"
+  chmod 0555 "\$2/ro"
 fi
 if [[ -n "\${MAKE_MOCK_REQUIRE_FILE:-}" ]]; then
   [[ "\$(cat "\$2/\${MAKE_MOCK_REQUIRE_FILE}")" == "\${MAKE_MOCK_REQUIRE_CONTENT}" ]] || exit 1
@@ -1694,4 +1705,94 @@ _assert_ran_in_repo() {
   [ "$status" -eq 0 ]
   _assert_ran_in_temp "${local_sha}"
   _assert_temp_gone
+}
+
+_no_checkout_line() {
+  printf 'pre-push: could not create a temporary checkout of %s; push refused.' "${local_sha:0:7}"
+}
+
+@test "dirty-tree: mktemp fails" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export TMPDIR="${BATS_TEST_TMPDIR}/no-such-dir"
+  run _dirty_push
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$(_no_checkout_line)"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "dirty-tree: worktree add fails" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  local _real_git _shim="${BATS_TEST_TMPDIR}/gitshim"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do
+  if [[ "\${_a}" == worktree ]]; then
+    for _b in "\$@"; do [[ "\${_b}" == add ]] && exit 1; done
+  fi
+done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  run _dirty_push
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"$(_no_checkout_line)"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [ "$(find "${TMPDIR}" -mindepth 1 -maxdepth 1 -name 'pre-push.*' | wc -l)" -eq 0 ]
+}
+
+# _signal_case <TERM|INT> <expected status> -- the make mock signals its own
+# process group while the suite runs in the temp checkout.
+_signal_case() {
+  local _sig="${1}" _want="${2}" _wrapper="${BATS_TEST_TMPDIR}/wrapper.sh"
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export MAKE_MOCK_SIGNAL="${_sig}"
+  # Slow the cleanup's worktree removal so a hook shell that exits without
+  # waiting for the subshell's cleanup is caught, not raced.
+  local _real_git _shim="${BATS_TEST_TMPDIR}/slowgit"
+  _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/git" <<SHIM
+#!/usr/bin/env bash
+for _a in "\$@"; do [[ "\${_a}" == remove ]] && sleep 1; done
+exec "${_real_git}" "\$@"
+SHIM
+  chmod +x "${_shim}/git"
+  CLEAN_PATH="${_shim}:${CLEAN_PATH}"
+  cat > "${_wrapper}" <<WRAP
+#!/usr/bin/env bash
+export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
+unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+cd '${REPO_DIR}' || exit 1
+exec bash '${REPO_ROOT}/scripts/pre-push' > '${BATS_TEST_TMPDIR}/hook.out' 2>&1 <<< 'refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}'
+WRAP
+  SECONDS=0
+  run _in_new_session "${_wrapper}"
+  [ "$output" = "${_want}" ]  # stdout of the hook goes to a file: bats waits on a pipe the cleanup would hold open
+  [ "${SECONDS}" -lt 8 ]
+  grep -q '^tree_lock ' "${MOCK_CALLS_FILE}"
+  grep -q '^tree_listed .*pre-push-' "${MOCK_CALLS_FILE}"
+  _assert_temp_gone
+}
+
+@test "dirty-tree: interrupt (TERM)" {
+  _signal_case TERM 143
+}
+
+@test "dirty-tree: interrupt (INT)" {
+  _signal_case INT 130
+}
+
+@test "dirty-tree: an undeletable temp file does not change the verdict" {
+  _dirty_fixture
+  _dirty_edit "echo 2"
+  export MAKE_MOCK_UNDELETABLE=1
+  run _dirty_push
+  chmod -R u+w "${TMPDIR}"
+  [ "$status" -eq 0 ]
 }

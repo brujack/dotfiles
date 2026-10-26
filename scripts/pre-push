@@ -267,6 +267,9 @@ _say_unreadable() {
     printf 'pre-push: could not read the working-tree status; testing committed %s in clean checkout %s.\n' \
         "${1}" "${2}" >&2
 }
+_no_checkout() {
+    printf 'pre-push: could not create a temporary checkout of %s; push refused.\n' "${1}" >&2
+}
 _say_suite_failed() {
     printf 'pre-push: suite failed against committed %s (clean checkout %s, now removed); uncommitted changes were not tested.\n' \
         "${1}" "${2}" >&2
@@ -296,19 +299,27 @@ fi
 # Dirty or unreadable: a subshell so its EXIT trap fires on every way out of
 # this step. The trap is installed only once the temp root exists, so cleanup
 # never receives an empty path, and it removes only what this run created.
+# INT and TERM exit through that trap (130 and 143) in both shells. The hook
+# shell needs its own: untrapped, it dies at once and the caller sees the exit
+# while the subshell is still removing the checkout. Dirty branch only; the
+# clean path creates nothing to clean up.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 _tmp_status=0
 (
-    _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || exit 1
-    [[ -n "${_tmp_root}" ]] || exit 1
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    _tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX")" || { _no_checkout "${tree_head:0:7}"; exit 1; }
+    [[ -n "${_tmp_root}" ]] || { _no_checkout "${tree_head:0:7}"; exit 1; }
     _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
     # Single-quoted: expands when the trap fires, so a quote in TMPDIR cannot
     # break the parse. The second remove clears a registration left when the
     # first failed (a locked entry whose directory is gone is never pruned). `|| :` because
     # the hook runs under set -e: a remove that fails must not abort the cleanup
     # or replace the suite's exit status.
-    trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}"; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
+    trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}" || :; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
     _git_stripped worktree add --quiet --detach --lock \
-        --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || exit 1
+        --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || { _no_checkout "${tree_head:0:7}"; exit 1; }
     if [[ ${_status_ok} -eq 1 ]]; then
         _say_dirty "$(printf '%s\n' "${_status}" | awk 'END { print NR }')" "${tree_head:0:7}" "${_tree}"
     else
