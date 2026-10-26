@@ -22,7 +22,7 @@ setup() {
   touch "${MOCK_CALLS_FILE}"
 }
 
-# _signal_fixture <install-handler: 0|1> <INT|TERM> <pipe: 0|1> -- writes a
+# _signal_fixture <install-handler: 0|1> <INT|TERM> <pipe: 0|1> [wait: 1|0] -- writes a
 # script that runs one section whose leaf signals the whole process group,
 # then touches an `after` marker. The marker exists only if the run continued.
 # pipe=1 pipes the section through tee, as run_update's sections are; pipe=0
@@ -35,12 +35,15 @@ setup() {
 # wait4 with its wait handler installed; until then the shell's SIGINT is at
 # the default action. The poll gives up after 500 tries and signals anyway:
 # 5 s of sleep, but each try also forks ps, so wall-clock is several times that.
+# wait=0 drops the poll; only the positive control below uses it.
 _signal_fixture() {
-  local _install="$1" _sig="$2" _pipe="$3" _f="${BATS_TEST_TMPDIR}/fixture.sh"
+  local _install="$1" _sig="$2" _pipe="$3" _wait="${4:-1}" _f="${BATS_TEST_TMPDIR}/fixture.sh"
+  local _poll='_i=0; until [[ $(ps -o stat= -p $PPID) == *S* ]] || (( ++_i > 500 )); do sleep 0.01; done; '
+  [[ ${_wait} -eq 1 ]] || _poll=''
   {
     printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
     [[ ${_install} -eq 1 ]] && printf '_update_trap_sigint\n'
-    printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; _i=0; until [[ \$(ps -o stat= -p \$PPID) == *S* ]] || (( ++_i > 500 )); do sleep 0.01; done; kill -${_sig} 0; sleep 2"
+    printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; ${_poll}kill -${_sig} 0; sleep 2"
     if [[ ${_pipe} -eq 1 ]]; then
       printf '_leaf 2>&1 | tee %q > /dev/null\n' "${BATS_TEST_TMPDIR}/tee_out"
     else
@@ -63,15 +66,29 @@ _signal_fixture() {
 # just before wait4. A leaf that signals inside that gap kills the fixture
 # shell (130): the CI-only failure of the control above (dotfiles#348). strace
 # delays every rt_sigaction the fixture shell makes, holding the gap open; the
-# leaf must wait it out.
-@test "control: the leaf waits for the fixture shell's wait handler before signalling" {
+# leaf must wait it out. The positive control proves the delay opens the gap
+# here, so a pass of the first test is not a pass of a race never run.
+_DELAY_SIGACTION=(strace -I4 -o /dev/null -e trace=rt_sigaction -e inject=rt_sigaction:delay_enter=20000)
+
+_skip_unless_strace() {
   [[ "$(uname -s)" == Linux ]] || skip "strace delay injection is Linux-only"
   strace -o /dev/null true 2> /dev/null || skip "strace missing or ptrace not permitted"
-  run _in_new_session "$(_signal_fixture 0 INT 0)" \
-    strace -I4 -o /dev/null -e trace=rt_sigaction -e inject=rt_sigaction:delay_enter=20000
+}
+
+@test "control: the leaf waits for the fixture shell's wait handler before signalling" {
+  _skip_unless_strace
+  run _in_new_session "$(_signal_fixture 0 INT 0)" "${_DELAY_SIGACTION[@]}"
   [ "$status" -eq 0 ]
   [ "$output" = "0" ]
   [ -e "${BATS_TEST_TMPDIR}/after" ]
+}
+
+@test "control: with the delay and no wait, the leaf's SIGINT kills the fixture shell" {
+  _skip_unless_strace
+  run _in_new_session "$(_signal_fixture 0 INT 0 0)" "${_DELAY_SIGACTION[@]}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "130" ]
+  [ ! -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
 @test "_update_trap_sigint aborts the run on SIGINT with 130, before the next command" {
