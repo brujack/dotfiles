@@ -324,9 +324,7 @@ _make_decoy() {
 
 # GIT_DIR redirects the refs (ahead), and GIT_WORK_TREE and GIT_INDEX_FILE
 # each flip the dirty bit alone (the decoy index and tree hold tracked.txt;
-# CLONE has no files). GIT_COMMON_DIR alone is inert for a discovered repo on
-# git 2.53 (HEAD and @{u} still resolve from CLONE), so no assertion here can
-# fail on its strip; it stays stripped to match the fleet's four-variable rule.
+# CLONE has no files). GIT_COMMON_DIR's own effect is pinned by the next test.
 @test "test_bug_git_sync_leaked_git_dir: status under all four leaked variables describes the repo it was given" {
   _make_decoy
   GIT_DIR="${TESTDIR}/decoy/.git" GIT_WORK_TREE="${TESTDIR}/decoy" \
@@ -334,4 +332,18 @@ _make_decoy() {
     run _git_repo_status "${CLONE}"
   [ "$status" -eq 0 ]
   [ "$output" = "dirty=0 ahead=0 behind=0" ]
+}
+
+# GIT_COMMON_DIR alone moves config (remote.origin.url) and the remote-tracking
+# refs to the decoy while HEAD stays CLONE's, so an unstripped push aims CLONE's
+# commits at the decoy's remote, or @{u} stops resolving and the sync skips.
+@test "test_bug_git_sync_leaked_git_dir: ahead repo under a leaked GIT_COMMON_DIR pushes to its own origin" {
+  _make_decoy
+  git -C "${CLONE}" commit -q --allow-empty -m "clone unpushed"
+  local _decoy_before
+  _decoy_before="$(git -C "${TESTDIR}/decoy-origin.git" rev-parse master)"
+  GIT_COMMON_DIR="${TESTDIR}/decoy/.git" run _git_sync_one_repo "${CLONE}"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${ORIGIN}" rev-parse master)" = "$(git -C "${CLONE}" rev-parse HEAD)" ]
+  [ "$(git -C "${TESTDIR}/decoy-origin.git" rev-parse master)" = "${_decoy_before}" ]
 }
