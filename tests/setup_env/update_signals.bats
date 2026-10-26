@@ -31,12 +31,15 @@ setup() {
 # 2026-09-29 in ubuntu:24.04 under CPU load, with no handler: piped continued
 # 37 of 40 runs, unpiped 40 of 40. It first showed as a CI-only control
 # failure, so the control uses the unpiped form.
+# The leaf signals only once its parent is asleep (ps state S), i.e. blocked in
+# wait4 with its wait handler installed; until then the shell's SIGINT is at
+# the default action. The poll gives up after about 5 s and signals anyway.
 _signal_fixture() {
   local _install="$1" _sig="$2" _pipe="$3" _f="${BATS_TEST_TMPDIR}/fixture.sh"
   {
     printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
     [[ ${_install} -eq 1 ]] && printf '_update_trap_sigint\n'
-    printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; kill -${_sig} 0; sleep 2"
+    printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; _i=0; until [[ \$(ps -o stat= -p \$PPID) == *S* ]] || (( ++_i > 500 )); do sleep 0.01; done; kill -${_sig} 0; sleep 2"
     if [[ ${_pipe} -eq 1 ]]; then
       printf '_leaf 2>&1 | tee %q > /dev/null\n' "${BATS_TEST_TMPDIR}/tee_out"
     else
@@ -49,6 +52,22 @@ _signal_fixture() {
 
 @test "control: without the handler, a SIGINT-catching leaf lets the run continue" {
   run _in_new_session "$(_signal_fixture 0 INT 0)"
+  [ "$status" -eq 0 ]
+  [ "$output" = "0" ]
+  [ -e "${BATS_TEST_TMPDIR}/after" ]
+}
+
+# A non-interactive bash leaves SIGINT at its default action and installs the
+# handler that lets it outlive a child's SIGINT only after forking that child,
+# just before wait4. A leaf that signals inside that gap kills the fixture
+# shell (130): the CI-only failure of the control above (dotfiles#348). strace
+# delays every rt_sigaction the fixture shell makes, holding the gap open; the
+# leaf must wait it out.
+@test "control: the leaf waits for the fixture shell's wait handler before signalling" {
+  [[ "$(uname -s)" == Linux ]] || skip "strace delay injection is Linux-only"
+  strace -o /dev/null true 2> /dev/null || skip "strace missing or ptrace not permitted"
+  run _in_new_session "$(_signal_fixture 0 INT 0)" \
+    strace -I4 -o /dev/null -e trace=rt_sigaction -e inject=rt_sigaction:delay_enter=20000
   [ "$status" -eq 0 ]
   [ "$output" = "0" ]
   [ -e "${BATS_TEST_TMPDIR}/after" ]
