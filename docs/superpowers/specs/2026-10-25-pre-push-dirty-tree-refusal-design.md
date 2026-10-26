@@ -167,7 +167,12 @@ detached linked worktree of `origin/master` (78d34c6c) under `mktemp -d` in `/tm
 environment stripped, exited 0 in 164 s with 3375 `ok` lines and no `not ok`;
 `git status --porcelain --untracked-files=all` was empty afterwards, and
 `git worktree remove --force` plus `rm -rf` left `git worktree list` with only the main
-checkout and the feature worktree. Population: one machine, one commit, one run.
+checkout and the feature worktree. Repeated the same day on the Studio (macOS, GNU bash
+5.3.20 and GNU Make 3.81 from a bare `PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`
+over `ssh`), detached worktree of 2587aa66 under `mktemp -d /tmp/pre-push.XXXXXX`: rc 0 in
+287 s, 3375 `ok`, 0 `not ok`, status empty afterwards, cleanup left only the main checkout.
+Population: two machines (`claude`, the Studio), one commit each, one run each; the 7950X is
+not measured.
 
 **Retained, recorded as backlog:** the wrong-tree refusal (N3) still prints a pasteable remedy
 with the defects round 2 found in the dirty-tree remedy (refs printed unquoted; a `HEAD`
@@ -294,4 +299,4 @@ Goal-Fit — Finding: (1) `setsid` is absent on macOS, so the `interrupt` case e
 Ergonomics — Finding: (1) bare `mktemp -d` ignores `TMPDIR` on the Studio's BSD `mktemp`, which would make the file-wide `TMPDIR` inert and the `mktemp fails` case wrong on `test-macos`; (2) `setsid` (as Goal-Fit 1); (3) `git worktree list` prints canonical paths (`/private/var` on macOS); (4) the `ignored file` case must commit `.gitignore`. Assumption: `macos-latest`'s `mktemp` matches the Studio; the explicit template makes it moot.
 Risk — Finding: (1) the interrupt race (as Goal-Fit 2); trapping INT and TERM in the hook's own shell defers them until the subshell finishes (measured 0/15 leftovers); (2) `setsid`; (3) the `_budget_commit` premise is false: 0 of 43 suite-reaching runs were dirty or budget cases; (4) a `worktree add` killed mid-write can leave a locked registration `prune` never clears. Assumption: the verdict does not depend on git-ignored files in `REPO_ROOT`; V1 measured `claude` only.
 Proposed revision (applied to the body above, pending operator disposition): explicit `mktemp` template; INT/TERM traps in the hook's shell; `_in_new_session` (moved to `tests/helpers/`) replaces `setsid`, with TERM and INT cases signalled from the `make` mock; canonical-path helper; `.gitignore` committed; `_budget_commit` rewrite dropped, `${REPO_DIR}` anchoring kept; `kill -9` note extended.
-Disposition:
+Disposition: Addressed — operator, 2026-10-25, as proposed. Risk assumption: Addressed — operator asked for the Studio run; recorded under Design, Cost (rc 0, 3375 ok, 0 not ok).
