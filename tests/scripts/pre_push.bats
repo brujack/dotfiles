@@ -27,11 +27,10 @@ _canon() { (cd "$1" && pwd -P); }
 # exact whole-line match. Substitution stays off the grep line so
 # makefile_lint_scope.bats's grep-led-line exemption applies.
 _assert_make_ran() {
-  local _dir _flag='-C'
+  local _dir
   _dir="$(_canon "${REPO_DIR}")"
   grep -qxF "make -C ${_dir} test" "${MOCK_CALLS_FILE}" && return 0
-  # _flag keeps "make" and "-C" off one non-grep line (the scanner's rule).
-  printf 'expected: make %s %s test\n' "${_flag}" "${_dir}" >&2
+  printf 'expected the suite to run in %s; mock calls:\n' "${_dir}" >&2
   if [[ -f "${MOCK_CALLS_FILE}" ]]; then
     cat "${MOCK_CALLS_FILE}" >&2
   else
