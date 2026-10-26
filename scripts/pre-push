@@ -313,9 +313,10 @@ _tmp_status=0
     _tree="${_tmp_root}/pre-push-${tree_head:0:7}"
     # Single-quoted: expands when the trap fires, so a quote in TMPDIR cannot
     # break the parse. The second remove clears a registration left when the
-    # first failed (a locked entry whose directory is gone is never pruned). `|| :` because
-    # the hook runs under set -e: a remove that fails must not abort the cleanup
-    # or replace the suite's exit status.
+    # first failed (a locked entry whose directory is gone is never pruned).
+    # Each command ends `|| :` because errexit is live inside an EXIT trap: a
+    # failed cleanup step would otherwise abort the rest of the cleanup and
+    # replace the suite's exit status.
     trap '_git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :; rm -rf "${_tmp_root}" || :; _git_stripped worktree remove -f -f "${_tree}" 2>/dev/null || :' EXIT
     _git_stripped worktree add --quiet --detach --lock \
         --reason "pre-push pid $$ testing ${tree_head:0:7}" "${_tree}" "${tree_head}" || { _no_checkout "${tree_head:0:7}"; exit 1; }
