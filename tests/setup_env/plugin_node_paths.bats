@@ -561,3 +561,104 @@ _make_plugin() {
   [[ "$output" == *"ctx/ctx/1.0.169/hooks/hooks.json: pins missing ${STALE_NODE}"* ]]
   [[ "$output" != *"//"* ]]
 }
+
+# A directory find cannot open hides every config below it. find reports that
+# on stderr and in its exit status, never on stdout, so a scan that reads only
+# stdout sees an empty, clean cache.
+@test "test_bug_plugin_node_unreadable_dir: an unreadable directory is tagged, refused by repair, and FAILed by doctor" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode 000 this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  chmod 000 "${_dir}"
+
+  run _plugin_stale_node_paths
+  local _find_status="${status}" _find_out="${output}"
+  run repair_plugin_node_paths
+  local _repair_status="${status}" _repair_out="${output}"
+  run _doctor_check_plugin_node_paths
+  local _doctor_status="${status}" _doctor_out="${output}"
+  _DOCTOR_FAILED=0
+  _doctor_check_plugin_node_paths >/dev/null
+  local _flag="${_DOCTOR_FAILED}"
+  chmod 755 "${_dir}"
+
+  [ "${_find_status}" -eq 0 ]
+  [ "${_find_out}" = "${_dir}"$'\t'"unreadable" ]
+  [ "${_repair_status}" -eq 1 ]
+  [[ "${_repair_out}" == *"cannot repair ${_dir}: cannot be read — run: chmod u+rx '${_dir}'"* ]]
+  [[ "${_repair_out}" != *"brew install"* ]]
+  [ "${_doctor_status}" -eq 0 ]
+  [ "${_flag}" -eq 1 ]
+  [[ "${_doctor_out}" == *"[FAIL]"* ]]
+  [[ "${_doctor_out}" == *" ctx/ctx/1.0.169: cannot be read — run: chmod u+rx '${_dir}'"* ]]
+  [[ "${_doctor_out}" != *"no plugin pins a missing node binary"* ]]
+}
+
+# Mode 644 lets find list a directory's names but not enter it, so the read
+# bit alone does not make a directory scannable.
+@test "test_bug_plugin_node_unreadable_dir: a readable but unsearchable directory is tagged" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169"
+  chmod 644 "${_dir}"
+
+  run _plugin_stale_node_paths
+  chmod 755 "${_dir}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_dir}"$'\t'"unreadable" ]
+}
+
+# find can fail for a reason no directory test sees (a directory removed
+# mid-scan, an I/O error). Its exit status is the only witness, so a non-zero
+# status with nothing tagged must still keep doctor from passing.
+@test "test_bug_plugin_node_unreadable_dir: a failing find with no unreadable directory tags the cache root" {
+  _make_plugin "ctx/ctx/1.0.169" "/usr/bin/node"
+  local _shim="${BATS_TEST_TMPDIR}/shim" _real_find
+  _real_find="$(command -v find)"
+  mkdir -p "${_shim}"
+  printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "${_real_find}" > "${_shim}/find"
+  chmod +x "${_shim}/find"
+
+  PATH="${_shim}:${PATH}" run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}"$'\t'"unreadable" ]
+
+  PATH="${_shim}:${PATH}" run _doctor_check_plugin_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[FAIL]"* ]]
+  [[ "$output" != *"no plugin pins a missing node binary"* ]]
+}
+
+# The repair writes a temp file beside the config and renames it over, so it
+# needs the directory writable as well as the file.
+@test "test_bug_plugin_node_ro_dir: doctor names chmod u+w on a read-only config directory" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks"
+  chmod 555 "${_dir}"
+
+  run _doctor_check_plugin_node_paths
+  chmod 755 "${_dir}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: chmod u+w '${_dir}' && setup_env.sh -t update --brew-only"* ]]
+  [[ "$output" == *"plugin.json: pins missing ${STALE_NODE} — run: setup_env.sh -t update --brew-only"* ]]
+}
+
+@test "test_bug_plugin_node_ro_dir: doctor names both paths when config and directory are read-only" {
+  [ "$(id -u)" -ne 0 ] || skip "root ignores the read-only mode this test relies on"
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _dir="${_OVERRIDE_CLAUDE_PLUGIN_CACHE}/ctx/ctx/1.0.169/hooks"
+  local _file="${_dir}/hooks.json"
+  chmod 444 "${_file}"
+  chmod 555 "${_dir}"
+
+  run _doctor_check_plugin_node_paths
+  chmod 755 "${_dir}"
+  chmod 644 "${_file}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json: pins missing ${STALE_NODE} — run: chmod u+w '${_file}' '${_dir}' && setup_env.sh -t update --brew-only"* ]]
+}
