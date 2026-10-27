@@ -2698,6 +2698,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # The section SKIPs without HAS_AWS (setup() unsets it), so set it to reach the call.
+  export HAS_AWS=1
   update_aws_cli() { return 1; }
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
   # run_update must return non-zero. `|| true` would swallow that non-zero and
@@ -2715,6 +2717,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # The section SKIPs without HAS_AWS (setup() unsets it), so set it to reach the call.
+  export HAS_AWS=1
   update_aws_cli() { return 0; }
   run_update
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_aws" ]
