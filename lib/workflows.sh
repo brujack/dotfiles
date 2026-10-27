@@ -303,21 +303,22 @@ _git_noenv() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
 }
 
-# _update_git_pull SECTION DIR [guarded] -- one -t update git-pull section:
-# SKIP when DIR is absent (or, if guarded, has no .git of its own), else pull it.
+# _update_git_pull SECTION DIR -- one -t update git-pull section: SKIP when DIR is
+# absent or has no .git of its own (git would resolve the nearest ancestor checkout
+# and pull that), else pull it. -e, not -d: a submodule or worktree .git is a file.
 _update_git_pull() {
-  local _section="$1" _dir="$2" _guarded="${3:-}"
+  local _section="$1" _dir="$2"
   if [[ ! -d ${_dir} ]]; then
     _update_skip "${_section}" "not installed"
     return 0
   fi
-  if [[ -n ${_guarded} && ! -e ${_dir}/.git ]]; then
+  if [[ ! -e ${_dir}/.git ]]; then
     _update_skip "${_section}" "not a git checkout — reinstall to enable updates"
     return 0
   fi
   _update_record_start "${_section}"
   printf "Updating %s\\n" "${_section}"
-  ( cd "${_dir}" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_${_section}"
+  ( cd "${_dir}" && _git_noenv pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_${_section}"
   _update_record_end "${_section}" "${PIPESTATUS[0]}"
 }
 
@@ -1280,9 +1281,7 @@ run_update() {
     else
       _update_skip "cheat.sh" "not installed"
     fi
-    # Guarded: ~/.oh-my-zsh is itself a checkout, so git's upward repo-dir
-    # resolution would pull the parent for a non-clone plugin install.
-    _update_git_pull "zsh-autosuggestions" "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" guarded
+    _update_git_pull "zsh-autosuggestions" "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
   else
     _update_skip "tfenv" "flag not set"
     _update_skip "oh-my-zsh" "flag not set"
