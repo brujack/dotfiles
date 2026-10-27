@@ -1584,8 +1584,11 @@ _plugin_cache_id() {
 # path of a versioned Homebrew node the config names that is no longer
 # executable, or "unreadable" (grep could not read the file) or "nontext"
 # (grep printed something that is not a match, e.g. "Binary file ... matches"
-# or a diagnostic). A file tagged unreadable or nontext was not read as clean
-# text, so callers must never treat it as clean. Each file is grepped on its
+# or a diagnostic). A directory find cannot list or enter is printed in place
+# of a config, tagged "unreadable", since every config below it went unread;
+# if find fails with no such directory found, the cache root is. A path tagged
+# unreadable or nontext was not read as clean text, so callers must never
+# treat it as clean. Each file is grepped on its
 # own under LC_ALL=C, so a byte that is invalid in the caller's locale cannot
 # hide a pin. rc 2 when there is no plugin cache at all, so callers can tell
 # "nothing to check" from "clean".
@@ -1594,9 +1597,18 @@ _plugin_stale_node_paths() {
   _cache="$(_claude_plugin_cache_dir)"
   [[ -d "${_cache}" ]] || return 2
 
-  local _file _node _out _rc
+  local _file _node _out _rc _find_rc _tagged=0
   # "${_cache}/": find does not descend a symlinked starting point without it.
+  # Directories are listed too: find reports one it cannot open only on stderr
+  # and in its exit status, so each is tested here instead.
   while IFS= read -r -d '' _file; do
+    if [[ -d "${_file}" ]]; then
+      if [[ ! -r "${_file}" || ! -x "${_file}" ]]; then
+        printf '%s\tunreadable\n' "${_file%/}"
+        _tagged=1
+      fi
+      continue
+    fi
     _out="$(LC_ALL=C grep -oE '/[^"[:space:]\\]*/Cellar/node(@[0-9]+)?/[^/"[:space:]\\]+/bin/node' "${_file}" 2>&1)"
     _rc=$?
     if [[ ${_rc} -ge 2 ]]; then
@@ -1611,8 +1623,20 @@ _plugin_stale_node_paths() {
     while IFS= read -r _node; do
       [[ -x "${_node}" ]] || printf '%s\t%s\n' "${_file}" "${_node}"
     done < <(printf '%s\n' "${_out}" | LC_ALL=C sort -u)
-  done < <(find "${_cache}/" -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) -print0)
+  done < <(find "${_cache}/" \( -type d -o -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) \) -print0 2>/dev/null)
+  wait "$!"
+  _find_rc=$?
+  [[ ${_find_rc} -eq 0 || ${_tagged} -eq 1 ]] || printf '%s\tunreadable\n' "${_cache}"
   return 0
+}
+
+# Prints the chmod that lets the scan read <path>: a directory also needs x.
+_plugin_read_remedy() {
+  if [[ -d "$1" ]]; then
+    printf "chmod u+rx '%s'" "$1"
+  else
+    printf "chmod u+r '%s'" "$1"
+  fi
 }
 
 # Prints "<formula>\t<stable path>" for a versioned Cellar node: the formula
@@ -1641,7 +1665,7 @@ repair_plugin_node_paths() {
   local _file _node _formula _stable _content _tmp _failed=0
   while IFS=$'\t' read -r _file _node; do
     if [[ "${_node}" == "unreadable" ]]; then
-      printf "cannot repair %s: cannot be read — run: chmod u+r '%s'\n" "${_file}" "${_file}" >&2
+      printf "cannot repair %s: cannot be read — run: %s\n" "${_file}" "$(_plugin_read_remedy "${_file}")" >&2
       _failed=1
       continue
     fi
@@ -1697,24 +1721,28 @@ _doctor_check_plugin_node_paths() {
   fi
 
   _cache="$(_claude_plugin_cache_dir)"
-  local _file _node _label _formula _stable
+  local _file _node _label _formula _stable _ro
   while IFS=$'\t' read -r _file _node; do
     _label="${_file#"${_cache}/"}"
     case "${_node}" in
       unreadable)
-        doctor_fail "${_label}" "cannot be read — run: chmod u+r '${_file}'"
+        doctor_fail "${_label}" "cannot be read — run: $(_plugin_read_remedy "${_file}")"
         ;;
       nontext)
         doctor_fail "${_label}" "contains non-text data — reinstall plugin $(_plugin_cache_id "${_file}")"
         ;;
       *)
         IFS=$'\t' read -r _formula _stable < <(_plugin_stable_node "${_node}")
-        # Name the cause the repair would hit: no opt link, a read-only config,
-        # or neither (then the update itself is the remedy).
+        # Name the cause the repair would hit: no opt link, a read-only config
+        # or directory (the repair writes a temp file beside the config and
+        # renames it over), or neither (then the update itself is the remedy).
+        _ro=""
+        [[ -w "${_file}" ]] || _ro="'${_file}'"
+        [[ -w "${_file%/*}" ]] || _ro="${_ro:+${_ro} }'${_file%/*}'"
         if [[ ! -x "${_stable}" ]]; then
           doctor_fail "${_label}" "pins missing ${_node} — run: brew install ${_formula}"
-        elif [[ ! -w "${_file}" ]]; then
-          doctor_fail "${_label}" "pins missing ${_node} — run: chmod u+w '${_file}' && setup_env.sh -t update --brew-only"
+        elif [[ -n "${_ro}" ]]; then
+          doctor_fail "${_label}" "pins missing ${_node} — run: chmod u+w ${_ro} && setup_env.sh -t update --brew-only"
         else
           doctor_fail "${_label}" "pins missing ${_node} — run: setup_env.sh -t update --brew-only"
         fi
