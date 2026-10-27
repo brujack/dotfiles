@@ -336,7 +336,8 @@ _install_ubuntu_base_packages() {
 
   # A failed update is one warning, not a failure: the installs below still
   # work from the cached indexes, and apt names the offending source itself.
-  sudo -H apt update || log_warn "base: apt update reported errors (see apt's E:/W: lines above); continuing"
+  # --error-on=any: without it an unreachable host exits 0 with only W: lines.
+  sudo -H apt update --error-on=any || log_warn "base: apt update reported errors (see apt's E:/W: lines above); continuing"
 
   local -a _failed=()
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" --install-recommends "${_hwe}" -y || {

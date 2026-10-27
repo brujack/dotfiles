@@ -19,7 +19,8 @@ install_git_linux() {
   log_info "Installing git via apt"
   sudo -H add-apt-repository ppa:git-core/ppa -y \
     || log_warn "PPA add failed — continuing with distro git"
-  sudo -H apt update \
+  # --error-on=any: without it an unreachable host exits 0 with only W: lines.
+  sudo -H apt update --error-on=any \
     || log_warn "apt update failed — package index may be stale"
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" git -y \
     || { log_error "Failed to install git"; return 1; }
@@ -33,7 +34,8 @@ install_zsh_linux() {
   fi
 
   log_info "Installing zsh via apt"
-  sudo -H apt update \
+  # --error-on=any: without it an unreachable host exits 0 with only W: lines.
+  sudo -H apt update --error-on=any \
     || log_warn "apt update failed — package index may be stale"
   sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" zsh zsh-doc -y \
     || { log_error "Failed to install zsh"; return 1; }
