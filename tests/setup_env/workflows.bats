@@ -995,6 +995,30 @@ nvidia" ]
   grep -q "^xargs -r sudo DEBIAN_FRONTEND=noninteractive nala install" "${MOCK_CALLS_FILE}"
 }
 
+# An unreachable source host is only a W: line with exit 0 unless --error-on=any is
+# passed, so the base warning, keyed on apt's exit status, never fired for it.
+@test "test_bug_apt_unreachable_host: _install_ubuntu_base_packages warns when a source host is unreachable" {
+  unset MACOS RESOLUTE
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  export MOCK_APT_UPDATE_UNREACHABLE=1
+  check_and_install_nala() { :; }
+  cd "${REPO_ROOT}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"base: apt update reported errors"* ]]
+}
+
+@test "test_bug_apt_unreachable_host: _install_ubuntu_base_packages stays quiet when apt update is clean" {
+  unset MACOS RESOLUTE
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  check_and_install_nala() { :; }
+  cd "${REPO_ROOT}"
+  run _install_ubuntu_base_packages
+  [ "$status" -eq 0 ]
+  grep -q "^apt update --error-on=any$" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"base: apt update reported errors"* ]]
+}
+
 @test "_install_ubuntu_base_packages returns 1 on an unsupported release" {
   unset MACOS NOBLE RESOLUTE
   export LINUX=1 UBUNTU=1

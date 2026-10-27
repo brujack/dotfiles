@@ -210,6 +210,8 @@ EOF
   run install_zsh_linux
   [ "$status" -eq 0 ]
   grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
+  # A clean update stays quiet; pairs with "install_zsh_linux warns when a source host is unreachable".
+  [[ "$output" != *"apt update failed"* ]]
 }
 
 @test "install_zsh_linux: installs when zsh is in rc state" {
@@ -247,6 +249,30 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"apt update failed"* ]]
   [[ "$output" == *"Installed zsh"* ]]
+}
+
+# An unreachable source host is only a W: line with exit 0 unless --error-on=any is
+# passed, so a warning keyed on apt's exit status never fired for it.
+@test "test_bug_apt_unreachable_host: install_zsh_linux warns when a source host is unreachable" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  unset MOCK_DPKG_STATUS_zsh MOCK_DPKG_STATUS_zsh_doc
+  export MOCK_APT_UPDATE_UNREACHABLE=1
+  run install_zsh_linux
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"apt update failed — package index may be stale"* ]]
+  [[ "$output" == *"Installed zsh"* ]]
+}
+
+@test "test_bug_apt_unreachable_host: install_git_linux warns when a source host is unreachable" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  unset MOCK_DPKG_STATUS_git
+  export MOCK_APT_UPDATE_UNREACHABLE=1
+  run install_git_linux
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"apt update failed — package index may be stale"* ]]
+  [[ "$output" == *"Installed git"* ]]
 }
 
 @test "install_zsh_linux: apt install zsh sees DEBIAN_FRONTEND=noninteractive" {
@@ -303,6 +329,8 @@ EOF
   run install_git_linux
   [ "$status" -eq 0 ]
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
+  # A clean update stays quiet; pairs with "install_git_linux warns when a source host is unreachable".
+  [[ "$output" != *"apt update failed"* ]]
 }
 
 @test "install_git_linux: installs when git is in rc state" {
