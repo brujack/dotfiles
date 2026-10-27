@@ -2034,9 +2034,12 @@ setup_dotfile_symlinks() {
 # install_terraform_skill -- clones or pulls the Cursor terraform-skill checkout.
 # Returns 0 on success, 1 on a git failure, 2 when the path exists but is not a
 # git checkout (left alone; -t update reports it as SKIP). git runs with GIT_*
-# stripped: an inherited GIT_DIR redirects a pull, and a clone writes into it.
+# stripped: inherited, they redirect a pull to another repo, and make a clone
+# fail (GIT_WORK_TREE), overwrite another repo's index (GIT_INDEX_FILE) or write
+# its remote and objects into another repo (GIT_COMMON_DIR).
+# _TERRAFORM_SKILL_REPO overrides the clone URL so tests can clone a local repo.
 install_terraform_skill() {
-  local _skill_repo="https://github.com/antonbabenko/terraform-skill.git"
+  local _skill_repo="${_TERRAFORM_SKILL_REPO:-https://github.com/antonbabenko/terraform-skill.git}"
   local _cursor_skill_dir="${HOME}/.cursor/skills/terraform-skill"
   local -a _git=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git)
 

@@ -173,3 +173,85 @@ _assert_non_clone_skipped() {
   [ "$(git -C "${_dir}" rev-parse HEAD)" = "$(_origin_head terraform-skill)" ]
   [ "$(git -C "${DECOY}" rev-parse HEAD)" = "${DECOY_HEAD}" ]
 }
+
+# The other three variables, one test each (dotfiles#384, #385): pull --ff-only reads
+# the work tree and the index, so neither strip is assumed inert.
+@test "test_bug_update_git_env: a leaked GIT_WORK_TREE does not receive the terraform-skill pull" {
+  local _dir="${HOME}/.cursor/skills/terraform-skill"
+  _clone_with_upstream terraform-skill "${_dir}"
+  _make_decoy
+
+  GIT_WORK_TREE="${DECOY}" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_dir}/terraform-skill.txt")" = "terraform-skill" ]
+  [ ! -e "${DECOY}/terraform-skill.txt" ]
+}
+
+@test "test_bug_update_git_env: a leaked GIT_COMMON_DIR does not redirect the terraform-skill pull" {
+  local _dir="${HOME}/.cursor/skills/terraform-skill"
+  _clone_with_upstream terraform-skill "${_dir}"
+  _make_decoy
+
+  GIT_COMMON_DIR="${DECOY}/.git" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${_dir}" rev-parse HEAD)" = "$(_origin_head terraform-skill)" ]
+}
+
+@test "test_bug_update_git_env: a leaked GIT_INDEX_FILE is not rewritten by the terraform-skill pull" {
+  local _dir="${HOME}/.cursor/skills/terraform-skill"
+  _clone_with_upstream terraform-skill "${_dir}"
+  _make_decoy
+  cp "${DECOY}/.git/index" "${BATS_TEST_TMPDIR}/index.before"
+
+  GIT_INDEX_FILE="${DECOY}/.git/index" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  cmp "${DECOY}/.git/index" "${BATS_TEST_TMPDIR}/index.before"
+}
+
+# The clone, through _TERRAFORM_SKILL_REPO. A leaked GIT_DIR is inert for git clone
+# (measured: the decoy is untouched and the clone lands in place), so it has no test;
+# each of the other three changes the clone.
+_terraform_skill_origin() {
+  local _peer="${BATS_TEST_TMPDIR}/tfs-peer"
+  export _TERRAFORM_SKILL_REPO="${BATS_TEST_TMPDIR}/tfs-origin.git"
+  git init -q --bare -b master "${_TERRAFORM_SKILL_REPO}"
+  git clone -q "${_TERRAFORM_SKILL_REPO}" "${_peer}" 2>/dev/null
+  printf 'skill\n' > "${_peer}/SKILL.md"
+  git -C "${_peer}" add SKILL.md
+  git -C "${_peer}" commit -q -m "skill"
+  git -C "${_peer}" push -q origin master
+  # --depth is ignored for a local path; file:// keeps the production --depth=1 real.
+  _TERRAFORM_SKILL_REPO="file://${_TERRAFORM_SKILL_REPO}"
+}
+
+@test "test_bug_update_git_env: a leaked GIT_WORK_TREE does not fail the terraform-skill clone" {
+  _terraform_skill_origin
+  _make_decoy
+
+  GIT_WORK_TREE="${DECOY}" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  [ "$(cat "${HOME}/.cursor/skills/terraform-skill/SKILL.md")" = "skill" ]
+  [ ! -e "${DECOY}/SKILL.md" ]
+}
+
+@test "test_bug_update_git_env: a leaked GIT_COMMON_DIR does not write the terraform-skill clone into another repo" {
+  _terraform_skill_origin
+  _make_decoy
+  cp "${DECOY}/.git/config" "${BATS_TEST_TMPDIR}/config.before"
+
+  GIT_COMMON_DIR="${DECOY}/.git" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  cmp "${DECOY}/.git/config" "${BATS_TEST_TMPDIR}/config.before"
+  [ -n "$(git -C "${HOME}/.cursor/skills/terraform-skill" rev-parse HEAD)" ]
+}
+
+@test "test_bug_update_git_env: a leaked GIT_INDEX_FILE is not rewritten by the terraform-skill clone" {
+  _terraform_skill_origin
+  _make_decoy
+  cp "${DECOY}/.git/index" "${BATS_TEST_TMPDIR}/index.before"
+
+  GIT_INDEX_FILE="${DECOY}/.git/index" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  cmp "${DECOY}/.git/index" "${BATS_TEST_TMPDIR}/index.before"
+  [ -e "${HOME}/.cursor/skills/terraform-skill/SKILL.md" ]
+}

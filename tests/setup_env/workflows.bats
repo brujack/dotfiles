@@ -31,6 +31,9 @@ setup() {
   # run_brew_install tests each `export HAS_AWS=1` or unset it themselves
   # explicitly and are unaffected.
   unset HAS_AWS
+  # Same trap for HAS_RUST: the rust section now SKIPs without it, so a test that
+  # inherits it from a developer profile passes there and fails on CI.
+  unset HAS_RUST
   # PYENV_ROOT is exported for real by this developer session's own pyenv
   # shell integration (/Users/bruce/.pyenv), and run_update's new
   # pyenv-shims section resolves _OVERRIDE_PYENV_ROOT, then PYENV_ROOT,
@@ -2729,6 +2732,10 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # The section SKIPs without HAS_RUST and a resolvable rustup (setup() unsets
+  # HAS_RUST), so supply both to reach update_rust on any host.
+  export HAS_RUST=1
+  _resolve_rustup() { printf '/fake/rustup\n'; }
   update_rust() { return 1; }
   # Capture rather than discard: this fixture stages a genuine section FAIL, so
   # run_update must return non-zero. `|| true` would swallow that non-zero and
@@ -2746,6 +2753,10 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  # The section SKIPs without HAS_RUST and a resolvable rustup (setup() unsets
+  # HAS_RUST), so supply both to reach update_rust on any host.
+  export HAS_RUST=1
+  _resolve_rustup() { printf '/fake/rustup\n'; }
   update_rust() { return 0; }
   run_update
   [ -f "${_DOTFILES_RUN_TMPDIR}/status_rust" ]
@@ -3550,6 +3561,10 @@ _cheat_mode() {
 @test "run_update records rust as WARN (not OK or FAIL) when update_rust returns 2" {
   sync_git_repos() { return 0; }
   sync_legacy_dirs() { return 0; }
+  # The section SKIPs without HAS_RUST and a resolvable rustup (setup() unsets
+  # HAS_RUST), so supply both to reach update_rust on any host.
+  export HAS_RUST=1
+  _resolve_rustup() { printf '/fake/rustup\n'; }
   update_rust() { echo "rustup has no default toolchain"; return 2; }
   export -f sync_git_repos sync_legacy_dirs update_rust
   export MACOS=1
