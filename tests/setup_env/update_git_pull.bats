@@ -24,7 +24,9 @@ _clone_with_upstream() {
   local _origin="${BATS_TEST_TMPDIR}/${_name}-origin.git" _peer="${BATS_TEST_TMPDIR}/${_name}-peer"
   git init -q --bare -b master "${_origin}"
   git clone -q "${_origin}" "${_peer}" 2>/dev/null
-  git -C "${_peer}" commit -q --allow-empty -m base
+  # Named per repo: identical empty commits share a SHA across repos, which let a
+  # decoy snapshot pass for the real one.
+  git -C "${_peer}" commit -q --allow-empty -m "base ${_name}"
   git -C "${_peer}" push -q -u origin master
   mkdir -p "$(dirname "${_dir}")"
   git clone -q "${_origin}" "${_dir}"
