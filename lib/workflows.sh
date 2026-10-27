@@ -303,6 +303,25 @@ _git_noenv() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
 }
 
+# _update_git_pull SECTION DIR -- one -t update git-pull section: SKIP when DIR is
+# absent or has no .git of its own (git would resolve the nearest ancestor checkout
+# and pull that), else pull it. -e, not -d: a submodule or worktree .git is a file.
+_update_git_pull() {
+  local _section="$1" _dir="$2"
+  if [[ ! -d ${_dir} ]]; then
+    _update_skip "${_section}" "not installed"
+    return 0
+  fi
+  if [[ ! -e ${_dir}/.git ]]; then
+    _update_skip "${_section}" "not a git checkout — reinstall to enable updates"
+    return 0
+  fi
+  _update_record_start "${_section}"
+  printf "Updating %s\\n" "${_section}"
+  ( cd "${_dir}" && _git_noenv pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_${_section}"
+  _update_record_end "${_section}" "${PIPESTATUS[0]}"
+}
+
 _git_is_valid_repo() {
   local _dir="$1"
   [[ -d "${_dir}" ]] && _git_noenv -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1
@@ -1226,30 +1245,9 @@ run_update() {
       _update_write_detail_from_err "rust" "warning output"
     fi
 
-    if [[ -d ${HOME}/.tfenv ]]; then
-      _update_record_start "tfenv"
-      printf "Updating tfenv\\n"
-      ( cd "${HOME}/.tfenv" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tfenv"
-      _update_record_end "tfenv" "${PIPESTATUS[0]}"
-    else
-      _update_skip "tfenv" "not installed"
-    fi
-    if [[ -d ${HOME}/.oh-my-zsh ]]; then
-      _update_record_start "oh-my-zsh"
-      printf "Updating oh-my-zsh\\n"
-      ( cd "${HOME}/.oh-my-zsh" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_oh-my-zsh"
-      _update_record_end "oh-my-zsh" "${PIPESTATUS[0]}"
-    else
-      _update_skip "oh-my-zsh" "not installed"
-    fi
-    if [[ -d ${HOME}/.tmux/plugins/tpm ]]; then
-      _update_record_start "tpm"
-      printf "Updating tpm\\n"
-      ( cd "${HOME}/.tmux/plugins/tpm" && git pull ) 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_tpm"
-      _update_record_end "tpm" "${PIPESTATUS[0]}"
-    else
-      _update_skip "tpm" "not installed"
-    fi
+    _update_git_pull "tfenv" "${HOME}/.tfenv"
+    _update_git_pull "oh-my-zsh" "${HOME}/.oh-my-zsh"
+    _update_git_pull "tpm" "${HOME}/.tmux/plugins/tpm"
     if [[ -f ${HOME}/bin/cht.sh ]] || [[ -f ${HOME}/.zsh.d/_cht ]]; then
       _update_record_start "cheat.sh"
       [[ -f ${HOME}/bin/cht.sh ]]  && printf "Updating cheat.sh\\n"
@@ -1283,24 +1281,7 @@ run_update() {
     else
       _update_skip "cheat.sh" "not installed"
     fi
-    local _zsh_autosug="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
-    if [[ -d ${_zsh_autosug} ]]; then
-      # Unlike its tfenv/oh-my-zsh/tpm siblings, this one is guarded: git's
-      # own repo-dir resolution walks upward, and ~/.oh-my-zsh is itself a
-      # checkout, so plumbing here would pull the parent and render a
-      # permanent "no changes" for a non-clone plugin install.
-      if [[ -e ${_zsh_autosug}/.git ]]; then
-        _update_record_start "zsh-autosuggestions"
-        printf "Updating zsh-autosuggestions\\n"
-        ( cd "${_zsh_autosug}" && git pull ) \
-          2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_zsh-autosuggestions"
-        _update_record_end "zsh-autosuggestions" "${PIPESTATUS[0]}"
-      else
-        _update_skip "zsh-autosuggestions" "not a git checkout — reinstall to enable updates"
-      fi
-    else
-      _update_skip "zsh-autosuggestions" "not installed"
-    fi
+    _update_git_pull "zsh-autosuggestions" "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
   else
     _update_skip "tfenv" "flag not set"
     _update_skip "oh-my-zsh" "flag not set"

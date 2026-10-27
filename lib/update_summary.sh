@@ -22,11 +22,18 @@ _update_snapshot() {
   "$@" > "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" 2>/dev/null || true
 }
 
+# _update_git ARGS... -- git with the four repo-location variables stripped: git -C
+# does not override an inherited GIT_DIR, which a hook or worktree parent exports.
+# A local copy of workflows.sh's _git_noenv, since this file is sourced on its own.
+_update_git() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
+}
+
 # _update_git_diff DIR OLD_SHA
 # Outputs git log from OLD_SHA to HEAD in DIR (one line per commit).
 _update_git_diff() {
   local _dir="$1" _old_sha="$2"
-  git -C "${_dir}" log "${_old_sha}..HEAD" --oneline 2>/dev/null
+  _update_git -C "${_dir}" log "${_old_sha}..HEAD" --oneline 2>/dev/null
 }
 
 # _update_skip SECTION REASON
@@ -111,16 +118,16 @@ _update_record_start() {
       # pip snapshot is captured inside the Python block; nothing to do here
       ;;
     oh-my-zsh)
-      git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
+      _update_git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
       ;;
     tpm)
-      git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tpm" 2>/dev/null || true
+      _update_git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tpm" 2>/dev/null || true
       ;;
     tfenv)
-      git -C "${HOME}/.tfenv" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" 2>/dev/null || true
+      _update_git -C "${HOME}/.tfenv" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" 2>/dev/null || true
       ;;
     zsh-autosuggestions)
-      git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
+      _update_git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
       ;;
     softwareupdate)
       softwareupdate -l 2>/dev/null \

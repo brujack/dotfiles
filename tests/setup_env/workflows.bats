@@ -2754,7 +2754,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.tfenv"
+  # .git marker: the section SKIPs a directory that is not its own checkout.
+  mkdir -p "${HOME}/.tfenv/.git"
   run run_update
   [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
@@ -2772,7 +2773,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.oh-my-zsh"
+  # .git marker: the section SKIPs a directory that is not its own checkout.
+  mkdir -p "${HOME}/.oh-my-zsh/.git"
   run run_update
   [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
@@ -2790,7 +2792,8 @@ assert_all_npm_globals_pinned() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
-  mkdir -p "${HOME}/.tmux/plugins/tpm"
+  # .git marker: the section SKIPs a directory that is not its own checkout.
+  mkdir -p "${HOME}/.tmux/plugins/tpm/.git"
   run run_update
   [ "$status" -eq 0 ]
   grep -q "^git pull$" "${MOCK_CALLS_FILE}"
