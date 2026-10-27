@@ -97,6 +97,16 @@ _claude_guard_repo_setup() {
   [ "${_ai_line}" -lt "${_claude_line}" ]
 }
 
+@test "run_update: ai-config rc 2 records WARN, not FAIL or OK" {
+  setup_ai_config() { printf 'ai-config not pulled: local edits overlap\n'; return 2; }
+  sync_git_repos() { return 0; }
+  sync_legacy_dirs() { return 0; }
+  install_git_hooks_all_repos() { return 0; }
+  export -f setup_ai_config sync_git_repos sync_legacy_dirs install_git_hooks_all_repos
+  run run_update
+  printf '%s\n' "$output" | grep -E '\[WARN\][^a-z]*ai-config +not fully updated'
+}
+
 @test "run_update: claude section updates every declared id installed at user scope, disabled ones included" {
   export UPDATE_CLAUDE=1
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"},{"id":"frontend-design@claude-plugins-official","scope":"user"}]'
