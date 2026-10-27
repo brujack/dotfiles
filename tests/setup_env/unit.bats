@@ -2608,7 +2608,8 @@ STUB
   _is_legacy_sync_host() { return 0; }
   export -f _is_legacy_sync_host
   _update_record_start "legacy-rsync"
-  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
+  # Not skipped: only the STARTED marker _update_record_start writes for every section.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "STARTED" ]
 }
 
 # ── tracked .ssh/config: the github block must name its identity ────────────

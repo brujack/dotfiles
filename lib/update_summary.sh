@@ -44,12 +44,19 @@ _update_skip() {
   printf "%s\n" "${_reason}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
+# _update_status_is_fail SECTION -- true when SECTION already recorded FAIL. The
+# _update_ok and _update_warn writers check it so a later call never softens a FAIL.
+_update_status_is_fail() {
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_$1" 2>/dev/null)" == "FAIL" ]]
+}
+
 # _update_ok SECTION MESSAGE
 # Records a section as passing. Use for advisory check sections (like brew-drift)
 # that bypass _update_record_start/_update_record_end. Do NOT call this on sections
 # that use _update_record_end — it would silently overwrite the timed result.
 _update_ok() {
   local _section="$1" _msg="$2"
+  _update_status_is_fail "${_section}" && return 0
   printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
@@ -65,6 +72,7 @@ _update_ok() {
 # git grep -n '_update_warn ' lib/
 _update_warn() {
   local _section="$1" _msg="$2"
+  _update_status_is_fail "${_section}" && return 0
   printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
@@ -100,9 +108,12 @@ _update_write_detail_from_err() {
 }
 
 # _update_record_start SECTION
-# Takes pre-snapshot appropriate for the section type.
+# Takes pre-snapshot appropriate for the section type. Marks the section STARTED
+# first, so one that never reaches _update_record_end or _update_skip still gets a
+# row (a FAIL, from _update_summary) instead of none.
 _update_record_start() {
   local _section="$1"
+  printf "STARTED\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
   case "${_section}" in
     brew)
       brew list --formula --versions > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" 2>/dev/null || true
@@ -575,7 +586,23 @@ _update_summary() {
       continue
     fi
     _status=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_section}")
-    _result=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_section}")
+    _result=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_section}" 2>/dev/null)
+
+    # Anything but the four final statuses is a FAIL, rewritten on disk so the
+    # ledger entry's failure_stage (which reads these files) names it too.
+    case "${_status}" in
+      OK|FAIL|SKIP|WARN) ;;
+      *)
+        if [[ "${_status}" == "STARTED" ]]; then
+          _result="started but did not finish"
+        else
+          _result="unrecognised status '${_status}'"
+        fi
+        _status="FAIL"
+        printf "FAIL\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
+        printf "%s\n" "${_result}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
+        ;;
+    esac
 
     case "${_status}" in
       OK)

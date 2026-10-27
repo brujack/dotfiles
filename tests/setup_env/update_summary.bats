@@ -960,7 +960,8 @@ firefox  124.0"
 @test "_update_record_start legacy-rsync case does not skip on studio" {
   _is_legacy_sync_host() { return 0; }
   _update_record_start "legacy-rsync"
-  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync" ]
+  # Not skipped: only the STARTED marker _update_record_start writes for every section.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "STARTED" ]
 }
 
 @test "_update_record_start legacy-rsync case under dry-run skips with reason dry run, not not studio" {
@@ -999,16 +1000,14 @@ firefox  124.0"
   # falsely claim working trees never moved.
   export DRY_RUN=1
   _update_record_start "git-repos"
-  [ ! -f "${_DOTFILES_RUN_TMPDIR}/status_git-repos" ]
+  # Not skipped: only the STARTED marker _update_record_start writes for every section.
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "STARTED" ]
 
-  # test-quality-review W4: the assertion above holds identically at base
-  # (git-repos has no case arm at all, dry-run or not) and is equally
-  # satisfied by _update_record_start erroring before reaching the `case`.
-  # This positive companion, in the same test and the same DRY_RUN=1
-  # environment, proves the function actually ran its case logic: the
-  # sibling legacy-rsync arm DOES write a SKIP file here (default mock
-  # hostname is not "studio"), so the git-repos absence means something
-  # rather than nothing having executed.
+  # test-quality-review W4: git-repos has no case arm at all, dry-run or not,
+  # so the STARTED marker above is all it gets. This positive companion, in
+  # the same test and the same DRY_RUN=1 environment, proves the case logic
+  # ran: the sibling legacy-rsync arm DOES overwrite the marker with SKIP here
+  # (default mock hostname is not "studio").
   _update_record_start "legacy-rsync"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_legacy-rsync")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_legacy-rsync")" = "not studio" ]
