@@ -424,6 +424,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Isolate tfenv's clone with `_TFENV_ROOT` (not a real `~/.tfenv`) and fail it via `_TFENV_REPO_URL`, never a real network call. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: tfenv root and repo url seams`
 
+- Point `_TERRAFORM_SKILL_REPO` at a local `file://` bare repo in any test that reaches `install_terraform_skill`'s real clone (default is the GitHub URL). → `dotfiles-test-seams.md` § `terraform-skill repo seam`
+
 - Drive all three pwsh states through `_PWSH_BIN` and the timeout through `_PWSH_PROBE_TIMEOUT`; test the `timeout`-absent fallback with a scoped `PATH` and a `#!/bin/bash` stub, in both directions. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pwsh probe seams`
 
 - `load_mocks` exports `_NVIDIA_MODULE_VERSION_FILE` to a nonexistent path (a real one exists on `claude`/`workstation`); redefine `_flatpak_available` in tests, never strip `tests/mocks` from `PATH` (exposes the real `/usr/bin/flatpak`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: nvidia module version and flatpak mock rules`
