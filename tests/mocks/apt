@@ -21,6 +21,17 @@ for _a in "$@"; do
   fi
   break
 done
+# MOCK_APT_UPDATE_UNREACHABLE: make `update` behave as real apt does when one source's host
+# does not resolve (measured 2026-10-26, apt 3.2.0 on claude): the failed fetch is only a
+# W: line and the exit status is 0, unless --error-on=any is given, which makes it E: and
+# exits 100.
+if [[ -n "${MOCK_APT_UPDATE_UNREACHABLE:-}" ]] && [[ "${_a:-}" == "update" ]]; then
+  _sev=W _rc=0
+  for _o in "$@"; do [[ "${_o}" == "--error-on=any" ]] && _sev=E _rc=100; done
+  printf "%s: Failed to fetch http://unreachable.invalid/ubuntu/dists/noble/InRelease  Could not resolve 'unreachable.invalid'\n" "${_sev}" >&2
+  printf '%s: Some index files failed to download. They have been ignored, or old ones used instead.\n' "${_sev}" >&2
+  exit "${_rc}"
+fi
 # MOCK_APT_STDOUT_FILE: emit this file on stdout (captured real apt output), so callers that
 # parse apt output see it. The failing-subcommand exit above deliberately skips it.
 [[ -n "${MOCK_APT_STDOUT_FILE:-}" ]] && cat "${MOCK_APT_STDOUT_FILE}"
