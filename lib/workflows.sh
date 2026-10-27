@@ -297,25 +297,60 @@ provision_claude_plugins() {
   return "${_rc}"
 }
 
+# git with the four repo-location variables stripped: git -C does not override an
+# inherited GIT_DIR, which a hook or worktree parent exports.
+_git_noenv() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
+}
+
 _git_is_valid_repo() {
   local _dir="$1"
-  [[ -d "${_dir}" ]] && git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1
+  [[ -d "${_dir}" ]] && _git_noenv -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1
+}
+
+# Renames a directory git cannot read to <dir>.broken-<UTC time> so a clone can take
+# its place. It may still hold uncommitted work, so it is never deleted.
+_git_move_aside() {
+  local _dir="$1" _aside
+  _aside="${_dir}.broken-$(date -u +%Y%m%dT%H%M%SZ)"
+  mv "${_dir}" "${_aside}" || { log_error "cannot move ${_dir} aside"; return 1; }
+  log_warn "${_dir} is not a readable git checkout; moved to ${_aside}"
 }
 
 _git_ssh_opts() {
   printf '%s' "ssh -o BatchMode=yes -o ConnectTimeout=10"
 }
 
+# rc 0 pulled or cloned, 1 failed, 2 done with a warning: the checkout was moved aside
+# and re-cloned, or local edits overlap upstream changes and were left unpulled.
 setup_ai_config() {
-  local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}"
+  local _dir="${_OVERRIDE_AI_CONFIG_DIR:-${AI_CONFIG_DIR}}" _rc=0
   if _git_is_valid_repo "${_dir}"; then
     log_info "Updating ai-config..."
-    GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --rebase --autostash || return 1
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_noenv -C "${_dir}" fetch --quiet || return 1
+    # Claude Code writes settings.json through its symlink, so local edits are
+    # routine. --autostash keeps them, but when upstream changed the same file the
+    # stash pop conflicts and pull still exits 0, leaving conflict markers in it.
+    # --no-renames lists both paths of a rename: with detection on, a renamed and
+    # edited file shows only its new path and hides an upstream edit to the old one.
+    local _overlap
+    _overlap="$(LC_ALL=C comm -12 \
+      <(_git_noenv -C "${_dir}" diff --no-renames --name-only HEAD | LC_ALL=C sort) \
+      <(_git_noenv -C "${_dir}" diff --no-renames --name-only "HEAD...@{u}" 2>/dev/null | LC_ALL=C sort))"
+    if [[ -n "${_overlap}" ]]; then
+      log_warn "ai-config not pulled: local edits to $(printf '%s' "${_overlap}" | tr '\n' ' ')overlap upstream changes; commit or discard them, then re-run"
+      return 2
+    fi
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_noenv -C "${_dir}" pull --rebase --autostash || return 1
   else
-    [[ -d "${_dir}" ]] && rm -rf "${_dir}"
+    if [[ -e "${_dir}" ]]; then
+      _git_move_aside "${_dir}" || return 1
+      _rc=2
+    fi
     log_info "ai-config not found — cloning..."
-    GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone git@github.com:brujack/ai-config "${_dir}" || return 1
+    GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_noenv clone git@github.com:brujack/ai-config "${_dir}" || return 1
   fi
+  return "${_rc}"
 }
 
 _dotfiles_run_tmpdir_setup() {
@@ -397,7 +432,10 @@ run_setup_user() {
   mkdir -p "${PERSONAL_GITREPOS}"
 
   clone_or_update_dotfiles || return 1
-  setup_ai_config || return 1
+  local _ai_rc=0
+  setup_ai_config || _ai_rc=$?
+  # rc 2 is a warning setup_ai_config already printed; the checkout is usable.
+  [[ ${_ai_rc} -eq 1 ]] && return 1
 
   setup_dotfile_symlinks || return 1
 
@@ -748,7 +786,12 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]]; then
     _update_record_start "ai-config"
     setup_ai_config 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_ai-config"
-    _update_record_end "ai-config" "${PIPESTATUS[0]}"
+    local _ai_config_rc="${PIPESTATUS[0]}"
+    _update_record_end "ai-config" "$(( _ai_config_rc == 2 ? 0 : _ai_config_rc ))"
+    if [[ ${_ai_config_rc} -eq 2 ]]; then
+      _update_warn "ai-config" "not fully updated — see detail"
+      _update_write_detail_from_err "ai-config" "warning output"
+    fi
   fi
 
   # ── claude plugins ────────────────────────────────────────────────────────
@@ -2066,11 +2109,13 @@ ensure_state_ledger() {
   local _err
 
   if _git_is_valid_repo "${_dir}"; then
-    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" git -C "${_dir}" pull --ff-only 2>&1 >/dev/null) \
+    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_noenv -C "${_dir}" pull --ff-only 2>&1 >/dev/null) \
       || _ledger_warn_with_cause "state-ledger pull failed — continuing without ledger sync" "${_err}"
   else
-    [[ -d "${_dir}" ]] && rm -rf "${_dir}"
-    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" git clone "${_url}" "${_dir}" 2>&1 >/dev/null) \
+    if [[ -e "${_dir}" ]]; then
+      _git_move_aside "${_dir}" || { log_warn "continuing without ledger"; return 0; }
+    fi
+    _err=$(GIT_SSH_COMMAND="$(_git_ssh_opts)" _git_noenv clone "${_url}" "${_dir}" 2>&1 >/dev/null) \
       || { _ledger_warn_with_cause "state-ledger clone failed — continuing without ledger" "${_err}"; return 0; }
   fi
 

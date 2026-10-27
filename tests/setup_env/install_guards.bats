@@ -803,16 +803,21 @@ _gnubin_present() {
   [ "${_rc}" -eq 1 ]
 }
 
-@test "setup_ai_config clones (self-heals) when dir exists but is not a valid git repo" {
+# A checkout git cannot read (leaked GIT_DIR, dubious ownership, corrupt .git) may
+# still hold uncommitted work, so it is moved aside, never deleted.
+@test "test_bug_ai_config_rm_rf: setup_ai_config moves an unreadable checkout aside, then clones" {
   export MOCK_GIT_REVPARSE_EXIT=1
   export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config"
   mkdir -p "${_OVERRIDE_AI_CONFIG_DIR}"
-  touch "${_OVERRIDE_AI_CONFIG_DIR}/corrupt-marker"
+  printf 'unpushed work\n' > "${_OVERRIDE_AI_CONFIG_DIR}/draft.md"
 
   run setup_ai_config
-  [ "${status}" -eq 0 ]
+  [ "${status}" -eq 2 ]
   grep -q "git clone git@github.com:brujack/ai-config ${_OVERRIDE_AI_CONFIG_DIR}" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_OVERRIDE_AI_CONFIG_DIR}/corrupt-marker" ]
+  local -a _aside=("${BATS_TEST_TMPDIR}"/ai-config.broken-*)
+  [ "${#_aside[@]}" -eq 1 ]
+  [ "$(cat "${_aside[0]}/draft.md")" = "unpushed work" ]
+  [[ "$output" == *"moved to ${_aside[0]}"* ]]
 }
 
 @test "setup_ai_config uses SSH BatchMode to avoid hanging on host-key prompt" {
@@ -893,16 +898,19 @@ _gnubin_present() {
   [ "${status}" -ne 0 ]
 }
 
-@test "ensure_state_ledger clones (self-heals) when dir exists but is not a valid git repo" {
+@test "test_bug_ai_config_rm_rf: ensure_state_ledger moves an unreadable checkout aside, then clones" {
   export MOCK_GIT_REVPARSE_EXIT=1
   export _OVERRIDE_STATE_LEDGER_DIR="${BATS_TEST_TMPDIR}/state-ledger"
   mkdir -p "${_OVERRIDE_STATE_LEDGER_DIR}"
-  touch "${_OVERRIDE_STATE_LEDGER_DIR}/corrupt-marker"
+  printf 'unpushed entry\n' > "${_OVERRIDE_STATE_LEDGER_DIR}/entry.json"
 
   run ensure_state_ledger
   [ "${status}" -eq 0 ]
   grep -q "git clone git@github.com:brujack/state-ledger.git ${_OVERRIDE_STATE_LEDGER_DIR}" "${MOCK_CALLS_FILE}"
-  [ ! -e "${_OVERRIDE_STATE_LEDGER_DIR}/corrupt-marker" ]
+  local -a _aside=("${BATS_TEST_TMPDIR}"/state-ledger.broken-*)
+  [ "${#_aside[@]}" -eq 1 ]
+  [ "$(cat "${_aside[0]}/entry.json")" = "unpushed entry" ]
+  [[ "$output" == *"moved to ${_aside[0]}"* ]]
 }
 
 @test "ensure_state_ledger uses SSH BatchMode to avoid hanging on host-key prompt" {
@@ -1409,6 +1417,27 @@ EOF
   "
   [ "${status}" -ne 0 ]
   ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
+}
+
+@test "run_setup_user: setup_ai_config rc 2 (warning) → continues to setup_dotfile_symlinks" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
+  mkdir -p "${_home}" "${_git_repos}"
+  run bash -c "
+    export PATH='${PATH}'
+    export HOME='${_home}'
+    export PERSONAL_GITREPOS='${_git_repos}'
+    export DOTFILES='dotfiles'
+    export LINUX=1
+    unset MACOS UBUNTU
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    clone_or_update_dotfiles() { return 0; }
+    setup_ai_config() { return 2; }
+    setup_dotfile_symlinks() { printf 'DOTFILES_CALLED\n'; return 1; }
+    run_setup_user
+  "
+  [[ "${output}" == *"DOTFILES_CALLED"* ]]
 }
 
 # ── _ai_config_tracked_items ─────────────────────────────────────────────────

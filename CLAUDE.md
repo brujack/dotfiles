@@ -50,7 +50,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 
 **Options:**
 
-- `--dry-run` guarantees no outbound write (no `git push`, `rsync --delete`, state-ledger entry write) but is not offline: fetches, `pull --ff-only`, package and registry installs still run; even `--dry-run` runs `ensure_state_ledger` ungated (may `git pull --ff-only`/`git clone` the state-ledger checkout, run `ledger.py init`, and `rm -rf` it if it exists but is not a valid repo); `DRY_RUN=0`/`false`/`no`/empty/unset mean off, any other value on, and an explicit flag wins. → `dotfiles-conventions.md` § `CLAUDE.md relocation: --dry-run option semantics`
+- `--dry-run` guarantees no outbound write (no `git push`, `rsync --delete`, state-ledger entry write) but is not offline: fetches, `pull --ff-only`, package and registry installs still run; even `--dry-run` runs `ensure_state_ledger` ungated (may `git pull --ff-only`/`git clone` the state-ledger checkout, run `ledger.py init`, and move it aside to `<dir>.broken-<UTC time>` if it exists but git cannot read it); `DRY_RUN=0`/`false`/`no`/empty/unset mean off, any other value on, and an explicit flag wins. → `dotfiles-conventions.md` § `CLAUDE.md relocation: --dry-run option semantics`
 
 ## Symlink Strategy
 
