@@ -458,7 +458,10 @@ run_setup_user() {
 
   setup_dotfile_symlinks || return 1
 
-  install_terraform_skill || return 1
+  # rc 2: an existing non-checkout was left alone and warned about; keep going.
+  local _tf_skill_rc=0
+  install_terraform_skill || _tf_skill_rc=$?
+  [[ ${_tf_skill_rc} -eq 1 ]] && return 1
 
   setup_zsh_as_default_shell || return 1
 
@@ -958,7 +961,12 @@ run_update() {
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_CLAUDE:-} ]]; then
     _update_record_start "terraform-skill"
     install_terraform_skill 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_terraform-skill"
-    _update_record_end "terraform-skill" "${PIPESTATUS[0]}"
+    local _tf_skill_rc="${PIPESTATUS[0]}"
+    if [[ ${_tf_skill_rc} -eq 2 ]]; then
+      _update_skip "terraform-skill" "not a git checkout — reinstall to enable updates"
+    else
+      _update_record_end "terraform-skill" "${_tf_skill_rc}"
+    fi
   else
     _update_skip "terraform-skill" "flag not set"
   fi
@@ -1026,14 +1034,14 @@ run_update() {
 
   # ── mas ───────────────────────────────────────────────────────────────────
   if [[ ${_run_all} -eq 1 ]] || [[ -n ${UPDATE_MAS:-} ]]; then
-    _update_record_start "mas"
-    local _mas_ec=0
     if [[ -n ${MACOS} ]]; then
+      _update_record_start "mas"
       log_info "Updating mas packages"
       mas upgrade 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_mas"
-      _mas_ec="${PIPESTATUS[0]}"
+      _update_record_end "mas" "${PIPESTATUS[0]}"
+    else
+      _update_skip "mas" "not macOS"
     fi
-    _update_record_end "mas" "${_mas_ec}"
   else
     _update_skip "mas" "flag not set"
   fi
@@ -1232,17 +1240,33 @@ run_update() {
       _update_write_detail_from_err "git-hooks" "warning output"
     fi
 
-    _update_record_start "aws"
-    update_aws_cli 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_aws"
-    _update_record_end "aws" "${PIPESTATUS[0]}"
+    # update_aws_cli and update_rust return 0 when they have nothing to do, so the
+    # cases where they would do nothing are SKIPs decided here, not OK rows.
+    if [[ -z ${HAS_AWS:-} ]]; then
+      _update_skip "aws" "HAS_AWS not set"
+    elif [[ -z ${MACOS:-} && -z ${LINUX:-} ]]; then
+      _update_skip "aws" "not applicable"
+    else
+      _update_record_start "aws"
+      update_aws_cli 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_aws"
+      _update_record_end "aws" "${PIPESTATUS[0]}"
+    fi
 
-    _update_record_start "rust"
-    update_rust 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_rust"
-    local _rust_rc="${PIPESTATUS[0]}"
-    _update_record_end "rust" "$(( _rust_rc == 2 ? 0 : _rust_rc ))"
-    if [[ ${_rust_rc} -eq 2 ]]; then
-      _update_warn "rust" "rustup has no usable active toolchain — see detail"
-      _update_write_detail_from_err "rust" "warning output"
+    if [[ -z ${HAS_RUST:-} ]]; then
+      _update_skip "rust" "HAS_RUST not set"
+    elif [[ -z ${MACOS:-} && -z ${UBUNTU:-} ]]; then
+      _update_skip "rust" "not applicable"
+    elif ! _resolve_rustup > /dev/null; then
+      _update_skip "rust" "rustup not found"
+    else
+      _update_record_start "rust"
+      update_rust 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_rust"
+      local _rust_rc="${PIPESTATUS[0]}"
+      _update_record_end "rust" "$(( _rust_rc == 2 ? 0 : _rust_rc ))"
+      if [[ ${_rust_rc} -eq 2 ]]; then
+        _update_warn "rust" "rustup has no usable active toolchain — see detail"
+        _update_write_detail_from_err "rust" "warning output"
+      fi
     fi
 
     _update_git_pull "tfenv" "${HOME}/.tfenv"

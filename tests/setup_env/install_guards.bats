@@ -1419,6 +1419,53 @@ EOF
   ! [[ "${output}" == *"DOTFILES_CALLED"* ]]
 }
 
+@test "run_setup_user: install_terraform_skill rc 2 (not a checkout) → continues to setup_zsh_as_default_shell" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
+  mkdir -p "${_home}" "${_git_repos}"
+  run bash -c "
+    export PATH='${PATH}'
+    export HOME='${_home}'
+    export PERSONAL_GITREPOS='${_git_repos}'
+    export DOTFILES='dotfiles'
+    export LINUX=1
+    unset MACOS UBUNTU
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    clone_or_update_dotfiles() { return 0; }
+    setup_ai_config() { return 0; }
+    setup_dotfile_symlinks() { return 0; }
+    install_terraform_skill() { return 2; }
+    setup_zsh_as_default_shell() { printf 'ZSH_CALLED\n'; return 1; }
+    run_setup_user
+  "
+  [[ "${output}" == *"ZSH_CALLED"* ]]
+}
+
+@test "run_setup_user: install_terraform_skill rc 1 → returns non-zero before setup_zsh_as_default_shell" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"
+  mkdir -p "${_home}" "${_git_repos}"
+  run bash -c "
+    export PATH='${PATH}'
+    export HOME='${_home}'
+    export PERSONAL_GITREPOS='${_git_repos}'
+    export DOTFILES='dotfiles'
+    export LINUX=1
+    unset MACOS UBUNTU
+    export MOCK_CALLS_FILE='${BATS_TEST_TMPDIR}/mock_calls'
+    source '${REPO_ROOT}/setup_env.sh'
+    clone_or_update_dotfiles() { return 0; }
+    setup_ai_config() { return 0; }
+    setup_dotfile_symlinks() { return 0; }
+    install_terraform_skill() { return 1; }
+    setup_zsh_as_default_shell() { printf 'ZSH_CALLED\n'; return 0; }
+    run_setup_user
+  "
+  [ "${status}" -ne 0 ]
+  [[ "${output}" != *"ZSH_CALLED"* ]]
+}
+
 @test "run_setup_user: setup_ai_config rc 2 (warning) → continues to setup_dotfile_symlinks" {
   local _home="${BATS_TEST_TMPDIR}/home"
   local _git_repos="${BATS_TEST_TMPDIR}/git-repos/personal"

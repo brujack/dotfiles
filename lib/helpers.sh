@@ -2031,21 +2031,34 @@ setup_dotfile_symlinks() {
   return "${_links_failed}"
 }
 
+# install_terraform_skill -- clones or pulls the Cursor terraform-skill checkout.
+# Returns 0 on success, 1 on a git failure, 2 when the path exists but is not a
+# git checkout (left alone; -t update reports it as SKIP). git runs with GIT_*
+# stripped: inherited, they redirect a pull to another repo, and make a clone
+# fail (GIT_WORK_TREE), overwrite another repo's index (GIT_INDEX_FILE) or write
+# its remote and objects into another repo (GIT_COMMON_DIR).
+# _TERRAFORM_SKILL_REPO overrides the clone URL so tests can clone a local repo; it
+# is honoured only under bats, so an exported value cannot redirect a real install.
 install_terraform_skill() {
   local _skill_repo="https://github.com/antonbabenko/terraform-skill.git"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TERRAFORM_SKILL_REPO:-} ]]; then
+    _skill_repo="${_TERRAFORM_SKILL_REPO}"
+  fi
   local _cursor_skill_dir="${HOME}/.cursor/skills/terraform-skill"
+  local -a _git=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git)
 
   log_info "Ensuring terraform-skill git checkout for Cursor (Claude Code uses the marketplace plugin)"
   mkdir -p "${HOME}/.cursor/skills"
 
   if [[ -d "${_cursor_skill_dir}/.git" ]]; then
     log_info "Updating terraform-skill in ${_cursor_skill_dir}"
-    git -C "${_cursor_skill_dir}" pull --ff-only || return 1
+    "${_git[@]}" -C "${_cursor_skill_dir}" pull --ff-only || return 1
   elif [[ -e "${_cursor_skill_dir}" ]]; then
     log_warn "Skipping ${_cursor_skill_dir}; path exists but is not a git checkout"
+    return 2
   else
     log_info "Cloning terraform-skill into ${_cursor_skill_dir}"
-    git clone --depth=1 "${_skill_repo}" "${_cursor_skill_dir}" || return 1
+    "${_git[@]}" clone --depth=1 -- "${_skill_repo}" "${_cursor_skill_dir}" || return 1
   fi
 }
 
