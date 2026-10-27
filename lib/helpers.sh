@@ -2037,9 +2037,13 @@ setup_dotfile_symlinks() {
 # stripped: inherited, they redirect a pull to another repo, and make a clone
 # fail (GIT_WORK_TREE), overwrite another repo's index (GIT_INDEX_FILE) or write
 # its remote and objects into another repo (GIT_COMMON_DIR).
-# _TERRAFORM_SKILL_REPO overrides the clone URL so tests can clone a local repo.
+# _TERRAFORM_SKILL_REPO overrides the clone URL so tests can clone a local repo; it
+# is honoured only under bats, so an exported value cannot redirect a real install.
 install_terraform_skill() {
-  local _skill_repo="${_TERRAFORM_SKILL_REPO:-https://github.com/antonbabenko/terraform-skill.git}"
+  local _skill_repo="https://github.com/antonbabenko/terraform-skill.git"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TERRAFORM_SKILL_REPO:-} ]]; then
+    _skill_repo="${_TERRAFORM_SKILL_REPO}"
+  fi
   local _cursor_skill_dir="${HOME}/.cursor/skills/terraform-skill"
   local -a _git=(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git)
 
@@ -2054,7 +2058,7 @@ install_terraform_skill() {
     return 2
   else
     log_info "Cloning terraform-skill into ${_cursor_skill_dir}"
-    "${_git[@]}" clone --depth=1 "${_skill_repo}" "${_cursor_skill_dir}" || return 1
+    "${_git[@]}" clone --depth=1 -- "${_skill_repo}" "${_cursor_skill_dir}" || return 1
   fi
 }
 

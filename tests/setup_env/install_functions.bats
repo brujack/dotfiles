@@ -421,6 +421,24 @@ teardown() {
   grep -q "git clone --depth=1" "${MOCK_CALLS_FILE}"
 }
 
+@test "install_terraform_skill ignores _TERRAFORM_SKILL_REPO outside bats" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills"
+  export HOME="${_home}"
+  BATS_TEST_TMPDIR='' _TERRAFORM_SKILL_REPO='file:///elsewhere.git' run install_terraform_skill
+  [ "$status" -eq 0 ]
+  grep -q "clone --depth=1 -- https://github.com/antonbabenko/terraform-skill.git" "${MOCK_CALLS_FILE}"
+  refute_grep "elsewhere" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_terraform_skill passes the repo after -- so it cannot be read as an option" {
+  local _home="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${_home}/.cursor/skills"
+  export HOME="${_home}"
+  _TERRAFORM_SKILL_REPO='--upload-pack=touch /tmp/pwned' run install_terraform_skill
+  grep -q "clone --depth=1 -- --upload-pack=touch /tmp/pwned " "${MOCK_CALLS_FILE}"
+}
+
 @test "install_terraform_skill runs git pull when .git dir exists" {
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/.cursor/skills/terraform-skill/.git"
