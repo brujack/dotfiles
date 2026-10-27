@@ -631,6 +631,23 @@ _make_plugin() {
   [[ "$output" != *"no plugin pins a missing node binary"* ]]
 }
 
+# Each config with a Cellar match runs a second process substitution, which
+# replaces $!, so find's status must be taken from its own pid, not from $!.
+@test "test_bug_plugin_node_unreadable_dir: a failing find is still reported when a config holds a stale pin" {
+  _make_brew_node
+  _make_plugin "ctx/ctx/1.0.169" "${STALE_NODE}"
+  local _shim="${BATS_TEST_TMPDIR}/shim" _real_find
+  _real_find="$(command -v find)"
+  mkdir -p "${_shim}"
+  printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "${_real_find}" > "${_shim}/find"
+  chmod +x "${_shim}/find"
+
+  PATH="${_shim}:${PATH}" run _plugin_stale_node_paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"hooks/hooks.json"$'\t'"${STALE_NODE}"* ]]
+  [ "$(printf '%s\n' "$output" | command grep -cxF "${_OVERRIDE_CLAUDE_PLUGIN_CACHE}"$'\t'"unreadable")" -eq 1 ]
+}
+
 # The repair writes a temp file beside the config and renames it over, so it
 # needs the directory writable as well as the file.
 @test "test_bug_plugin_node_ro_dir: doctor names chmod u+w on a read-only config directory" {

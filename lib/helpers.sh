@@ -1597,10 +1597,14 @@ _plugin_stale_node_paths() {
   _cache="$(_claude_plugin_cache_dir)"
   [[ -d "${_cache}" ]] || return 2
 
-  local _file _node _out _rc _find_rc _tagged=0
+  local _file _node _out _rc _find_fd _find_pid _find_rc _tagged=0
   # "${_cache}/": find does not descend a symlinked starting point without it.
   # Directories are listed too: find reports one it cannot open only on stderr
-  # and in its exit status, so each is tested here instead.
+  # and in its exit status, so each is tested here instead. find runs on its
+  # own fd so its pid can be kept: the loop body's own process substitution
+  # replaces $!, so a wait "$!" after the loop would wait on that instead.
+  exec {_find_fd}< <(find "${_cache}/" \( -type d -o -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) \) -print0 2>/dev/null)
+  _find_pid=$!
   while IFS= read -r -d '' _file; do
     if [[ -d "${_file}" ]]; then
       if [[ ! -r "${_file}" || ! -x "${_file}" ]]; then
@@ -1623,8 +1627,9 @@ _plugin_stale_node_paths() {
     while IFS= read -r _node; do
       [[ -x "${_node}" ]] || printf '%s\t%s\n' "${_file}" "${_node}"
     done < <(printf '%s\n' "${_out}" | LC_ALL=C sort -u)
-  done < <(find "${_cache}/" \( -type d -o -type f \( -path '*/hooks/hooks.json' -o -path '*/.claude-plugin/plugin.json' \) \) -print0 2>/dev/null)
-  wait "$!"
+  done <&"${_find_fd}"
+  exec {_find_fd}<&-
+  wait "${_find_pid}"
   _find_rc=$?
   [[ ${_find_rc} -eq 0 || ${_tagged} -eq 1 ]] || printf '%s\tunreadable\n' "${_cache}"
   return 0
