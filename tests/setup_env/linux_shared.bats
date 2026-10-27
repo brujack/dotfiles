@@ -210,7 +210,7 @@ EOF
   run install_zsh_linux
   [ "$status" -eq 0 ]
   grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
-  # A clean update stays quiet; pairs with the unreachable-host test below.
+  # A clean update stays quiet; pairs with "install_zsh_linux warns when a source host is unreachable".
   [[ "$output" != *"apt update failed"* ]]
 }
 
@@ -329,7 +329,7 @@ EOF
   run install_git_linux
   [ "$status" -eq 0 ]
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
-  # A clean update stays quiet; pairs with the unreachable-host test below.
+  # A clean update stays quiet; pairs with "install_git_linux warns when a source host is unreachable".
   [[ "$output" != *"apt update failed"* ]]
 }
 
