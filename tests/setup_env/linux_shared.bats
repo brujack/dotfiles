@@ -210,6 +210,8 @@ EOF
   run install_zsh_linux
   [ "$status" -eq 0 ]
   grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
+  # A clean update stays quiet; pairs with the unreachable-host test below.
+  [[ "$output" != *"apt update failed"* ]]
 }
 
 @test "install_zsh_linux: installs when zsh is in rc state" {
@@ -327,6 +329,8 @@ EOF
   run install_git_linux
   [ "$status" -eq 0 ]
   grep -q "apt install git" "${MOCK_CALLS_FILE}"
+  # A clean update stays quiet; pairs with the unreachable-host test below.
+  [[ "$output" != *"apt update failed"* ]]
 }
 
 @test "install_git_linux: installs when git is in rc state" {
