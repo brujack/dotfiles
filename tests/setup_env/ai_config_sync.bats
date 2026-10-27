@@ -7,6 +7,8 @@ load '../helpers/common.bash'
 
 setup() {
   load_setup_env
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}"
   export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
   export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"
   export GIT_COMMITTER_NAME="bats" GIT_COMMITTER_EMAIL="bats@example.com"
@@ -102,7 +104,8 @@ _upstream_change() {
 }
 
 # Each of the four variables redirects git on its own (dotfiles#380, #381), so each
-# gets a leak test of its own; the decoy must come through untouched.
+# gets a leak test of its own: the real checkout must reach origin's HEAD, and where
+# the leak would write into the decoy (work tree, index) the decoy is checked too.
 _make_decoy() {
   DECOY="${BATS_TEST_TMPDIR}/decoy"
   git init -q -b master "${DECOY}"
@@ -170,4 +173,16 @@ _make_decoy() {
   [ "$status" -eq 2 ]
   [ "$(git -C "${_OVERRIDE_AI_CONFIG_DIR}" rev-parse HEAD)" = "${_head_before}" ]
   grep -qx 'local ten' "${_OVERRIDE_AI_CONFIG_DIR}/notes.md"
+}
+
+# The audit's original scenario: a GIT_DIR pointing nowhere made rev-parse fail, so a
+# healthy checkout read as invalid and was deleted. It must now be pulled in place.
+@test "test_bug_ai_config_rm_rf: a GIT_DIR pointing nowhere does not move a healthy checkout aside" {
+  _upstream_change notes.md 'upstream notes'
+
+  GIT_DIR="${BATS_TEST_TMPDIR}/nonexistent/.git" run setup_ai_config
+  [ "$status" -eq 0 ]
+  local -a _aside=("${BATS_TEST_TMPDIR}"/ai-config.broken-*)
+  [ ! -e "${_aside[0]}" ]
+  [ "$(git -C "${_OVERRIDE_AI_CONFIG_DIR}" rev-parse HEAD)" = "$(git -C "${ORIGIN}" rev-parse master)" ]
 }
