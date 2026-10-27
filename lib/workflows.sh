@@ -331,10 +331,12 @@ setup_ai_config() {
     # Claude Code writes settings.json through its symlink, so local edits are
     # routine. --autostash keeps them, but when upstream changed the same file the
     # stash pop conflicts and pull still exits 0, leaving conflict markers in it.
+    # --no-renames lists both paths of a rename: with detection on, a renamed and
+    # edited file shows only its new path and hides an upstream edit to the old one.
     local _overlap
     _overlap="$(LC_ALL=C comm -12 \
-      <(_git_noenv -C "${_dir}" diff --name-only HEAD | LC_ALL=C sort) \
-      <(_git_noenv -C "${_dir}" diff --name-only "HEAD...@{u}" 2>/dev/null | LC_ALL=C sort))"
+      <(_git_noenv -C "${_dir}" diff --no-renames --name-only HEAD | LC_ALL=C sort) \
+      <(_git_noenv -C "${_dir}" diff --no-renames --name-only "HEAD...@{u}" 2>/dev/null | LC_ALL=C sort))"
     if [[ -n "${_overlap}" ]]; then
       log_warn "ai-config not pulled: local edits to $(printf '%s' "${_overlap}" | tr '\n' ' ')overlap upstream changes; commit or discard them, then re-run"
       return 2
