@@ -430,12 +430,13 @@ teardown() {
   grep -qE "git -C .* pull --ff-only" "${MOCK_CALLS_FILE}"
 }
 
-@test "install_terraform_skill warns and skips when path exists without .git" {
+@test "install_terraform_skill warns, skips and returns 2 when path exists without .git" {
   local _home="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${_home}/.cursor/skills/terraform-skill"
   export HOME="${_home}"
   run install_terraform_skill
-  [ "$status" -eq 0 ]
+  # 2, not 0: -t update must report SKIP for a checkout it did not update.
+  [ "$status" -eq 2 ]
   [[ "$output" == *"not a git checkout"* ]]
   refute_grep "git clone" "${MOCK_CALLS_FILE}"
   refute_grep "git -C .* pull" "${MOCK_CALLS_FILE}" -E

@@ -160,3 +160,16 @@ _assert_non_clone_skipped() {
 @test "test_bug_update_git_env: a tpm dir that is not a clone is skipped, not resolved to an ancestor" {
   _assert_non_clone_skipped tpm
 }
+
+# install_terraform_skill pulled with bare git -C, the same leak as the four sections
+# above; it runs from -t update and setup_user.
+@test "test_bug_update_git_env: a leaked GIT_DIR does not redirect the terraform-skill pull" {
+  local _dir="${HOME}/.cursor/skills/terraform-skill"
+  _clone_with_upstream terraform-skill "${_dir}"
+  _make_decoy
+
+  GIT_DIR="${DECOY}/.git" run install_terraform_skill
+  [ "$status" -eq 0 ]
+  [ "$(git -C "${_dir}" rev-parse HEAD)" = "$(_origin_head terraform-skill)" ]
+  [ "$(git -C "${DECOY}" rev-parse HEAD)" = "${DECOY_HEAD}" ]
+}
