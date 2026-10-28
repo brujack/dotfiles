@@ -1252,7 +1252,9 @@ EOF
 }
 
 @test "_update_write_detail_from_warn writes nothing for a missing or empty err file" {
-  _update_write_detail_from_warn "absent" "warning output"
+  run _update_write_detail_from_warn "absent" "warning output"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
   [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_absent" ]]
   : > "${_DOTFILES_RUN_TMPDIR}/err_empty"
   _update_write_detail_from_warn "empty" "warning output"
