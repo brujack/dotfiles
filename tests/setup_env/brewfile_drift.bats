@@ -154,6 +154,19 @@ teardown() {
   grep -q "jq" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }
 
+@test "_update_check_brewfile_drift: a backslash in a package name is written literally" {
+  export MACOS=1
+  printf 'brew "git"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES='git a\cb zz'
+  export MOCK_BREW_LIST_FORMULA='git a\cb zz'
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  grep -qF '    a\cb' "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -qF '    zz' "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+}
+
 @test "_update_check_brewfile_drift: WARN when formula in Brewfile but not installed" {
   export MACOS=1
   printf 'brew "git"\nbrew "missing-tool"\n' > "${BATS_TEST_TMPDIR}/Brewfile"

@@ -1025,8 +1025,11 @@ EOF
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
   _doctor_check_plugin_node_paths() { :; }
+  _doctor_check_brew_links() { :; }
+  _doctor_check_renovate_cadence() { :; }
+  _doctor_check_ledger_drift_cadence() { :; }
   run run_doctor
-  [[ "$output" == *"1 warnings"* ]]
+  [[ "$output" == *", 0 failed, 1 warnings"* ]]
 }
 
 # ── run_check_versions ────────────────────────────────────────────────────────

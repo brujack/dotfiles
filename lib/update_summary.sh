@@ -285,7 +285,7 @@ _update_record_end() {
           _result="${_formula_count} formulae ($(printf '%s' "${_formula_diff}" | paste -sd', ' -))"
         fi
         if [[ ${_cask_count} -gt 0 ]]; then
-          [[ -n "${_result}" ]] && _result="${_result}\n"
+          [[ -n "${_result}" ]] && _result="${_result}"$'\n'
           _result="${_result}${_cask_count} cask(s) ($(printf '%s' "${_cask_diff}" | paste -sd', ' -))"
         fi
       else
@@ -600,7 +600,8 @@ _ledger_write_run_entry() {
         _result_str=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_s}")
         if [[ "${_result_str}" != "no changes" && "${_result_str}" != "updated" && \
               "${_result_str}" != *"skipped"* ]]; then
-          _count=$(printf '%s' "${_result_str}" | grep -oE '^[0-9]+' || printf '0')
+          # brew's result is two lines when formulae and casks both changed; sum each line's count.
+          _count=$(printf '%s\n' "${_result_str}" | awk '/^[0-9]+/ { n += $1 } END { print n + 0 }')
           _packages_updated=$(( _packages_updated + ${_count:-0} ))
         fi
       fi
@@ -647,7 +648,7 @@ _update_summary() {
   local _timestamp
   _timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
-  _output+="=== Update Summary — ${_timestamp} ===\n\n"
+  _output+="=== Update Summary — ${_timestamp} ==="$'\n\n'
 
   local _section _status _result
   for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
@@ -676,44 +677,44 @@ _update_summary() {
     case "${_status}" in
       OK)
         _ok=$(( _ok + 1 ))
-        _output+="$(printf "[OK]   %-20s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[OK]   %-20s %s" "${_section}" "${_result}")"$'\n'
         ;;
       FAIL)
         _fail=$(( _fail + 1 ))
-        _output+="$(printf "[FAIL] %-20s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[FAIL] %-20s %s" "${_section}" "${_result}")"$'\n'
         ;;
       SKIP)
         _skip=$(( _skip + 1 ))
-        _output+="$(printf "[SKIP] %-20s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[SKIP] %-20s %s" "${_section}" "${_result}")"$'\n'
         ;;
       WARN)
         _warn=$(( _warn + 1 ))
-        _output+="$(printf "[WARN] %-20s %s" "${_section}" "${_result}")\n"
+        _output+="$(printf "[WARN] %-20s %s" "${_section}" "${_result}")"$'\n'
         ;;
     esac
   done
 
   local _total=$(( _ok + _fail + _skip + _warn ))
-  _output+="\n$(printf "%d sections: %d OK, %d failed, %d warnings, %d skipped" "${_total}" "${_ok}" "${_fail}" "${_warn}" "${_skip}")\n"
+  _output+=$'\n'"$(printf "%d sections: %d OK, %d failed, %d warnings, %d skipped" "${_total}" "${_ok}" "${_fail}" "${_warn}" "${_skip}")"$'\n'
 
   # Build detail output (in section order for deterministic output)
   local _detail_output=""
   for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
     if [[ -f "${_DOTFILES_RUN_TMPDIR}/detail_${_section}" ]]; then
-      _detail_output+="\n$(cat "${_DOTFILES_RUN_TMPDIR}/detail_${_section}")\n"
+      _detail_output+=$'\n'"$(cat "${_DOTFILES_RUN_TMPDIR}/detail_${_section}")"$'\n'
     fi
   done
 
   # Print to terminal
-  printf '%b' "${_output}"
-  [[ -n "${_detail_output}" ]] && printf '%b' "${_detail_output}"
+  printf '%s' "${_output}"
+  [[ -n "${_detail_output}" ]] && printf '%s' "${_detail_output}"
 
   # Append to log file
   local _log="${UPDATE_LOG_PATH:-${HOME}/.dotfiles-update.log}"
   {
     printf "────────────────────────────────────────────────────────\n"
-    printf '%b' "${_output}"
-    [[ -n "${_detail_output}" ]] && printf '%b' "${_detail_output}"
+    printf '%s' "${_output}"
+    [[ -n "${_detail_output}" ]] && printf '%s' "${_detail_output}"
     :
   } >> "${_log}" 2>/dev/null || log_warn "Could not write to ${_log}"
 
@@ -893,37 +894,37 @@ _update_check_brewfile_drift() {
   _update_warn "brew-drift" "${_summary}"
 
   # Write detail file
-  local _detail="brew-drift details:\n"
+  local _detail="brew-drift details:"$'\n'
   if [[ -n "${_untracked_formulae}" ]] || [[ -n "${_untracked_casks}" ]] || [[ -n "${_untracked_taps}" ]]; then
-    _detail+="  Untracked (installed, not in Brewfile):\n"
+    _detail+="  Untracked (installed, not in Brewfile):"$'\n'
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    ${_pkg}\n"
+      _detail+="    ${_pkg}"$'\n'
     done <<< "${_untracked_formulae}"
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    cask: ${_pkg}\n"
+      _detail+="    cask: ${_pkg}"$'\n'
     done <<< "${_untracked_casks}"
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    tap: ${_pkg}\n"
+      _detail+="    tap: ${_pkg}"$'\n'
     done <<< "${_untracked_taps}"
   fi
   if [[ -n "${_missing_formulae}" ]] || [[ -n "${_missing_casks}" ]] || [[ -n "${_missing_taps}" ]]; then
-    _detail+="  Missing (in Brewfile, not installed):\n"
+    _detail+="  Missing (in Brewfile, not installed):"$'\n'
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    ${_pkg}\n"
+      _detail+="    ${_pkg}"$'\n'
     done <<< "${_missing_formulae}"
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    cask: ${_pkg}\n"
+      _detail+="    cask: ${_pkg}"$'\n'
     done <<< "${_missing_casks}"
     while IFS= read -r _pkg; do
       [[ -z "${_pkg}" ]] && continue
-      _detail+="    tap: ${_pkg}\n"
+      _detail+="    tap: ${_pkg}"$'\n'
     done <<< "${_missing_taps}"
   fi
 
-  printf '%b' "${_detail}" > "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  printf '%s' "${_detail}" > "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
 }

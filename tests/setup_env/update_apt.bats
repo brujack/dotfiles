@@ -395,8 +395,9 @@ setup() {
   export MOCK_APT_GET_FULL_UPGRADE_OUTPUT="${REPO_ROOT}/tests/fixtures/apt/simulate-held-resolute.txt"
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  # _update_summary prints the detail verbatim (%s), so the file is what is shown.
   local _shown
-  _shown="$(printf '%b' "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")")"
+  _shown="$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")"
   [[ "${_shown}" == *'404  Nope \033[31mRED \c tail[0m end); apt kept'* ]]
   [[ "${_shown}" == *'liblzma5 was kept back'* ]]
   [[ "${_shown}" != *$'\x1b'* ]]
@@ -410,11 +411,11 @@ setup() {
   export MOCK_APT_STDOUT_FILE="${_in}"
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
-  [[ "$(printf '%b' "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")")" == 'file:/srv/a\033b\c is not updating: fetch failed (File not found); apt kept its previous package list for this source' ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")" == 'file:/srv/a\033b\c is not updating: fetch failed (File not found); apt kept its previous package list for this source' ]]
 }
 
 @test "_update_apt_printable: keeps printable ASCII only in a UTF-8 locale" {
   local _out
   _out="$(LC_ALL=C.UTF-8 _update_apt_printable $'a\xe2\x80\xaeb\x1b[1m\\c\xc2\x85 \xc3\xa9 z')"
-  [ "${_out}" = 'ab[1m\\c  z' ]
+  [ "${_out}" = 'ab[1m\c  z' ]
 }
