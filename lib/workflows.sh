@@ -718,6 +718,16 @@ _update_trap_sigint() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
 }
 
+# _update_apt_printable TEXT -- TEXT with non-printing bytes removed and each
+# backslash doubled. _update_summary prints detail with printf '%b', and apt's
+# fetch reason carries the server's HTTP reason phrase, so without this a mirror
+# or a man-in-the-middle on a plain-http source could put escape sequences on the
+# terminal and in the update log, or cut the summary short with \c.
+_update_apt_printable() {
+  local _s="${1//[^[:print:]]/}"
+  printf '%s' "${_s//\\/\\\\}"
+}
+
 # _update_apt_fetch_check APT_RC
 # Reads err_apt for sources apt could not fetch (unreachable host, 404) and says so on
 # the apt row: apt update exits 0 and keeps that source's old index, so the row read OK
@@ -741,6 +751,8 @@ _update_apt_fetch_check() {
 
   while IFS=$'\t' read -r _host _reason; do
     [[ -n ${_host} ]] || continue
+    _host="$(_update_apt_printable "${_host}")"
+    _reason="$(_update_apt_printable "${_reason}")"
     _names="${_names:+${_names}, }${_host}"
     _lines+="${_host} is not updating: fetch failed (${_reason}); apt kept its previous package list for this source"$'\n'
   done <<< "${_hosts}"

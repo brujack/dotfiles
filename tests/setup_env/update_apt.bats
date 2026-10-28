@@ -139,6 +139,7 @@ setup() {
   _in=$'W: Failed to fetch http://user@Mirror.Example:8080/ubuntu/dists/noble/InRelease  Could not connect\n'
   _in+=$'Failed to fetch http://unprefixed.example/x  not apt\n'
   _in+=$'W: http://legacy.example/ubuntu/dists/noble/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.\n'
+  _in+=$'E: Repository \'https://download.docker.com/linux/ubuntu noble InRelease\' changed its \'Origin\' value from \'\' to \'Docker\'\n'
   run _apt_fetch_failed_hosts <<< "${_in}"
   [ "$status" -eq 0 ]
   [ "$output" = "mirror.example"$'\t'"Could not connect" ]
@@ -151,6 +152,24 @@ setup() {
   run _apt_fetch_failed_hosts <<< "Warning: Failed to fetch https://a.example/x/InRelease  Redirection from https://a.example/x to 'http://other.example/y' is forbidden"
   [ "$status" -eq 0 ]
   [ "$output" = "a.example"$'\t'"Redirection from https://a.example/x to 'http://other.example/y' is forbidden" ]
+}
+
+@test "_apt_fetch_failed_hosts: a fetch line with no reason says so" {
+  run _apt_fetch_failed_hosts <<< 'W: Failed to fetch http://x.example/a'
+  [ "$status" -eq 0 ]
+  [ "$output" = "x.example"$'\t'"no reason given" ]
+}
+
+@test "_apt_fetch_failed_hosts: a source with no http(s) URL is named by its source string" {
+  run _apt_fetch_failed_hosts <<< 'W: Failed to fetch file:/var/local-repo/InRelease  File not found'
+  [ "$status" -eq 0 ]
+  [ "$output" = "file:/var/local-repo/InRelease"$'\t'"File not found" ]
+}
+
+@test "_apt_not_upgraded: a summary line with no trailing newline is still read" {
+  run _apt_not_upgraded < <(printf '%s' '0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.')
+  [ "$status" -eq 0 ]
+  [ "$output" = "not-upgraded"$'\t'"1" ]
 }
 
 @test "_apt_not_upgraded: held package is reported kept, with apt's count" {
@@ -277,6 +296,7 @@ setup() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" == *"; kept-back check did not run — see detail" ]]
   grep -q 'apt-get -s full-upgrade' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  grep -qx '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
 }
 
 @test "run_update apt section: simulation output with no summary is WARN, never clean" {
@@ -326,4 +346,59 @@ setup() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "SKIP" ]
   [[ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_apt" ]]
   run ! grep -q '^apt-get -s full-upgrade' "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update apt section: more named packages than apt's count still warns on the kept one" {
+  setup_run_update_linux
+  local _in="${BATS_TEST_TMPDIR}/sim.txt"
+  printf '%s\n' 'The following upgrades have been deferred due to phasing:' '  p1' \
+    'The following packages have been kept back:' '  k1' \
+    '0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.' > "${_in}"
+  export MOCK_APT_STDOUT_FILE="${CLEAN}" MOCK_APT_GET_FULL_UPGRADE_OUTPUT="${_in}"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" == *"; 1 package(s) kept back: k1 — see detail" ]]
+}
+
+@test "run_update apt section: fetch parser failure is WARN, never clean" {
+  setup_run_update_linux
+  export MOCK_APT_STDOUT_FILE="${CLEAN}"
+  _apt_fetch_failed_hosts() { log_error 'fetch boom'; return 1; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" == *"; fetch check did not run — see detail" ]]
+  grep -q 'fetch boom' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run ! command grep -q $'\x1b' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+}
+
+@test "run_update apt section: fetch parser failure on a failed apt keeps FAIL, appends after the error tail" {
+  setup_run_update_linux
+  export MOCK_APT_STDOUT_FILE="${CLEAN}" MOCK_APT_FAIL_SUBCMD=full-upgrade
+  _apt_fetch_failed_hosts() { log_error 'fetch boom'; return 1; }
+  local _rc=0
+  run_update || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "FAIL" ]
+  local _err _boom
+  _err="$(grep -n 'nala full-upgrade failed' "${_DOTFILES_RUN_TMPDIR}/detail_apt" | head -1 | cut -d: -f1)"
+  _boom="$(grep -n 'fetch boom' "${_DOTFILES_RUN_TMPDIR}/detail_apt" | head -1 | cut -d: -f1)"
+  [ -n "${_err}" ]
+  [ -n "${_boom}" ]
+  [ "${_err}" -lt "${_boom}" ]
+}
+
+@test "run_update apt section: a server's reason text cannot inject escapes or cut the summary" {
+  setup_run_update_linux
+  local _in="${BATS_TEST_TMPDIR}/update.txt"
+  printf 'E: Failed to fetch http://evil.example/d/InRelease  404  Nope \\033[31mRED \\c tail\033[0m\a end\n' > "${_in}"
+  export MOCK_APT_STDOUT_FILE="${_in}"
+  export MOCK_APT_GET_FULL_UPGRADE_OUTPUT="${REPO_ROOT}/tests/fixtures/apt/simulate-held-resolute.txt"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  local _shown
+  _shown="$(printf '%b' "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")")"
+  [[ "${_shown}" == *'404  Nope \033[31mRED \c tail[0m end); apt kept'* ]]
+  [[ "${_shown}" == *'liblzma5 was kept back'* ]]
+  [[ "${_shown}" != *$'\x1b'* ]]
+  [[ "${_shown}" != *$'\a'* ]]
 }
