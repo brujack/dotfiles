@@ -1,0 +1,18 @@
+
+WARNING: apt does not have a stable CLI interface. Use with caution in scripts.
+
+Ign:1 http://nonexistent.invalid/ubuntu resolute InRelease
+Hit:2 http://security.ubuntu.com/ubuntu resolute-security InRelease
+Hit:3 http://archive.ubuntu.com/ubuntu resolute InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu resolute-updates InRelease
+Hit:5 http://archive.ubuntu.com/ubuntu resolute-backports InRelease
+Ign:1 http://nonexistent.invalid/ubuntu resolute InRelease
+Ign:1 http://nonexistent.invalid/ubuntu resolute InRelease
+Err:1 http://nonexistent.invalid/ubuntu resolute InRelease
+  Could not resolve 'nonexistent.invalid'
+Reading package lists...
+Building dependency tree...
+Reading state information...
+4 packages can be upgraded. Run 'apt list --upgradable' to see them.
+Warning: Failed to fetch http://nonexistent.invalid/ubuntu/dists/resolute/InRelease  Could not resolve 'nonexistent.invalid'
+Warning: Some index files failed to download. They have been ignored, or old ones used instead.

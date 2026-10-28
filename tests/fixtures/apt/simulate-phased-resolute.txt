@@ -1,0 +1,37 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following upgrades have been deferred due to phasing:
+  gir1.2-adw-1 libadwaita-1-0
+The following packages will be upgraded:
+  albert cloud-init cloud-init-base gh google-cloud-cli
+  google-cloud-cli-app-engine-go google-cloud-cli-app-engine-python kubectl
+  microsoft-edge-stable mutter-common powershell
+11 upgraded, 0 newly installed, 0 to remove and 2 not upgraded.
+Inst microsoft-edge-stable [156.0.4314.42-1] (156.0.4314.50-1 edge stable:stable [amd64])
+Inst albert [35.1.0-0+764.1] (35.2.0-0+766.1 home:manuelschneid3r:download.opensuse.org [amd64])
+Inst cloud-init-base [26.1-0ubuntu3~26.04.1] (26.2-0ubuntu1~26.04.1 Ubuntu:26.04/resolute-updates [all]) [cloud-init:amd64 ]
+Inst cloud-init [26.1-0ubuntu3~26.04.1] (26.2-0ubuntu1~26.04.1 Ubuntu:26.04/resolute-updates [all])
+Inst gh [2.103.2] (2.103.3 gh:cli.github.com [amd64])
+Inst google-cloud-cli [590.0.1-0] (591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Inst google-cloud-cli-app-engine-python [590.0.1-0] (591.0.0-0 cloud-sdk:cloud-sdk [all])
+Inst google-cloud-cli-app-engine-go [590.0.1-0] (591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Inst kubectl [1:590.0.1-0] (1:591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Inst powershell [7.6.8-1.deb] (7.6.9-1.deb microsoft-ubuntu-noble-prod noble:noble [amd64])
+Inst mutter-common [50.1-0ubuntu2.4] (50.1-0ubuntu2.5 Ubuntu:26.04/resolute-updates [all])
+Conf microsoft-edge-stable (156.0.4314.50-1 edge stable:stable [amd64])
+Conf albert (35.2.0-0+766.1 home:manuelschneid3r:download.opensuse.org [amd64])
+Conf cloud-init-base (26.2-0ubuntu1~26.04.1 Ubuntu:26.04/resolute-updates [all])
+Conf cloud-init (26.2-0ubuntu1~26.04.1 Ubuntu:26.04/resolute-updates [all])
+Conf gh (2.103.3 gh:cli.github.com [amd64])
+Conf google-cloud-cli (591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Conf google-cloud-cli-app-engine-python (591.0.0-0 cloud-sdk:cloud-sdk [all])
+Conf google-cloud-cli-app-engine-go (591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Conf kubectl (1:591.0.0-0 cloud-sdk:cloud-sdk [amd64])
+Conf powershell (7.6.9-1.deb microsoft-ubuntu-noble-prod noble:noble [amd64])
+Conf mutter-common (50.1-0ubuntu2.5 Ubuntu:26.04/resolute-updates [all])

@@ -206,19 +206,62 @@ _apt_signer_awk_list() {
   printf '%s' "$*"
 }
 
+# _apt_scan_failed_hosts MODE -- shared body of the two scans below; MODE is
+# "signer" or "fetch" (see lib/apt_stale_signer_hosts.awk).
+_apt_scan_failed_hosts() {
+  local _mode="$1" _prefixes _tokens _awk_file="${DOTFILES_REPO_ROOT}/lib/apt_stale_signer_hosts.awk"
+  # Empty lists would skip every line and read as "no stale signer"; refuse instead.
+  # The fetch scan needs the token list too: without it a signer failure reads as a fetch failure.
+  ((${#APT_SIGNER_PREFIXES[@]} && ${#APT_SIGNER_TOKENS[@]})) \
+    || { log_error "_apt_scan_failed_hosts: signer lists undefined (lib/constants.sh not sourced)"; return 1; }
+  [[ -r "${_awk_file}" ]] \
+    || { log_error "_apt_scan_failed_hosts: awk program not readable: ${_awk_file}"; return 1; }
+  _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
+  _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
+  awk -v mode="${_mode}" -v prefixes="${_prefixes}" -v tokens="${_tokens}" -f "${_awk_file}"
+}
+
 # Reads apt output on stdin; prints "host<TAB>token" once per distinct host
 # (lowercased, no userinfo or port) named on a signature-failure line, so
 # callers need not re-parse apt's wording.
 _apt_stale_signer_hosts() {
-  local _prefixes _tokens _awk_file="${DOTFILES_REPO_ROOT}/lib/apt_stale_signer_hosts.awk"
-  # Empty lists would skip every line and read as "no stale signer"; refuse instead.
-  ((${#APT_SIGNER_PREFIXES[@]} && ${#APT_SIGNER_TOKENS[@]})) \
-    || { log_error "_apt_stale_signer_hosts: signer lists undefined (lib/constants.sh not sourced)"; return 1; }
-  [[ -r "${_awk_file}" ]] \
-    || { log_error "_apt_stale_signer_hosts: awk program not readable: ${_awk_file}"; return 1; }
-  _prefixes="$(_apt_signer_awk_list "${APT_SIGNER_PREFIXES[@]}")" || return 1
-  _tokens="$(_apt_signer_awk_list "${APT_SIGNER_TOKENS[@]}")" || return 1
-  awk -v prefixes="${_prefixes}" -v tokens="${_tokens}" -f "${_awk_file}"
+  _apt_scan_failed_hosts signer
+}
+
+# Reads apt output on stdin; prints "host<TAB>reason" once per distinct host apt
+# could not fetch for a reason other than a signature failure. apt update exits 0
+# and keeps the old index for such a source (measured 2026-10-27, apt 3.x).
+_apt_fetch_failed_hosts() {
+  _apt_scan_failed_hosts fetch
+}
+
+# Reads `LC_ALL=C apt-get -s full-upgrade` output on stdin. Prints "kept<TAB>pkg"
+# and "phased<TAB>pkg" for each package apt names in those two lists, then
+# "not-upgraded<TAB>N" from the summary line. Returns 1 when there is no summary
+# line, so a wording change reads as "did not run", never as clean.
+_apt_not_upgraded() {
+  local _line _section="" _n="" _pkg
+  local -a _pkgs
+  while IFS= read -r _line || [[ -n ${_line} ]]; do
+    _line="${_line%$'\r'}"
+    case "${_line}" in
+      "The following packages have been kept back:") _section="kept" ;;
+      "The following upgrades have been deferred due to phasing:") _section="phased" ;;
+      "  "*)
+        [[ -n ${_section} ]] || continue
+        read -ra _pkgs <<< "${_line}"
+        for _pkg in "${_pkgs[@]}"; do
+          printf '%s\t%s\n' "${_section}" "${_pkg}"
+        done
+        ;;
+      *)
+        _section=""
+        [[ ${_line} =~ ^[0-9]+\ upgraded,.*\ and\ ([0-9]+)\ not\ upgraded\.$ ]] && _n="${BASH_REMATCH[1]}"
+        ;;
+    esac
+  done
+  [[ -n ${_n} ]] || return 1
+  printf 'not-upgraded\t%s\n' "${_n}"
 }
 
 # Maps a host named by a signature failure to its one-line remedy, so the

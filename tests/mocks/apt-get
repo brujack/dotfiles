@@ -47,6 +47,19 @@ case "${_verb}" in
       printf 'Reading package lists...\n'
     fi
     ;;
+  full-upgrade)
+    # run_update's kept-back check simulates with -s. Default is a clean summary, so a
+    # test that does not care about kept-back packages sees an OK apt row.
+    # MOCK_APT_GET_FULL_UPGRADE_OUTPUT: print this captured file instead (stdout).
+    # MOCK_APT_GET_FULL_UPGRADE_EXIT: exit with this code after printing.
+    printf 'apt-get-env LC_ALL=%s\n' "${LC_ALL:-}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+    if [[ -n "${MOCK_APT_GET_FULL_UPGRADE_OUTPUT:-}" ]]; then
+      cat "${MOCK_APT_GET_FULL_UPGRADE_OUTPUT}"
+    else
+      printf '0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n'
+    fi
+    [[ -n "${MOCK_APT_GET_FULL_UPGRADE_EXIT:-}" ]] && exit "${MOCK_APT_GET_FULL_UPGRADE_EXIT}"
+    ;;
   install)
     [[ -n "${MOCK_APT_GET_INSTALL_OUTPUT:-}" ]] && _apt_print_split "${MOCK_APT_GET_INSTALL_OUTPUT}"
     [[ -n "${MOCK_APT_GET_INSTALL_MARK:-}" ]] && printf '%s %s\n' "${MOCK_APT_GET_INSTALL_MARK}" "${_pkgs[*]}"

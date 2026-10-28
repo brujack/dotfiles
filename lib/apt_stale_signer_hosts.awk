@@ -1,7 +1,14 @@
-# Reads apt output on stdin; prints "host<TAB>token" once per distinct host named
-# on a signature-failure line. Called by _apt_stale_signer_hosts in lib/linux_shared.sh
-# with -v prefixes=... -v tokens=... ("|"-joined). Lives in its own file because a
+# Reads apt output on stdin. By default (signer mode) prints "host<TAB>token" once
+# per distinct host named on a signature-failure line. Called by
+# _apt_scan_failed_hosts in lib/linux_shared.sh with -v mode=signer|fetch
+# -v prefixes=... -v tokens=... ("|"-joined). Lives in its own file because a
 # multi-line single-quoted program inside a .sh counts as uncoverable lines in bash-coverage.
+# With -v mode=fetch it reads the other failure apt update exits 0 on: a "Failed to
+# fetch" line carrying no signer token (an unreachable host, a 404), and prints
+# "host<TAB>reason". host is the source URL's host or, when the source has no
+# http(s) URL (file:, cdrom:), the source token up to its first space. A signer
+# failure also prints a "Failed to fetch" line, so the token test never puts a
+# line in both reports.
 BEGIN {
   np = split(prefixes, pre, "|")
   nt = split(tokens, tok, "|")
@@ -17,10 +24,20 @@ BEGIN {
   for (i = 1; i <= nt; i++) {
     if (index($0, tok[i]) > 0) { found = tok[i]; break }
   }
-  if (found == "") next
   rest = $0
+  if (mode == "fetch") {
+    if (found != "" || index($0, "Failed to fetch ") == 0) next
+    found = $0
+    sub(/^.*Failed to fetch [^ ]+ */, "", found)
+    if (found == "") found = "no reason given"
+    # Only the source URL names the host: the reason can carry another URL (a redirect target).
+    rest = substr($0, index($0, "Failed to fetch ") + 16)
+    sub(/ .*/, "", rest)
+  } else if (found == "") next
   # authority = text after the scheme up to the first / quote or space
+  got = 0
   while (match(rest, /https?:\/\/[^\/\047 ]+/)) {
+    got = 1
     url = substr(rest, RSTART, RLENGTH)
     rest = substr(rest, RSTART + RLENGTH)
     sub(/^https?:\/\//, "", url)
@@ -29,4 +46,7 @@ BEGIN {
     url = tolower(url)
     if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
   }
+  # A fetch failure on a source with no http(s) URL (file:, cdrom:) still names it,
+  # by the source token up to its first space, so the row never reads OK for it.
+  if (mode == "fetch" && !got && rest != "" && !(rest in seen)) { seen[rest] = 1; printf "%s\t%s\n", rest, found }
 }

@@ -1,0 +1,19 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages have been kept back:
+  liblzma5
+The following packages will be upgraded:
+  libsystemd0 libudev1 zlib1g
+3 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+Inst libsystemd0 [259.5-0ubuntu3.4] (259.9-0ubuntu0.1 Ubuntu:26.04/resolute-updates [amd64])
+Conf libsystemd0 (259.9-0ubuntu0.1 Ubuntu:26.04/resolute-updates [amd64])
+Inst libudev1 [259.5-0ubuntu3.4] (259.9-0ubuntu0.1 Ubuntu:26.04/resolute-updates [amd64])
+Conf libudev1 (259.9-0ubuntu0.1 Ubuntu:26.04/resolute-updates [amd64])
+Inst zlib1g [1:1.3.dfsg+really1.3.1-1ubuntu3.1] (1:1.3.dfsg+really1.3.1-1ubuntu3.2 Ubuntu:26.04/resolute-updates, Ubuntu:26.04/resolute-security [amd64])
+Conf zlib1g (1:1.3.dfsg+really1.3.1-1ubuntu3.2 Ubuntu:26.04/resolute-updates, Ubuntu:26.04/resolute-security [amd64])
