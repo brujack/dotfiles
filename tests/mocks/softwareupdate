@@ -2,8 +2,16 @@
 printf "softwareupdate %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 case "$1" in
   -l)
-    printf "%s\n" "${MOCK_SOFTWAREUPDATE_LIST_OUTPUT:-}"
-    exit 0
+    # MOCK_SOFTWAREUPDATE_LIST_OUTPUT_AFTER: the list once an --install call has
+    # been recorded (the post-install snapshot); defaults to the pre-install list.
+    # MOCK_SOFTWAREUPDATE_LIST_EXIT: fail the listing itself.
+    if [[ -n "${MOCK_SOFTWAREUPDATE_LIST_OUTPUT_AFTER+set}" ]] \
+      && grep -q -- '--install' "${MOCK_CALLS_FILE:-/tmp/mock_calls}" 2> /dev/null; then
+      printf "%s\n" "${MOCK_SOFTWAREUPDATE_LIST_OUTPUT_AFTER}"
+    else
+      printf "%s\n" "${MOCK_SOFTWAREUPDATE_LIST_OUTPUT:-}"
+    fi
+    exit "${MOCK_SOFTWAREUPDATE_LIST_EXIT:-0}"
     ;;
   *)
     exit "${MOCK_SOFTWAREUPDATE_EXIT:-0}"

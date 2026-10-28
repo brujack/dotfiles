@@ -226,7 +226,7 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 === Update Summary — 2026-04-13 10:00:00 ===
 
 [OK]   brew                 3 formulae (git 2.47.0, curl 8.12.1, openssl 3.4.1)
-[OK]   softwareupdate       2 update(s) (Xcode-16.3, macOS Sequoia 15.4.1)
+[OK]   softwareupdate       1 update(s) installed (Xcode-16.3); 1 still pending (macOS Sequoia 15.4.1)
 [OK]   apt                  14 package(s) (curl 7.88.1, git 2.44.0, ...)
 [OK]   snap                 2 package(s) (firefox 124.0, chromium 123.0)
 [OK]   mas                  1 app(s) (Slack (4.42))

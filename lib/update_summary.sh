@@ -14,12 +14,41 @@ _update_diff_lines() {
   comm -13 <(sort "${_pre}") <(sort "${_post}")
 }
 
-# _update_snapshot SECTION COMMAND...
-# Runs COMMAND and writes stdout to ${_DOTFILES_RUN_TMPDIR}/pre_SECTION.
-_update_snapshot() {
-  local _section="$1"
+# The result for a section whose before or after snapshot failed: the update ran,
+# but the change list cannot be derived from it.
+_UPDATE_NO_CHANGE_LIST="updated; change list unavailable (snapshot failed)"
+
+# _update_capture FILE CMD... -- writes CMD's stdout to FILE. When CMD fails the
+# file is removed: `cmd > file || true` creates the file before cmd runs, so a
+# failed snapshot used to leave an empty list that diffed as "no changes" (or as
+# every package changed).
+_update_capture() {
+  local _file="$1"
   shift
-  "$@" > "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" 2>/dev/null || true
+  "$@" > "${_file}" 2> /dev/null || rm -f "${_file}"
+}
+
+# _update_capture_sha FILE DIR -- the HEAD SHA of DIR into FILE; no file when git
+# fails or prints nothing.
+_update_capture_sha() {
+  _update_capture "$1" _update_git -C "$2" rev-parse HEAD
+  [[ -s "$1" ]] || rm -f "$1"
+}
+
+# _update_gem_list -- `gem list` from the ruby update_gems updates. Fails when
+# _ruby_gem_path_prefix (lib/developer.sh) is not loaded, rather than listing
+# whatever gem PATH finds and reading "no changes".
+_update_gem_list() {
+  declare -f _ruby_gem_path_prefix > /dev/null || return 1
+  PATH="$(_ruby_gem_path_prefix)${PATH}" gem list
+}
+
+# _update_softwareupdate_labels -- pending update labels, one per line. Fails only
+# when softwareupdate -l fails; no pending update is an empty, successful list.
+_update_softwareupdate_labels() {
+  local _out
+  _out="$(softwareupdate -l 2> /dev/null)" || return 1
+  printf '%s\n' "${_out}" | sed -n 's/^\* Label: //p'
 }
 
 # _update_git ARGS... -- git with the four repo-location variables stripped: git -C
@@ -141,35 +170,32 @@ _update_record_start() {
   printf "STARTED\n" > "${_DOTFILES_RUN_TMPDIR}/status_${_section}"
   case "${_section}" in
     brew)
-      brew list --formula --versions > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" 2>/dev/null || true
-      brew list --cask --versions > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" 2>/dev/null || true
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" brew list --formula --versions
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" brew list --cask --versions
       ;;
     mas)
       mas list > "${_DOTFILES_RUN_TMPDIR}/pre_mas" 2>/dev/null || true
       ;;
     gems)
-      gem list > "${_DOTFILES_RUN_TMPDIR}/pre_gems" 2>/dev/null || true
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_gems" _update_gem_list
       ;;
     pip)
       # pip snapshot is captured inside the Python block; nothing to do here
       ;;
     oh-my-zsh)
-      _update_git -C "${HOME}/.oh-my-zsh" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" 2>/dev/null || true
+      _update_capture_sha "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" "${HOME}/.oh-my-zsh"
       ;;
     tpm)
-      _update_git -C "${HOME}/.tmux/plugins/tpm" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tpm" 2>/dev/null || true
+      _update_capture_sha "${_DOTFILES_RUN_TMPDIR}/pre_tpm" "${HOME}/.tmux/plugins/tpm"
       ;;
     tfenv)
-      _update_git -C "${HOME}/.tfenv" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" 2>/dev/null || true
+      _update_capture_sha "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" "${HOME}/.tfenv"
       ;;
     zsh-autosuggestions)
-      _update_git -C "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" rev-parse HEAD > "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" 2>/dev/null || true
+      _update_capture_sha "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"
       ;;
     softwareupdate)
-      softwareupdate -l 2>/dev/null \
-        | grep '^\* Label:' \
-        | sed 's/^\* Label: //' \
-        > "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" || true
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" _update_softwareupdate_labels
       ;;
     apt)
       if [[ -n ${UBUNTU:-} ]]; then
@@ -240,18 +266,21 @@ _update_record_end() {
 
   case "${_section}" in
     brew)
-      local _formula_diff="" _cask_diff="" _formula_count=0 _cask_count=0
-      brew list --formula --versions > "${_DOTFILES_RUN_TMPDIR}/post_brew_formula" 2>/dev/null || true
-      brew list --cask --versions > "${_DOTFILES_RUN_TMPDIR}/post_brew_cask" 2>/dev/null || true
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" ]]; then
+      local _formula_diff="" _cask_diff="" _formula_count=0 _cask_count=0 _f
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/post_brew_formula" brew list --formula --versions
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/post_brew_cask" brew list --cask --versions
+      for _f in pre_brew_formula post_brew_formula pre_brew_cask post_brew_cask; do
+        [[ -f "${_DOTFILES_RUN_TMPDIR}/${_f}" ]] || _result="${_UPDATE_NO_CHANGE_LIST}"
+      done
+      if [[ -z "${_result}" ]]; then
         _formula_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" "${_DOTFILES_RUN_TMPDIR}/post_brew_formula")
         _formula_count=$(printf '%s' "${_formula_diff}" | grep -c . || true)
-      fi
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" ]]; then
         _cask_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" "${_DOTFILES_RUN_TMPDIR}/post_brew_cask")
         _cask_count=$(printf '%s' "${_cask_diff}" | grep -c . || true)
       fi
-      if [[ ${_formula_count} -gt 0 ]] || [[ ${_cask_count} -gt 0 ]]; then
+      if [[ -n "${_result}" ]]; then
+        :
+      elif [[ ${_formula_count} -gt 0 ]] || [[ ${_cask_count} -gt 0 ]]; then
         if [[ ${_formula_count} -gt 0 ]]; then
           _result="${_formula_count} formulae ($(printf '%s' "${_formula_diff}" | paste -sd', ' -))"
         fi
@@ -281,8 +310,9 @@ _update_record_end() {
       fi
       ;;
     gems)
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]]; then
-        gem list > "${_DOTFILES_RUN_TMPDIR}/post_gems" 2>/dev/null || true
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_gems" _update_gem_list
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" && -f "${_DOTFILES_RUN_TMPDIR}/post_gems" ]]; then
         local _gem_diff
         _gem_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_gems" "${_DOTFILES_RUN_TMPDIR}/post_gems")
         local _gem_count
@@ -293,7 +323,7 @@ _update_record_end() {
           _result="no changes"
         fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     pip)
@@ -319,30 +349,44 @@ _update_record_end() {
           tfenv) _git_dir="${HOME}/.tfenv" ;;
           zsh-autosuggestions) _git_dir="${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions" ;;
         esac
-        local _commits
-        _commits=$(_update_git_diff "${_git_dir}" "${_old_sha}")
-        local _commit_count
-        _commit_count=$(printf '%s' "${_commits}" | grep -c . || true)
-        if [[ ${_commit_count} -gt 0 ]]; then
-          _result="${_commit_count} commit(s)"
+        local _commits _commit_count
+        if ! _commits=$(_update_git_diff "${_git_dir}" "${_old_sha}"); then
+          _result="${_UPDATE_NO_CHANGE_LIST}"
         else
-          _result="no changes"
+          _commit_count=$(printf '%s' "${_commits}" | grep -c . || true)
+          if [[ ${_commit_count} -gt 0 ]]; then
+            _result="${_commit_count} commit(s)"
+          else
+            _result="no changes"
+          fi
         fi
       else
-        _result="no changes"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     softwareupdate)
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" ]]; then
-        local _su_count
-        _su_count=$(wc -l < "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" | tr -d ' ')
-        if [[ ${_su_count} -gt 0 ]]; then
-          _result="${_su_count} update(s) ($(paste -sd', ' - < "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate"))"
+      # Installed = listed before and gone after; pending = whatever is still
+      # listed after the install. The pre list alone only says what was
+      # available, not what the install did.
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate" _update_softwareupdate_labels
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" && -f "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate" ]]; then
+        local _su_done _su_pending _su_done_n _su_pending_n
+        _su_done=$(LC_ALL=C comm -23 <(LC_ALL=C sort "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate") \
+          <(LC_ALL=C sort "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate"))
+        _su_pending=$(grep -v '^$' "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate" || true)
+        _su_done_n=$(printf '%s' "${_su_done}" | grep -c . || true)
+        _su_pending_n=$(printf '%s' "${_su_pending}" | grep -c . || true)
+        if [[ ${_su_done_n} -gt 0 ]]; then
+          _result="${_su_done_n} update(s) installed ($(printf '%s' "${_su_done}" | paste -sd', ' -))"
         else
           _result="no changes"
         fi
+        if [[ ${_su_pending_n} -gt 0 ]]; then
+          _result="${_result}; ${_su_pending_n} still pending ($(printf '%s' "${_su_pending}" | paste -sd', ' -))"
+        fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     claude)

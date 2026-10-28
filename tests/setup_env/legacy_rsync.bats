@@ -18,6 +18,18 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "_is_legacy_sync_host is true on studio-1, the Studio on wifi" {
+  export MOCK_HOSTNAME_OUTPUT=studio-1
+  run _is_legacy_sync_host
+  [ "$status" -eq 0 ]
+}
+
+@test "_is_legacy_sync_host is false for a name that only starts with studio" {
+  export MOCK_HOSTNAME_OUTPUT=studio-2
+  run _is_legacy_sync_host
+  [ "$status" -eq 1 ]
+}
+
 @test "_is_legacy_sync_host is false on any other host" {
   export MOCK_HOSTNAME_OUTPUT=workstation
   run _is_legacy_sync_host

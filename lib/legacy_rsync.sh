@@ -9,8 +9,12 @@ if ! declare -f _dry_run_active >/dev/null 2>&1; then
   _dry_run_active() { return 0; }
 fi
 
+# The Studio is studio wired and studio-1 on wifi (config/profiles.sh).
 _is_legacy_sync_host() {
-  [[ "$(hostname -s)" == "studio" ]]
+  case "$(hostname -s)" in
+    studio | studio-1) return 0 ;;
+  esac
+  return 1
 }
 
 sync_legacy_dirs() {
