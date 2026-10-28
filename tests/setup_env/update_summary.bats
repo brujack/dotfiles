@@ -1334,6 +1334,13 @@ EOF
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec error output]\ncol1 col2\n indented')" ]
 }
 
+@test "_update_write_detail_from_err turns our own non-ASCII punctuation into ASCII" {
+  printf 'pyenv not found on PATH \xe2\x80\x94 rehash skipped\na \xe2\x86\x92 b \xe2\x94\x80\xe2\x94\x80 \xe2\x94\x9c\xe2\x94\x94\n' \
+    > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_err "sec" "error output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec error output]\npyenv not found on PATH - rehash skipped\na -> b -- ++')" ]
+}
+
 @test "_update_write_detail_from_err does not let control-only lines push the cause out of the window" {
   local _i
   { printf 'the real cause\n'; for _i in $(seq 1 10); do printf '\033[1A\033[2K\r\n'; done; } \

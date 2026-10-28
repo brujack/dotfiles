@@ -124,12 +124,16 @@ _update_fail() {
 # escape, a BEL, or a right-to-left override (U+202E) reordering the line.
 # Whole CSI sequences (colour, cursor movement, erase) go first, so they leave no
 # "[2K" residue and a line of nothing but them ends up blank; a tab becomes a
-# space, so tab-separated words stay apart; then every byte outside [:print:]
-# goes. The C locale makes [:print:] ASCII-only whatever the
-# caller's locale (non-ASCII text is dropped too, a cost accepted for one rule
-# everywhere) and keeps BSD sed from refusing an invalid UTF-8 byte.
+# space, so tab-separated words stay apart; the non-ASCII characters our own
+# messages use (em dash, box-drawing line and corners, right arrow) become ASCII,
+# since our log lines reach err_<section> too; then every byte outside [:print:]
+# goes. The C locale makes [:print:] ASCII-only whatever the caller's locale
+# (other non-ASCII text is dropped, a cost accepted for one rule everywhere) and
+# keeps BSD sed from refusing an invalid UTF-8 byte.
 _update_printable_lines() {
-  LC_ALL=C sed 's|\x1b\[[0-?]*[ -/]*[@-~]||g' | LC_ALL=C tr '\t' ' ' | LC_ALL=C tr -cd '[:print:]\n'
+  LC_ALL=C sed -e 's|\x1b\[[0-?]*[ -/]*[@-~]||g' \
+    -e 's|\xe2\x80\x94|-|g; s|\xe2\x94\x80|-|g; s|\xe2\x86\x92|->|g; s|\xe2\x94\x9c|+|g; s|\xe2\x94\x94|+|g' \
+    | LC_ALL=C tr '\t' ' ' | LC_ALL=C tr -cd '[:print:]\n'
 }
 
 # _update_printable TEXT -- TEXT cut to printable ASCII, newlines dropped, for a
