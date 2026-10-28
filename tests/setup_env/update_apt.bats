@@ -402,3 +402,13 @@ setup() {
   [[ "${_shown}" != *$'\x1b'* ]]
   [[ "${_shown}" != *$'\a'* ]]
 }
+
+@test "run_update apt section: a backslash in a non-http source is shown literally" {
+  setup_run_update_linux
+  local _in="${BATS_TEST_TMPDIR}/update.txt"
+  printf 'W: Failed to fetch file:/srv/a\\033b\\c  File not found\n' > "${_in}"
+  export MOCK_APT_STDOUT_FILE="${_in}"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  [[ "$(printf '%b' "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")")" == 'file:/srv/a\033b\c is not updating: fetch failed (File not found); apt kept its previous package list for this source' ]]
+}
