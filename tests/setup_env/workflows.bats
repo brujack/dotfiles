@@ -3542,6 +3542,24 @@ _cheat_mode() {
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_git-repos")" == *"one repo skipped"* ]]
 }
 
+@test "run_update git-repos detail names the skipped repo even after many syncing lines" {
+  sync_git_repos() {
+    local _i
+    log_info "git-repos: syncing /r/early"
+    log_warn "/r/early: remote unreachable, skipping"
+    for _i in $(seq 1 15); do log_info "git-repos: syncing /r/clean-${_i}"; done
+    return 2
+  }
+  sync_legacy_dirs() { return 0; }
+  export -f sync_git_repos sync_legacy_dirs
+  export MACOS=1
+  unset LINUX UBUNTU
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
+  grep -q '/r/early: remote unreachable, skipping' "${_DOTFILES_RUN_TMPDIR}/detail_git-repos"
+  run ! command grep -q 'syncing /r/clean' "${_DOTFILES_RUN_TMPDIR}/detail_git-repos"
+}
+
 @test "run_update records legacy-rsync as WARN (not OK) when sync_legacy_dirs returns 2" {
   sync_git_repos() { return 0; }
   sync_legacy_dirs() { echo "one target unreachable"; return 2; }

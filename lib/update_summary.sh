@@ -107,6 +107,31 @@ _update_write_detail_from_err() {
   fi
 }
 
+# _update_write_detail_from_warn SECTION LABEL
+# Like _update_write_detail_from_err, but keeps only the [WARN] lines, so a
+# section that logs a line per item (git-repos logs one per repo) cannot push the
+# warning that explains the WARN out of the window. Capped at 20 lines with a
+# count of the rest. With no [WARN] line it falls back to the plain tail, so the
+# detail is never empty.
+_update_write_detail_from_warn() {
+  local _section="$1" _label="$2"
+  local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}" _warns _n
+  [[ -s "${_err_file}" ]] || return 0
+  _warns="$(sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_err_file}" | grep '^\[WARN\]' || true)"
+  if [[ -z "${_warns}" ]]; then
+    _update_write_detail_from_err "${_section}" "${_label}"
+    return 0
+  fi
+  _n="$(printf '%s\n' "${_warns}" | wc -l | tr -d ' ')"
+  {
+    printf "[%s %s]\n" "${_section}" "${_label}"
+    printf '%s\n' "${_warns}" | head -20
+    if [[ ${_n} -gt 20 ]]; then
+      printf '... and %d more\n' "$((_n - 20))"
+    fi
+  } > "${_DOTFILES_RUN_TMPDIR}/detail_${_section}"
+}
+
 # _update_record_start SECTION
 # Takes pre-snapshot appropriate for the section type. Marks the section STARTED
 # first, so one that never reaches _update_record_end or _update_skip still gets a

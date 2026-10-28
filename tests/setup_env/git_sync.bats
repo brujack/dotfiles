@@ -348,3 +348,75 @@ _make_decoy() {
   [ "$(git -C "${ORIGIN}" rev-parse master)" = "$(git -C "${CLONE}" rev-parse HEAD)" ]
   [ "$(git -C "${TESTDIR}/decoy-origin.git" rev-parse master)" = "${_decoy_before}" ]
 }
+
+# ── Cluster F: silent git-repos outcomes (2026-10-27 audit #5, #6) ────────────
+
+@test "_git_repo_status reports not-a-repo for a directory git cannot read" {
+  mkdir -p "${TESTDIR}/broken/.git"
+  run _git_repo_status "${TESTDIR}/broken"
+  [ "$status" -eq 0 ]
+  [ "$output" = "not-a-repo" ]
+}
+
+@test "_git_sync_one_repo returns 1 and names a directory git cannot read" {
+  mkdir -p "${TESTDIR}/broken/.git"
+  run _git_sync_one_repo "${TESTDIR}/broken"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"${TESTDIR}/broken: not a readable git repository, skipping"* ]]
+}
+
+@test "sync_git_repos returns 2 and names a state-ledger directory that is not a repo" {
+  local base="${TESTDIR}/fake-personal-ledger"
+  mkdir -p "${base}"
+  git clone -q "${ORIGIN}" "${base}/ok-repo"
+  mkdir -p "${TESTDIR}/ledger-not-a-repo"
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/ledger-not-a-repo"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"${TESTDIR}/ledger-not-a-repo: not a readable git repository, skipping"* ]]
+}
+
+@test "sync_git_repos returns 2 and names a discovered repo whose .git is unreadable" {
+  local base="${TESTDIR}/fake-personal-broken"
+  mkdir -p "${base}/broken-repo/.git"
+  git clone -q "${ORIGIN}" "${base}/ok-repo"
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"${base}/broken-repo: not a readable git repository, skipping"* ]]
+}
+
+@test "sync_git_repos returns 2 and names a repos base that does not exist" {
+  export _OVERRIDE_PERSONAL_GITREPOS="${TESTDIR}/no-such-base"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"git-repos: repos base '${TESTDIR}/no-such-base' is not a directory, nothing synced"* ]]
+}
+
+@test "sync_git_repos returns 2 when the repos base is unset" {
+  unset _OVERRIDE_PERSONAL_GITREPOS PERSONAL_GITREPOS
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"git-repos: repos base is not set (PERSONAL_GITREPOS), nothing synced"* ]]
+}
+
+@test "sync_git_repos returns 2 when the repos base holds no repos" {
+  mkdir -p "${TESTDIR}/empty-base/not-a-repo"
+  export _OVERRIDE_PERSONAL_GITREPOS="${TESTDIR}/empty-base"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"git-repos: no repos found under '${TESTDIR}/empty-base'"* ]]
+}
+
+@test "sync_git_repos still syncs the state ledger when the repos base is missing" {
+  export _OVERRIDE_PERSONAL_GITREPOS="${TESTDIR}/no-such-base"
+  export _OVERRIDE_STATE_LEDGER_DIR="${CLONE}"
+  run sync_git_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"git-repos: syncing ${CLONE}"* ]]
+}

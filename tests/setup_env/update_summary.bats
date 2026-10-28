@@ -1218,3 +1218,43 @@ EOF
   [ "$status" -eq 0 ]
   grep -q '"success": false' "${_captured_broken}"
 }
+
+# ── _update_write_detail_from_warn ────────────────────────────────────────────
+
+@test "_update_write_detail_from_warn keeps only [WARN] lines, ANSI stripped" {
+  printf '\033[0;32m[INFO]\033[0m  syncing a\n\033[1;33m[WARN]\033[0m  a: skipped\n\033[0;32m[INFO]\033[0m  syncing b\n' \
+    > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec warning output]\n[WARN]  a: skipped')" ]
+}
+
+@test "_update_write_detail_from_warn caps at 20 lines and counts the rest" {
+  local _i
+  for _i in $(seq 1 25); do printf '[WARN]  r%d: skipped\n' "${_i}"; done > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(wc -l < "${_DOTFILES_RUN_TMPDIR}/detail_sec")" -eq 22 ]
+  [ "$(sed -n 21p "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "[WARN]  r20: skipped" ]
+  [ "$(tail -1 "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "... and 5 more" ]
+}
+
+@test "_update_write_detail_from_warn writes exactly 20 lines with no count at the cap" {
+  local _i
+  for _i in $(seq 1 20); do printf '[WARN]  r%d: skipped\n' "${_i}"; done > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(wc -l < "${_DOTFILES_RUN_TMPDIR}/detail_sec")" -eq 21 ]
+  run ! command grep -q 'more$' "${_DOTFILES_RUN_TMPDIR}/detail_sec"
+}
+
+@test "_update_write_detail_from_warn falls back to the tail when there is no [WARN] line" {
+  printf 'one repo skipped\n' > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec warning output]\none repo skipped')" ]
+}
+
+@test "_update_write_detail_from_warn writes nothing for a missing or empty err file" {
+  _update_write_detail_from_warn "absent" "warning output"
+  [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_absent" ]]
+  : > "${_DOTFILES_RUN_TMPDIR}/err_empty"
+  _update_write_detail_from_warn "empty" "warning output"
+  [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_empty" ]]
+}

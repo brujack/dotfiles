@@ -29,8 +29,14 @@ _git_sync_git() {
 _git_repo_status() {
   local _path="$1"
 
-  if [[ ! -d "${_path}" ]] || ! _git_sync_git -C "${_path}" rev-parse --git-dir >/dev/null 2>&1; then
+  if [[ ! -d "${_path}" ]]; then
     printf "missing\n"
+    return 0
+  fi
+  # A directory that exists but git cannot read (corrupt or empty .git, another
+  # owner's checkout) is a failure to report, not an absent repo to skip quietly.
+  if ! _git_sync_git -C "${_path}" rev-parse --git-dir >/dev/null 2>&1; then
+    printf "not-a-repo\n"
     return 0
   fi
 
@@ -63,6 +69,10 @@ _git_sync_one_repo() {
   case "${_status}" in
     missing)
       return 0
+      ;;
+    not-a-repo)
+      log_warn "${_path}: not a readable git repository, skipping"
+      return 1
       ;;
     unreachable)
       log_warn "${_path}: remote unreachable, skipping"
@@ -116,13 +126,29 @@ _git_sync_one_repo() {
 sync_git_repos() {
   local _had_warning=0
   local _repo
-  local _base="${_OVERRIDE_PERSONAL_GITREPOS:-${PERSONAL_GITREPOS}}"
+  local _base="${_OVERRIDE_PERSONAL_GITREPOS:-${PERSONAL_GITREPOS:-}}"
+  local _found=0
 
-  while IFS= read -r _repo; do
-    [[ -z "${_repo}" ]] && continue
-    log_info "git-repos: syncing ${_repo}"
-    _git_sync_one_repo "${_repo}" || _had_warning=1
-  done < <(find "${_base}" -maxdepth 2 -name .git -type d 2>/dev/null | sed 's#/\.git$##' | sort)
+  # An unset or absent base used to sync zero repos with rc 0: the row read OK
+  # while nothing ran. The ledger below is still synced either way.
+  if [[ -z "${_base}" ]]; then
+    log_warn "git-repos: repos base is not set (PERSONAL_GITREPOS), nothing synced"
+    _had_warning=1
+  elif [[ ! -d "${_base}" ]]; then
+    log_warn "git-repos: repos base '${_base}' is not a directory, nothing synced"
+    _had_warning=1
+  else
+    while IFS= read -r _repo; do
+      [[ -z "${_repo}" ]] && continue
+      _found=1
+      log_info "git-repos: syncing ${_repo}"
+      _git_sync_one_repo "${_repo}" || _had_warning=1
+    done < <(find "${_base}" -maxdepth 2 -name .git -type d 2>/dev/null | sed 's#/\.git$##' | sort)
+    if [[ ${_found} -eq 0 ]]; then
+      log_warn "git-repos: no repos found under '${_base}'"
+      _had_warning=1
+    fi
+  fi
 
   local _ledger_dir="${_OVERRIDE_STATE_LEDGER_DIR:-${HOME}/.local/share/state-ledger}"
   if [[ -d "${_ledger_dir}" ]]; then

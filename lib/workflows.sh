@@ -1314,7 +1314,7 @@ run_update() {
     _update_record_end "git-repos" "$(( _git_repos_rc == 2 ? 0 : _git_repos_rc ))"
     if [[ ${_git_repos_rc} -eq 2 ]]; then
       _update_warn "git-repos" "one or more repos skipped — see detail"
-      _update_write_detail_from_err "git-repos" "warning output"
+      _update_write_detail_from_warn "git-repos" "warning output"
     fi
 
     _update_record_start "legacy-rsync"
