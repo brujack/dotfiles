@@ -656,7 +656,7 @@ _gnubin_present() {
   grep -q "^brew cleanup" "${MOCK_CALLS_FILE}"
   # Logged last, so upgrade and cleanup output cannot push it out of the
   # summary's tail -10 detail.
-  [[ "${lines[-1]}" == *"brew trust failed"* ]]
+  [[ "${lines[${#lines[@]}-1]}" == *"brew trust failed"* ]]
 }
 
 @test "brew_update returns 1 when brew cleanup fails" {

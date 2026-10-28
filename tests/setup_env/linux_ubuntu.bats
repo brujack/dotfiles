@@ -4131,8 +4131,10 @@ _az_cloud_env() {
   export MOCK_BREW_TRUST_EXIT=1
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  [[ "$output" == *"[WARN]"*"brew trust failed"* ]]
-  [[ "$output" == *"Error: mock brew trust failure"* ]]
+  # brew_update runs first and warns for its own trust call; the function's
+  # own trust call must add a second warning, not lean on that one.
+  [ "$(printf '%s\n' "$output" | command grep -c 'brew trust failed')" -eq 2 ]
+  [ "$(printf '%s\n' "$output" | command grep -c 'Error: mock brew trust failure')" -eq 2 ]
 }
 
 # ── _install_ubuntu_gui_tools ────────────────────────────────────────────────
