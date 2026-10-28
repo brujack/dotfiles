@@ -1308,6 +1308,40 @@ EOF
   [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_empty" ]]
 }
 
+# ── detail text cut to printable ASCII ────────────────────────────────────────
+
+@test "_update_printable: keeps printable ASCII only in a UTF-8 locale" {
+  local _out
+  _out="$(LC_ALL=C.UTF-8 _update_printable $'a\xe2\x80\xaeb\x1b[1m\\c\xc2\x85 \xc3\xa9 z')"
+  [ "${_out}" = 'ab\c  z' ]
+}
+
+@test "_update_printable: an empty argument prints nothing" {
+  run _update_printable ''
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "_update_write_detail_from_err drops control bytes and non-ASCII from the tail" {
+  printf 'boom\033[2Kgone\a \xc3\xa9 tail\n\033[31mred\033[0m\n' > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_err "sec" "error output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec error output]\nboomgone  tail\nred')" ]
+}
+
+@test "_update_write_detail_from_err does not let control-only lines push the cause out of the window" {
+  local _i
+  { printf 'the real cause\n'; for _i in $(seq 1 10); do printf '\033[1A\033[2K\r\n'; done; } \
+    > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_err "sec" "error output"
+  command grep -qx 'the real cause' "${_DOTFILES_RUN_TMPDIR}/detail_sec"
+}
+
+@test "_update_write_detail_from_warn drops control bytes from [WARN] lines" {
+  printf '[WARN]  x\033]0;title\ay\n' > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec warning output]\n[WARN]  x]0;titley')" ]
+}
+
 # ── Cluster G: snapshot honesty (2026-10-27 audit #7, #12 and failed snapshots) ─
 
 _unknown_result='updated; change list unavailable (snapshot failed)'

@@ -718,18 +718,6 @@ _update_trap_sigint() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
 }
 
-# _update_apt_printable TEXT -- TEXT cut to printable ASCII.
-# The C locale makes [:print:] ASCII-only whatever the caller's locale, so a
-# right-to-left override (U+202E) cannot reorder the line either. apt's fetch
-# reason carries the server's HTTP reason phrase, so without this a mirror or a
-# man-in-the-middle on a plain-http source could put raw escape sequences on the
-# terminal and in the update log. Backslashes stay as they are: _update_summary
-# prints detail with printf '%s', so a \c or \033 is shown, never interpreted.
-_update_apt_printable() {
-  local LC_ALL=C
-  printf '%s' "${1//[^[:print:]]/}"
-}
-
 # _update_apt_fetch_check APT_RC
 # Reads err_apt for sources apt could not fetch (unreachable host, 404) and, after a
 # clean apt run, says so on the apt row (after a failed one it adds to the detail
@@ -747,15 +735,15 @@ _update_apt_fetch_check() {
 
   if [[ ${_parse_rc} -ne 0 ]]; then
     [[ ${_apt_rc} -eq 0 ]] && _update_warn "apt" "${_result}; fetch check did not run — see detail"
-    sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" >> "${_detail}"
+    _update_printable_lines < "${_parse_err}" >> "${_detail}"
     return 0
   fi
   [[ -n ${_hosts} ]] || return 0
 
   while IFS=$'\t' read -r _host _reason; do
     [[ -n ${_host} ]] || continue
-    _host="$(_update_apt_printable "${_host}")"
-    _reason="$(_update_apt_printable "${_reason}")"
+    _host="$(_update_printable "${_host}")"
+    _reason="$(_update_printable "${_reason}")"
     _names="${_names:+${_names}, }${_host}"
     _lines+="${_host} is not updating: fetch failed (${_reason}); apt kept its previous package list for this source"$'\n'
   done <<< "${_hosts}"
@@ -785,12 +773,13 @@ _update_apt_kept_back_check() {
     _update_warn "apt" "${_result}; kept-back check did not run — see detail"
     {
       printf 'apt-get -s full-upgrade failed or gave no usable summary; its last lines:\n'
-      tail -5 "${_sim}"
+      tail -5 "${_sim}" | _update_printable_lines
     } >> "${_detail}"
     return 0
   fi
 
   while IFS=$'\t' read -r _kind _pkg; do
+    _pkg="$(_update_printable "${_pkg}")"
     case "${_kind}" in
       kept) _kept+=("${_pkg}") ;;
       phased) _phased+=("${_pkg}") ;;
@@ -833,9 +822,9 @@ _update_apt_signer_check() {
   if [[ ${_parse_rc} -ne 0 ]]; then
     if [[ ${_apt_rc} -eq 0 ]]; then
       _update_warn "apt" "${_result}; signer check did not run — see detail"
-      sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" > "${_detail}"
+      _update_printable_lines < "${_parse_err}" > "${_detail}"
     else
-      sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" >> "${_detail}"
+      _update_printable_lines < "${_parse_err}" >> "${_detail}"
     fi
     return 0
   fi
@@ -843,6 +832,8 @@ _update_apt_signer_check() {
 
   while IFS=$'\t' read -r _host _token; do
     [[ -n ${_host} ]] || continue
+    _host="$(_update_printable "${_host}")"
+    _token="$(_update_printable "${_token}")"
     _remedy="$(_apt_signer_remedy "${_host}")"
     _names="${_names:+${_names}, }${_host}"
     _lines+="${_host} is not updating: signature check failed (${_token}): signer rotated or expired, or a proxy served unsigned data; ${_remedy}"$'\n'

@@ -398,7 +398,7 @@ setup() {
   # _update_summary prints the detail verbatim (%s), so the file is what is shown.
   local _shown
   _shown="$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")"
-  [[ "${_shown}" == *'404  Nope \033[31mRED \c tail[0m end); apt kept'* ]]
+  [[ "${_shown}" == *'404  Nope \033[31mRED \c tail end); apt kept'* ]]
   [[ "${_shown}" == *'liblzma5 was kept back'* ]]
   [[ "${_shown}" != *$'\x1b'* ]]
   [[ "${_shown}" != *$'\a'* ]]
@@ -414,8 +414,58 @@ setup() {
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")" == 'file:/srv/a\033b\c is not updating: fetch failed (File not found); apt kept its previous package list for this source' ]]
 }
 
-@test "_update_apt_printable: keeps printable ASCII only in a UTF-8 locale" {
-  local _out
-  _out="$(LC_ALL=C.UTF-8 _update_apt_printable $'a\xe2\x80\xaeb\x1b[1m\\c\xc2\x85 \xc3\xa9 z')"
-  [ "${_out}" = 'ab[1m\c  z' ]
+# Every apt-sourced text that reaches detail_apt is cut to printable ASCII
+# (_update_printable / _update_printable_lines, lib/update_summary.sh).
+
+@test "run_update apt section: signer parser stderr reaches the detail without control bytes" {
+  setup_run_update_linux
+  export MOCK_APT_STDOUT_FILE="${STALE}"
+  _apt_stale_signer_hosts() { printf 'bad\a\033]0;t\a end\n' >&2; return 1; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  command grep -qx 'bad]0;t end' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run ! command grep -q $'[\a\x1b]' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+}
+
+@test "run_update apt section: fetch parser stderr reaches the detail without control bytes" {
+  setup_run_update_linux
+  export MOCK_APT_STDOUT_FILE="${CLEAN}"
+  _apt_fetch_failed_hosts() { printf 'fetch\a\033]0;t\a boom\n' >&2; return 1; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  command grep -qx 'fetch]0;t boom' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run ! command grep -q $'[\a\x1b]' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+}
+
+@test "run_update apt section: a stale signer's host and reason reach the detail without control bytes" {
+  setup_run_update_linux
+  export MOCK_APT_STDOUT_FILE="${STALE}"
+  _apt_stale_signer_hosts() { printf 'ev\033[2Kil.example\tNO\aPUBKEY\n'; }
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")" == 'evil.example is not updating: signature check failed (NOPUBKEY)'* ]]
+  run ! command grep -q $'[\a\x1b]' "${_DOTFILES_RUN_TMPDIR}/detail_apt" "${_DOTFILES_RUN_TMPDIR}/result_apt"
+}
+
+@test "run_update apt section: an unusable simulation's tail reaches the detail without control bytes" {
+  setup_run_update_linux
+  local _in="${BATS_TEST_TMPDIR}/sim.txt"
+  printf 'junk\a\033[2K line\n' > "${_in}"
+  export MOCK_APT_STDOUT_FILE="${CLEAN}" MOCK_APT_GET_FULL_UPGRADE_OUTPUT="${_in}"
+  run_update
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" == *"kept-back check did not run"* ]]
+  command grep -qxF 'junk line' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run ! command grep -q $'[\a\x1b]' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+}
+
+@test "run_update apt section: a kept-back name reaches the row and detail without control bytes" {
+  setup_run_update_linux
+  local _in="${BATS_TEST_TMPDIR}/sim.txt"
+  printf '%s\n' 'The following packages have been kept back:' $'  k\a\x1b[2K1' \
+    '0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.' > "${_in}"
+  export MOCK_APT_STDOUT_FILE="${CLEAN}" MOCK_APT_GET_FULL_UPGRADE_OUTPUT="${_in}"
+  run_update
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" == *"; 1 package(s) kept back: k1 — see detail" ]]
+  command grep -q '^k1 was kept back' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run ! command grep -q $'[\a\x1b]' "${_DOTFILES_RUN_TMPDIR}/detail_apt" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }

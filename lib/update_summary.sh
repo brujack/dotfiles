@@ -118,17 +118,40 @@ _update_fail() {
   printf "%s\n" "${_msg}" > "${_DOTFILES_RUN_TMPDIR}/result_${_section}"
 }
 
+# _update_printable_lines -- stdin to stdout, each line cut to printable ASCII.
+# The summary prints detail verbatim (printf '%s'), so a raw byte in a tool's
+# output would reach the terminal and the update log: a cursor-movement or OSC
+# escape, a BEL, or a right-to-left override (U+202E) reordering the line.
+# Whole CSI sequences (colour, cursor movement, erase) go first, so they leave no
+# "[2K" residue and a line of nothing but them ends up blank; then every byte
+# outside [:print:] goes. The C locale makes [:print:] ASCII-only whatever the
+# caller's locale (non-ASCII text is dropped too, a cost accepted for one rule
+# everywhere) and keeps BSD sed from refusing an invalid UTF-8 byte.
+_update_printable_lines() {
+  LC_ALL=C sed 's|\x1b\[[0-?]*[ -/]*[@-~]||g' | LC_ALL=C tr -cd '[:print:]\n'
+}
+
+# _update_printable TEXT -- TEXT cut to printable ASCII, newlines dropped, for a
+# value interpolated into one line: apt's fetch host and reason (the reason is a
+# mirror's HTTP reason phrase, so a man-in-the-middle on a plain-http source
+# controls it), its signer host and reason, and kept-back package names.
+_update_printable() {
+  printf '%s\n' "$1" | _update_printable_lines | LC_ALL=C tr -d '\n'
+}
+
 # _update_write_detail_from_err SECTION LABEL
 # Extracts a trimmed tail of err_${SECTION} into detail_${SECTION}. Shared by
 # _update_record_end's FAIL path and run_update's WARN call sites (legacy-rsync
 # and others) so partial-failure detail captured via `tee` isn't silently
-# dropped just because the section didn't hard-fail.
+# dropped just because the section didn't hard-fail. Lines are cut to printable
+# ASCII before blank ones are dropped, so a line of nothing but escapes cannot
+# take a slot in the 10-line window.
 _update_write_detail_from_err() {
   local _section="$1" _label="$2"
   local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}"
   if [[ -f "${_err_file}" ]] && [[ -s "${_err_file}" ]]; then
     local _err_tail
-    _err_tail=$(grep -v '^[[:space:]]*$' "${_err_file}" | tail -10 | sed 's/\x1b\[[0-9;]*m//g; s/\r//')
+    _err_tail=$(_update_printable_lines < "${_err_file}" | grep -v '^[[:space:]]*$' | tail -10)
     if [[ -n "${_err_tail}" ]]; then
       printf "[%s %s]\n%s\n" "${_section}" "${_label}" "${_err_tail}" \
         > "${_DOTFILES_RUN_TMPDIR}/detail_${_section}"
@@ -146,7 +169,7 @@ _update_write_detail_from_warn() {
   local _section="$1" _label="$2"
   local _err_file="${_DOTFILES_RUN_TMPDIR}/err_${_section}" _warns _n
   [[ -s "${_err_file}" ]] || return 0
-  _warns="$(sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_err_file}" | grep '^\[WARN\]' || true)"
+  _warns="$(_update_printable_lines < "${_err_file}" | grep '^\[WARN\]' || true)"
   if [[ -z "${_warns}" ]]; then
     _update_write_detail_from_err "${_section}" "${_label}"
     return 0
