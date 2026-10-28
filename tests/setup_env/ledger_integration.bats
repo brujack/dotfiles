@@ -211,6 +211,23 @@ EOF
     grep -q '"failure_stage": "brew"' "${_captured}"
 }
 
+@test "_ledger_write_dotfiles_entry: packages_updated_count sums every line of a multi-line result" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+    printf 'OK\n' > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+    printf '3 formulae (a, b, c)\n2 cask(s) (d, e)\n' > "${_DOTFILES_RUN_TMPDIR}/result_brew"
+    printf 'OK\n' > "${_DOTFILES_RUN_TMPDIR}/status_pip"
+    printf '1 package(s) (f)\n' > "${_DOTFILES_RUN_TMPDIR}/result_pip"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_dotfiles_entry
+
+    grep -q '"packages_updated_count": 6' "${_captured}"
+}
+
 # ── _ledger_write_run_entry (generalized) ─────────────────────────────────────
 
 @test "_ledger_write_run_entry: no-ops when started_at absent" {

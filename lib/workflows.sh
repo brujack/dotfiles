@@ -718,16 +718,16 @@ _update_trap_sigint() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
 }
 
-# _update_apt_printable TEXT -- TEXT cut to printable ASCII, each backslash doubled.
+# _update_apt_printable TEXT -- TEXT cut to printable ASCII.
 # The C locale makes [:print:] ASCII-only whatever the caller's locale, so a
-# right-to-left override (U+202E) cannot reorder the line either. _update_summary prints detail with printf '%b', and apt's
-# fetch reason carries the server's HTTP reason phrase, so without this a mirror
-# or a man-in-the-middle on a plain-http source could put escape sequences on the
-# terminal and in the update log, or cut the summary short with \c.
+# right-to-left override (U+202E) cannot reorder the line either. apt's fetch
+# reason carries the server's HTTP reason phrase, so without this a mirror or a
+# man-in-the-middle on a plain-http source could put raw escape sequences on the
+# terminal and in the update log. Backslashes stay as they are: _update_summary
+# prints detail with printf '%s', so a \c or \033 is shown, never interpreted.
 _update_apt_printable() {
   local LC_ALL=C
-  local _s="${1//[^[:print:]]/}"
-  printf '%s' "${_s//\\/\\\\}"
+  printf '%s' "${1//[^[:print:]]/}"
 }
 
 # _update_apt_fetch_check APT_RC

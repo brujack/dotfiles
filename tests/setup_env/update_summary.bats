@@ -698,6 +698,47 @@ firefox  124.0"
   [[ "$output" == *"bat"* ]]
 }
 
+@test "_update_summary: a backslash in a result is printed literally and later rows survive" {
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  printf '%s\n' 'a\cb \033[31mred' > "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_pip"
+  printf "later row\n" > "${_DOTFILES_RUN_TMPDIR}/result_pip"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'a\cb \033[31mred'* ]]
+  [[ "$output" != *$'\x1b'* ]]
+  [[ "$output" == *"later row"* ]]
+  [[ "$output" == *"2 sections: 2 OK, 0 failed, 0 warnings, 0 skipped"* ]]
+}
+
+@test "_update_summary: a backslash in a detail is printed literally and later details survive" {
+  printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  printf "warned\n" > "${_DOTFILES_RUN_TMPDIR}/result_apt"
+  printf '%s\n' 'x\cy\nz' > "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew-drift"
+  printf "drifted\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  printf "later detail\n" > "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'x\cy\nz'* ]]
+  [[ "$output" == *"later detail"* ]]
+  grep -qF 'x\cy\nz' "${UPDATE_LOG_PATH}"
+  grep -qF "later detail" "${UPDATE_LOG_PATH}"
+}
+
+@test "_update_summary: rows, totals and details each end on their own line" {
+  printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  printf "WARN\n" > "${_DOTFILES_RUN_TMPDIR}/status_apt"
+  printf "warned\n" > "${_DOTFILES_RUN_TMPDIR}/result_apt"
+  printf "apt detail\n" > "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  run _update_summary
+  [ "$status" -eq 0 ]
+  [[ "$output" != *'\n'* ]]
+  [[ "$output" == *$'no changes\n'* ]]
+  [[ "$output" == *$'skipped\n\napt detail\n'* ]]
+}
+
 @test "_update_summary: no detail block when no detail file exists" {
   printf "OK\n" > "${_DOTFILES_RUN_TMPDIR}/status_brew"
   printf "no changes\n" > "${_DOTFILES_RUN_TMPDIR}/result_brew"
@@ -812,6 +853,9 @@ firefox  124.0"
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_brew"
   grep -q "formulae" "${_DOTFILES_RUN_TMPDIR}/result_brew"
   grep -q "cask(s)" "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  # Two real lines, not one line holding a literal \n for printf '%b' to expand.
+  run ! grep -qF '\n' "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  [ "$(wc -l < "${_DOTFILES_RUN_TMPDIR}/result_brew")" -eq 2 ]
 }
 
 @test "_update_record_end gems: reports the change list unavailable when no pre-snapshot" {
