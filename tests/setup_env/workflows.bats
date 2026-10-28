@@ -1361,6 +1361,19 @@ nvidia" ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_update reports brew as WARN with the trust failure in its detail" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_BREW=1
+  export MOCK_BREW_TRUST_EXIT=1
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"not fully updated — see detail" ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_brew")" == *"brew trust failed"* ]]
+}
+
 @test "run_update calls gem update with no flags" {
   export MACOS=1
   unset LINUX
@@ -2192,10 +2205,10 @@ _stub_refresher_fail() {
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "WARN" ]
-  # The WARN keeps the normal brew result (what upgraded) and appends the cask
-  # failure, so a WARN never hides formulae that did upgrade.
+  # The WARN keeps the normal brew result (what upgraded) and appends that the
+  # run was partial, so a WARN never hides formulae that did upgrade.
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"no changes"* ]]
-  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"cask upgrade"*"failed"* ]]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" == *"not fully updated — see detail" ]]
   [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_brew")" == *"Error: firefox"* ]]
 }
 

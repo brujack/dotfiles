@@ -74,6 +74,44 @@ _update_gem_list() {
   PATH="$(_ruby_gem_path_prefix)${PATH}" gem list
 }
 
+# _update_join -- joins stdin's lines with ", ". `paste -sd', '` does not: it
+# cycles through the delimiter characters, so three lines read "a,b c".
+_update_join() {
+  awk 'NR > 1 { printf ", " } { printf "%s", $0 }'
+}
+
+# _update_still_outdated CMD... -- "still outdated: N (a, b)" for the names CMD
+# lists after an upgrade, nothing when it lists none, and "still-outdated check
+# failed" when CMD fails. brew upgrade skips a pinned formula and mas upgrade an
+# app it cannot apply, both with exit 0, so the before/after diff alone reads
+# such a run as "no changes".
+_update_still_outdated() {
+  local _out _n
+  if ! _out="$("$@")"; then
+    printf 'still-outdated check failed'
+    return 0
+  fi
+  _n=$(printf '%s' "${_out}" | grep -c . || true)
+  if [[ ${_n} -gt 0 ]]; then
+    printf 'still outdated: %d (%s)' "${_n}" "$(printf '%s\n' "${_out}" | grep . | _update_join)"
+  fi
+  return 0
+}
+
+# _update_brew_outdated -- formula names brew still lists as outdated. brew
+# update has just run, so its auto-update would only refetch every tap.
+_update_brew_outdated() {
+  HOMEBREW_NO_AUTO_UPDATE=1 brew outdated --formula --quiet 2> /dev/null
+}
+
+# _update_mas_outdated -- app names from `mas outdated` (" <id>  <name>  (<old> ->
+# <new>)"), failing when mas does.
+_update_mas_outdated() {
+  local _out
+  _out="$(mas outdated 2> /dev/null)" || return 1
+  printf '%s\n' "${_out}" | sed -E 's/^ *[0-9]+ +//; s/ +\([^()]*\)$//'
+}
+
 # _update_softwareupdate_labels -- pending update labels, one per line. Fails only
 # when softwareupdate -l fails; no pending update is an empty, successful list.
 _update_softwareupdate_labels() {
@@ -331,15 +369,18 @@ _update_record_end() {
         :
       elif [[ ${_formula_count} -gt 0 ]] || [[ ${_cask_count} -gt 0 ]]; then
         if [[ ${_formula_count} -gt 0 ]]; then
-          _result="${_formula_count} formulae ($(printf '%s' "${_formula_diff}" | paste -sd', ' -))"
+          _result="${_formula_count} formulae ($(printf '%s' "${_formula_diff}" | _update_join))"
         fi
         if [[ ${_cask_count} -gt 0 ]]; then
           [[ -n "${_result}" ]] && _result="${_result}"$'\n'
-          _result="${_result}${_cask_count} cask(s) ($(printf '%s' "${_cask_diff}" | paste -sd', ' -))"
+          _result="${_result}${_cask_count} cask(s) ($(printf '%s' "${_cask_diff}" | _update_join))"
         fi
       else
         _result="no changes"
       fi
+      local _brew_left
+      _brew_left="$(_update_still_outdated _update_brew_outdated)"
+      [[ -n "${_brew_left}" ]] && _result="${_result}"$'\n'"${_brew_left}"
       ;;
     mas)
       if [[ -f "${_DOTFILES_RUN_TMPDIR}/err_mas" ]]; then
@@ -349,7 +390,8 @@ _update_record_end() {
         _mas_count=$(printf '%s' "${_mas_updated}" | grep -c . || true)
         if [[ ${_mas_count} -gt 0 ]]; then
           local _mas_names
-          _mas_names=$(printf '%s' "${_mas_updated}" | sed 's/^==> Updated //' | paste -sd', ' -)
+          # mas 7 appends " in <install path>" to each updated app.
+          _mas_names=$(printf '%s' "${_mas_updated}" | sed 's/^==> Updated //; s/ in \/.*$//' | _update_join)
           _result="${_mas_count} app(s) (${_mas_names})"
         else
           _result="no changes"
@@ -357,6 +399,9 @@ _update_record_end() {
       else
         _result="updated"
       fi
+      local _mas_left
+      _mas_left="$(_update_still_outdated _update_mas_outdated)"
+      [[ -n "${_mas_left}" ]] && _result="${_result}; ${_mas_left}"
       ;;
     gems)
       [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]] \
@@ -367,7 +412,7 @@ _update_record_end() {
         local _gem_count
         _gem_count=$(printf '%s' "${_gem_diff}" | grep -c . || true)
         if [[ ${_gem_count} -gt 0 ]]; then
-          _result="${_gem_count} gem(s) ($(printf '%s' "${_gem_diff}" | paste -sd', ' -))"
+          _result="${_gem_count} gem(s) ($(printf '%s' "${_gem_diff}" | _update_join))"
         else
           _result="no changes"
         fi
@@ -380,7 +425,7 @@ _update_record_end() {
         local _pip_count
         _pip_count=$(grep -c . "${_DOTFILES_RUN_TMPDIR}/pip_outdated" || true)
         if [[ ${_pip_count} -gt 0 ]]; then
-          _result="${_pip_count} package(s) ($(paste -sd', ' - < "${_DOTFILES_RUN_TMPDIR}/pip_outdated"))"
+          _result="${_pip_count} package(s) ($(_update_join < "${_DOTFILES_RUN_TMPDIR}/pip_outdated"))"
         else
           _result="no changes"
         fi
@@ -427,12 +472,12 @@ _update_record_end() {
         _su_done_n=$(printf '%s' "${_su_done}" | grep -c . || true)
         _su_pending_n=$(printf '%s' "${_su_pending}" | grep -c . || true)
         if [[ ${_su_done_n} -gt 0 ]]; then
-          _result="${_su_done_n} update(s) installed ($(printf '%s' "${_su_done}" | paste -sd', ' -))"
+          _result="${_su_done_n} update(s) installed ($(printf '%s' "${_su_done}" | _update_join))"
         else
           _result="no changes"
         fi
         if [[ ${_su_pending_n} -gt 0 ]]; then
-          _result="${_result}; ${_su_pending_n} still pending ($(printf '%s' "${_su_pending}" | paste -sd', ' -))"
+          _result="${_result}; ${_su_pending_n} still pending ($(printf '%s' "${_su_pending}" | _update_join))"
         fi
       else
         _result="${_UPDATE_NO_CHANGE_LIST}"
@@ -463,7 +508,7 @@ _update_record_end() {
         _npm_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_npm" "${_DOTFILES_RUN_TMPDIR}/post_npm")
         _npm_count=$(printf '%s' "${_npm_diff}" | grep -c . || true)
         if [[ ${_npm_count} -gt 0 ]]; then
-          _result="${_npm_count} package(s) ($(printf '%s' "${_npm_diff}" | sed 's/^[├└]── //' | paste -sd', ' -))"
+          _result="${_npm_count} package(s) ($(printf '%s' "${_npm_diff}" | sed 's/^[├└]── //' | _update_join))"
         else
           _result="no changes"
         fi
@@ -479,7 +524,7 @@ _update_record_end() {
         _apt_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_apt" "${_DOTFILES_RUN_TMPDIR}/post_apt")
         _apt_count=$(printf '%s' "${_apt_diff}" | grep -c . || true)
         if [[ ${_apt_count} -gt 0 ]]; then
-          _result="${_apt_count} package(s) ($(printf '%s' "${_apt_diff}" | paste -sd', ' -))"
+          _result="${_apt_count} package(s) ($(printf '%s' "${_apt_diff}" | _update_join))"
         else
           _result="no changes"
         fi
@@ -492,7 +537,7 @@ _update_record_end() {
         local _reboot_pkgs_file="${_REBOOT_REQUIRED_PKGS_PATH:-/var/run/reboot-required.pkgs}"
         if [[ -f "${_reboot_pkgs_file}" ]]; then
           local _reboot_pkgs
-          _reboot_pkgs=$(sort -u "${_reboot_pkgs_file}" | paste -sd', ' -)
+          _reboot_pkgs=$(sort -u "${_reboot_pkgs_file}" | _update_join)
           _result="${_result} — reboot required (${_reboot_pkgs})"
         else
           _result="${_result} — reboot required"
@@ -507,7 +552,7 @@ _update_record_end() {
         _snap_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_snap" "${_DOTFILES_RUN_TMPDIR}/post_snap")
         _snap_count=$(printf '%s' "${_snap_diff}" | grep -c . || true)
         if [[ ${_snap_count} -gt 0 ]]; then
-          _result="${_snap_count} package(s) ($(printf '%s' "${_snap_diff}" | paste -sd', ' -))"
+          _result="${_snap_count} package(s) ($(printf '%s' "${_snap_diff}" | _update_join))"
         else
           _result="no changes"
         fi

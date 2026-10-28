@@ -286,7 +286,7 @@ uv_sync_venv() {
 }
 
 # brew_update -- returns 0 on success, 1 on a hard failure, 2 when only a cask
-# upgrade failed.
+# upgrade or the tap trust failed.
 brew_update() {
   if ! ensure_not_root; then
     return 1
@@ -303,7 +303,12 @@ brew_update() {
   fi
 
   # Re-establish tap trust on every update; Homebrew 6.0 trust checks block installs otherwise.
-  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
+  # A failure does not stop the upgrades (an already-trusted tap still works),
+  # but it is reported, last, so it stays inside the summary's detail tail: the
+  # next install from that tap is refused. A hard failure below returns 1 first;
+  # brew trust's own error is then the only record of it.
+  local _rc=0 _trust_failed=0
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest || _trust_failed=1
 
   log_info "Upgrading installed formulae..."
   if ! brew upgrade --yes; then
@@ -314,7 +319,6 @@ brew_update() {
   # A failed cask upgrade does not stop the run (a cask can fail on an app
   # its own updater already replaced), but it must not read as success:
   # return 2 so callers can report it.
-  local _rc=0
   log_info "Upgrading installed casks..."
   if ! brew upgrade --cask --greedy --yes; then
     log_warn "Some casks failed to upgrade; continuing."
@@ -327,6 +331,10 @@ brew_update() {
     return 1
   fi
 
+  if [[ ${_trust_failed} -eq 1 ]]; then
+    log_warn "brew trust failed: Homebrew refuses formulae and casks from a tap it does not trust"
+    _rc=2
+  fi
   [[ ${_rc} -eq 0 ]] && log_info "Homebrew update process completed successfully."
   return "${_rc}"
 }

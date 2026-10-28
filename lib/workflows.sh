@@ -679,7 +679,7 @@ run_brew_install() {
   local _brew_rc
   brew_update
   _brew_rc=$?
-  # rc 2 (a cask upgrade failed) is reported by brew_update and does not stop the install.
+  # rc 2 (a cask upgrade or the tap trust failed) is reported by brew_update and does not stop the install.
   [[ ${_brew_rc} -ne 0 && ${_brew_rc} -ne 2 ]] && return 1
   brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
@@ -868,8 +868,9 @@ run_update() {
       _update_record_end "brew" "$(( _brew_rc == 2 ? 0 : _brew_rc ))"
       if [[ ${_brew_rc} -eq 2 ]]; then
         # Keep what _update_record_end summarized (the formulae and casks that did
-        # upgrade); _update_warn replaces the result line.
-        _update_warn "brew" "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew"); one or more cask upgrades failed — see detail"
+        # upgrade); _update_warn replaces the result line. rc 2 is a failed cask
+        # upgrade or a failed brew trust; the detail names which.
+        _update_warn "brew" "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew"); not fully updated — see detail"
         _update_write_detail_from_err "brew" "warning output"
       fi
 
@@ -1289,7 +1290,7 @@ run_update() {
         # identically as a silent [OK].
         _update_warn "pyenv-shims" "ansible venv disappeared during the run (${_pyenv_shims_bin})"
       elif [[ -n "${_pyenv_shims_missing}" ]]; then
-        _update_warn "pyenv-shims" "missing shim(s): $(printf '%s' "${_pyenv_shims_missing}" | paste -sd', ' -)"
+        _update_warn "pyenv-shims" "missing shim(s): $(printf '%s' "${_pyenv_shims_missing}" | _update_join)"
         _update_write_detail_from_err "pyenv-shims" "warning output"
       fi
     fi

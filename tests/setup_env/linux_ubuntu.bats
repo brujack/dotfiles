@@ -4127,6 +4127,16 @@ _az_cloud_env() {
   refute_grep "brew trust.* go-task/tap" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_brew_packages: warns when brew trust fails, without failing the install" {
+  export MOCK_BREW_TRUST_EXIT=1
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  # brew_update runs first and warns for its own trust call; the function's
+  # own trust call must add a second warning, not lean on that one.
+  [ "$(printf '%s\n' "$output" | command grep -c 'brew trust failed')" -eq 2 ]
+  [ "$(printf '%s\n' "$output" | command grep -c 'Error: mock brew trust failure')" -eq 2 ]
+}
+
 # ── _install_ubuntu_gui_tools ────────────────────────────────────────────────
 
 @test "_install_ubuntu_gui_tools: HAS_DEVTOOLS installs virtualbox" {

@@ -295,6 +295,20 @@ _stub_bats_present() {
   _assert_trust_covers_brewfile
 }
 
+@test "install_macos_casks: warns when brew trust fails, without failing the install" {
+  export DOTFILES="dotfiles"
+  mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui"
+  touch "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools"
+  ln -sf "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.gui" "${BREWFILE_LOC}/Brewfile"
+  unset HAS_GUI HAS_DEVTOOLS
+  export MOCK_BREW_TRUST_EXIT=1
+  run install_macos_casks
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"*"brew trust failed"* ]]
+  [[ "$output" == *"Error: mock brew trust failure"* ]]
+}
+
 @test "install_macos_casks: refuses on homebrew-core packer, no bundle run" {
   export DOTFILES="dotfiles"
   mkdir -p "${BREWFILE_LOC}" "${PERSONAL_GITREPOS}/${DOTFILES}"

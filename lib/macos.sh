@@ -202,8 +202,8 @@ install_macos_casks() {
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     brew bundle --file "${PERSONAL_GITREPOS}/${DOTFILES}/Brewfile.devtools" || return 1
   fi
-  # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest 2>/dev/null || true
+  # Trust third-party taps for Homebrew 6.0 (idempotent; a tap is recorded even when it is not tapped)
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest || log_warn "brew trust failed: Homebrew refuses formulae and casks from a tap it does not trust"
 }
 
 install_macos_packages() {
@@ -222,7 +222,7 @@ install_macos_packages() {
     local _brew_rc
     brew_update
     _brew_rc=$?
-    # rc 2 (a cask upgrade failed) is reported by brew_update and does not stop setup.
+    # rc 2 (a cask upgrade or the tap trust failed) is reported by brew_update and does not stop setup.
     [[ ${_brew_rc} -ne 0 && ${_brew_rc} -ne 2 ]] && return 1
     printf "Installing other brew stuff...\n"
     brew_tap_if_missing homebrew/bundle || return 1
