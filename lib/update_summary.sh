@@ -14,14 +14,6 @@ _update_diff_lines() {
   comm -13 <(sort "${_pre}") <(sort "${_post}")
 }
 
-# _update_snapshot SECTION COMMAND...
-# Runs COMMAND and writes stdout to ${_DOTFILES_RUN_TMPDIR}/pre_SECTION.
-_update_snapshot() {
-  local _section="$1"
-  shift
-  "$@" > "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" 2>/dev/null || true
-}
-
 # The result for a section whose before or after snapshot failed: the update ran,
 # but the change list cannot be derived from it.
 _UPDATE_NO_CHANGE_LIST="updated; change list unavailable (snapshot failed)"
@@ -373,9 +365,9 @@ _update_record_end() {
       fi
       ;;
     softwareupdate)
-      # Installed = listed before and gone after; pending = still listed after (an
-      # update needing a restart stays listed). The pre list alone only says what
-      # was available, not what the install did.
+      # Installed = listed before and gone after; pending = whatever is still
+      # listed after the install. The pre list alone only says what was
+      # available, not what the install did.
       [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" ]] \
         && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate" _update_softwareupdate_labels
       if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" && -f "${_DOTFILES_RUN_TMPDIR}/post_softwareupdate" ]]; then

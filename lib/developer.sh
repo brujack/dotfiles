@@ -496,7 +496,7 @@ recreate_ruby() {
 
 # _ruby_gem_path_prefix -- prints the PATH prefix ("<dir>:") that makes `gem` the
 # managed ruby's (chruby on macOS, rbenv shims on Linux), or nothing when that dir
-# is absent. update_gems and the gems update snapshot both use it, so the snapshot
+# is absent or the platform is neither. update_gems and the gems update snapshot both use it, so the snapshot
 # lists the gems the update changed rather than the system ruby's.
 _ruby_gem_path_prefix() {
   local _ruby_gem_dir=""

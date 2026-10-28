@@ -49,20 +49,6 @@ teardown() {
   [[ "$output" == *"node 20.12.0"* ]]
 }
 
-# ── _update_snapshot ──────────────────────────────────────────────────────────
-
-@test "_update_snapshot writes command stdout to pre_SECTION file" {
-  _update_snapshot "testcmd" printf "hello world\n"
-  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_testcmd" ]
-  grep -q "hello world" "${_DOTFILES_RUN_TMPDIR}/pre_testcmd"
-}
-
-@test "_update_snapshot overwrites existing snapshot file" {
-  printf "old\n" > "${_DOTFILES_RUN_TMPDIR}/pre_testcmd"
-  _update_snapshot "testcmd" printf "new\n"
-  grep -q "new" "${_DOTFILES_RUN_TMPDIR}/pre_testcmd"
-  ! grep -q "old" "${_DOTFILES_RUN_TMPDIR}/pre_testcmd"
-}
 
 # ── _update_git_diff ──────────────────────────────────────────────────────────
 
@@ -319,12 +305,12 @@ firefox 124.0"
   grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_mas"
 }
 
-@test "_update_record_end shows softwareupdate labels in result" {
+@test "_update_record_end names a softwareupdate label still listed after the install as pending" {
   export MOCK_SOFTWAREUPDATE_LIST_OUTPUT="* Label: Xcode-14.3"
   _update_record_start "softwareupdate"
   _update_record_end "softwareupdate" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_softwareupdate"
-  grep -q "Xcode-14.3" "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "no changes; 1 still pending (Xcode-14.3)" ]
 }
 
 @test "_update_record_end reports no changes for softwareupdate when nothing pending" {
@@ -723,21 +709,21 @@ firefox  124.0"
 
 # ── _update_record_start tpm/tfenv/zsh-autosuggestions ───────────────────────
 
-@test "_update_record_start tpm: creates pre-snapshot file" {
+@test "_update_record_start tpm: records the HEAD SHA as its pre-snapshot" {
   export HOME="${BATS_TEST_TMPDIR}"
   _update_git() { printf 'abc1234\n'; }
   _update_record_start "tpm"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_tpm")" = "abc1234" ]
 }
 
-@test "_update_record_start tfenv: creates pre-snapshot file" {
+@test "_update_record_start tfenv: records the HEAD SHA as its pre-snapshot" {
   export HOME="${BATS_TEST_TMPDIR}"
   _update_git() { printf 'abc1234\n'; }
   _update_record_start "tfenv"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_tfenv")" = "abc1234" ]
 }
 
-@test "_update_record_start zsh-autosuggestions: creates pre-snapshot file" {
+@test "_update_record_start zsh-autosuggestions: records the HEAD SHA as its pre-snapshot" {
   export HOME="${BATS_TEST_TMPDIR}"
   _update_git() { printf 'abc1234\n'; }
   _update_record_start "zsh-autosuggestions"
@@ -829,11 +815,11 @@ firefox  124.0"
   grep -q "cask(s)" "${_DOTFILES_RUN_TMPDIR}/result_brew"
 }
 
-@test "_update_record_end gems: reports updated when no pre-snapshot" {
+@test "_update_record_end gems: reports the change list unavailable when no pre-snapshot" {
   rm -f "${_DOTFILES_RUN_TMPDIR}/pre_gems"
   _update_record_end "gems" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_gems"
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_gems"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_gems")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
 @test "_update_record_end pip: reports no changes when pip_outdated is empty" {
@@ -858,11 +844,11 @@ firefox  124.0"
   grep -q "1 commit(s)" "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions"
 }
 
-@test "_update_record_end softwareupdate: reports updated when no pre-snapshot" {
+@test "_update_record_end softwareupdate: reports the change list unavailable when no pre-snapshot" {
   rm -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate"
   _update_record_end "softwareupdate" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_softwareupdate"
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
 @test "_update_record_end claude: reports updated when no pre-snapshot" {
@@ -1279,7 +1265,7 @@ EOF
   [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_empty" ]]
 }
 
-# ── Cluster G: snapshot honesty (2026-10-27 audit #7, #12, snapshot failures) ──
+# ── Cluster G: snapshot honesty (2026-10-27 audit #7, #12 and failed snapshots) ─
 
 _unknown_result='updated; change list unavailable (snapshot failed)'
 
