@@ -49,7 +49,6 @@ teardown() {
   [[ "$output" == *"node 20.12.0"* ]]
 }
 
-
 # ── _update_git_diff ──────────────────────────────────────────────────────────
 
 @test "_update_git_diff returns commit log between old SHA and HEAD" {
@@ -1013,7 +1012,8 @@ firefox  124.0"
 #
 # _ledger_write_run_entry no-ops until both started_at (in _DOTFILES_RUN_TMPDIR,
 # already aliased to BATS_TEST_TMPDIR by this file's setup()) and a machine-id
-# (under HOME/.config/dotfiles) exist -- see lib/update_summary.sh:381,383.
+# (under HOME/.config/dotfiles) exist -- see the two guards at the top of
+# _ledger_write_run_entry in lib/update_summary.sh.
 # Each test seeds both explicitly under HOME, which setup() points at a
 # per-test fixture directory.
 
