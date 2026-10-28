@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -1235,6 +1237,14 @@ EOF
   [ "$(wc -l < "${_DOTFILES_RUN_TMPDIR}/detail_sec")" -eq 22 ]
   [ "$(sed -n 21p "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "[WARN]  r20: skipped" ]
   [ "$(tail -1 "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "... and 5 more" ]
+}
+
+@test "_update_write_detail_from_warn counts the one line past the cap" {
+  local _i
+  for _i in $(seq 1 21); do printf '[WARN]  r%d: skipped\n' "${_i}"; done > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_warn "sec" "warning output"
+  [ "$(wc -l < "${_DOTFILES_RUN_TMPDIR}/detail_sec")" -eq 22 ]
+  [ "$(tail -1 "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "... and 1 more" ]
 }
 
 @test "_update_write_detail_from_warn writes exactly 20 lines with no count at the cap" {
