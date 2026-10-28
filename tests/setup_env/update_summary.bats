@@ -1389,3 +1389,21 @@ _unknown_result='updated; change list unavailable (snapshot failed)'
   _update_capture "${BATS_TEST_TMPDIR}/bad" false
   [[ ! -e "${BATS_TEST_TMPDIR}/bad" ]]
 }
+
+@test "gems: a gem list that fails only after the update reads unavailable" {
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0)"
+  _update_record_start "gems"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]
+  export MOCK_GEM_LIST_EXIT=1
+  _update_record_end "gems" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_gems")" = "${_unknown_result}" ]
+}
+
+@test "softwareupdate: a listing that fails only after the install reads unavailable" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT='* Label: A-1'
+  _update_record_start "softwareupdate"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate" ]
+  export MOCK_SOFTWAREUPDATE_LIST_EXIT=1
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "${_unknown_result}" ]
+}
