@@ -1328,6 +1328,12 @@ EOF
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec error output]\nboomgone  tail\nred')" ]
 }
 
+@test "_update_write_detail_from_err keeps a tab as a space, so tab-separated words stay apart" {
+  printf 'col1\tcol2\n\tindented\n' > "${_DOTFILES_RUN_TMPDIR}/err_sec"
+  _update_write_detail_from_err "sec" "error output"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_sec")" = "$(printf '[sec error output]\ncol1 col2\n indented')" ]
+}
+
 @test "_update_write_detail_from_err does not let control-only lines push the cause out of the window" {
   local _i
   { printf 'the real cause\n'; for _i in $(seq 1 10); do printf '\033[1A\033[2K\r\n'; done; } \
