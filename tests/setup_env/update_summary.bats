@@ -1407,3 +1407,24 @@ _unknown_result='updated; change list unavailable (snapshot failed)'
   _update_record_end "softwareupdate" 0
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "${_unknown_result}" ]
 }
+
+@test "gems: without _ruby_gem_path_prefix loaded the snapshot fails, never lists PATH's gem" {
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0)"
+  unset -f _ruby_gem_path_prefix
+  _update_record_start "gems"
+  [[ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_gems" ]]
+}
+
+@test "_ruby_gem_path_prefix: chruby dir on macOS, rbenv shims on Linux, nothing when absent" {
+  export RUBY_VER="4.0.5"
+  unset LINUX
+  export MACOS=1
+  [ -z "$(_ruby_gem_path_prefix)" ]
+  mkdir -p "${HOME}/.rubies/ruby-4.0.5/bin"
+  [ "$(_ruby_gem_path_prefix)" = "${HOME}/.rubies/ruby-4.0.5/bin:" ]
+  unset MACOS
+  export LINUX=1
+  [ -z "$(_ruby_gem_path_prefix)" ]
+  mkdir -p "${HOME}/.rbenv/shims"
+  [ "$(_ruby_gem_path_prefix)" = "${HOME}/.rbenv/shims:" ]
+}

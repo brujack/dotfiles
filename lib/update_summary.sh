@@ -43,8 +43,11 @@ _update_capture_sha() {
   [[ -s "$1" ]] || rm -f "$1"
 }
 
-# _update_gem_list -- `gem list` from the ruby update_gems updates.
+# _update_gem_list -- `gem list` from the ruby update_gems updates. Fails when
+# _ruby_gem_path_prefix (lib/developer.sh) is not loaded, rather than listing
+# whatever gem PATH finds and reading "no changes".
 _update_gem_list() {
+  declare -f _ruby_gem_path_prefix > /dev/null || return 1
   PATH="$(_ruby_gem_path_prefix)${PATH}" gem list
 }
 

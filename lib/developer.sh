@@ -501,7 +501,7 @@ recreate_ruby() {
 _ruby_gem_path_prefix() {
   local _ruby_gem_dir=""
   if [[ -n ${MACOS:-} ]]; then
-    _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER}/bin"
+    _ruby_gem_dir="${HOME}/.rubies/ruby-${RUBY_VER:-}/bin"
   elif [[ -n ${LINUX:-} ]]; then
     _ruby_gem_dir="${HOME}/.rbenv/shims"
   fi
