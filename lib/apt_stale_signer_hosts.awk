@@ -7,8 +7,8 @@
 # fetch" line carrying no signer token (an unreachable host, a 404), and prints
 # "host<TAB>reason". host is the source URL's host or, when the source has no
 # http(s) URL (file:, cdrom:), the source token up to its first space. A signer
-# failure also prints a "Failed to fetch" line, so the token test keeps each
-# line in exactly one of the two reports.
+# failure also prints a "Failed to fetch" line, so the token test never puts a
+# line in both reports.
 BEGIN {
   np = split(prefixes, pre, "|")
   nt = split(tokens, tok, "|")
