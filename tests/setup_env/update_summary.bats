@@ -49,6 +49,25 @@ teardown() {
   [[ "$output" == *"node 20.12.0"* ]]
 }
 
+# ── _update_join ──────────────────────────────────────────────────────────────
+
+@test "_update_join separates three lines with a comma and a space each" {
+  run _update_join <<< $'a\nb\nc'
+  [ "$status" -eq 0 ]
+  [ "$output" = "a, b, c" ]
+}
+
+@test "_update_join leaves a single line unchanged" {
+  run _update_join <<< "only"
+  [ "$output" = "only" ]
+}
+
+@test "_update_join prints nothing for empty input" {
+  run _update_join < /dev/null
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 # ── _update_git_diff ──────────────────────────────────────────────────────────
 
 @test "_update_git_diff returns commit log between old SHA and HEAD" {
@@ -260,6 +279,54 @@ firefox 124.0"
   grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_brew"
 }
 
+@test "_update_record_end names a formula brew upgrade left outdated on its own line" {
+  # brew upgrade skips a pinned formula with exit 0, so the before/after
+  # diff alone reads that run as "no changes".
+  printf "git\n" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula"
+  printf "" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git" MOCK_BREW_LIST_CASK=""
+  export MOCK_BREW_OUTDATED="llama.cpp git"
+  _update_record_end "brew" 0
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "no changes"$'\n'"still outdated: 2 (llama.cpp, git)" ]
+}
+
+@test "_update_record_end adds no outdated line for brew when nothing is left outdated" {
+  printf "git\n" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula"
+  printf "" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git" MOCK_BREW_LIST_CASK=""
+  _update_record_end "brew" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "no changes" ]
+}
+
+@test "_update_record_end says the brew outdated check failed rather than omitting it" {
+  printf "git\n" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula"
+  printf "" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git" MOCK_BREW_LIST_CASK=""
+  export MOCK_BREW_OUTDATED="llama.cpp" MOCK_BREW_OUTDATED_EXIT=1
+  _update_record_end "brew" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "no changes"$'\n'"still-outdated check failed" ]
+}
+
+@test "_update_record_end runs the brew outdated check without auto-updating Homebrew" {
+  printf "git\n" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula"
+  printf "" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git" MOCK_BREW_LIST_CASK=""
+  _update_record_end "brew" 0
+  command grep -qxF "brew outdated --formula --quiet" "${MOCK_CALLS_FILE}"
+  command grep -qxF "HOMEBREW_NO_AUTO_UPDATE=1" "${MOCK_CALLS_FILE}"
+}
+
+@test "_update_record_end keeps the ledger count of a brew run with leftovers to what upgraded" {
+  printf "git 2.44.0\n" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula"
+  printf "" > "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask"
+  export MOCK_BREW_LIST_FORMULA="git_2.45.0" MOCK_BREW_LIST_CASK=""
+  export MOCK_BREW_OUTDATED="llama.cpp wget node"
+  _update_record_end "brew" 0
+  run awk '/^[0-9]+/ { n += $1 } END { print n + 0 }' "${_DOTFILES_RUN_TMPDIR}/result_brew"
+  [ "$output" = "1" ]
+}
+
 @test "_update_record_end pip reports single package without trailing newline" {
   # Python's "\n".join([pkg]) produces no trailing newline — wc -l would return 0
   # grep -c . correctly counts 1 non-empty line regardless of trailing newline
@@ -296,6 +363,37 @@ firefox 124.0"
   _update_record_end "mas" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_mas"
   grep -q "Slack (4.40)" "${_DOTFILES_RUN_TMPDIR}/result_mas"
+}
+
+@test "_update_record_end drops the install path mas 7 prints after an updated app" {
+  printf "==> Updated Slack (4.40) in /Applications/Slack.app\n" > "${_DOTFILES_RUN_TMPDIR}/err_mas"
+  _update_record_end "mas" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_mas")" = "1 app(s) (Slack (4.40))" ]
+}
+
+@test "_update_record_end names an App Store app mas upgrade left outdated" {
+  # mas upgrade needs a signed-in Apple Account, and mas 7 cannot report
+  # sign-in state, so an update it could not apply must be named.
+  printf "==> Updating mas packages\n" > "${_DOTFILES_RUN_TMPDIR}/err_mas"
+  export MOCK_MAS_OUTDATED_OUTPUT=" 497799835  Xcode            (15.0 -> 15.1)
+1037126344  Apple Configurator  (2.20 -> 2.21)"
+  _update_record_end "mas" 0
+  grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_mas"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_mas")" = "no changes; still outdated: 2 (Xcode, Apple Configurator)" ]
+}
+
+@test "_update_record_end keeps parentheses that belong to an outdated mas app's name" {
+  printf "==> Updating mas packages\n" > "${_DOTFILES_RUN_TMPDIR}/err_mas"
+  export MOCK_MAS_OUTDATED_OUTPUT="1234567890  Logic (Pro)  (11.0 -> 11.1)"
+  _update_record_end "mas" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_mas")" = "no changes; still outdated: 1 (Logic (Pro))" ]
+}
+
+@test "_update_record_end says the mas outdated check failed rather than omitting it" {
+  printf "==> Updated Slack (4.40)\n" > "${_DOTFILES_RUN_TMPDIR}/err_mas"
+  export MOCK_MAS_OUTDATED_OUTPUT=" 497799835  Xcode  (15.0 -> 15.1)" MOCK_MAS_OUTDATED_EXIT=1
+  _update_record_end "mas" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_mas")" = "1 app(s) (Slack (4.40)); still-outdated check failed" ]
 }
 
 @test "_update_record_end shows no changes for mas when upgrade output has no updated lines" {

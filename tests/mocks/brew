@@ -34,6 +34,18 @@ case "$1" in
     printf "NONINTERACTIVE=%s\n" "${NONINTERACTIVE:-unset}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
     exit "${MOCK_BREW_INSTALL_EXIT:-0}"
     ;;
+  outdated)
+    printf "HOMEBREW_NO_AUTO_UPDATE=%s\n" "${HOMEBREW_NO_AUTO_UPDATE:-unset}" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+    # shellcheck disable=SC2086 # word-splitting is the point: renders a space-separated list one-per-line, as real brew does
+    printf "%s\n" ${MOCK_BREW_OUTDATED:-}
+    exit "${MOCK_BREW_OUTDATED_EXIT:-0}"
+    ;;
+  trust)
+    if [[ "${MOCK_BREW_TRUST_EXIT:-0}" -ne 0 ]]; then
+      printf "Error: mock brew trust failure\n" >&2
+    fi
+    exit "${MOCK_BREW_TRUST_EXIT:-0}"
+    ;;
   update)
     exit "${MOCK_BREW_UPDATE_EXIT:-0}"
     ;;

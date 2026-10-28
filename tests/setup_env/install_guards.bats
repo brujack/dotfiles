@@ -642,6 +642,23 @@ _gnubin_present() {
   _assert_trust_covers_brewfile
 }
 
+@test "brew_update returns 2 and names the failure when brew trust fails, and still upgrades" {
+  # Homebrew refuses to load a formula or cask from an untrusted tap, so a
+  # swallowed trust failure surfaced only as a later, unexplained refusal.
+  export MOCK_ID_U=1000
+  export MOCK_BREW_TRUST_EXIT=1
+  run brew_update
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"[WARN]"*"brew trust failed"* ]]
+  [[ "$output" == *"Error: mock brew trust failure"* ]]
+  [[ "$output" != *"completed successfully"* ]]
+  grep -q "^brew upgrade --yes" "${MOCK_CALLS_FILE}"
+  grep -q "^brew cleanup" "${MOCK_CALLS_FILE}"
+  # Logged last, so upgrade and cleanup output cannot push it out of the
+  # summary's tail -10 detail.
+  [[ "${lines[-1]}" == *"brew trust failed"* ]]
+}
+
 @test "brew_update returns 1 when brew cleanup fails" {
   export MOCK_ID_U=1000
   export MOCK_BREW_CLEANUP_EXIT=1

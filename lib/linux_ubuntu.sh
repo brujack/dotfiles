@@ -1489,8 +1489,8 @@ _install_ubuntu_brew_packages() {
     brew_install_formula ollama || _failed+=(ollama)
   fi
 
-  # Trust third-party taps for Homebrew 6.0 (idempotent — no-op if already trusted or tap absent)
-  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap 2> /dev/null || true
+  # Trust third-party taps for Homebrew 6.0 (idempotent; a tap is recorded even when it is not tapped)
+  brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap oven-sh/bun redpanda-data/tap snyk/tap || log_warn "brew trust failed: Homebrew refuses formulae and casks from a tap it does not trust"
 
   if [[ ${#_failed[@]} -gt 0 ]]; then
     log_warn "brew: ${#_failed[@]} package(s) failed: ${_failed[*]}"
