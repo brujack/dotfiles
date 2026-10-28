@@ -35,6 +35,8 @@ _git_repo_status() {
   fi
   # A directory that exists but git cannot read (corrupt or empty .git, another
   # owner's checkout) is a failure to report, not an absent repo to skip quietly.
+  # It is reported and left in place: unlike ai-config and the state ledger, which
+  # are moved aside and re-cloned, a personal repo may hold the only copy of work.
   if ! _git_sync_git -C "${_path}" rev-parse --git-dir >/dev/null 2>&1; then
     printf "not-a-repo\n"
     return 0

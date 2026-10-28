@@ -3556,6 +3556,7 @@ _cheat_mode() {
   unset LINUX UBUNTU
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_git-repos")" = "WARN" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_git-repos")" = "one or more repos skipped, or none synced — see detail" ]
   grep -q '/r/early: remote unreachable, skipping' "${_DOTFILES_RUN_TMPDIR}/detail_git-repos"
   run ! command grep -q 'syncing /r/clean' "${_DOTFILES_RUN_TMPDIR}/detail_git-repos"
 }
