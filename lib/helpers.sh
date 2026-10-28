@@ -286,7 +286,7 @@ uv_sync_venv() {
 }
 
 # brew_update -- returns 0 on success, 1 on a hard failure, 2 when only a cask
-# upgrade failed.
+# upgrade or the tap trust failed.
 brew_update() {
   if ! ensure_not_root; then
     return 1
@@ -305,7 +305,8 @@ brew_update() {
   # Re-establish tap trust on every update; Homebrew 6.0 trust checks block installs otherwise.
   # A failure does not stop the upgrades (an already-trusted tap still works),
   # but it is reported, last, so it stays inside the summary's detail tail: the
-  # next install from that tap is refused.
+  # next install from that tap is refused. A hard failure below returns 1 first;
+  # brew trust's own error is then the only record of it.
   local _rc=0 _trust_failed=0
   brew trust cloudflare/cloudflare getagentseal/codeburn gitguardian/tap hashicorp/tap oven-sh/bun redpanda-data/tap snyk/tap teamookla/speedtest || _trust_failed=1
 

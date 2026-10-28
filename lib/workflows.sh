@@ -679,7 +679,7 @@ run_brew_install() {
   local _brew_rc
   brew_update
   _brew_rc=$?
-  # rc 2 (a cask upgrade failed) is reported by brew_update and does not stop the install.
+  # rc 2 (a cask upgrade or the tap trust failed) is reported by brew_update and does not stop the install.
   [[ ${_brew_rc} -ne 0 && ${_brew_rc} -ne 2 ]] && return 1
   brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
