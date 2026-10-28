@@ -160,7 +160,7 @@ setup() {
   [ "$output" = "x.example"$'\t'"no reason given" ]
 }
 
-@test "_apt_fetch_failed_hosts: a source with no http(s) URL is named by its source string" {
+@test "_apt_fetch_failed_hosts: a source with no http(s) URL is named by its source token" {
   run _apt_fetch_failed_hosts <<< 'W: Failed to fetch file:/var/local-repo/InRelease  File not found'
   [ "$status" -eq 0 ]
   [ "$output" = "file:/var/local-repo/InRelease"$'\t'"File not found" ]

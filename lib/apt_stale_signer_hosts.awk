@@ -46,6 +46,6 @@ BEGIN {
     if (!(url in seen)) { seen[url] = 1; printf "%s\t%s\n", url, found }
   }
   # A fetch failure on a source with no http(s) URL (file:, cdrom:) still names it,
-  # by the whole source string, so the row never reads OK for it.
+  # by the source token up to its first space, so the row never reads OK for it.
   if (mode == "fetch" && !got && rest != "" && !(rest in seen)) { seen[rest] = 1; printf "%s\t%s\n", rest, found }
 }
