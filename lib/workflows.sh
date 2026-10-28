@@ -718,6 +718,87 @@ _update_trap_sigint() {
   trap 'trap - INT; kill -INT "${BASHPID:-$$}"' INT
 }
 
+# _update_apt_fetch_check APT_RC
+# Reads err_apt for sources apt could not fetch (unreachable host, 404) and says so on
+# the apt row: apt update exits 0 and keeps that source's old index, so the row read OK
+# while the source went stale. Same shape as _update_apt_signer_check, which runs first
+# and owns the signature failures.
+_update_apt_fetch_check() {
+  local _apt_rc="$1" _detail="${_DOTFILES_RUN_TMPDIR}/detail_apt" _hosts _result _parse_rc=0
+  local _parse_err="${_DOTFILES_RUN_TMPDIR}/err_apt_fetch" _host _reason _lines="" _names=""
+
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt" 2> /dev/null)" == "SKIP" ]] && return 0
+
+  _hosts="$(_apt_fetch_failed_hosts < "${_DOTFILES_RUN_TMPDIR}/err_apt" 2> "${_parse_err}")" || _parse_rc=$?
+  _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt" 2> /dev/null)"
+
+  if [[ ${_parse_rc} -ne 0 ]]; then
+    [[ ${_apt_rc} -eq 0 ]] && _update_warn "apt" "${_result}; fetch check did not run — see detail"
+    sed 's/\x1b\[[0-9;]*m//g; s/\r//' "${_parse_err}" >> "${_detail}"
+    return 0
+  fi
+  [[ -n ${_hosts} ]] || return 0
+
+  while IFS=$'\t' read -r _host _reason; do
+    [[ -n ${_host} ]] || continue
+    _names="${_names:+${_names}, }${_host}"
+    _lines+="${_host} is not updating: fetch failed (${_reason}); apt kept its previous package list for this source"$'\n'
+  done <<< "${_hosts}"
+
+  [[ ${_apt_rc} -eq 0 ]] && _update_warn "apt" "${_result}; could not fetch ${_names} — see detail"
+  printf '%s' "${_lines}" >> "${_detail}"
+}
+
+# _update_apt_kept_back_check APT_RC
+# Asks apt which upgrades are still pending after nala full-upgrade, which exits 0
+# when it keeps a package back (held, or its dependencies cannot be met), so the row
+# read OK while the package stayed old. nala lists phased updates as kept back too;
+# those are Ubuntu's staged rollout and install on their own, so they are named in
+# the detail of a warning but never cause one. Runs only after a clean upgrade: a
+# failed one is already FAIL. apt-get -s needs no root and takes no lock.
+_update_apt_kept_back_check() {
+  local _apt_rc="$1" _detail="${_DOTFILES_RUN_TMPDIR}/detail_apt" _sim="${_DOTFILES_RUN_TMPDIR}/apt_simulate"
+  local _parsed _result _kind _pkg _n=0 _unnamed _names="" _count
+  local -a _kept=() _phased=()
+
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt" 2> /dev/null)" == "SKIP" ]] && return 0
+  [[ ${_apt_rc} -eq 0 ]] || return 0
+  _result="$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt" 2> /dev/null)"
+
+  if ! LC_ALL=C apt-get -s full-upgrade < /dev/null > "${_sim}" 2>&1 \
+    || ! _parsed="$(_apt_not_upgraded < "${_sim}")"; then
+    _update_warn "apt" "${_result}; kept-back check did not run — see detail"
+    {
+      printf 'apt-get -s full-upgrade gave no usable summary; its last lines:\n'
+      tail -5 "${_sim}"
+    } >> "${_detail}"
+    return 0
+  fi
+
+  while IFS=$'\t' read -r _kind _pkg; do
+    case "${_kind}" in
+      kept) _kept+=("${_pkg}") ;;
+      phased) _phased+=("${_pkg}") ;;
+      not-upgraded) _n="${_pkg}" ;;
+    esac
+  done <<< "${_parsed}"
+
+  _unnamed=$((_n - ${#_kept[@]} - ${#_phased[@]}))
+  ((_unnamed > 0)) || _unnamed=0
+  _count=$((${#_kept[@]} + _unnamed))
+  ((_count > 0)) || return 0
+
+  for _pkg in "${_kept[@]}"; do
+    _names="${_names:+${_names}, }${_pkg}"
+    printf '%s was kept back: it is held (apt-mark showhold) or its dependencies cannot be met; sudo apt full-upgrade shows why\n' "${_pkg}" >> "${_detail}"
+  done
+  ((_unnamed > 0)) \
+    && printf '%d package(s) not upgraded that apt-get -s full-upgrade did not name; apt list --upgradable lists them\n' "${_unnamed}" >> "${_detail}"
+  ((${#_phased[@]} > 0)) \
+    && printf 'phased (Ubuntu staged rollout, installs on its own): %s\n' "${_phased[*]}" >> "${_detail}"
+  _update_warn "apt" "${_result}; ${_count} package(s) kept back${_names:+: ${_names}} — see detail"
+}
+
 # _update_apt_signer_check APT_RC
 # Reads err_apt for sources whose signature check failed and says so on the apt row.
 # The package result is kept because the upgrade itself may have worked; the stale
@@ -999,6 +1080,8 @@ run_update() {
       local _apt_rc="${PIPESTATUS[0]}"
       _update_record_end "apt" "${_apt_rc}"
       _update_apt_signer_check "${_apt_rc}"
+      _update_apt_fetch_check "${_apt_rc}"
+      _update_apt_kept_back_check "${_apt_rc}"
 
       if _snap_available; then
         _update_record_start "snap"

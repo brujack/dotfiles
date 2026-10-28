@@ -21,6 +21,24 @@ Real captured output; never hand-edited. Captured 2026-10-17.
 - rc: 0
 - Considered line: `W: Failed to fetch https://download.docker.com/linux/ubuntu/dists/noble/InRelease  ... NO_PUBKEY 7EA0A9C3F273FCD8` (apt 2.x uses `W:`/`E:`).
 
+## update-unreachable-host-resolute.txt
+
+- Captured 2026-10-27. Container `ubuntu:26.04`, `apt 3.2.0 (amd64)`, root inside `docker run --rm`.
+- `/etc/apt/sources.list.d/bogus.list` held `deb [trusted=yes] http://nonexistent.invalid/ubuntu resolute main`; command `apt update`, stdout and stderr to the file.
+- rc: 0
+- Considered line: `Warning: Failed to fetch http://nonexistent.invalid/ubuntu/dists/resolute/InRelease  Could not resolve 'nonexistent.invalid'` (no signer token, so the fetch scan owns it).
+
+## simulate-held-resolute.txt, simulate-clean-resolute.txt
+
+- Captured 2026-10-27. Same container and apt as above, after `apt-get update`.
+- Held: `apt-mark hold liblzma5` with four packages upgradable, then `LC_ALL=C apt-get -s full-upgrade` as an unprivileged user (`su u -c ...`). rc 0. `nala full-upgrade --no-update -y` on the same state also exited 0, listed liblzma5 under `Kept Back, Will Not Be Upgraded`, and left it upgradable.
+- Clean: the same command after unholding and installing the four packages. rc 0.
+
+## simulate-phased-resolute.txt
+
+- Captured 2026-10-27 on `claude` (Ubuntu 26.04, `apt 3.2.0`), unprivileged: `LC_ALL=C apt-get -s full-upgrade`. rc 0.
+- Two updates were mid-rollout (`The following upgrades have been deferred due to phasing:`). python-apt's `Cache.upgrade(dist_upgrade=True)`, the call nala 0.16.0 makes, left the same two unmarked, so nala lists phased updates under Kept Back.
+
 ## V1
 
 Question: does apt print a considered line carrying `EXPKEYSIG`/`KEYEXPIRED` and the URL when a signing key expires?
