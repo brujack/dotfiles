@@ -35,6 +35,37 @@ _update_capture_sha() {
   [[ -s "$1" ]] || rm -f "$1"
 }
 
+# _update_apt_list -- "package version" per installed deb.
+_update_apt_list() {
+  dpkg-query -W -f='${Package} ${Version}\n'
+}
+
+# _update_snap_list -- "name version" per installed snap. Fails when `snap list`
+# fails, which `snap list | awk` hides behind awk's exit status.
+_update_snap_list() {
+  local _out
+  _out="$(snap list --color=never 2> /dev/null)" || return 1
+  printf '%s\n' "${_out}" | awk 'NR>1 {print $1, $2}'
+}
+
+# _update_claude_list -- one "Version:" line per installed plugin. Fails when
+# `claude plugins list` fails; no plugins installed is an empty list, not a failure.
+_update_claude_list() {
+  local _out
+  _out="$(claude plugins list 2> /dev/null)" || return 1
+  printf '%s\n' "${_out}" | { grep 'Version:' || true; } | sed 's/^[[:space:]]*//'
+}
+
+# _update_npm_list -- one line per global npm package. `npm list -g` exits
+# non-zero on harmless peer-dependency warnings, so success is judged by output:
+# a listing with no package line failed.
+_update_npm_list() {
+  local _pkgs
+  _pkgs="$(npm list -g --depth=0 2> /dev/null | grep -v '^/')"
+  [[ -n ${_pkgs} ]] || return 1
+  printf '%s\n' "${_pkgs}"
+}
+
 # _update_gem_list -- `gem list` from the ruby update_gems updates. Fails when
 # _ruby_gem_path_prefix (lib/developer.sh) is not loaded, rather than listing
 # whatever gem PATH finds and reading "no changes".
@@ -201,9 +232,6 @@ _update_record_start() {
       _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_brew_formula" brew list --formula --versions
       _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_brew_cask" brew list --cask --versions
       ;;
-    mas)
-      mas list > "${_DOTFILES_RUN_TMPDIR}/pre_mas" 2>/dev/null || true
-      ;;
     gems)
       _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_gems" _update_gem_list
       ;;
@@ -227,30 +255,23 @@ _update_record_start() {
       ;;
     apt)
       if [[ -n ${UBUNTU:-} ]]; then
-        dpkg-query -W -f='${Package} ${Version}\n' > "${_DOTFILES_RUN_TMPDIR}/pre_apt" 2>/dev/null || true
+        _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_apt" _update_apt_list
       else
         _update_skip "apt" "not applicable"
       fi
       ;;
     snap)
       if [[ -n ${UBUNTU:-} ]]; then
-        snap list --color=never 2>/dev/null \
-          | awk 'NR>1 {print $1, $2}' \
-          > "${_DOTFILES_RUN_TMPDIR}/pre_snap" || true
+        _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_snap" _update_snap_list
       else
         _update_skip "snap" "not applicable"
       fi
       ;;
     claude)
-      claude plugins list 2>/dev/null \
-        | grep 'Version:' \
-        | sed 's/^[[:space:]]*//' \
-        > "${_DOTFILES_RUN_TMPDIR}/pre_claude" || true
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_claude" _update_claude_list
       ;;
     npm)
-      npm list -g --depth=0 2>/dev/null \
-        | grep -v '^/' \
-        > "${_DOTFILES_RUN_TMPDIR}/pre_npm" || true
+      _update_capture "${_DOTFILES_RUN_TMPDIR}/pre_npm" _update_npm_list
       ;;
     legacy-rsync)
       if ! _is_legacy_sync_host; then
@@ -418,11 +439,9 @@ _update_record_end() {
       fi
       ;;
     claude)
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_claude" ]]; then
-        claude plugins list 2>/dev/null \
-          | grep 'Version:' \
-          | sed 's/^[[:space:]]*//' \
-          > "${_DOTFILES_RUN_TMPDIR}/post_claude" || true
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_claude" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_claude" _update_claude_list
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_claude" && -f "${_DOTFILES_RUN_TMPDIR}/post_claude" ]]; then
         local _claude_diff
         _claude_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_claude" "${_DOTFILES_RUN_TMPDIR}/post_claude")
         local _claude_count
@@ -433,14 +452,13 @@ _update_record_end() {
           _result="no changes"
         fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     npm)
-      npm list -g --depth=0 2>/dev/null \
-        | grep -v '^/' \
-        > "${_DOTFILES_RUN_TMPDIR}/post_npm" || true
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]]; then
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_npm" _update_npm_list
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_npm" && -f "${_DOTFILES_RUN_TMPDIR}/post_npm" ]]; then
         local _npm_diff _npm_count
         _npm_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_npm" "${_DOTFILES_RUN_TMPDIR}/post_npm")
         _npm_count=$(printf '%s' "${_npm_diff}" | grep -c . || true)
@@ -450,12 +468,13 @@ _update_record_end() {
           _result="no changes"
         fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     apt)
-      dpkg-query -W -f='${Package} ${Version}\n' > "${_DOTFILES_RUN_TMPDIR}/post_apt" 2>/dev/null || true
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_apt" ]]; then
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_apt" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_apt" _update_apt_list
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_apt" && -f "${_DOTFILES_RUN_TMPDIR}/post_apt" ]]; then
         local _apt_diff _apt_count
         _apt_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_apt" "${_DOTFILES_RUN_TMPDIR}/post_apt")
         _apt_count=$(printf '%s' "${_apt_diff}" | grep -c . || true)
@@ -465,7 +484,7 @@ _update_record_end() {
           _result="no changes"
         fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       # Check for reboot-required flag written by apt when a kernel or core lib is updated
       local _reboot_flag="${_REBOOT_REQUIRED_PATH:-/var/run/reboot-required}"
@@ -481,10 +500,9 @@ _update_record_end() {
       fi
       ;;
     snap)
-      snap list --color=never 2>/dev/null \
-        | awk 'NR>1 {print $1, $2}' \
-        > "${_DOTFILES_RUN_TMPDIR}/post_snap" || true
-      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_snap" ]]; then
+      [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_snap" ]] \
+        && _update_capture "${_DOTFILES_RUN_TMPDIR}/post_snap" _update_snap_list
+      if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_snap" && -f "${_DOTFILES_RUN_TMPDIR}/post_snap" ]]; then
         local _snap_diff _snap_count
         _snap_diff=$(_update_diff_lines "${_DOTFILES_RUN_TMPDIR}/pre_snap" "${_DOTFILES_RUN_TMPDIR}/post_snap")
         _snap_count=$(printf '%s' "${_snap_diff}" | grep -c . || true)
@@ -494,7 +512,7 @@ _update_record_end() {
           _result="no changes"
         fi
       else
-        _result="updated"
+        _result="${_UPDATE_NO_CHANGE_LIST}"
       fi
       ;;
     git-hooks)

@@ -3,7 +3,12 @@ printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 if [[ "${MOCK_NPM_EXIT:-0}" -ne 0 ]]; then
   exit "${MOCK_NPM_EXIT}"
 fi
+# MOCK_NPM_LIST_EXIT: exit code after printing the listing, as real npm does on
+# peer-dependency warnings (MOCK_NPM_EXIT fails before printing anything).
 case "$1" in
-  list) printf "%s\n" "${MOCK_NPM_LIST_OUTPUT:-}" ;;
+  list)
+    printf "%s\n" "${MOCK_NPM_LIST_OUTPUT:-}"
+    exit "${MOCK_NPM_LIST_EXIT:-0}"
+    ;;
 esac
 exit 0

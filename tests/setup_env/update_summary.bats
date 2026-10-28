@@ -520,10 +520,11 @@ git 2.44.0-1ubuntu7"
   grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }
 
-@test "_update_record_end apt reports updated when no pre-snapshot" {
+@test "_update_record_end apt: reports the change list unavailable when no pre-snapshot" {
+  export _REBOOT_REQUIRED_PATH="${BATS_TEST_TMPDIR}/no-reboot-required"
   export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
   _update_record_end "apt" 0
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_apt"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
 @test "_update_record_end apt writes FAIL on non-zero exit" {
@@ -797,9 +798,9 @@ firefox  124.0"
   grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_npm"
 }
 
-@test "_update_record_end npm: reports updated when no pre-snapshot" {
+@test "_update_record_end npm: reports the change list unavailable when no pre-snapshot" {
   _update_record_end "npm" 0
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_npm"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_npm")" = "updated; change list unavailable (snapshot failed)" ]
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_npm"
 }
 
@@ -894,18 +895,18 @@ firefox  124.0"
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
-@test "_update_record_end claude: reports updated when no pre-snapshot" {
+@test "_update_record_end claude: reports the change list unavailable when no pre-snapshot" {
   rm -f "${_DOTFILES_RUN_TMPDIR}/pre_claude"
   _update_record_end "claude" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_claude"
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_claude"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
-@test "_update_record_end snap: reports updated when no pre-snapshot" {
+@test "_update_record_end snap: reports the change list unavailable when no pre-snapshot" {
   rm -f "${_DOTFILES_RUN_TMPDIR}/pre_snap"
   _update_record_end "snap" 0
   grep -q "OK" "${_DOTFILES_RUN_TMPDIR}/status_snap"
-  grep -q "updated" "${_DOTFILES_RUN_TMPDIR}/result_snap"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_snap")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
 # ── _UPDATE_SECTION_ORDER ─────────────────────────────────────────────────────
@@ -1531,4 +1532,100 @@ _unknown_result='updated; change list unavailable (snapshot failed)'
   softwareupdate --install --all
   _update_record_end "softwareupdate" 0
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "no changes; 1 still pending (macOS 27.2-26B123)" ]
+}
+
+# ── snapshot honesty: apt, snap, claude, npm (Backlog row 321) ───────────────
+
+_unavailable='updated; change list unavailable (snapshot failed)'
+
+@test "apt: a failed dpkg-query before-snapshot reads unavailable, not no changes" {
+  export _REBOOT_REQUIRED_PATH="${BATS_TEST_TMPDIR}/no-reboot-required"
+  unset MACOS; export LINUX=1 UBUNTU=1
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3" MOCK_DPKG_QUERY_EXIT=1
+  _update_record_start "apt"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_apt" ]
+  unset MOCK_DPKG_QUERY_EXIT
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "${_unavailable}" ]
+}
+
+@test "apt: a failed dpkg-query after-snapshot reads unavailable, not every package changed" {
+  export _REBOOT_REQUIRED_PATH="${BATS_TEST_TMPDIR}/no-reboot-required"
+  printf "curl 7.88.1-1ubuntu3\n" > "${_DOTFILES_RUN_TMPDIR}/pre_apt"
+  export MOCK_DPKG_QUERY_EXIT=1
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "${_unavailable}" ]
+}
+
+@test "snap: a failed snap list before-snapshot reads unavailable, not no changes" {
+  unset MACOS; export LINUX=1 UBUNTU=1
+  export MOCK_SNAP_LIST_OUTPUT=$'Name Version\nfirefox 124.0' MOCK_SNAP_EXIT=1
+  _update_record_start "snap"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_snap" ]
+  unset MOCK_SNAP_EXIT
+  _update_record_end "snap" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_snap")" = "${_unavailable}" ]
+}
+
+@test "snap: a failed snap list after-snapshot reads unavailable" {
+  printf "firefox 124.0\n" > "${_DOTFILES_RUN_TMPDIR}/pre_snap"
+  export MOCK_SNAP_EXIT=1
+  _update_record_end "snap" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_snap")" = "${_unavailable}" ]
+}
+
+@test "claude: a failed plugins list before-snapshot reads unavailable, not no changes" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="    Version: 5.0.7" MOCK_CLAUDE_FAIL_ARGS="plugins list"
+  _update_record_start "claude"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_claude" ]
+  unset MOCK_CLAUDE_FAIL_ARGS
+  _update_record_end "claude" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" = "${_unavailable}" ]
+}
+
+@test "claude: a failed plugins list after-snapshot reads unavailable" {
+  printf "Version: 5.0.7\n" > "${_DOTFILES_RUN_TMPDIR}/pre_claude"
+  export MOCK_CLAUDE_FAIL_ARGS="plugins list"
+  _update_record_end "claude" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" = "${_unavailable}" ]
+}
+
+@test "claude: no plugins installed is a real empty snapshot and reads no changes" {
+  export MOCK_CLAUDE_PLUGINS_LIST_OUTPUT="No plugins installed"
+  _update_record_start "claude"
+  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_claude" ]
+  _update_record_end "claude" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" = "no changes" ]
+}
+
+@test "npm: a failed npm list reads unavailable, not no changes" {
+  export MOCK_NPM_LIST_OUTPUT="── firecrawl-mcp@0.1.0" MOCK_NPM_EXIT=1
+  _update_record_start "npm"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]
+  unset MOCK_NPM_EXIT
+  _update_record_end "npm" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_npm")" = "${_unavailable}" ]
+}
+
+@test "npm: a listing printed with a non-zero exit (peer-dependency warnings) is kept" {
+  export MOCK_NPM_LIST_OUTPUT=$'/usr/local/lib\n├── firecrawl-mcp@0.1.0' MOCK_NPM_LIST_EXIT=1
+  _update_record_start "npm"
+  [ -s "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]
+  export MOCK_NPM_LIST_OUTPUT=$'/usr/local/lib\n├── firecrawl-mcp@0.2.0'
+  _update_record_end "npm" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_npm")" = "1 package(s) (firecrawl-mcp@0.2.0)" ]
+}
+
+@test "npm: a listing with no package line reads unavailable" {
+  export MOCK_NPM_LIST_OUTPUT="/usr/local/lib"
+  _update_record_start "npm"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_npm" ]
+  _update_record_end "npm" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_npm")" = "${_unavailable}" ]
+}
+
+@test "mas: _update_record_start takes no snapshot (the mas row reads err_mas)" {
+  _update_record_start "mas"
+  [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_mas" ]
+  run ! command grep -q 'mas list' "${MOCK_CALLS_FILE}"
 }
