@@ -318,7 +318,7 @@ setup() {
   run_update || _rc=$?
   [ "${_rc}" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "FAIL" ]
-  run ! grep -q '^apt-get -s full-upgrade' "${MOCK_CALLS_FILE}"
+  run ! command grep -q '^apt-get -s full-upgrade' "${MOCK_CALLS_FILE}"
   grep -q 'nonexistent.invalid is not updating' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
 }
 
@@ -345,7 +345,7 @@ setup() {
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "SKIP" ]
   [[ ! -f "${_DOTFILES_RUN_TMPDIR}/detail_apt" ]]
-  run ! grep -q '^apt-get -s full-upgrade' "${MOCK_CALLS_FILE}"
+  run ! command grep -q '^apt-get -s full-upgrade' "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update apt section: more named packages than apt's count still warns on the kept one" {
@@ -411,4 +411,10 @@ setup() {
   run_update
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
   [[ "$(printf '%b' "$(cat "${_DOTFILES_RUN_TMPDIR}/detail_apt")")" == 'file:/srv/a\033b\c is not updating: fetch failed (File not found); apt kept its previous package list for this source' ]]
+}
+
+@test "_update_apt_printable: keeps printable ASCII only in a UTF-8 locale" {
+  local _out
+  _out="$(LC_ALL=C.UTF-8 _update_apt_printable $'a\xe2\x80\xaeb\x1b[1m\\c\xc2\x85 \xc3\xa9 z')"
+  [ "${_out}" = 'ab[1m\\c  z' ]
 }

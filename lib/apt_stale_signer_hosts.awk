@@ -4,7 +4,8 @@
 # multi-line single-quoted program inside a .sh counts as uncoverable lines in bash-coverage.
 # With -v mode=fetch it reads the other failure apt update exits 0 on: a "Failed to
 # fetch" line carrying no signer token (an unreachable host, a 404), and prints
-# "host<TAB>reason". A signer failure also prints a "Failed to fetch" line, so the
+# "host<TAB>reason", where host is the source URL's host, or the whole source
+# string when the source has no http(s) URL (file:, cdrom:). A signer failure also prints a "Failed to fetch" line, so the
 # token test keeps each source in exactly one of the two reports.
 BEGIN {
   np = split(prefixes, pre, "|")
