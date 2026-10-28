@@ -1014,9 +1014,8 @@ firefox  124.0"
 # _ledger_write_run_entry no-ops until both started_at (in _DOTFILES_RUN_TMPDIR,
 # already aliased to BATS_TEST_TMPDIR by this file's setup()) and a machine-id
 # (under HOME/.config/dotfiles) exist -- see lib/update_summary.sh:381,383.
-# Each test seeds both explicitly and exports HOME per-test, matching this
-# file's existing convention (see _update_record_start tpm/tfenv above) of not
-# putting HOME in the shared setup().
+# Each test seeds both explicitly under HOME, which setup() points at a
+# per-test fixture directory.
 
 _seed_ledger_run_files() {
   printf '2026-08-12T00:00:00Z\n'  > "${_DOTFILES_RUN_TMPDIR}/started_at"
@@ -1413,4 +1412,32 @@ _unknown_result='updated; change list unavailable (snapshot failed)'
   [ -z "$(_ruby_gem_path_prefix)" ]
   mkdir -p "${HOME}/.rbenv/shims"
   [ "$(_ruby_gem_path_prefix)" = "${HOME}/.rbenv/shims:" ]
+}
+
+@test "brew: any one of the four snapshots failing reads unavailable" {
+  local _list _when
+  for _list in FORMULA CASK; do
+    for _when in before after; do
+      rm -f "${_DOTFILES_RUN_TMPDIR}"/pre_brew_* "${_DOTFILES_RUN_TMPDIR}"/post_brew_* "${_DOTFILES_RUN_TMPDIR}/result_brew"
+      export MOCK_BREW_LIST_FORMULA="git" MOCK_BREW_LIST_CASK="docker"
+      unset MOCK_BREW_LIST_FORMULA_EXIT MOCK_BREW_LIST_CASK_EXIT
+      [[ ${_when} == before ]] && export "MOCK_BREW_LIST_${_list}_EXIT=1"
+      _update_record_start "brew"
+      unset MOCK_BREW_LIST_FORMULA_EXIT MOCK_BREW_LIST_CASK_EXIT
+      [[ ${_when} == after ]] && export "MOCK_BREW_LIST_${_list}_EXIT=1"
+      _update_record_end "brew" 0
+      [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "${_unknown_result}" ] \
+        || { echo "not unavailable: ${_list} ${_when}"; return 1; }
+    done
+  done
+}
+
+@test "softwareupdate: real -l output yields only the label, not its header or Title line" {
+  MOCK_SOFTWAREUPDATE_LIST_OUTPUT="$(cat "${REPO_ROOT}/tests/fixtures/softwareupdate/list-restart-pending.txt")"
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT
+  _update_record_start "softwareupdate"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_softwareupdate")" = "macOS 27.2-26B123" ]
+  softwareupdate --install --all
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "no changes; 1 still pending (macOS 27.2-26B123)" ]
 }

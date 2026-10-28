@@ -1,0 +1,6 @@
+Software Update Tool
+
+Finding available software
+Software Update found the following new or updated software:
+* Label: macOS 27.2-26B123
+	Title: macOS 27.2, Version: 27.2, Size: 6067473KiB, Recommended: YES, Action: restart, 
