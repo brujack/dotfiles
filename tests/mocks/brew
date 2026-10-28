@@ -15,7 +15,7 @@ case "$1" in
       # shellcheck disable=SC2086 # word-splitting is the point: renders a space-separated list one-per-line, as real brew does
       printf "%s\n" ${MOCK_BREW_LIST_FORMULA:-}
     fi
-    exit 0
+    exit "${MOCK_BREW_LIST_EXIT:-0}"
     ;;
   tap)
     if [[ $# -eq 1 ]]; then

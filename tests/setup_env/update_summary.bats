@@ -11,6 +11,10 @@ setup() {
   load_setup_env
   export _DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  # The gems snapshot resolves gem through ~/.rbenv/shims or ~/.rubies (as
+  # update_gems does); a real HOME would run the box's real gem, not the mock.
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}"
 }
 
 teardown() {
@@ -150,8 +154,9 @@ teardown() {
     git -C '${_repo}' add .
     git -C '${_repo}' commit --quiet -m 'init'
   "
-  _update_record_start "oh-my-zsh"
+  HOME="${BATS_TEST_TMPDIR}" PATH="${clean_path}" _update_record_start "oh-my-zsh"
   [ -f "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh")" = "$(PATH="${clean_path}" git -C "${_repo}" rev-parse HEAD)" ]
 }
 
 @test "_update_record_start creates pre-snapshot for claude section" {
@@ -720,20 +725,23 @@ firefox  124.0"
 
 @test "_update_record_start tpm: creates pre-snapshot file" {
   export HOME="${BATS_TEST_TMPDIR}"
+  _update_git() { printf 'abc1234\n'; }
   _update_record_start "tpm"
-  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_tpm" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_tpm")" = "abc1234" ]
 }
 
 @test "_update_record_start tfenv: creates pre-snapshot file" {
   export HOME="${BATS_TEST_TMPDIR}"
+  _update_git() { printf 'abc1234\n'; }
   _update_record_start "tfenv"
-  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_tfenv")" = "abc1234" ]
 }
 
 @test "_update_record_start zsh-autosuggestions: creates pre-snapshot file" {
   export HOME="${BATS_TEST_TMPDIR}"
+  _update_git() { printf 'abc1234\n'; }
   _update_record_start "zsh-autosuggestions"
-  [ -f "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_zsh-autosuggestions")" = "abc1234" ]
 }
 
 # ── _update_record_start npm ──────────────────────────────────────────────────
@@ -785,9 +793,9 @@ firefox  124.0"
   grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_tfenv"
 }
 
-@test "_update_record_end zsh-autosuggestions: reports no changes when no pre-snapshot" {
+@test "_update_record_end zsh-autosuggestions: reports the change list unavailable when no pre-snapshot" {
   _update_record_end "zsh-autosuggestions" 0
-  grep -q "no changes" "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_zsh-autosuggestions")" = "updated; change list unavailable (snapshot failed)" ]
 }
 
 # ── _update_record_end default case ──────────────────────────────────────────
@@ -1269,4 +1277,115 @@ EOF
   : > "${_DOTFILES_RUN_TMPDIR}/err_empty"
   _update_write_detail_from_warn "empty" "warning output"
   [[ ! -e "${_DOTFILES_RUN_TMPDIR}/detail_empty" ]]
+}
+
+# ── Cluster G: snapshot honesty (2026-10-27 audit #7, #12, snapshot failures) ──
+
+_unknown_result='updated; change list unavailable (snapshot failed)'
+
+@test "brew: a failed before-snapshot reads unavailable, not every formula changed" {
+  export MOCK_BREW_LIST_FORMULA="git wget" MOCK_BREW_LIST_EXIT=1
+  _update_record_start "brew"
+  export MOCK_BREW_LIST_EXIT=0
+  _update_record_end "brew" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew")" = "OK" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "${_unknown_result}" ]
+}
+
+@test "brew: a failed after-snapshot reads unavailable, not no changes" {
+  export MOCK_BREW_LIST_FORMULA="git wget"
+  _update_record_start "brew"
+  export MOCK_BREW_LIST_EXIT=1
+  _update_record_end "brew" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "${_unknown_result}" ]
+}
+
+@test "brew: snapshots that both succeed still report no changes" {
+  export MOCK_BREW_LIST_FORMULA="git wget"
+  _update_record_start "brew"
+  _update_record_end "brew" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_brew")" = "no changes" ]
+}
+
+@test "gems: a failed gem list reads unavailable, not no changes" {
+  export MOCK_GEM_LIST_OUTPUT="rake (13.0)" MOCK_GEM_LIST_EXIT=1
+  _update_record_start "gems"
+  _update_record_end "gems" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_gems")" = "${_unknown_result}" ]
+}
+
+@test "gems: the snapshot uses the gem update_gems uses (rbenv shims on Linux)" {
+  export LINUX=1 HOME="${BATS_TEST_TMPDIR}/home"
+  unset MACOS
+  mkdir -p "${HOME}/.rbenv/shims"
+  printf '#!/usr/bin/env bash\nprintf "shim-gem (1.0)\\n"\n' > "${HOME}/.rbenv/shims/gem"
+  chmod +x "${HOME}/.rbenv/shims/gem"
+  export MOCK_GEM_LIST_OUTPUT="path-gem (1.0)"
+  _update_record_start "gems"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/pre_gems")" = "shim-gem (1.0)" ]
+}
+
+@test "git section: an unreadable checkout reads unavailable, not no changes" {
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}/.tmux/plugins/tpm"
+  export MOCK_GIT_EXIT=128
+  _update_record_start "tpm"
+  [[ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_tpm" ]]
+  export MOCK_GIT_EXIT=0
+  _update_record_end "tpm" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_tpm")" = "${_unknown_result}" ]
+}
+
+@test "git section: an empty before-SHA is no snapshot" {
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  _update_git() { return 0; }
+  _update_record_start "tfenv"
+  [[ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_tfenv" ]]
+}
+
+@test "git section: a failed git log reads unavailable, not no changes" {
+  printf 'abc1234\n' > "${_DOTFILES_RUN_TMPDIR}/pre_oh-my-zsh"
+  _update_git_diff() { return 128; }
+  _update_record_end "oh-my-zsh" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_oh-my-zsh")" = "${_unknown_result}" ]
+}
+
+@test "softwareupdate: the result names what installed, not what was available" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT=$'* Label: A-1\n* Label: B-2'
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT_AFTER='* Label: B-2'
+  _update_record_start "softwareupdate"
+  softwareupdate --install --all
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "1 update(s) installed (A-1); 1 still pending (B-2)" ]
+}
+
+@test "softwareupdate: nothing installed and nothing pending reads no changes" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT=''
+  _update_record_start "softwareupdate"
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "no changes" ]
+}
+
+@test "softwareupdate: everything installed names it with nothing pending" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT='* Label: A-1'
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT_AFTER=''
+  _update_record_start "softwareupdate"
+  softwareupdate --install --all
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "1 update(s) installed (A-1)" ]
+}
+
+@test "softwareupdate: a failed softwareupdate -l reads unavailable, not no changes" {
+  export MOCK_SOFTWAREUPDATE_LIST_OUTPUT='* Label: A-1' MOCK_SOFTWAREUPDATE_LIST_EXIT=1
+  _update_record_start "softwareupdate"
+  _update_record_end "softwareupdate" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_softwareupdate")" = "${_unknown_result}" ]
+}
+
+@test "_update_capture removes the file when the command fails, keeps it when it succeeds" {
+  _update_capture "${BATS_TEST_TMPDIR}/ok" printf 'x\n'
+  [ "$(cat "${BATS_TEST_TMPDIR}/ok")" = "x" ]
+  printf 'stale\n' > "${BATS_TEST_TMPDIR}/bad"
+  _update_capture "${BATS_TEST_TMPDIR}/bad" false
+  [[ ! -e "${BATS_TEST_TMPDIR}/bad" ]]
 }
