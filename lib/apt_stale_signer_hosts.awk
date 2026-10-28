@@ -21,13 +21,16 @@ BEGIN {
   for (i = 1; i <= nt; i++) {
     if (index($0, tok[i]) > 0) { found = tok[i]; break }
   }
+  rest = $0
   if (mode == "fetch") {
     if (found != "" || index($0, "Failed to fetch ") == 0) next
     found = $0
     sub(/^.*Failed to fetch [^ ]+ */, "", found)
     if (found == "") found = "no reason given"
+    # Only the source URL names the host: the reason can carry another URL (a redirect target).
+    rest = substr($0, index($0, "Failed to fetch ") + 16)
+    sub(/ .*/, "", rest)
   } else if (found == "") next
-  rest = $0
   # authority = text after the scheme up to the first / quote or space
   while (match(rest, /https?:\/\/[^\/\047 ]+/)) {
     url = substr(rest, RSTART, RLENGTH)

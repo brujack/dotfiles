@@ -1,6 +1,6 @@
 # apt fixtures
 
-Real captured output; never hand-edited. Captured 2026-10-17.
+Real captured output; never hand-edited. Captured 2026-10-17 unless a section gives its own date.
 
 ## update-clean-resolute.txt
 

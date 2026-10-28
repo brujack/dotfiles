@@ -147,6 +147,12 @@ setup() {
   [ -z "$output" ]
 }
 
+@test "_apt_fetch_failed_hosts: a URL in apt's reason text is not reported as a source" {
+  run _apt_fetch_failed_hosts <<< "Warning: Failed to fetch https://a.example/x/InRelease  Redirection from https://a.example/x to 'http://other.example/y' is forbidden"
+  [ "$status" -eq 0 ]
+  [ "$output" = "a.example"$'\t'"Redirection from https://a.example/x to 'http://other.example/y' is forbidden" ]
+}
+
 @test "_apt_not_upgraded: held package is reported kept, with apt's count" {
   run _apt_not_upgraded < "${REPO_ROOT}/tests/fixtures/apt/simulate-held-resolute.txt"
   [ "$status" -eq 0 ]
