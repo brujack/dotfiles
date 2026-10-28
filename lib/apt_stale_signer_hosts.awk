@@ -1,13 +1,14 @@
-# Reads apt output on stdin; prints "host<TAB>token" once per distinct host named
-# on a signature-failure line. Called by _apt_scan_failed_hosts in lib/linux_shared.sh
-# with -v prefixes=... -v tokens=... ("|"-joined). Lives in its own file because a
+# Reads apt output on stdin. By default (signer mode) prints "host<TAB>token" once
+# per distinct host named on a signature-failure line. Called by
+# _apt_scan_failed_hosts in lib/linux_shared.sh with -v mode=signer|fetch
+# -v prefixes=... -v tokens=... ("|"-joined). Lives in its own file because a
 # multi-line single-quoted program inside a .sh counts as uncoverable lines in bash-coverage.
 # With -v mode=fetch it reads the other failure apt update exits 0 on: a "Failed to
 # fetch" line carrying no signer token (an unreachable host, a 404), and prints
 # "host<TAB>reason". host is the source URL's host or, when the source has no
 # http(s) URL (file:, cdrom:), the source token up to its first space. A signer
 # failure also prints a "Failed to fetch" line, so the token test keeps each
-# source in exactly one of the two reports.
+# line in exactly one of the two reports.
 BEGIN {
   np = split(prefixes, pre, "|")
   nt = split(tokens, tok, "|")

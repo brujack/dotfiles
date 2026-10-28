@@ -731,8 +731,9 @@ _update_apt_printable() {
 }
 
 # _update_apt_fetch_check APT_RC
-# Reads err_apt for sources apt could not fetch (unreachable host, 404) and says so on
-# the apt row: apt update exits 0 and keeps that source's old index, so the row read OK
+# Reads err_apt for sources apt could not fetch (unreachable host, 404) and, after a
+# clean apt run, says so on the apt row (after a failed one it adds to the detail
+# only): apt update exits 0 and keeps that source's old index, so the row read OK
 # while the source went stale. Same shape as _update_apt_signer_check, which runs first
 # and owns the signature failures.
 _update_apt_fetch_check() {
@@ -783,7 +784,7 @@ _update_apt_kept_back_check() {
     || ! _parsed="$(_apt_not_upgraded < "${_sim}")"; then
     _update_warn "apt" "${_result}; kept-back check did not run — see detail"
     {
-      printf 'apt-get -s full-upgrade gave no usable summary; its last lines:\n'
+      printf 'apt-get -s full-upgrade failed or gave no usable summary; its last lines:\n'
       tail -5 "${_sim}"
     } >> "${_detail}"
     return 0
