@@ -790,7 +790,7 @@ _update_apt_kept_back_check() {
 
   for _pkg in "${_kept[@]}"; do
     _names="${_names:+${_names}, }${_pkg}"
-    printf '%s was kept back: it is held (apt-mark showhold) or its dependencies cannot be met; sudo apt full-upgrade shows why\n' "${_pkg}" >> "${_detail}"
+    printf '%s was kept back: it is held (apt-mark showhold) or its dependencies cannot be met; apt full-upgrade, run as root, says why\n' "${_pkg}" >> "${_detail}"
   done
   ((_unnamed > 0)) \
     && printf '%d package(s) not upgraded that apt-get -s full-upgrade did not name; apt list --upgradable lists them\n' "${_unnamed}" >> "${_detail}"

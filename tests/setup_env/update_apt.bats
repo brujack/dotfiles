@@ -1,7 +1,8 @@
 #!/usr/bin/env bats
-# run_update's apt section: stale-signer detection on err_apt.
+# run_update's apt section: stale-signer, fetch-failure and kept-back detection.
 
 load '../helpers/common.bash'
+bats_require_minimum_version 1.5.0
 
 setup() {
   load_setup_env
@@ -133,10 +134,11 @@ setup() {
   [ -z "$output" ]
 }
 
-@test "_apt_fetch_failed_hosts: apt 2.x W: prefix is read, unprefixed and clean lines are not" {
+@test "_apt_fetch_failed_hosts: apt 2.x W: prefix is read; unprefixed, non-fetch and clean lines are not" {
   local _in
   _in=$'W: Failed to fetch http://user@Mirror.Example:8080/ubuntu/dists/noble/InRelease  Could not connect\n'
   _in+=$'Failed to fetch http://unprefixed.example/x  not apt\n'
+  _in+=$'W: http://legacy.example/ubuntu/dists/noble/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.\n'
   run _apt_fetch_failed_hosts <<< "${_in}"
   [ "$status" -eq 0 ]
   [ "$output" = "mirror.example"$'\t'"Could not connect" ]
@@ -171,6 +173,14 @@ setup() {
   run _apt_not_upgraded <<< "${_in}"
   [ "$status" -eq 0 ]
   [ "$output" = "kept"$'\t'"aa"$'\n'"kept"$'\t'"bb"$'\n'"kept"$'\t'"cc"$'\n'"not-upgraded"$'\t'"3" ]
+}
+
+@test "_apt_not_upgraded: CRLF output parses the same as LF" {
+  local _in
+  _in=$'The following packages have been kept back:\r\n  aa\r\n0 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.\r\n'
+  run _apt_not_upgraded <<< "${_in}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "kept"$'\t'"aa"$'\n'"not-upgraded"$'\t'"1" ]
 }
 
 @test "_apt_not_upgraded: no summary line fails, so a format change never reads clean" {
@@ -209,7 +219,7 @@ setup() {
   [ "${_rc}" -eq 0 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_apt")" = "WARN" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "${_base}; 1 package(s) kept back: liblzma5 — see detail" ]
-  grep -qx 'liblzma5 was kept back: it is held (apt-mark showhold) or its dependencies cannot be met; sudo apt full-upgrade shows why' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
+  grep -qx 'liblzma5 was kept back: it is held (apt-mark showhold) or its dependencies cannot be met; apt full-upgrade, run as root, says why' "${_DOTFILES_RUN_TMPDIR}/detail_apt"
 }
 
 @test "run_update apt section: the kept-back check asks apt in the C locale, as a simulation" {
