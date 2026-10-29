@@ -16,21 +16,33 @@ setup() {
 }
 
 # _curl_redirect_sites FILE... -- one "file:line<TAB>ok|missing" row per
-# non-comment line that runs curl with -L (in any short-option cluster) or
-# --location. "ok" means both https-only flags are on that line.
+# non-comment command that runs curl, or a variable whose name holds "curl"
+# ("${_curl}"), with -L (in any short-option cluster) or --location.
+# Backslash-continued lines are joined first and reported at their first line,
+# so flags split across lines are still seen. "ok" means both https-only flags
+# are on the command. Not seen: options built into an array beforehand.
 _curl_redirect_sites() {
   awk '
-    /^[[:space:]]*#/ { next }
-    {
-      if ($0 !~ /(^|[^A-Za-z0-9_${])curl[[:space:]]/) next
-      if ($0 !~ /[[:space:]]-[A-Za-z]*L[A-Za-z]*[[:space:]]/ && $0 !~ /--location/) next
+    function check(file, line, text,   q, ok) {
+      if (text ~ /^[[:space:]]*#/) return
+      if (text !~ /(^|[^A-Za-z0-9_])(curl|[$][{]?[A-Za-z0-9_]*[Cc][Uu][Rr][Ll][A-Za-z0-9_]*[}]?"?)[[:space:]]/) return
+      if (text !~ /[[:space:]]-[A-Za-z]*L[A-Za-z]*([[:space:]]|$)/ && text !~ /--location/) return
       # The value must be quoted: zsh expands an unquoted =https to the path of
       # a command named https (httpie ships one), and a remedy line is pasted
-      # into zsh. Octal \047 is portable to BSD awk; \x27 is not.
+      # into zsh. Octal \047 for the single quote, as POSIX awk specifies.
       q = "[\"\047]"
-      ok = ($0 ~ ("--proto[[:space:]]+" q "=https" q) && $0 ~ ("--proto-redir[[:space:]]+" q "=https" q))
-      printf "%s:%d\t%s\n", FILENAME, FNR, (ok ? "ok" : "missing")
+      ok = (text ~ ("--proto[[:space:]]+" q "=https" q) && text ~ ("--proto-redir[[:space:]]+" q "=https" q))
+      printf "%s:%d\t%s\n", file, line, (ok ? "ok" : "missing")
     }
+    FNR == 1 && buf != "" { check(bfile, bline, buf); buf = "" }
+    {
+      if (buf == "") { bfile = FILENAME; bline = FNR }
+      l = $0
+      if (l ~ /\\$/) { sub(/\\$/, "", l); buf = buf l " "; next }
+      check(bfile, bline, buf l)
+      buf = ""
+    }
+    END { if (buf != "") check(bfile, bline, buf) }
   ' "$@"
 }
 
@@ -47,7 +59,8 @@ _tracked_shell_outside_tests() {
   [ "$status" -eq 0 ]
   # A count, not membership: a scanner that silently stops matching must go
   # red here rather than report zero violations over zero sites. 11 sites
-  # existed when the gate was added; new ones raise the count, never lower it.
+  # existed when the gate was added. The floor catches a broken scanner, not
+  # a site that was removed or left the shebang scope.
   [ "$(printf '%s\n' "$output" | command grep -c .)" -ge 11 ]
   [[ "$output" != *$'\t'missing* ]]
 }
@@ -66,6 +79,12 @@ curl --proto =https --proto-redir =https -fsSL https://example.invalid/unquoted
 printf '%s\n' 'paste: curl --proto "=https" --proto-redir "=https" -fsSL https://example.invalid/f'
 curl -fsS https://example.invalid/no-redirect
 "${_curl}" -fsSL https://example.invalid/var-invoked
+local _curl="${_RHN_CURL_BIN:-curl}"
+curl --proto '=https' --proto-redir '=https' \
+  -fsSL https://example.invalid/continued-ok
+curl \
+  -fsSL https://example.invalid/continued-missing
+echo trailing; curl -fsSL
 EOF
   run _curl_redirect_sites "${_fx}"
   [ "$status" -eq 0 ]
@@ -75,5 +94,9 @@ ${_fx}:5	missing
 ${_fx}:6	missing
 ${_fx}:7	missing
 ${_fx}:8	missing
-${_fx}:9	ok" ]
+${_fx}:9	ok
+${_fx}:11	missing
+${_fx}:13	ok
+${_fx}:15	missing
+${_fx}:17	missing" ]
 }
