@@ -347,7 +347,8 @@ printf "install %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
 exit 0
 EOF
   cp "${_shim}/install" "${_shim}/sudo"
-  chmod +x "${_shim}/install" "${_shim}/sudo"
+  cp "${_shim}/install" "${_shim}/mv"
+  chmod +x "${_shim}/install" "${_shim}/sudo" "${_shim}/mv"
 
   local _payload="raw-payload-9.9.9"
   local _sha
@@ -454,6 +455,86 @@ EOF
   [ "$status" -eq 1 ]
   [[ "$output" == *"install into"* ]]
   [ ! -e "${_dest}/footool" ]
+}
+
+# install(1) unlinks its destination before copying, so a copy that fails
+# straight onto the target leaves the tool missing. These shims model that:
+# a failing install removes whatever path it was given last, then exits 1.
+
+_release_old_footool() {
+  printf '#!/usr/bin/env bash\nprintf "footool version 1.0.0\\n"\n' > "${_RELEASE_BIN_DIR}/footool"
+  chmod +x "${_RELEASE_BIN_DIR}/footool"
+}
+
+_release_raw_payload() {
+  _payload="raw-payload-9.9.9"
+  _sha="$(printf '%s' "${_payload}" | sha256sum | awk '{print $1}')"
+  export MOCK_CURL_STDOUT="${_payload}"
+}
+
+@test "_install_pinned_release_binary: a failing copy leaves the previous binary in place" {
+  _release_old_footool
+  local _payload _sha
+  _release_raw_payload
+  local _shim="${BATS_TEST_TMPDIR}/unlinking-install-shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nrm -f "${!#}"\nexit 1\n' > "${_shim}/install"
+  chmod +x "${_shim}/install"
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [ "$("${_RELEASE_BIN_DIR}/footool")" = "footool version 1.0.0" ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool.new" ]
+}
+
+@test "_install_pinned_release_binary: a failing rename leaves the previous binary and no .new" {
+  _release_old_footool
+  local _payload _sha
+  _release_raw_payload
+  local _shim="${BATS_TEST_TMPDIR}/failing-mv-shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${_shim}/mv"
+  chmod +x "${_shim}/mv"
+  PATH="${_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"footool install into ${_RELEASE_BIN_DIR} failed"* ]]
+  [ "$("${_RELEASE_BIN_DIR}/footool")" = "footool version 1.0.0" ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool.new" ]
+}
+
+@test "_install_pinned_release_binary: an upgrade replaces the previous binary and leaves no .new" {
+  _release_old_footool
+  local _payload _sha
+  _release_raw_payload
+  run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_RELEASE_BIN_DIR}/footool")" = "${_payload}" ]
+  [ -x "${_RELEASE_BIN_DIR}/footool" ]
+  [ ! -e "${_RELEASE_BIN_DIR}/footool.new" ]
+}
+
+@test "_install_pinned_release_binary: the sudo path stages to .new and renames it over the target" {
+  local _dest="${BATS_TEST_TMPDIR}/readonly-bin"
+  mkdir -p "${_dest}"
+  chmod 0555 "${_dest}"
+  export _RELEASE_BIN_DIR="${_dest}"
+  local _sudo_shim="${BATS_TEST_TMPDIR}/sudo-shim"
+  mkdir -p "${_sudo_shim}"
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "%s"\nexit 0\n' "${MOCK_CALLS_FILE}" > "${_sudo_shim}/sudo"
+  chmod +x "${_sudo_shim}/sudo"
+  local _payload _sha
+  _release_raw_payload
+  PATH="${_sudo_shim}:${PATH}" run _install_pinned_release_binary footool 9.9.9 \
+    "https://example.invalid/footool" \
+    "${_sha}" raw '^footool version 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  command grep -qE "^sudo install -m 0755 .* ${_dest}/footool\.new$" "${MOCK_CALLS_FILE}"
+  command grep -qxF "sudo mv -f ${_dest}/footool.new ${_dest}/footool" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_pinned_release_binary: unzip failure returns 1 before reaching install" {
