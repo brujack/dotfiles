@@ -5,15 +5,20 @@
 # the source, and this produces the plain, hash-carrying requirements files that
 # other repos' CI can install with stock pip and no uv on the runner.
 #
-# FOUR renderings, deliberately separate files -- do not harmonise them:
+# Five renderings, deliberately separate files -- do not harmonise them:
 #   test-lint    -> requirements-ci.txt              the full local/dev test set
-#   runtime      -> requirements-runtime-ci.txt      terraform_ansible
+#   runtime      -> requirements-runtime-ci.txt      no consumer yet (see below)
 #   ci-test      -> requirements-ci-test.txt         per-PR test/lint jobs
 #   ci-mutation  -> requirements-ci-mutation.txt     mutation jobs
-# They exist because the consumers genuinely differ: terraform_ansible installs
-# ansible/molecule and no test tooling; etch-cli runs three tools and needs 9
-# packages, not the 80 the full test-lint set renders. See pyproject.toml for
-# the boundary rule governing what may enter ci-test.
+#   ci-audit     -> requirements-ci-audit.txt        pip-audit dependency audit
+# They exist because the consumers genuinely differ: etch-cli's CI copies only
+# ci-test, while ai-config and state-ledger add ci-audit to their CI jobs and
+# ci-mutation to their mutation jobs, and none of them needs the much larger
+# test-lint set. runtime is the ansible/molecule set with no test tooling,
+# rendered ahead of a terraform_ansible adoption on purpose (dotfiles#232);
+# terraform_ansible still keeps its own ansible/requirements-ci.txt, so nothing
+# installs runtime today. See pyproject.toml for the boundary rule governing
+# what may enter ci-test.
 #
 # `sync` writes them; `check` fails if a committed copy has drifted.
 #
