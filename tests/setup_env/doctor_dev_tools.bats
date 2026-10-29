@@ -303,12 +303,15 @@ STUB
   # macOS outside interactive zsh has only Homebrew's gtimeout. The fallback
   # list is the one _doctor_check_brew_links uses; this one names a real
   # timeout under the gtimeout name, so a kill (rc 124) proves it was used.
+  # A wrapper, not a symlink: uutils' multicall `timeout` dispatches on argv0
+  # and refuses to run as `gtimeout`.
   export LINUX=1 HAS_DEVTOOLS=1
   export _DOCTOR_PROBE_TIMEOUT=1
   local _no_timeout_dir="${BATS_TEST_TMPDIR}/bin_no_timeout"
   local _fallback_dir="${BATS_TEST_TMPDIR}/fallback"
   mkdir -p "${_no_timeout_dir}" "${_fallback_dir}"
-  ln -s "$(readlink "${_BIN_DIR}/timeout")" "${_fallback_dir}/gtimeout"
+  printf '#!/bin/bash\nexec "%s" "$@"\n' "$(readlink "${_BIN_DIR}/timeout")" > "${_fallback_dir}/gtimeout"
+  chmod +x "${_fallback_dir}/gtimeout"
   ln -s "$(readlink "${_BIN_DIR}/sleep")" "${_no_timeout_dir}/sleep"
   cat > "${_no_timeout_dir}/terraform" <<'STUB'
 #!/bin/bash
