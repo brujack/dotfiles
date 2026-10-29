@@ -104,10 +104,10 @@ setup() {
 }
 
 @test "the two renderings are different files with different content" {
-  # They are deliberately separate: terraform_ansible installs the runtime set
-  # and no test tooling, the other three the reverse. This guards against a
-  # later "harmonisation" into one file, which would serve terraform_ansible
-  # not at all.
+  # They are deliberately separate: runtime is the ansible/molecule set with no
+  # test tooling, and test-lint is the reverse. This guards against a later
+  # "harmonisation" into one file, which would leave runtime useless to the
+  # terraform_ansible adoption it was rendered for (dotfiles#232).
   run ! diff -q "${REPO_ROOT}/requirements-ci.txt" \
                 "${REPO_ROOT}/requirements-runtime-ci.txt"
   grep -q '^ansible==' "${REPO_ROOT}/requirements-runtime-ci.txt"
