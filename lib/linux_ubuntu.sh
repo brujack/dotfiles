@@ -810,9 +810,14 @@ _install_ubuntu_rust() {
       log_warn "rustup not found; skipping Rust configuration"
       return 0
     fi
-    "${_rustup}" self update || return 1
-    "${_rustup}" update || return 1
-    "${_rustup}" component add rust-analyzer || return 1
+    # From ${HOME}, so a rust-toolchain.toml in the caller's working directory
+    # cannot pick the toolchain these act on (see update_rust, lib/developer.sh).
+    (
+      cd "${HOME}" || exit 1
+      "${_rustup}" self update || exit 1
+      "${_rustup}" update || exit 1
+      "${_rustup}" component add rust-analyzer || exit 1
+    ) || return 1
   fi
 }
 

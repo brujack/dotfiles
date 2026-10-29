@@ -1,3 +1,10 @@
 #!/usr/bin/env bash
 printf "rustup %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+# Real rustup selects the toolchain named by a rust-toolchain.toml in the
+# working directory and refuses when it is not installed; mimic that so a test
+# can show a caller does not run rustup from the caller's cwd.
+if [[ -e "${PWD}/rust-toolchain.toml" ]]; then
+  printf "error: override toolchain is not installed: %s\n" "${PWD}/rust-toolchain.toml" >&2
+  exit 1
+fi
 exit "${MOCK_RUSTUP_EXIT:-0}"

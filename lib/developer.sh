@@ -263,9 +263,16 @@ _rustup_is_brew_build() {
 # rustup call fails, 2 when rustup exists but has no default toolchain (a
 # keg-only brew rustup nobody ran `rustup default stable` on). run_update maps
 # 2 to WARN: FAIL would fail every run on such a mac, OK would hide it.
-update_rust() {
+#
+# The body is a subshell that runs from ${HOME}: rustup selects the toolchain
+# named by a rust-toolchain.toml (or a `rustup override`) in the working
+# directory and its parents, so run from inside a pinned Rust repo every call
+# here would act on that repo's toolchain, or fail when it is not installed,
+# instead of the default.
+update_rust() (
   [[ -n ${HAS_RUST} ]] || return 0
   [[ -n ${UBUNTU} ]] || [[ -n ${MACOS} ]] || return 0
+  cd "${HOME}" || return 1
   log_info "Updating Rust"
   local _rustup
   if ! _rustup="$(_resolve_rustup)"; then
@@ -283,7 +290,7 @@ update_rust() {
   fi
   "${_rustup}" update || return 1
   "${_rustup}" component add rust-analyzer || return 1
-}
+)
 
 # install_aws_tools -- the fresh-machine path, run once per box.
 #
@@ -832,11 +839,16 @@ _cargo_tool_state() {
 # (tdd.md E2) -- except a test that deliberately unsets _CARGO_BIN to
 # exercise the other resolution branches, which is then responsible for its
 # own isolation.
-install_cargo_tools() {
+#
+# The body is a subshell that runs from ${HOME}, for the reason update_rust
+# gives: cargo is a rustup proxy, so a rust-toolchain.toml in the caller's
+# working directory would pick the toolchain for every call below.
+install_cargo_tools() (
   if [[ -z ${HAS_RUST} ]]; then
     printf '%s\n' 'cargo tools: skipped (HAS_RUST unset)'
     return 0
   fi
+  cd "${HOME}" || return 1
 
   local _cargo
   if [[ -n "${_CARGO_BIN:-}" ]] && [[ -x "${_CARGO_BIN}" ]]; then
@@ -936,4 +948,4 @@ install_cargo_tools() {
     return 2
   fi
   return 0
-}
+)

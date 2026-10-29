@@ -7,6 +7,13 @@
 # cargo-tarpaulin.
 printf "cargo %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 
+# cargo is a rustup proxy, so it obeys a rust-toolchain.toml in the working
+# directory the same way rustup does (tests/mocks/rustup); mimic the refusal.
+if [[ -e "${PWD}/rust-toolchain.toml" ]]; then
+  printf "error: toolchain is not installed: %s\n" "${PWD}/rust-toolchain.toml" >&2
+  exit 1
+fi
+
 # `cargo --version`: MOCK_CARGO_VERSION, defaulting (when unset) to a cargo new
 # enough for install_cargo_tools's CARGO_MIN_VER floor. Set it empty to
 # simulate an unreadable version.
