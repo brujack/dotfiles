@@ -379,21 +379,6 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-# ── install_ruby_tools ───────────────────────────────────────────────────────
-
-@test "install_ruby_tools returns non-zero and installs nothing when the download is not the pinned tarball" {
-  export LINUX=1
-  unset MACOS UBUNTU
-  local _home="${BATS_TEST_TMPDIR}/home"
-  mkdir -p "${_home}/software_downloads"
-  export HOME="${_home}"
-  # The fetch mock writes placeholder bytes, which cannot match RUBY_INSTALL_SHA256.
-  run install_ruby_tools
-  [ "$status" -ne 0 ]
-  [ ! -e "${_home}/software_downloads/ruby-install-${RUBY_INSTALL_VER}" ]
-  refute_grep "make .*install" "${MOCK_CALLS_FILE}"
-}
-
 # ── _install_ubuntu_go ────────────────────────────────────────────────────────
 # The unsupported-version range guard was removed — always calls tarball install.
 

@@ -1154,28 +1154,6 @@ nvidia" ]
   ! grep -q "awscli" "${MOCK_CALLS_FILE}"
 }
 
-# ── install_ruby_tools ────────────────────────────────────────────────────────
-
-@test "install_ruby_tools fetches the pinned ruby-install release on Linux and refuses an unverified download" {
-  unset MACOS
-  export LINUX=1
-  export UBUNTU=1
-  export NOBLE=1
-  # The shared fetch mock returns placeholder bytes, so the sha256 check must
-  # refuse them; tests/setup_env/ruby_install.bats covers the verified path.
-  run install_ruby_tools
-  [ "$status" -eq 1 ]
-  grep -qF "releases/download/v${RUBY_INSTALL_VER}/ruby-install-${RUBY_INSTALL_VER}.tar.gz" "${MOCK_CALLS_FILE}"
-  refute_grep "make .*install" "${MOCK_CALLS_FILE}"
-}
-
-@test "install_ruby_tools is a no-op on macOS" {
-  export MACOS=1
-  unset LINUX UBUNTU
-  install_ruby_tools
-  ! grep -q "ruby-install" "${MOCK_CALLS_FILE}"
-}
-
 # ── install_ruby ──────────────────────────────────────────────────────────────
 
 @test "install_ruby calls ruby-install on macOS when ruby absent" {
@@ -2485,21 +2463,6 @@ _stub_refresher_fail() {
 
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
 
-@test "run_developer_or_ansible returns non-zero when install_ruby_tools fails" {
-  unset MACOS LINUX UBUNTU
-  install_ruby_tools() { return 1; }
-  run run_developer_or_ansible
-  [ "$status" -ne 0 ]
-}
-
-@test "run_developer_or_ansible does not call install_ruby when install_ruby_tools fails" {
-  unset MACOS LINUX UBUNTU
-  install_ruby_tools() { return 1; }
-  install_ruby() { printf "install_ruby\n" >> "${MOCK_CALLS_FILE}"; return 0; }
-  run run_developer_or_ansible
-  ! grep -q "install_ruby" "${MOCK_CALLS_FILE}"
-}
-
 @test "run_developer_or_ansible returns non-zero when jscpd npm install fails" {
   export MACOS=1
   unset LINUX UBUNTU
@@ -2528,10 +2491,25 @@ _stub_refresher_fail() {
   ! grep -q "firecrawl-cli" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_developer_or_ansible on Linux neither fetches nor builds ruby-install" {
+  # Linux Ruby comes from rbenv (install_ruby); ruby-install is a macOS tool, so
+  # the developer run must not download or build it as root.
+  export LINUX=1
+  unset MACOS UBUNTU
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { return 0; }
+  setup_ansible()            { return 0; }
+  clone_personal_repos()     { return 0; }
+  _ledger_write_run_entry()  { :; }
+  run run_developer_or_ansible
+  [ "$status" -eq 0 ]
+  refute_grep "postmodern/ruby-install" "${MOCK_CALLS_FILE}"
+  refute_grep "make .*install" "${MOCK_CALLS_FILE}"
+}
+
 @test "run_developer_or_ansible succeeds on Linux calling setup_ansible and clone_personal_repos" {
   export LINUX=1
   unset MACOS UBUNTU
-  install_ruby_tools()       { return 0; }
   install_ruby()             { return 0; }
   install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
@@ -2549,7 +2527,6 @@ _stub_refresher_fail() {
 @test "run_developer_or_ansible skips the gh step when LINUX is unset" {
   unset LINUX UBUNTU
   export MACOS=1
-  install_ruby_tools()       { return 0; }
   install_ruby()             { return 0; }
   install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
@@ -2567,7 +2544,6 @@ _stub_refresher_fail() {
 @test "run_developer_or_ansible continues, warns and ledgers 2 when install_github_cli_linux fails" {
   export LINUX=1
   unset MACOS UBUNTU
-  install_ruby_tools()       { return 0; }
   install_ruby()             { return 0; }
   install_github_cli_linux() { return 1; }
   setup_ansible()            { printf "setup_ansible\n" >> "${MOCK_CALLS_FILE}"; return 0; }
@@ -2584,7 +2560,6 @@ _stub_refresher_fail() {
 @test "run_developer_or_ansible runs the gh step before install_ruby, and a ruby failure still returns 1 with no ledger entry" {
   export LINUX=1
   unset MACOS UBUNTU
-  install_ruby_tools()       { return 0; }
   install_github_cli_linux() { printf "github_cli_linux\n" >> "${MOCK_CALLS_FILE}"; return 0; }
   install_ruby()             { printf "install_ruby\n" >> "${MOCK_CALLS_FILE}"; return 1; }
   _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
