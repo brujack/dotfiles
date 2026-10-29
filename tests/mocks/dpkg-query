@@ -10,8 +10,9 @@
 #      Answers per package via MOCK_DPKG_STATUS_<pkg>, e.g.
 #      MOCK_DPKG_STATUS_zsh_doc="rc ". Give dpkg's real three-column form:
 #      a clean status ends in a space (the empty error column), and a guard
-#      matching that space is how `iiR` is told from `ii`. A hyphen in the package name maps to an
-#      underscore in the variable name (bash identifiers can't hold '-').
+#      matching that space is how `iiR` is told from `ii`. A hyphen in the
+#      package name maps to an underscore in the variable name (bash
+#      identifiers can't hold '-').
 #      An unset variable means the package is absent (prints nothing).
 #
 # The two forms can only be told apart by a real (if minimal) argument
