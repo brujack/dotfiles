@@ -1156,13 +1156,17 @@ nvidia" ]
 
 # ── install_ruby_tools ────────────────────────────────────────────────────────
 
-@test "install_ruby_tools downloads ruby-install on Linux when absent" {
+@test "install_ruby_tools fetches the pinned ruby-install release on Linux and refuses an unverified download" {
   unset MACOS
   export LINUX=1
   export UBUNTU=1
   export NOBLE=1
-  install_ruby_tools
-  grep -q "ruby-install" "${MOCK_CALLS_FILE}"
+  # The shared fetch mock returns placeholder bytes, so the sha256 check must
+  # refuse them; tests/setup_env/ruby_install.bats covers the verified path.
+  run install_ruby_tools
+  [ "$status" -eq 1 ]
+  grep -qF "releases/download/v${RUBY_INSTALL_VER}/ruby-install-${RUBY_INSTALL_VER}.tar.gz" "${MOCK_CALLS_FILE}"
+  refute_grep "make .*install" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_ruby_tools is a no-op on macOS" {
