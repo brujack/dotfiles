@@ -1859,6 +1859,14 @@ EOF
   [ "$(grep -cx "rustup update" "${MOCK_CALLS_FILE}")" -eq 0 ]
 }
 
+@test "_install_ubuntu_rust: returns 1 and runs no rustup call when it cannot cd to HOME" {
+  export HAS_RUST=1
+  cd() { [[ $1 == "${HOME}" ]] && return 1; builtin cd "$@"; }
+  run _install_ubuntu_rust
+  [ "$status" -eq 1 ]
+  refute_grep "rustup" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_rustup_rs ────────────────────────────────────────────────────────
 #
 # sha256sum and mktemp are deliberately NOT mocked, so the digest check runs for

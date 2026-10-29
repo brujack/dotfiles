@@ -517,7 +517,8 @@ teardown() {
 # reachable, which is how an earlier version of this test ran a real
 # `rustup self update` against the operator's toolchain (tdd.md E2).
 # _rustup_mock_in <dir> <failing-args> [calls-file] -- writes a rustup mock into
-# <dir> that logs its argv and exits 1 only for the exact <failing-args>.
+# <dir> that logs its argv and exits 1 only for the exact <failing-args>, or
+# when its cwd holds a rust-toolchain.toml.
 _rustup_mock_in() {
   local _dir="$1" _fail="$2" _calls="${3:-${BATS_TEST_TMPDIR}/rustup_calls}"
   mkdir -p "${_dir}"
@@ -602,6 +603,17 @@ component add rust-analyzer" ]
   # move its caller's working directory.
   update_rust > /dev/null 2>&1
   [ "${PWD}" = "${BATS_TEST_TMPDIR}/pinned-repo" ]
+}
+
+# The cd guard's failure branch. `cd` is shadowed rather than HOME pointed at a
+# missing directory, so the rustup the mock seeded under the fixture HOME stays
+# resolvable and the test proves the guard, not a resolution failure.
+@test "update_rust returns 1 and runs no rustup when it cannot cd to HOME" {
+  _rust_mock "__none__"
+  cd() { [[ $1 == "${HOME}" ]] && return 1; builtin cd "$@"; }
+  run update_rust
+  [ "$status" -eq 1 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/rustup_calls" ]
 }
 
 # ── update_rust on macOS ─────────────────────────────────────────────────────

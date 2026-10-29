@@ -374,6 +374,14 @@ cargo-denylist v9.9.9:
   [ "${PWD}" = "${BATS_TEST_TMPDIR}/pinned-repo" ]
 }
 
+@test "install_cargo_tools: returns 1 and runs no cargo when it cannot cd to HOME" {
+  export HAS_RUST=1
+  cd() { [[ $1 == "${HOME}" ]] && return 1; builtin cd "$@"; }
+  run install_cargo_tools
+  [ "$status" -eq 1 ]
+  refute_grep "cargo" "${MOCK_CALLS_FILE}"
+}
+
 @test "install_cargo_tools: reads the list exactly once for an 8-pin run" {
   export HAS_RUST=1
   export MOCK_CARGO_LIST
