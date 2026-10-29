@@ -781,10 +781,12 @@ _doctor_check_dev_tools() {
   # cost of that degrade: a genuinely hung tool can then block doctor
   # itself, since nothing bounds the probe any more. Accepted because every
   # Linux target this arm runs on ships coreutils (and therefore `timeout`)
-  # by construction -- the fallback exists for a shim-scoped test PATH, not
-  # for an expected production gap.
+  # by construction -- the unbounded branch exists for a shim-scoped test
+  # PATH, not for an expected production gap. The gtimeout fallback is the
+  # one _doctor_check_brew_links uses, so the arm stays bounded if it is
+  # ever enabled outside Linux.
   local _timeout_bin
-  _timeout_bin="$(command -v timeout 2>/dev/null)"
+  _timeout_bin="$(_doctor_resolve_timeout)"
 
   local _tool _bin _args _rc
   for _tool in pwsh tflint zig terraform tfsec; do
@@ -1327,6 +1329,13 @@ _doctor_brew_links_names() {
   printf '%s' "${_shown}"
 }
 
+# Prints the `timeout` to bound a doctor probe with: the one on PATH, else
+# Homebrew's gtimeout (macOS ships no `timeout`). Prints nothing when none
+# resolves, and the caller then runs the probe unbounded.
+_doctor_resolve_timeout() {
+  _doctor_resolve_executable timeout "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}"
+}
+
 # Prints the first usable <cmd>: `command -v` (absolute and executable only, so
 # a function or alias name is rejected), then each executable entry of the
 # space-separated <fallbacks>. Prints nothing when none resolves.
@@ -1424,7 +1433,7 @@ _doctor_check_brew_links() {
   # exist for. None found: the probe runs unbounded, the same accepted degrade
   # as _doctor_check_dev_tools.
   local _timeout_bin _bound="${_DOCTOR_BREW_TIMEOUT:-60}"
-  _timeout_bin="$(_doctor_resolve_executable timeout "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}")"
+  _timeout_bin="$(_doctor_resolve_timeout)"
 
   # `local` is declared apart from the assignment: `local _out="$(…)"` would
   # replace the command's status with local's own and _rc would read 0.

@@ -64,6 +64,9 @@ setup() {
   _DOCTOR_WARN=0
 
   unset LINUX HAS_DEVTOOLS _DOCTOR_PROBE_TIMEOUT
+  # A real gtimeout sits at the default fallback paths on a provisioned mac,
+  # so leaving the seam unset would bound the no-timeout test's probe there.
+  export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-gtimeout"
 }
 
 teardown() {
@@ -294,6 +297,68 @@ STUB
   _zig_line="$(printf '%s\n' "$output" | grep 'zig')"
   [[ "${_zig_line}" == *"[WARN]"* ]]
   [[ "${_zig_line}" == *"does not run (rc 1)"* ]]
+}
+
+@test "_doctor_check_dev_tools bounds the probe with a fallback gtimeout when timeout is not on PATH" {
+  # macOS outside interactive zsh has only Homebrew's gtimeout. The fallback
+  # list is the one _doctor_check_brew_links uses; this one names a real
+  # timeout under the gtimeout name, so a kill (rc 124) proves it was used.
+  export LINUX=1 HAS_DEVTOOLS=1
+  export _DOCTOR_PROBE_TIMEOUT=1
+  local _no_timeout_dir="${BATS_TEST_TMPDIR}/bin_no_timeout"
+  local _fallback_dir="${BATS_TEST_TMPDIR}/fallback"
+  mkdir -p "${_no_timeout_dir}" "${_fallback_dir}"
+  ln -s "$(readlink "${_BIN_DIR}/timeout")" "${_fallback_dir}/gtimeout"
+  ln -s "$(readlink "${_BIN_DIR}/sleep")" "${_no_timeout_dir}/sleep"
+  cat > "${_no_timeout_dir}/terraform" <<'STUB'
+#!/bin/bash
+sleep 3; exit 0
+STUB
+  chmod +x "${_no_timeout_dir}/terraform"
+  export _TIMEOUT_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/missing/gtimeout ${_fallback_dir}/gtimeout"
+
+  PATH="${_no_timeout_dir}" run _doctor_check_dev_tools
+  [ "$status" -eq 0 ]
+  local _terraform_line
+  _terraform_line="$(printf '%s\n' "$output" | grep 'terraform')"
+  [[ "${_terraform_line}" == *"terraform: does not run (rc 124) — setup_env.sh -t developer"* ]]
+}
+
+@test "_doctor_check_dev_tools prefers timeout on PATH over the gtimeout fallback" {
+  export LINUX=1 HAS_DEVTOOLS=1
+  local _fallback_dir="${BATS_TEST_TMPDIR}/fallback"
+  mkdir -p "${_fallback_dir}"
+  cat > "${_fallback_dir}/gtimeout" <<STUB
+#!/bin/bash
+printf 'gtimeout %s\n' "\$*" >> "${MOCK_CALLS_FILE}"
+exit 1
+STUB
+  chmod +x "${_fallback_dir}/gtimeout"
+  export _TIMEOUT_FALLBACK_PATHS="${_fallback_dir}/gtimeout"
+  _write_stub "zig" "exit 0"
+
+  PATH="${_BIN_DIR}" run _doctor_check_dev_tools
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"zig"* ]]
+  [[ "$(printf '%s\n' "$output" | grep 'zig')" == *"[PASS]"* ]]
+  [ ! -s "${MOCK_CALLS_FILE}" ]
+}
+
+@test "_doctor_resolve_timeout: PATH timeout, else the first executable fallback, else nothing" {
+  local _fallback_dir="${BATS_TEST_TMPDIR}/fallback" _empty_dir="${BATS_TEST_TMPDIR}/empty"
+  mkdir -p "${_fallback_dir}" "${_empty_dir}"
+  : > "${_fallback_dir}/not-exec"
+  ln -s "$(readlink "${_BIN_DIR}/timeout")" "${_fallback_dir}/gtimeout"
+  export _TIMEOUT_FALLBACK_PATHS="${_fallback_dir}/not-exec ${_fallback_dir}/gtimeout"
+
+  PATH="${_BIN_DIR}" run _doctor_resolve_timeout
+  [ "$output" = "${_BIN_DIR}/timeout" ]
+  PATH="${_empty_dir}" run _doctor_resolve_timeout
+  [ "$output" = "${_fallback_dir}/gtimeout" ]
+  export _TIMEOUT_FALLBACK_PATHS="${_fallback_dir}/not-exec"
+  PATH="${_empty_dir}" run _doctor_resolve_timeout
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 # ── T2: the probe must actually run from HOME, not from the caller's cwd
