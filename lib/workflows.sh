@@ -642,7 +642,6 @@ run_developer_or_ansible() {
   printf "Installing exa-mcp-server via npm\n"
   npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
 
-  install_ruby_tools || return 1
   install_ruby || return 1
   setup_ansible || return 1
   clone_personal_repos

@@ -30,13 +30,7 @@ for arg in "${args[@]}"; do
     mkdir -p "${targetdir}/${dirname}"
     touch "${targetdir}/${dirname}/shellcheck"
   fi
-  # Create stub directories for ruby-install and chruby tarballs
-  if [[ "$arg" =~ ruby-install-.*\.tar\.gz$ ]]; then
-    if [[ -n "${target}" ]]; then
-      dirname=$(basename "$arg" .tar.gz)
-      mkdir -p "${target}/${dirname}"
-    fi
-  fi
+  # Create stub directories for chruby tarballs
   if [[ "$arg" =~ chruby-.*\.tar\.gz$ ]]; then
     if [[ -n "${target}" ]]; then
       dirname=$(basename "$arg" .tar.gz)

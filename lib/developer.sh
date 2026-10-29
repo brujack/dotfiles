@@ -385,58 +385,6 @@ setup_vim_plugins() {
   fi
 }
 
-# install_ruby_tools -- builds ruby-install from its release tarball and
-# installs it as root, so the tarball is checked against RUBY_INSTALL_SHA256
-# before anything is extracted. The pin must be recorded for RUBY_INSTALL_VER
-# (RUBY_INSTALL_SHA256_FOR_VER), so a version bump without a new pin fails
-# closed. The release asset is pinned, not GitHub's archive/ tarball, whose
-# bytes GitHub generates on demand.
-install_ruby_tools() {
-  printf "Installing ruby-install on linux\\n"
-  [[ -n ${LINUX} ]] || return 0
-  local _dir="${HOME}/software_downloads"
-  local _name="ruby-install-${RUBY_INSTALL_VER}"
-  [[ -d "${_dir}/${_name}" ]] && return 0
-
-  if ! _sha256_pin_ok "${RUBY_INSTALL_SHA256}"; then
-    log_error "ruby-install: RUBY_INSTALL_SHA256 is not a sha256: ${RUBY_INSTALL_SHA256}"
-    return 1
-  fi
-  if [[ "${RUBY_INSTALL_SHA256_FOR_VER}" != "${RUBY_INSTALL_VER}" ]]; then
-    log_error "ruby-install: RUBY_INSTALL_SHA256 is for ${RUBY_INSTALL_SHA256_FOR_VER}, not ${RUBY_INSTALL_VER}; pin the new release in lib/constants.sh"
-    return 1
-  fi
-
-  local _url="https://github.com/postmodern/ruby-install/releases/download/v${RUBY_INSTALL_VER}/${_name}.tar.gz"
-  local _tmp
-  _tmp="$(mktemp -d "${TMPDIR:-/tmp}/ruby-install.XXXXXXXX")" || return 1
-  if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_tmp}/${_name}.tar.gz" "${_url}"; then
-    log_error "ruby-install: download failed: ${_url}"
-    rm -rf "${_tmp}"
-    return 1
-  fi
-  if ! _sha256_check ruby-install "${_tmp}/${_name}.tar.gz" RUBY_INSTALL_SHA256 \
-    "${RUBY_INSTALL_SHA256}" "${_url}" "not extracting it"; then
-    rm -rf "${_tmp}"
-    return 1
-  fi
-  if ! tar -xzf "${_tmp}/${_name}.tar.gz" -C "${_tmp}" || [[ ! -f "${_tmp}/${_name}/Makefile" ]]; then
-    log_error "ruby-install: archive has no ${_name}/Makefile"
-    rm -rf "${_tmp}"
-    return 1
-  fi
-  if ! { mkdir -p "${_dir}" && mv "${_tmp}/${_name}" "${_dir}/${_name}"; }; then
-    log_error "ruby-install: could not move ${_name} into ${_dir}"
-    rm -rf "${_tmp}"
-    return 1
-  fi
-  rm -rf "${_tmp}"
-  if ! sudo make -C "${_dir}/${_name}" install; then
-    log_error "ruby-install: make install failed in ${_dir}/${_name}"
-    return 1
-  fi
-}
-
 install_ruby() {
   if [[ ! -d ${HOME}/.rubies/ruby-${RUBY_VER}/bin ]]; then
     printf "Install ruby %s\\n" "${RUBY_VER}"
