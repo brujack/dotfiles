@@ -104,6 +104,14 @@ PACKER_VER="1.16.1"
 PYTHON_VER="3.14.8"
 # read by lib/developer.sh:install_ruby_tools
 RUBY_INSTALL_VER="0.10.2"
+# sha256 of the ruby-install-<ver>.tar.gz release asset, which is built and
+# installed as root. Hand-bumped with RUBY_INSTALL_VER: download the asset and
+# its .asc, check the signature (Postmodern, primary key
+# 04B2F3EA654140BCC7DA1B5754C3D9E9B9515E77), then pin the digest and _FOR_VER.
+# read by lib/developer.sh:install_ruby_tools
+RUBY_INSTALL_SHA256="65836158b8026992b2e96ed344f3d888112b2b105d0166ecb08ba3b4a0d91bf6"
+# read by lib/developer.sh:install_ruby_tools
+RUBY_INSTALL_SHA256_FOR_VER="0.10.2"
 # read by lib/developer.sh:install_ruby, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions, .config/.zshrc.d/5_general.zsh
 RUBY_VER="4.0.7"
 # read by lib/workflows.sh:run_check_versions and
