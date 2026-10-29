@@ -7,15 +7,17 @@
 #
 # Five renderings, deliberately separate files -- do not harmonise them:
 #   test-lint    -> requirements-ci.txt              the full local/dev test set
-#   runtime      -> requirements-runtime-ci.txt      no consumer
+#   runtime      -> requirements-runtime-ci.txt      no consumer yet (see below)
 #   ci-test      -> requirements-ci-test.txt         per-PR test/lint jobs
 #   ci-mutation  -> requirements-ci-mutation.txt     mutation jobs
 #   ci-audit     -> requirements-ci-audit.txt        pip-audit dependency audit
 # They exist because the consumers genuinely differ: etch-cli's CI copies only
 # ci-test, while ai-config and state-ledger add ci-audit to their CI jobs and
 # ci-mutation to their mutation jobs, and none of them needs the much larger
-# test-lint set. terraform_ansible keeps its own ansible/requirements-ci.txt
-# and reads none of these. See pyproject.toml for the boundary rule governing
+# test-lint set. runtime is the ansible/molecule set with no test tooling,
+# rendered ahead of a terraform_ansible adoption on purpose (dotfiles#232);
+# terraform_ansible still keeps its own ansible/requirements-ci.txt, so nothing
+# installs runtime today. See pyproject.toml for the boundary rule governing
 # what may enter ci-test.
 #
 # `sync` writes them; `check` fails if a committed copy has drifted.
