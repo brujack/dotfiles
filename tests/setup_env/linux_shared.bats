@@ -195,28 +195,39 @@ EOF
 # with a newer candidate.
 
 @test "_apt_pkg_installed: an installed package (ii) is installed" {
-  export MOCK_DPKG_STATUS_git=ii
+  export MOCK_DPKG_STATUS_git="ii "
   run _apt_pkg_installed git
   [ "$status" -eq 0 ]
 }
 
 @test "_apt_pkg_installed: a held package (hi) is installed" {
-  export MOCK_DPKG_STATUS_git=hi
+  export MOCK_DPKG_STATUS_git="hi "
   run _apt_pkg_installed git
   [ "$status" -eq 0 ]
 }
 
 @test "_apt_pkg_installed: removed-config (rc), half-installed (iU) and absent are not installed" {
-  export MOCK_DPKG_STATUS_git=rc
+  export MOCK_DPKG_STATUS_git="rc "
   run _apt_pkg_installed git
   [ "$status" -eq 1 ]
-  export MOCK_DPKG_STATUS_git=iU
+  export MOCK_DPKG_STATUS_git="iU "
   run _apt_pkg_installed git
   [ "$status" -eq 1 ]
-  export MOCK_DPKG_STATUS_git=hU
+  export MOCK_DPKG_STATUS_git="hU "
   run _apt_pkg_installed git
   [ "$status" -eq 1 ]
   unset MOCK_DPKG_STATUS_git
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+}
+
+@test "_apt_pkg_installed: a reinstall-required package (iiR, hiR) is not installed" {
+  # dpkg sets the third Status-Abbrev column to R after a failed unpack. The
+  # package is broken, so the guard must send it to apt install, not skip it.
+  export MOCK_DPKG_STATUS_git=iiR
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+  export MOCK_DPKG_STATUS_git=hiR
   run _apt_pkg_installed git
   [ "$status" -eq 1 ]
 }
@@ -226,8 +237,8 @@ EOF
 @test "install_zsh_linux: skips when zsh and zsh-doc are both installed" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_zsh=ii
-  export MOCK_DPKG_STATUS_zsh_doc=ii
+  export MOCK_DPKG_STATUS_zsh="ii "
+  export MOCK_DPKG_STATUS_zsh_doc="ii "
   run install_zsh_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
@@ -237,8 +248,8 @@ EOF
 @test "install_zsh_linux: skips when zsh and zsh-doc are held" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_zsh=hi
-  export MOCK_DPKG_STATUS_zsh_doc=hi
+  export MOCK_DPKG_STATUS_zsh="hi "
+  export MOCK_DPKG_STATUS_zsh_doc="hi "
   run install_zsh_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
@@ -248,7 +259,7 @@ EOF
 @test "install_zsh_linux: installs when zsh-doc is absent" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_zsh=ii
+  export MOCK_DPKG_STATUS_zsh="ii "
   unset MOCK_DPKG_STATUS_zsh_doc
   run install_zsh_linux
   [ "$status" -eq 0 ]
@@ -260,10 +271,10 @@ EOF
 @test "install_zsh_linux: installs when zsh is in rc state" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_zsh=rc
+  export MOCK_DPKG_STATUS_zsh="rc "
   # zsh-doc must read as installed here — otherwise its absence alone would
   # explain the guard failing, and the test would say nothing about `rc`.
-  export MOCK_DPKG_STATUS_zsh_doc=ii
+  export MOCK_DPKG_STATUS_zsh_doc="ii "
   run install_zsh_linux
   [ "$status" -eq 0 ]
   grep -q "apt install zsh zsh-doc" "${MOCK_CALLS_FILE}"
@@ -347,7 +358,7 @@ EOF
 @test "install_git_linux: skips when git is already installed" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_git=ii
+  export MOCK_DPKG_STATUS_git="ii "
   run install_git_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
@@ -357,7 +368,7 @@ EOF
 @test "install_git_linux: skips when git is held" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_git=hi
+  export MOCK_DPKG_STATUS_git="hi "
   run install_git_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
@@ -389,7 +400,7 @@ EOF
 @test "install_git_linux: installs when git is in rc state" {
   unset MACOS
   export LINUX=1 UBUNTU=1
-  export MOCK_DPKG_STATUS_git=rc
+  export MOCK_DPKG_STATUS_git="rc "
   run install_git_linux
   [ "$status" -eq 0 ]
   grep -q "apt install git" "${MOCK_CALLS_FILE}"

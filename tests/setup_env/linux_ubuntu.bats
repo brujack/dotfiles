@@ -1994,7 +1994,9 @@ exit 0'
 # dpkg -l stub for the driver guard. It prints a header, then an `ii` row for
 # each package in SHIM_DPKG_INSTALLED, an `rc` row (removed, config files left)
 # for each in SHIM_DPKG_RC and an `hi` row (held, installed) for each in
-# SHIM_DPKG_HELD, so the guard's `^[ih]i ` filter is what separates them. It does not mimic real `dpkg -l <unknown>`, which prints
+# SHIM_DPKG_HELD, so the guard's `^[ih]i ` filter is what separates them.
+# SHIM_DPKG_ROWS takes `<state>:<pkg>` pairs for any other state (`iiR`, `ri`),
+# padded to dpkg's three status columns. It does not mimic real `dpkg -l <unknown>`, which prints
 # only `dpkg-query: no packages found matching <name>` (no header) and exits 1.
 _nvidia_dpkg_shim() {
   cat > "${SHIM_DIR}/dpkg" << 'SHIM'
@@ -2010,6 +2012,9 @@ if [[ "$1" == "-l" ]]; then
   done
   for _p in ${SHIM_DPKG_HELD:-}; do
     [[ "$2" == "${_p}" ]] && printf 'hi  %s  1  amd64  stub\n' "${_p}"
+  done
+  for _e in ${SHIM_DPKG_ROWS:-}; do
+    [[ "$2" == "${_e#*:}" ]] && printf '%-3s %s  1  amd64  stub\n' "${_e%%:*}" "${_e#*:}"
   done
 fi
 exit 0
@@ -2072,6 +2077,58 @@ SHIM
   grep -q "dpkg -l nvidia-driver-${NVIDIA_DRIVER_VER}-open" "${MOCK_CALLS_FILE}"
   refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
   [[ "$output" != *"reboot required"* ]]
+  grep -Eq "install .*nvidia-container-toolkit( |$)" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: a reinstall-required -open (iiR, hiR) is reinstalled" {
+  # dpkg sets the third status column to R after a failed unpack, so the driver
+  # is broken. The guard's trailing space is what keeps `iiR` from reading as `ii`.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  local _state
+  for _state in iiR hiR; do
+    export SHIM_DPKG_ROWS="${_state}:nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+    # An empty listing also sends the guard to apt install, so prove the row is there.
+    dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" | grep -q "^${_state} *nvidia-driver-${NVIDIA_DRIVER_VER}-open "
+    : > "${MOCK_CALLS_FILE}"
+    run _install_ubuntu_nvidia
+    [ "$status" -eq 0 ]
+    grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+  done
+}
+
+@test "_install_ubuntu_nvidia: an -open selected for removal (ri, pi) goes to apt install" {
+  # `ri`/`pi` are installed but marked for removal or purge. Only `i` and `h` in
+  # the first column mean the operator wants the package kept.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  local _state
+  for _state in ri pi; do
+    export SHIM_DPKG_ROWS="${_state}:nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+    # An empty listing also sends the guard to apt install, so prove the row is there.
+    dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" | grep -q "^${_state} *nvidia-driver-${NVIDIA_DRIVER_VER}-open "
+    : > "${MOCK_CALLS_FILE}"
+    run _install_ubuntu_nvidia
+    [ "$status" -eq 0 ]
+    grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
+  done
+}
+
+@test "_install_ubuntu_nvidia: a reinstall-required container toolkit (iiR) is reinstalled" {
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  _nvidia_dpkg_shim
+  export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+  export SHIM_DPKG_ROWS="iiR:nvidia-container-toolkit"
+  dpkg -l nvidia-container-toolkit | grep -q "^iiR nvidia-container-toolkit "
+  run _install_ubuntu_nvidia
+  [ "$status" -eq 0 ]
+  refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
   grep -Eq "install .*nvidia-container-toolkit( |$)" "${MOCK_CALLS_FILE}"
 }
 
