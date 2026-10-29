@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # lib/linux_shared.sh — Ubuntu Linux install functions (git, zsh, bats, updates)
 
+# A held package (`apt-mark hold`) reads `hi` and is installed; matching only
+# `ii` would reinstall it, which apt refuses when a newer candidate exists.
 _apt_pkg_installed() {
-  dpkg-query -f '${db:Status-Abbrev}' -W "${1}" 2>/dev/null | grep -q '^ii'
+  dpkg-query -f '${db:Status-Abbrev}' -W "${1}" 2>/dev/null | grep -q '^[ih]i'
 }
 
 install_git_linux() {

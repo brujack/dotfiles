@@ -425,7 +425,8 @@ check_and_install_nala() {
   log_info "Installing nala"
   if [[ "$(uname -s)" = "Linux" ]]; then
     if [[ $(awk -F= '/^NAME/{print $2}' /etc/os-release | tr -d '"') = "Ubuntu" ]]; then
-      if ! dpkg -l nala 2>/dev/null | grep -q '^ii'; then
+      # `hi` is a held nala, which is installed (see _apt_pkg_installed).
+      if ! dpkg -l nala 2>/dev/null | grep -q '^[ih]i '; then
         log_info "Installing nala via apt"
         sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" nala -y
       fi
