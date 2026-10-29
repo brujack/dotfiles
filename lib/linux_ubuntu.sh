@@ -1205,7 +1205,8 @@ _install_ubuntu_hashicorp() {
     # shellcheck disable=SC2016 # dpkg-query's own ${...} format syntax, not a shell expansion
     _status="$(dpkg-query -W -f='${db:Status-Abbrev} ${Version}' "${_tool}" 2> /dev/null)" || _status=""
     _dv="${_status##* }"
-    if [[ ${_status} == "ii "* && ${_dv} == "${_ver}"-* ]]; then
+    # `hi` is held at that version, which is installed too.
+    if [[ ${_status} == [ih]"i "* && ${_dv} == "${_ver}"-* ]]; then
       printf '%s: up to date (%s)\n' "${_tool}" "${_dv}"
       _hashicorp_retire_stamped "${_tool}" shadows || _hc_rc=1
     else

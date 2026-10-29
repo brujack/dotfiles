@@ -166,6 +166,30 @@ teardown() {
   refute_grep "apt install nala" "${MOCK_CALLS_FILE}"
 }
 
+@test "check_and_install_nala skips install when nala is held" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export HOME="${BATS_TEST_TMPDIR}"
+  # `apt-mark hold nala` lists as 'hi'; it is installed, and apt refuses to
+  # reinstall a held package that has a newer candidate.
+  export MOCK_DPKG_L_NALA="hi  nala  0.15.0  amd64  Commandline Package Manager"
+  unset RESOLUTE
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  refute_grep "apt install nala" "${MOCK_CALLS_FILE}"
+}
+
+@test "check_and_install_nala installs nala when only its config remains (rc)" {
+  export MOCK_UNAME_S=Linux
+  export MOCK_AWK_OS_NAME="Ubuntu"
+  export HOME="${BATS_TEST_TMPDIR}"
+  export MOCK_DPKG_L_NALA="rc  nala  0.15.0  amd64  Commandline Package Manager"
+  unset RESOLUTE
+  run check_and_install_nala
+  [ "$status" -eq 0 ]
+  grep -q "apt install .*nala" "${MOCK_CALLS_FILE}"
+}
+
 # Every dpkg-running sudo call needs DEBIAN_FRONTEND on its own command line:
 # needrestart's apt hook raises a debconf dialog when stdout is not a tty, and
 # sudo does not pass the caller's value through.

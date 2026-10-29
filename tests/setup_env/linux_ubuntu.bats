@@ -3148,6 +3148,26 @@ _HC_CONFFILE='[-o][Dpkg::Options::=--force-confdef][-o][Dpkg::Options::=--force-
   [[ "$output" == *"vagrant: up to date"* ]]
 }
 
+@test "_install_ubuntu_hashicorp: a held package at the pinned version is up to date" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="hi  ${PACKER_VER}-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"packer: up to date (${PACKER_VER}-1)"* ]]
+  refute_grep -F "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_hashicorp: a held package at an older version is still installed" {
+  _hc_env
+  unset MOCK_DPKG_QUERY_EXIT
+  export MOCK_DPKG_STATUS_packer="hi  1.0.0-1" MOCK_DPKG_STATUS_vagrant="ii  ${VAGRANT_VER}-1"
+  run _install_ubuntu_hashicorp
+  [ "$status" -eq 0 ]
+  grep -qF "packer=${PACKER_VER}-*" "${MOCK_CALLS_FILE}"
+  [[ "$output" != *"packer: up to date"* ]]
+}
+
 @test "_install_ubuntu_hashicorp: an older installed version is installed again" {
   _hc_env
   unset MOCK_DPKG_QUERY_EXIT

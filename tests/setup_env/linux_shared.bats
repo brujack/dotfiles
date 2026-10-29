@@ -189,6 +189,38 @@ EOF
   refute_grep "apt " "${MOCK_CALLS_FILE}"
 }
 
+# ── _apt_pkg_installed ───────────────────────────────────────────────────────
+# A package held with `apt-mark hold` reads `hi`, and it is installed: treating
+# it as absent makes setup reinstall it, which apt refuses for a held package
+# with a newer candidate.
+
+@test "_apt_pkg_installed: an installed package (ii) is installed" {
+  export MOCK_DPKG_STATUS_git=ii
+  run _apt_pkg_installed git
+  [ "$status" -eq 0 ]
+}
+
+@test "_apt_pkg_installed: a held package (hi) is installed" {
+  export MOCK_DPKG_STATUS_git=hi
+  run _apt_pkg_installed git
+  [ "$status" -eq 0 ]
+}
+
+@test "_apt_pkg_installed: removed-config (rc), half-installed (iU) and absent are not installed" {
+  export MOCK_DPKG_STATUS_git=rc
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+  export MOCK_DPKG_STATUS_git=iU
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+  export MOCK_DPKG_STATUS_git=hU
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+  unset MOCK_DPKG_STATUS_git
+  run _apt_pkg_installed git
+  [ "$status" -eq 1 ]
+}
+
 # ── install_zsh_linux ────────────────────────────────────────────────────────
 
 @test "install_zsh_linux: skips when zsh and zsh-doc are both installed" {
@@ -196,6 +228,17 @@ EOF
   export LINUX=1 UBUNTU=1
   export MOCK_DPKG_STATUS_zsh=ii
   export MOCK_DPKG_STATUS_zsh_doc=ii
+  run install_zsh_linux
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  refute_grep "apt install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_zsh_linux: skips when zsh and zsh-doc are held" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_DPKG_STATUS_zsh=hi
+  export MOCK_DPKG_STATUS_zsh_doc=hi
   run install_zsh_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
@@ -305,6 +348,16 @@ EOF
   unset MACOS
   export LINUX=1 UBUNTU=1
   export MOCK_DPKG_STATUS_git=ii
+  run install_git_linux
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already installed"* ]]
+  refute_grep "apt install" "${MOCK_CALLS_FILE}"
+}
+
+@test "install_git_linux: skips when git is held" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  export MOCK_DPKG_STATUS_git=hi
   run install_git_linux
   [ "$status" -eq 0 ]
   [[ "$output" == *"already installed"* ]]
