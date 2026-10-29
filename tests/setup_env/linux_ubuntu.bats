@@ -3582,6 +3582,21 @@ _hc_refresh_fixture() {
   refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_hashicorp: a refresh whose signer check cannot run says so instead of reading as no rotation" {
+  _hc_env
+  # never-fetched prints the rotation hint when the parser runs (test above), so
+  # only the parser failure can take it away here.
+  _hc_refresh_fixture never-fetched
+  _apt_stale_signer_hosts() { printf '_apt_scan_failed_hosts: signer lists undefined\n' >&2; return 1; }
+  run --separate-stderr _install_ubuntu_hashicorp
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"hashicorp: could not check the refresh output for a key rotation (the signer parser failed, see above); a rotated key is not ruled out"* ]]
+  [[ "$stderr" != *"is not verified by keys/hashicorp.asc"* ]]
+  [[ "$stderr" != *"; see the next line"* ]]
+  [[ "$stderr" == *"; re-run ./setup_env.sh -t developer"* ]]
+  refute_grep 'apt-get install' "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_hashicorp: an unserved codename says the repo returned 404 and prints no rotation hint" {
   _hc_env
   _hc_refresh_fixture no-release
@@ -3797,6 +3812,21 @@ _HC_HOST_LINE='deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
   [ "$status" -eq 1 ]
   run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: connection reset"
   [ "$status" -eq 1 ]
+}
+
+# The signer lists and DOTFILES_REPO_ROOT are readonly, so the parser's own failure
+# is stood in for by redefining it: rc 1 is what _apt_scan_failed_hosts returns when
+# it cannot run.
+@test "_hashicorp_rotation_hint_fires: returns 2, not 1, when the signer parser fails" {
+  _apt_stale_signer_hosts() { printf '_apt_scan_failed_hosts: signer lists undefined\n' >&2; return 1; }
+  run --separate-stderr _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: NO_PUBKEY ABCDEF"
+  [ "$status" -eq 2 ]
+}
+
+@test "_hashicorp_rotation_hint_fires: a failed parser's partial output still returns 2, never 0" {
+  _apt_stale_signer_hosts() { printf 'apt.releases.hashicorp.com\tNO_PUBKEY\n'; return 1; }
+  run _hashicorp_rotation_hint_fires "W: https://apt.releases.hashicorp.com noble InRelease: NO_PUBKEY ABCDEF"
+  [ "$status" -eq 2 ]
 }
 
 @test "_install_ubuntu_hashicorp: a lowercase enabled: no stanza raises no warning" {
