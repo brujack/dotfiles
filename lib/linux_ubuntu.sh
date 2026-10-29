@@ -764,7 +764,7 @@ _install_rustup_rs() {
   local _tmp
   _tmp="$(mktemp -d)" || return 1
 
-  if ! curl -fsSL -o "${_tmp}/rustup-init" "${_RUSTUP_INIT_URL:-${RUSTUP_INIT_URL}}"; then
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_tmp}/rustup-init" "${_RUSTUP_INIT_URL:-${RUSTUP_INIT_URL}}"; then
     log_error "rustup-init download failed"
     rm -rf "${_tmp}"
     return 1
@@ -878,7 +878,7 @@ _install_ubuntu_nvidia() {
     local _ltmp
     _ltmp="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/nvidia-list.XXXXXXXX")" || return 1
     # shellcheck disable=SC2024 # the redirect is read by the invoking user on purpose: the throwaway dir is user-owned and sudo only needs the content on stdin
-    if ! curl -fsSL -o "${_ltmp}/list" "${NVIDIA_CONTAINER_LIST_URL}" \
+    if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_ltmp}/list" "${NVIDIA_CONTAINER_LIST_URL}" \
       || ! sed "s#deb https://#deb [signed-by=${_keyring}] https://#g" "${_ltmp}/list" > "${_ltmp}/list.signed" \
       || ! sudo -H tee "${_list}" < "${_ltmp}/list.signed" > /dev/null; then
       log_warn "nvidia: container toolkit source list failed"
@@ -1586,7 +1586,7 @@ _install_apt_keyring() {
     rm -rf "${_dir}"
     return 1
   fi
-  if ! curl -fsSL -o "${_dir}/key" "${_url}"; then
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_dir}/key" "${_url}"; then
     log_warn "${_ring}: key download failed"
     rm -rf "${_dir}"
     return 1
@@ -1888,7 +1888,7 @@ _install_ubuntu_albert() {
     return 2
   }
 
-  if ! curl -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_dir}/albert-key.asc" "${_url}"; then
     rm -rf "${_dir}"
     log_warn "albert key fetch failed (${_url}); ${_keep_note}"
     return 2
@@ -2083,7 +2083,7 @@ _install_pinned_release_binary() {
   fi
 
   local _artifact="${_tmp}/${_name}.download"
-  if ! curl -fsSL -o "${_artifact}" "${_url}"; then
+  if ! curl --proto '=https' --proto-redir '=https' -fsSL -o "${_artifact}" "${_url}"; then
     log_error "${_name} download failed"
     rm -rf "${_tmp}"
     return 1

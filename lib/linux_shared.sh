@@ -288,7 +288,7 @@ _apt_signer_remedy() {
       # Two steps because the installer re-fetches only when tofu is absent; staging
       # keeps a failed or non-key download away from the live keyring.
       # shellcheck disable=SC2016 # the text is shown to the operator to paste; $d must stay literal
-      printf '%s\n' 'Stage and show: `d=$(mktemp -d) && curl -fsSL -o "$d/key" https://packages.opentofu.org/opentofu/tofu/gpgkey && gpg --batch --dearmor -o "$d/ring" "$d/key" && gpg --show-keys "$d/ring" && echo "$d"`. Compare the printed fingerprint with OpenTofu'"'"'s published key. Then install: `sudo install -m 0644 "$d/ring" /etc/apt/keyrings/opentofu-archive-keyring.gpg.new && sudo mv -f /etc/apt/keyrings/opentofu-archive-keyring.gpg.new /etc/apt/keyrings/opentofu-archive-keyring.gpg && rm -rf "$d"`'
+      printf '%s\n' 'Stage and show: `d=$(mktemp -d) && curl --proto "=https" --proto-redir "=https" -fsSL -o "$d/key" https://packages.opentofu.org/opentofu/tofu/gpgkey && gpg --batch --dearmor -o "$d/ring" "$d/key" && gpg --show-keys "$d/ring" && echo "$d"`. Compare the printed fingerprint with OpenTofu'"'"'s published key. Then install: `sudo install -m 0644 "$d/ring" /etc/apt/keyrings/opentofu-archive-keyring.gpg.new && sudo mv -f /etc/apt/keyrings/opentofu-archive-keyring.gpg.new /etc/apt/keyrings/opentofu-archive-keyring.gpg && rm -rf "$d"`'
       ;;
     packages.microsoft.com)
       printf '%s\n' "verify Microsoft's new key, replace keys/microsoft.asc and bump MS_GPG_FPR in lib/constants.sh"

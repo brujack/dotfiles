@@ -381,7 +381,7 @@ setup_vim_plugins() {
     chmod 770 "${HOME}"/.vim/autoload
   fi
   if [[ ! -f ${HOME}/.vim/autoload/plug.vim ]]; then
-    curl -fLo "${HOME}"/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    curl --proto '=https' --proto-redir '=https' -fLo "${HOME}"/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
   fi
 }
 

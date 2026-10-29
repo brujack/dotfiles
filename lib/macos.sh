@@ -79,7 +79,7 @@ install_homebrew() {
 
   log_info "Installing Homebrew..."
   local _brew_script
-  _brew_script="$(curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh")" || {
+  _brew_script="$(curl --proto '=https' --proto-redir '=https' -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh")" || {
     log_error "Failed to download Homebrew installer. Aborting."
     return 1
   }

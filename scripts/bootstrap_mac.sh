@@ -20,7 +20,7 @@ _bootstrap_mac_install_homebrew() {
   fi
   printf "[INFO]  Installing Homebrew...\n"
   local _script
-  _script=$(curl -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh") || return 1
+  _script=$(curl --proto '=https' --proto-redir '=https' -fsSL "https://raw.githubusercontent.com/Homebrew/install/${HOMEBREW_INSTALL_SHA}/install.sh") || return 1
   /bin/bash -c "${_script}"
 }
 

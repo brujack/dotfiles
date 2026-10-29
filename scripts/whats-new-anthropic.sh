@@ -27,7 +27,7 @@ print(text)
 
 fetch_platform_notes() {
   local _raw
-  _raw="$(curl -sL "${PLATFORM_URL}")" || { printf "Error: failed to fetch platform release notes\n" >&2; return 1; }
+  _raw="$(curl --proto '=https' --proto-redir '=https' -sL "${PLATFORM_URL}")" || { printf "Error: failed to fetch platform release notes\n" >&2; return 1; }
   printf "%s" "${_raw}" | strip_html
 }
 
