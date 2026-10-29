@@ -1117,9 +1117,13 @@ _hashicorp_refresh_failed_line() {
 
 # rc 0 when a W: or E: line of the refresh output names the host together with a
 # signature-verification token: the signer is not the one keys/hashicorp.asc holds.
+# rc 1 when no line does; rc 2 when the signer parser could not run, so a broken
+# parser is never read as "no rotation".
 # Usage: _hashicorp_rotation_hint_fires <apt output>
 _hashicorp_rotation_hint_fires() {
-  printf '%s\n' "$1" | _apt_stale_signer_hosts | cut -f1 | command grep -qxF apt.releases.hashicorp.com
+  local _hosts
+  _hosts="$(printf '%s\n' "$1" | _apt_stale_signer_hosts)" || return 2
+  cut -f1 <<< "${_hosts}" | command grep -qxF apt.releases.hashicorp.com
 }
 
 # The one next action that ends the refresh-failed line.
@@ -1269,10 +1273,12 @@ _install_ubuntu_hashicorp() {
     -o "Dir::Etc::sourcelist=${_list}" -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 2>&1)
   _rc=$?
   if ((_rc != 0)); then
-    local _hint=0
-    _hashicorp_rotation_hint_fires "${_out}" && _hint=1
+    local _hint=0 _hint_rc=0
+    _hashicorp_rotation_hint_fires "${_out}" || _hint_rc=$?
+    ((_hint_rc == 0)) && _hint=1
     [[ -n ${_out} ]] && printf '%s\n' "${_out}" >&2
     log_warn "$(_hashicorp_refresh_failed_line "${_rc}" "${_out}" "${_joined}")$(_hashicorp_refresh_next_action "${_out}" "${_codename}" "${_hint}")"
+    ((_hint_rc != 2)) || log_warn "hashicorp: could not check the refresh output for a key rotation (the signer parser failed, see above); a rotated key is not ruled out"
     ((_hint == 0)) || log_warn "hashicorp: apt.releases.hashicorp.com is not verified by keys/hashicorp.asc (key rotated or expired, or the host served unsigned data); re-vendor keys/hashicorp.asc from https://apt.releases.hashicorp.com/gpg after verifying it out of band, and if its primary fingerprint changed also edit HASHICORP_GPG_FPR in lib/constants.sh"
     return 1
   fi
