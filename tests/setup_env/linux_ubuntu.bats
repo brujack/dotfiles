@@ -2089,8 +2089,10 @@ SHIM
   _nvidia_dpkg_shim
   local _state
   for _state in iiR hiR; do
-    : > "${MOCK_CALLS_FILE}"
     export SHIM_DPKG_ROWS="${_state}:nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+    # An empty listing also sends the guard to apt install, so prove the row is there.
+    dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" | grep -q "^${_state} *nvidia-driver-${NVIDIA_DRIVER_VER}-open "
+    : > "${MOCK_CALLS_FILE}"
     run _install_ubuntu_nvidia
     [ "$status" -eq 0 ]
     grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
@@ -2106,8 +2108,10 @@ SHIM
   _nvidia_dpkg_shim
   local _state
   for _state in ri pi; do
-    : > "${MOCK_CALLS_FILE}"
     export SHIM_DPKG_ROWS="${_state}:nvidia-driver-${NVIDIA_DRIVER_VER}-open"
+    # An empty listing also sends the guard to apt install, so prove the row is there.
+    dpkg -l "nvidia-driver-${NVIDIA_DRIVER_VER}-open" | grep -q "^${_state} *nvidia-driver-${NVIDIA_DRIVER_VER}-open "
+    : > "${MOCK_CALLS_FILE}"
     run _install_ubuntu_nvidia
     [ "$status" -eq 0 ]
     grep -Eq "install .*nvidia-driver-${NVIDIA_DRIVER_VER}-open( |$)" "${MOCK_CALLS_FILE}"
@@ -2121,6 +2125,7 @@ SHIM
   _nvidia_dpkg_shim
   export SHIM_DPKG_INSTALLED="nvidia-driver-${NVIDIA_DRIVER_VER}-open"
   export SHIM_DPKG_ROWS="iiR:nvidia-container-toolkit"
+  dpkg -l nvidia-container-toolkit | grep -q "^iiR nvidia-container-toolkit "
   run _install_ubuntu_nvidia
   [ "$status" -eq 0 ]
   refute_grep "install .*nvidia-driver-" "${MOCK_CALLS_FILE}" -E
