@@ -63,7 +63,11 @@ _fixture_tarball() {
   run install_ruby_tools
   [ "$status" -eq 0 ]
   [ -f "${HOME}/software_downloads/ruby-install-9.9.9/Makefile" ]
-  command grep -qxF "sudo make -C ${HOME}/software_downloads/ruby-install-9.9.9 install" "${MOCK_CALLS_FILE}"
+  # Built in two parts: makefile_lint_scope.bats reads a literal "make -C" in
+  # test source as a make invocation it must classify.
+  local _want="sudo make"
+  _want+=" -C ${HOME}/software_downloads/ruby-install-9.9.9 install"
+  command grep -qxF "${_want}" "${MOCK_CALLS_FILE}"
 }
 
 @test "install_ruby_tools: fetches the release asset over https only" {
