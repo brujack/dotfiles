@@ -524,6 +524,9 @@ _rustup_mock_in() {
   {
     printf '#!/usr/bin/env bash\n'
     printf 'printf "%%s\\n" "$*" >> "%s"\n' "${_calls}"
+    # Mimics real rustup refusing a rust-toolchain.toml in the cwd that names
+    # an uninstalled toolchain (measured, rustup 1.29.2).
+    printf '[ -e "${PWD}/rust-toolchain.toml" ] && exit 1\n'
     printf '[ "$*" = "%s" ] && exit 1\n' "${_fail}"
     printf 'exit 0\n'
   } > "${_dir}/rustup"
@@ -578,6 +581,27 @@ _rust_mock() {
 self update
 update
 component add rust-analyzer" ]
+}
+
+# rustup honours a rust-toolchain.toml in the working directory and its parents,
+# so `-t update` run from inside a Rust repo pinned to an uninstalled toolchain
+# failed `show active-toolchain` (a spurious "no default toolchain" WARN), and
+# would otherwise have run `component add` against the pinned toolchain.
+@test "update_rust ignores a rust-toolchain.toml in the caller's working directory" {
+  _rust_mock "__none__"
+  mkdir -p "${BATS_TEST_TMPDIR}/pinned-repo"
+  printf '[toolchain]\nchannel = "1.42.0"\n' > "${BATS_TEST_TMPDIR}/pinned-repo/rust-toolchain.toml"
+  cd "${BATS_TEST_TMPDIR}/pinned-repo"
+  run update_rust
+  [ "$status" -eq 0 ]
+  [ "$(cat "${BATS_TEST_TMPDIR}/rustup_calls")" = "show active-toolchain
+self update
+update
+component add rust-analyzer" ]
+  # Called directly, not via `run` (itself a subshell): the function must not
+  # move its caller's working directory.
+  update_rust > /dev/null 2>&1
+  [ "${PWD}" = "${BATS_TEST_TMPDIR}/pinned-repo" ]
 }
 
 # ── update_rust on macOS ─────────────────────────────────────────────────────

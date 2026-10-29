@@ -354,6 +354,26 @@ cargo-denylist v9.9.9:
   refute_grep "install --locked" "${MOCK_CALLS_FILE}"
 }
 
+# cargo is a rustup proxy: run from inside a repo whose rust-toolchain.toml
+# names an uninstalled toolchain, `cargo --version` and `cargo install --list`
+# both fail (measured, rustup 1.29.2), so every pin read as absent and was
+# reinstalled -- with that repo's toolchain, had it been installed.
+@test "install_cargo_tools: ignores a rust-toolchain.toml in the caller's working directory" {
+  export HAS_RUST=1
+  export MOCK_CARGO_LIST
+  MOCK_CARGO_LIST="$(_cargo_list_fixture)"
+  mkdir -p "${BATS_TEST_TMPDIR}/pinned-repo"
+  printf '[toolchain]\nchannel = "1.42.0"\n' > "${BATS_TEST_TMPDIR}/pinned-repo/rust-toolchain.toml"
+  cd "${BATS_TEST_TMPDIR}/pinned-repo"
+  run install_cargo_tools
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cargo tools: cargo-audit 0.22.2 ok"* ]]
+  [[ "$output" != *"could not read cargo version"* ]]
+  refute_grep "install --locked" "${MOCK_CALLS_FILE}"
+  install_cargo_tools > /dev/null 2>&1
+  [ "${PWD}" = "${BATS_TEST_TMPDIR}/pinned-repo" ]
+}
+
 @test "install_cargo_tools: reads the list exactly once for an 8-pin run" {
   export HAS_RUST=1
   export MOCK_CARGO_LIST

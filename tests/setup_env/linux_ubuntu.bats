@@ -1836,6 +1836,29 @@ EOF
   grep -q "rustup component add rust-analyzer" "${MOCK_CALLS_FILE}"
 }
 
+# rustup honours a rust-toolchain.toml in the working directory, so a setup run
+# from inside a pinned Rust repo would update and add rust-analyzer to that
+# repo's toolchain, or fail when it is not installed (tests/mocks/rustup
+# mimics the refusal).
+@test "_install_ubuntu_rust: ignores a rust-toolchain.toml in the caller's working directory" {
+  export HAS_RUST=1
+  mkdir -p "${BATS_TEST_TMPDIR}/pinned-repo"
+  printf '[toolchain]\nchannel = "1.42.0"\n' > "${BATS_TEST_TMPDIR}/pinned-repo/rust-toolchain.toml"
+  cd "${BATS_TEST_TMPDIR}/pinned-repo"
+  run _install_ubuntu_rust
+  [ "$status" -eq 0 ]
+  grep -qx "rustup component add rust-analyzer" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_rust: a failing rustup call returns 1 and stops the sequence" {
+  export HAS_RUST=1
+  export MOCK_RUSTUP_EXIT=1
+  run _install_ubuntu_rust
+  [ "$status" -eq 1 ]
+  grep -qx "rustup self update" "${MOCK_CALLS_FILE}"
+  [ "$(grep -cx "rustup update" "${MOCK_CALLS_FILE}")" -eq 0 ]
+}
+
 # ── _install_rustup_rs ────────────────────────────────────────────────────────
 #
 # sha256sum and mktemp are deliberately NOT mocked, so the digest check runs for
