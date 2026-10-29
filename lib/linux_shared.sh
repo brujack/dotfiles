@@ -3,8 +3,10 @@
 
 # A held package (`apt-mark hold`) reads `hi` and is installed; matching only
 # `ii` would reinstall it, which apt refuses when a newer candidate exists.
+# The trailing space is the empty error column: `iiR`/`hiR` (reinstall required
+# after a failed unpack) is broken and must go to apt install.
 _apt_pkg_installed() {
-  dpkg-query -f '${db:Status-Abbrev}' -W "${1}" 2>/dev/null | grep -q '^[ih]i'
+  dpkg-query -f '${db:Status-Abbrev}' -W "${1}" 2>/dev/null | grep -q '^[ih]i '
 }
 
 install_git_linux() {
