@@ -516,3 +516,63 @@ _detect_verdicts() {
     esac
   done <<< "${_calls}"
 }
+
+# ---- Vagrantfile provisioner -----------------------------------------------
+# The Vagrantfile's shell provisioner runs its inline script as root, so its apt
+# calls carry no sudo and the tracked-file scans above never see them. Giving each
+# command line of that script a leading `sudo ` lets the same tokenizer judge both
+# verdicts. The script runs with no tty, so a conffile prompt fails the provision.
+_vagrant_provision_as_sudo() {
+  PATH="${_CLEAN_PATH}" awk '
+    /<<-EOS$/ { inside = 1; next }
+    inside && /^[[:space:]]*EOS$/ { inside = 0; next }
+    inside {
+      if (!cont) sub(/^[[:space:]]*/, "&sudo ")
+      print
+      cont = ($0 ~ /\\[[:space:]]*$/)
+    }
+  ' "$1"
+}
+
+@test "the Vagrantfile provisioner's dpkg-running apt calls carry the frontend and conffile options" {
+  local _fx="${BATS_TEST_TMPDIR}/vagrant-provision.sh" _calls _bad
+  _vagrant_provision_as_sudo "${REPO_ROOT}/Vagrantfile" > "${_fx}"
+  # An empty extraction must fail, not pass: the heredoc marker may have changed.
+  grep -q 'dist-upgrade' "${_fx}"
+  _calls="$(_dpkg_sudo_calls "${_fx}"; _conffile_calls "${_fx}")"
+  _bad="$(printf '%s\n' "${_calls}" | grep -E ':(conffile:)?bad$' | sed "s|^${_fx}:||" || true)"
+  if [[ -n "${_bad}" ]]; then
+    printf 'Vagrantfile provision apt call(s) missing DEBIAN_FRONTEND=noninteractive or the conffile options\n' >&2
+    printf '(line numbers count from the first line of the inline script):\n%s\n' "${_bad}" >&2
+    printf 'Fix: DEBIAN_FRONTEND=noninteractive apt <verb> ... -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold\n' >&2
+    return 1
+  fi
+  [ "$(printf '%s\n' "${_calls}" | grep -cE ':[0-9]+:ok$')" -gt 0 ]
+  [ "$(printf '%s\n' "${_calls}" | grep -c ':conffile:ok$')" -gt 0 ]
+}
+
+# Positive control for the extraction: a provisioner with a bare apt install must be
+# reported bad on both verdicts, and lines outside the heredoc must not be judged.
+@test "the Vagrantfile extraction reports a bare provisioner apt call on both verdicts" {
+  local _vf="${BATS_TEST_TMPDIR}/Vagrantfile" _fx="${BATS_TEST_TMPDIR}/vagrant-provision.sh"
+  printf '%s\n' \
+    '# sudo apt install outside -y' \
+    '  config.vm.provision "shell", inline: <<-EOS' \
+    '    apt update -y' \
+    '    DEBIAN_FRONTEND=noninteractive apt install -y \' \
+    '      -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold foo' \
+    '    apt dist-upgrade -y' \
+    '  EOS' \
+    'sudo apt install after -y' > "${_vf}"
+  _vagrant_provision_as_sudo "${_vf}" > "${_fx}"
+  run _dpkg_sudo_calls "${_fx}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf '%s\n' "${_fx}:2:ok" "${_fx}:4:bad")" ]
+  run _detect_verdicts_in "${_fx}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf '2:conffile:ok\n4:conffile:bad')" ]
+}
+
+_detect_verdicts_in() {
+  _conffile_calls "$1" | grep ':conffile:' | sed "s|^$1:||"
+}
