@@ -2228,10 +2228,16 @@ _install_ubuntu_tfenv() {
 
   local _root="${_TFENV_ROOT:-${HOME}/.tfenv}"
   local _links="${_TFENV_LINK_DIR:-/usr/local/bin}"
-  local _repo="${_TFENV_REPO_URL:-https://github.com/tfutils/tfenv.git}"
+  # _TFENV_REPO_URL is a test seam honoured only under bats, so an exported value
+  # cannot redirect the real clone; `--` keeps a value starting with `-` from
+  # being read as a git option (`--upload-pack=` runs a command).
+  local _repo="https://github.com/tfutils/tfenv.git"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TFENV_REPO_URL:-} ]]; then
+    _repo="${_TFENV_REPO_URL}"
+  fi
 
   if [[ ! -d "${_root}" ]]; then
-    if ! git clone "${_repo}" "${_root}"; then
+    if ! git clone -- "${_repo}" "${_root}"; then
       log_warn "tfenv clone into ${_root} failed; skipping"
       return 0
     fi

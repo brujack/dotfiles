@@ -108,7 +108,7 @@ FIXTURE
 @test "_install_ubuntu_tfenv: absent root clones tfenv from the configured URL" {
   run _install_ubuntu_tfenv
   [ "$status" -eq 0 ]
-  grep -q "^git clone ${_TFENV_REPO_URL} ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
+  grep -q "^git clone -- ${_TFENV_REPO_URL} ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_tfenv: clone failure warns and returns 0" {
@@ -138,7 +138,28 @@ FIXTURE
   unset _TFENV_REPO_URL
   run _install_ubuntu_tfenv
   [ "$status" -eq 0 ]
-  grep -q "^git clone https://github.com/tfutils/tfenv.git ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
+  grep -q "^git clone -- https://github.com/tfutils/tfenv.git ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
+}
+
+# Run the function as production would: BATS_TEST_TMPDIR is empty outside bats,
+# and `local` shadows it for this call only.
+_install_ubuntu_tfenv_outside_bats() {
+  local BATS_TEST_TMPDIR=""
+  _install_ubuntu_tfenv
+}
+
+@test "_install_ubuntu_tfenv: an exported repo URL is ignored outside bats, so it cannot redirect a real clone" {
+  run _install_ubuntu_tfenv_outside_bats
+  [ "$status" -eq 0 ]
+  grep -q "^git clone -- https://github.com/tfutils/tfenv.git ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
+  refute_grep "sentinel" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfenv: a repo URL starting with - reaches git after --, as a URL and not an option" {
+  export _TFENV_REPO_URL="--upload-pack=touch ${BATS_TEST_TMPDIR}/pwned"
+  run _install_ubuntu_tfenv
+  [ "$status" -eq 0 ]
+  grep -qxF "git clone -- --upload-pack=touch ${BATS_TEST_TMPDIR}/pwned ${_TFENV_ROOT}" "${MOCK_CALLS_FILE}"
 }
 
 # ── existing-but-invalid root (interrupted clone, stray mkdir, damaged
