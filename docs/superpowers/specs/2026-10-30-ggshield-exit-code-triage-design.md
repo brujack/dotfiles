@@ -1,6 +1,7 @@
 # pre-commit hook: triage the ggshield scan's exit code
 
 - **Date:** 2026-10-30
+- **Approved:** 2026-10-30
 - **Backlog row:** "The pre-commit hook resolves ggshield but never checks it is _usable_, and an unusable scanner blocks every commit" (P2 — CI)
 
 ## Problem
