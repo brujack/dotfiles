@@ -173,14 +173,106 @@ setup() {
   [ "${_t}" -lt "$(( _f / 2 ))" ]
 }
 
-@test "all four renderings are distinct files" {
-  local _a="${REPO_ROOT}/requirements-ci.txt"
-  local _b="${REPO_ROOT}/requirements-runtime-ci.txt"
-  local _c="${REPO_ROOT}/requirements-ci-test.txt"
-  local _d="${REPO_ROOT}/requirements-ci-mutation.txt"
-  run ! diff -q "${_a}" "${_c}"
-  run ! diff -q "${_c}" "${_d}"
-  run ! diff -q "${_b}" "${_d}"
+# Print each pair of identical files among the arguments, one `<a> <b>` line per
+# pair, and return 1 if there is any. Every pair is compared, so a duplicate
+# anywhere in the set is caught, not only between neighbours.
+_identical_pairs() {
+  local -a _files=("$@")
+  local _i _j _found=0
+  for ((_i = 0; _i < ${#_files[@]}; _i++)); do
+    for ((_j = _i + 1; _j < ${#_files[@]}; _j++)); do
+      if cmp -s "${_files[_i]}" "${_files[_j]}"; then
+        printf '%s %s\n' "${_files[_i]##*/}" "${_files[_j]##*/}"
+        _found=1
+      fi
+    done
+  done
+  return "${_found}"
+}
+
+# Fail, naming the cause, unless every argument is a non-empty file and no two
+# are identical. Two empty files compare equal, and a missing file makes cmp
+# exit 2, which _identical_pairs reads as "not identical": without the first
+# check a missing rendering would pass. Report either as itself, not as a match.
+_assert_distinct_files() {
+  local _f _pairs
+  for _f in "$@"; do
+    [ -s "${_f}" ] || { printf 'missing or empty: %s\n' "${_f}" >&2; return 1; }
+  done
+  _pairs="$(_identical_pairs "$@")" && return 0
+  printf 'identical renderings:\n%s\n' "${_pairs}" >&2
+  return 1
+}
+
+@test "all five renderings are pairwise distinct files" {
+  # Never harmonise them (see the header of scripts/sync-requirements-ci.sh):
+  # each consumer job installs only the renderings it runs, so collapsing two
+  # would hand a job tools it does not run, or drop tools it does.
+  _assert_distinct_files \
+    "${REPO_ROOT}/requirements-ci.txt" \
+    "${REPO_ROOT}/requirements-runtime-ci.txt" \
+    "${REPO_ROOT}/requirements-ci-test.txt" \
+    "${REPO_ROOT}/requirements-ci-mutation.txt" \
+    "${REPO_ROOT}/requirements-ci-audit.txt"
+}
+
+@test "_assert_distinct_files fails on a missing or an empty file, not as a match" {
+  printf 'a==1\n' > "${BATS_TEST_TMPDIR}/a.txt"
+  printf 'b==1\n' > "${BATS_TEST_TMPDIR}/b.txt"
+  run _assert_distinct_files "${BATS_TEST_TMPDIR}/a.txt" "${BATS_TEST_TMPDIR}/b.txt" "${BATS_TEST_TMPDIR}/gone.txt"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"missing or empty: ${BATS_TEST_TMPDIR}/gone.txt"* ]]
+  [[ "${output}" != *"identical renderings"* ]]
+  : > "${BATS_TEST_TMPDIR}/e1.txt"
+  : > "${BATS_TEST_TMPDIR}/e2.txt"
+  run _assert_distinct_files "${BATS_TEST_TMPDIR}/a.txt" "${BATS_TEST_TMPDIR}/e1.txt" "${BATS_TEST_TMPDIR}/e2.txt"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"missing or empty: ${BATS_TEST_TMPDIR}/e1.txt"* ]]
+  [[ "${output}" != *"identical renderings"* ]]
+}
+
+@test "_assert_distinct_files names the identical pair and passes distinct files" {
+  printf 'a==1\n' > "${BATS_TEST_TMPDIR}/a.txt"
+  printf 'b==1\n' > "${BATS_TEST_TMPDIR}/b.txt"
+  cp "${BATS_TEST_TMPDIR}/a.txt" "${BATS_TEST_TMPDIR}/c.txt"
+  run _assert_distinct_files "${BATS_TEST_TMPDIR}/a.txt" "${BATS_TEST_TMPDIR}/b.txt" "${BATS_TEST_TMPDIR}/c.txt"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"identical renderings:"*"a.txt c.txt"* ]]
+  run _assert_distinct_files "${BATS_TEST_TMPDIR}/a.txt" "${BATS_TEST_TMPDIR}/b.txt"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "_identical_pairs catches a duplicate at every one of the 10 pairs of five files" {
+  local -a _fx
+  local _k _i _j
+  for ((_i = 0; _i < 5; _i++)); do
+    for ((_j = _i + 1; _j < 5; _j++)); do
+      _fx=()
+      for ((_k = 0; _k < 5; _k++)); do
+        printf 'pkg%s==1.0\n' "${_k}" > "${BATS_TEST_TMPDIR}/r${_k}.txt"
+        _fx+=("${BATS_TEST_TMPDIR}/r${_k}.txt")
+      done
+      cp "${_fx[_i]}" "${_fx[_j]}"
+      run _identical_pairs "${_fx[@]}"
+      if [ "${status}" -ne 1 ] || [ "${output}" != "r${_i}.txt r${_j}.txt" ]; then
+        printf 'pair %s,%s: status %s output %s\n' "${_i}" "${_j}" "${status}" "${output}" >&2
+        return 1
+      fi
+    done
+  done
+}
+
+@test "_identical_pairs passes five distinct files and reports nothing" {
+  local -a _fx=()
+  local _k
+  for ((_k = 0; _k < 5; _k++)); do
+    printf 'pkg%s==1.0\n' "${_k}" > "${BATS_TEST_TMPDIR}/r${_k}.txt"
+    _fx+=("${BATS_TEST_TMPDIR}/r${_k}.txt")
+  done
+  run _identical_pairs "${_fx[@]}"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
 
 @test "check fails when the ci-audit rendering has drifted" {
