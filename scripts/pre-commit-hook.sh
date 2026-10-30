@@ -53,7 +53,43 @@ else
 fi
 
 if [[ -n "${_ggshield}" ]]; then
-  "${_ggshield}" secret scan pre-commit "$@" || exit 1
+  # ggshield 1.56.1 ExitCode (ggshield/core/errors.py): 0 clean, 1 found,
+  # 2 usage, 3 auth, 4 server unavailable, 128 unexpected. Measured
+  # 2026-10-30 on `secret scan pre-commit`: bad or missing key 3, dead
+  # proxy 4 (28 s when blackholed).
+  #
+  # Only 3 continues: a bad, expired or missing credential persists until
+  # someone re-authenticates, so blocking on it blocks every commit and
+  # invites a bypass that drops `make lint` too. 4 blocks: it is transient,
+  # and when one chunk of a multi-chunk scan times out ggshield discards
+  # findings from the chunks that finished (verticals/secret/
+  # secret_scanner.py, _collect_results). --fail-on-server-error is pinned
+  # so a machine-level `fail_on_server_error: false` cannot turn that into
+  # a silent 0. 2 is a usage error, and also a 401 during the scan: a key
+  # revoked inside the 300 s auth cache gets 2 once, then 3. 128 includes
+  # quota exhaustion. Unknown codes fail closed.
+  "${_ggshield}" secret scan pre-commit --fail-on-server-error "$@"
+  _scan_rc=$?
+  case "${_scan_rc}" in
+    0) ;;
+    1) exit 1 ;;
+    3)
+      printf 'pre-commit: ggshield could not authenticate (exit 3) — SECRET SCAN DID NOT RUN\n' >&2
+      printf 'pre-commit: fix with: ggshield auth login (or check GITGUARDIAN_API_KEY)\n' >&2
+      ;;
+    4)
+      printf 'pre-commit: GitGuardian unreachable (exit 4) — blocking: a partial scan can discard findings\n' >&2
+      printf 'pre-commit: retry the commit when the network is back\n' >&2
+      exit 1
+      ;;
+    *)
+      printf 'pre-commit: ggshield failed (exit %s) — unknown failure, blocking\n' "${_scan_rc}" >&2
+      if [[ "${_scan_rc}" -eq 2 ]]; then
+        printf 'pre-commit: --fail-on-server-error needs ggshield 1.50.0 or later\n' >&2
+      fi
+      exit 1
+      ;;
+  esac
 else
   # Loud, and on stderr. Never exit non-zero here: a machine that genuinely
   # lacks ggshield must still be able to commit the change that installs it.
