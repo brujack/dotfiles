@@ -192,8 +192,8 @@ _identical_pairs() {
 
 @test "all five renderings are pairwise distinct files" {
   # Never harmonise them (see the header of scripts/sync-requirements-ci.sh):
-  # each consumer installs exactly one, so collapsing two would hand a job
-  # tools it does not run, or drop tools it does.
+  # each consumer job installs only the renderings it runs, so collapsing two
+  # would hand a job tools it does not run, or drop tools it does.
   local -a _r=(
     "${REPO_ROOT}/requirements-ci.txt"
     "${REPO_ROOT}/requirements-runtime-ci.txt"
