@@ -1,5 +1,7 @@
 # ggshield Exit-Code Triage Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#408 (6d8110aa), 2026-10-30.
+
 spec: docs/superpowers/specs/2026-10-30-ggshield-exit-code-triage-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
