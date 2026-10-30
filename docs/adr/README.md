@@ -55,3 +55,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0049](0049-pre-push-refuses-a-push-not-at-the-tested-tree.md) | pre-push refuses a push whose refs are not at the tested tree | 2026-10-22 | Accepted |
 | [0050](0050-ai-config-links-come-from-the-tracked-list.md) | ai-config links come from git's tracked list | 2026-10-25 | Accepted |
 | [0051](0051-pre-push-tests-a-dirty-tree-in-a-clean-checkout.md) | pre-push tests a dirty tree's pushed commit in a clean checkout | 2026-10-25 | Accepted |
+| [0052](0052-pre-commit-triages-the-ggshield-exit-code.md) | pre-commit triages the ggshield scan exit code | 2026-10-30 | Accepted |
