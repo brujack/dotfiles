@@ -258,3 +258,24 @@ changed design substance.
 Stop signals after round 2: every round-2 finding sat in the rc 4 arm or the test apparatus, and
 the round-2 correction removed mechanism (path count, constant, three tests, one requirement)
 without adding any. Both signals point to stopping.
+
+## Spec alignment (2026-10-30)
+
+- spec: docs/superpowers/specs/2026-10-30-ggshield-exit-code-triage-design.md
+- anchor: 6e7a902528758455ba541192df361b92c11bd25a
+- in scope: R1, R2, R3, R4, R5, R6, R7
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Phase 2 implementer and Phase 3 test-quality-review (orchestrator, private archive copy): rc3->block, default->continue, rc4->continue, drop --fail-on-server-error, rc3 msg to stdout, rc2 arm removed each turned >=1 test red; 6/6 killed.
+- V2: Commits fde74667, 87de5f54, ff14e29e, d74b9ba1 in the feature worktree ran the pre-commit hook with ambient authenticated ggshield 1.56.1, each printing 'No secrets have been found', exit 0.
