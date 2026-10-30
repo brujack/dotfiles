@@ -65,8 +65,9 @@ if [[ -n "${_ggshield}" ]]; then
   # findings from the chunks that finished (verticals/secret/
   # secret_scanner.py, _collect_results). --fail-on-server-error is pinned
   # so a machine-level `fail_on_server_error: false` cannot turn that into
-  # a silent 0. 2 is a usage error, and also a 401 during the scan: a key
-  # revoked inside the 300 s auth cache gets 2 once, then 3. 128 includes
+  # a silent 0. 2 blocks with its own remedy: it is a usage error (an
+  # older ggshield rejecting the flag) and also a 401 during the scan, where a
+  # key revoked inside the 300 s auth cache gets 2 once, then 3. 128 includes
   # quota exhaustion. Unknown codes fail closed.
   "${_ggshield}" secret scan pre-commit --fail-on-server-error "$@"
   _scan_rc=$?
@@ -82,11 +83,13 @@ if [[ -n "${_ggshield}" ]]; then
       printf 'pre-commit: retry the commit when the network is back\n' >&2
       exit 1
       ;;
+    2)
+      printf 'pre-commit: ggshield failed (exit 2) — usage error or a 401 during the scan, blocking\n' >&2
+      printf 'pre-commit: if ggshield is older than 1.50.0, upgrade it (--fail-on-server-error needs 1.50.0); otherwise retry, a revoked key reports exit 3 next time\n' >&2
+      exit 1
+      ;;
     *)
-      printf 'pre-commit: ggshield failed (exit %s) — unknown failure, blocking\n' "${_scan_rc}" >&2
-      if [[ "${_scan_rc}" -eq 2 ]]; then
-        printf 'pre-commit: --fail-on-server-error needs ggshield 1.50.0 or later\n' >&2
-      fi
+      printf 'pre-commit: ggshield failed (exit %s) — unexpected exit code, blocking\n' "${_scan_rc}" >&2
       exit 1
       ;;
   esac
