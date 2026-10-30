@@ -132,3 +132,60 @@ _run_hook_no_ggshield_on_path() {
   run bash -c "export PATH='${path_with_ggshield}'; cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 1 ]
 }
+
+_run_scan_rc() {
+  _write_makefile 0
+  _write_ggshield_mock "${1}"
+  _run_hook "export GGSHIELD_BIN='${BATS_TEST_TMPDIR}/ggshield';"
+}
+
+@test "ggshield scan rc 0 exits 0, pins --fail-on-server-error" {
+  _run_scan_rc 0
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+  grep -q -- 'secret scan pre-commit --fail-on-server-error' "${MOCK_CALLS_FILE}"
+}
+
+@test "ggshield scan rc 1 (secrets found) exits 1" {
+  _run_scan_rc 1
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+}
+
+@test "ggshield scan rc 2 (usage) exits 1 and names the minimum version" {
+  _run_scan_rc 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exit 2"* ]]
+  [[ "$output" == *"1.50.0"* ]]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+}
+
+@test "ggshield scan rc 3 (auth) warns loudly and exits 0" {
+  _run_scan_rc 3
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SECRET SCAN DID NOT RUN"* ]]
+  [[ "$output" == *"(exit 3)"* ]]
+  [[ "$output" == *"ggshield auth login"* ]]
+  grep -q -- 'secret scan pre-commit --fail-on-server-error' "${MOCK_CALLS_FILE}"
+}
+
+@test "ggshield scan rc 4 (server unavailable) exits 1" {
+  _run_scan_rc 4
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exit 4"* ]]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+}
+
+@test "ggshield scan rc 5 (unknown) fails closed with exit 1" {
+  _run_scan_rc 5
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exit 5"* ]]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+}
+
+@test "ggshield scan rc 128 (unexpected) exits 1" {
+  _run_scan_rc 128
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exit 128"* ]]
+  [[ "$output" != *"SECRET SCAN DID NOT RUN"* ]]
+}
