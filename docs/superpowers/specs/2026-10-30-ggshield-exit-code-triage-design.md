@@ -44,24 +44,24 @@ Two corrections to the backlog row follow:
 
 Read in the installed 1.56.1 source (`ggshield/verticals/secret/secret_scanner.py`):
 
-- `pre-commit` sends staged files as documents in chunks. A chunk closes at
-  `maximum_documents_per_scan` documents, or when the payload would pass
-  `maximum_payload_size - 10240`. A document over `maximum_document_size` is skipped, not sent.
+- `pre-commit` sends staged changes as documents in chunks. A chunk closes at
+  `maximum_documents_per_scan` documents, or when the JSON-encoded payload would pass
+  `maximum_payload_size - 10240`. A document over `maximum_document_size` (raw bytes) is skipped,
+  not sent.
 - The chunks are scanned concurrently. In `_collect_results`, a `ConnectionError` or `Timeout`
   on any chunk raises `ServiceUnavailableError` (rc 4) and **discards the results already
   collected**, including secrets found by chunks that finished.
-- So for a multi-chunk commit, rc 4 can mean "a secret was found and then thrown away". For a
-  single-chunk commit, rc 4 means no result was ever collected.
+- So for a multi-chunk commit, rc 4 can mean "a secret was found and then thrown away".
 
 The limits are server preferences, cached in `~/.cache/ggshield/auth_check.yaml`. For this
 account on 2026-10-30 (`claude`): `maximum_documents_per_scan: 20`, `maximum_document_size:
-1048576`, `maximum_payload_size: 26214400`. Twenty documents of at most 1 MiB each stay under the
-payload ceiling, so with these preferences the staged-file count alone decides the chunk count.
-`GG_MAX_DOCS` overrides the document limit on the client side. Population: one account's server
-preferences, read once; nothing in the hook re-reads them.
+1048576`, `maximum_payload_size: 26214400`. Recent commit sizes (`git log --since=2026-07-01
+--shortstat origin/master`, non-merge): 7 of 1101 touched more than 20 files, the largest 32.
+Multi-chunk commits happen in this repo, rarely.
 
-Recent commit sizes (`git log --since=2026-07-01 --shortstat origin/master`, non-merge): the five
-largest touched 26, 26, 26, 30 and 32 files. Multi-chunk commits happen in this repo.
+No condition the hook can evaluate cheaply and reliably separates a single-chunk rc 4 from a
+multi-chunk one: the chunk count depends on server preferences, `GG_MAX_DOCS`, and JSON-escaped
+payload size. This is why rc 4 blocks (see Decision).
 
 ## Latency of a degraded scan
 
@@ -71,7 +71,7 @@ Measured 2026-10-30 on `claude`, same scratch repo, one staged file:
 - Blackholed proxy (`HTTPS_PROXY=http://10.255.255.1:9`): rc 4 after 28 s.
 - Blackholed proxy with `GITGUARDIAN_API_TIMEOUT=10`: rc 4 after 16 s.
 
-28 s is tolerable for a hook that then continues, so the hook does not set a timeout.
+The hook does not set a timeout. An offline commit waits up to about 28 s, then blocks.
 
 ## Existing gates on the same hazard
 
@@ -86,24 +86,30 @@ Measured 2026-10-30 on `claude`, same scratch repo, one staged file:
 
 - ggshield's own `--fail-on-server-error/--no-fail-on-server-error`
   (`GITGUARDIAN_FAIL_ON_SERVER_ERROR`, config `secret.fail_on_server_error`, added in 1.50.0,
-  default fail-closed) turns rc 4 into exit 0 with a warning. It has the same chunk-discard hole,
-  it cannot express the single-chunk condition, and its warning does not carry the hook's
-  `SECRET SCAN DID NOT RUN` marker. The hook therefore pins `--fail-on-server-error` so that a
-  machine-level `false` cannot silently pre-empt the hook's rc 4 arm.
+  default fail-closed) turns rc 4 into exit 0 with a warning, with the same chunk-discard hole.
+  A machine setting it `false` would let a multi-chunk rc 4 through silently. The hook therefore
+  pins `--fail-on-server-error`.
 - `ai-devops/scripts/pre-commit` already does a three-way triage: block on 1, warn and continue
-  on every other non-zero code. That fails open on rc 2 and rc 128, and on multi-chunk rc 4. Its
-  comment cites unreachable as rc 3. `ai-config/scripts/pre-commit-hook.sh` resolves with bare
-  `command -v` and runs the scan as its last command, so absence is silent and any non-zero rc
-  blocks. Neither is changed here.
+  on every other non-zero code. That fails open on rc 2, rc 128 and rc 4. Its comment cites
+  unreachable as rc 3. `ai-config/scripts/pre-commit-hook.sh` resolves with bare `command -v`
+  and runs the scan as its last command, so absence is silent and any non-zero rc blocks.
+  Neither is changed here.
 
 ## Decision
 
-Operator, 2026-10-30, in two steps:
+Operator, 2026-10-30, in three steps:
 
 1. Allowlist 3 and 4: warn and continue only on the codes ggshield documents as environmental.
    Everything else outside 0 blocks. Unknown fails closed.
-2. After the round-1 review showed the chunk-discard behaviour: rc 4 warns and continues only
-   when the staged set fits one chunk (at most 20 staged paths). Otherwise rc 4 blocks.
+2. After round 1 showed the chunk-discard behaviour: rc 4 warns only for 20 staged paths or fewer.
+3. After round 2 found every new defect in that arm (a failed path count read as 0 and admitted
+   rc 4; the 20-path bound does not hold under JSON-escaped payload sizing; the threshold mirrors a
+   server preference nothing re-reads): **rc 4 always blocks.** Only rc 3 warns and continues.
+
+The reasoning for the asymmetry: rc 3 (bad, expired or missing credential) persists until a human
+re-authenticates, so blocking on it blocks every commit, which is the harm this spec removes. rc 4
+(server unreachable) is transient and clears on retry, and it is the code that can hide a
+discarded finding.
 
 ## Design
 
@@ -113,74 +119,67 @@ with:
 1. Run `"${_ggshield}" secret scan pre-commit --fail-on-server-error "$@"` and capture its rc.
 2. `case` on the rc:
 
-| rc                           | Action           | stderr                                                                                                                                                                                                                        |
-| ---------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0                            | continue, exit 0 | none                                                                                                                                                                                                                          |
-| 1                            | exit 1           | none added (ggshield prints its findings)                                                                                                                                                                                     |
-| 3                            | continue, exit 0 | `pre-commit: ggshield could not authenticate (exit 3) — SECRET SCAN DID NOT RUN`, then a remedy line naming `ggshield auth login` and `GITGUARDIAN_API_KEY`                                                                   |
-| 4, at most 20 staged paths   | continue, exit 0 | `pre-commit: GitGuardian unreachable (exit 4) — SECRET SCAN DID NOT RUN`, then a line saying CI `secret-scan` still gates the PR                                                                                              |
-| 4, more than 20 staged paths | exit 1           | `pre-commit: GitGuardian unreachable (exit 4) during a multi-chunk scan of <n> staged paths — ggshield discards partial findings, blocking`, then a remedy line (retry when online, or split the commit to 20 paths or fewer) |
-| any other                    | exit 1           | `pre-commit: ggshield failed (exit <rc>) — unknown failure, blocking`; for rc 2 also a line noting that `--fail-on-server-error` needs ggshield 1.50.0 or later                                                               |
+| rc | Action | stderr |
+|----|--------|--------|
+| 0 | continue, exit 0 | none |
+| 1 | exit 1 | none added (ggshield prints its findings) |
+| 3 | continue, exit 0 | `pre-commit: ggshield could not authenticate (exit 3) — SECRET SCAN DID NOT RUN`, then a remedy line naming `ggshield auth login` and `GITGUARDIAN_API_KEY` |
+| 4 | exit 1 | `pre-commit: GitGuardian unreachable (exit 4) — blocking: a partial scan can discard findings`, then a remedy line: retry when the network is back |
+| any other | exit 1 | `pre-commit: ggshield failed (exit <rc>) — unknown failure, blocking`; for rc 2 also a line noting that `--fail-on-server-error` needs ggshield 1.50.0 or later |
 
-- The staged-path count is `git diff --cached --name-only -z` counted by NUL. It counts
-  deletions too, which only overcounts. Overcounting makes rc 4 block more often, never less.
-- The threshold 20 is a hook constant, `_GG_SINGLE_CHUNK_MAX=20`. Its comment records the server
-  preference it mirrors, the date read, and that a lower server value would make the rc 4 allow-path
-  admit multi-chunk commits. It is not an environment override.
 - The phrase `SECRET SCAN DID NOT RUN` is the one the unresolved-binary branch already prints.
-  Every path where no scan result exists shares one greppable marker. The multi-chunk rc 4 block
-  does not print it, because part of the scan may have run.
+  Only rc 3 joins it, because only rc 3 continues without a result.
 - The comment above the `case` records the enum, the 2026-10-30 measurements, the chunk-discard
-  behaviour, and why 2 and 128 block. rc 2 is a usage error, but also what a 401 during the scan
-  produces: a key revoked inside the 300 s auth cache (`core/auth_check_cache.py`) passes the
-  startup check, gets rc 2 on that one commit, and rc 3 on the next. rc 128 includes quota
-  exhaustion (`QuotaLimitReachedError`).
+  behaviour behind the rc 4 block, and why 2 and 128 block. rc 2 is a usage error, but also what
+  a 401 during the scan produces: a key revoked inside the 300 s auth cache
+  (`core/auth_check_cache.py`) passes the startup check, gets rc 2 on that one commit, and rc 3 on
+  the next. rc 128 includes quota exhaustion (`QuotaLimitReachedError`).
 - The resolution logic above the scan, and the unresolved-binary branch, are unchanged.
 
 ## Testing
 
 TDD in `tests/scripts/pre_commit_hook.bats`, using the existing `_write_ggshield_mock <rc>` stub:
 
-- One test per rc in {0, 1, 2, 3, 5, 128}, each asserting the hook's exit status from the table
-  above. rc 5 stands for "a code ggshield adds later".
-- rc 4 three times: with 1 staged path (exit 0), with exactly 20 (exit 0) and with 21 (exit 1).
-- rc 0: assert the mock was invoked (`MOCK_CALLS_FILE`) with `--fail-on-server-error`, so the
-  exit-0 case fails if the hook stops running the scan or drops the flag.
-- rc 3 and rc 4 at 1 and 20 paths: output contains `SECRET SCAN DID NOT RUN`.
-- rc 1 and rc 4 at 21 paths: output does not contain `SECRET SCAN DID NOT RUN`.
-- rc 2, 5 and 128, and rc 4 at 21 paths: output contains `exit <rc>`. rc 2 output also names
-  1.50.0.
+- One test per rc in {0, 1, 2, 3, 4, 5, 128}, each asserting the hook's exit status from the
+  table above. rc 5 stands for "a code ggshield adds later".
+- Every exit-0 case (rc 0 and rc 3) asserts the mock was invoked (`MOCK_CALLS_FILE`) with
+  `--fail-on-server-error`. Without this, both pass through the unresolved-binary branch, which
+  also exits 0.
+- rc 3: output contains `SECRET SCAN DID NOT RUN` and `(exit 3)`.
+- rc 1 and rc 4: output does not contain `SECRET SCAN DID NOT RUN`.
+- rc 2, 4, 5 and 128: output contains `exit <rc>`. rc 2 output also names 1.50.0.
 - The existing test "pre-commit-hook.sh exits 1 when ggshield fails" stays as the rc 1 case.
-- Mutation controls before commit: map rc 3 to block; map `*)` to continue; change the threshold
-  comparison from `<=` to `<`; drop `--fail-on-server-error`. Each must turn at least one test red.
+- Mutation controls before commit: map rc 3 to block; map `*)` to continue; map rc 4 to
+  continue; drop `--fail-on-server-error`; route rc 3 to the unresolved-binary message. Each must
+  turn at least one test red.
 
 ## Docs
 
 - `CLAUDE.md`, the pre-commit bullet ("If unresolvable, exit 0 but announce the skip..."): add
-  that rc 3 warns and continues, rc 4 warns and continues only for 20 staged paths or fewer, and
-  every other non-zero rc blocks.
+  that scan rc 3 warns and continues, and every other non-zero rc (rc 4 included) blocks.
 - `docs/superpowers/README.md`: mark the backlog row done.
-- Backlog rows in ai-devops (fails open on rc 2, 128 and multi-chunk rc 4; comment cites
-  unreachable as 3) and in ai-config (bare `command -v`, silent when absent, no triage), each in
-  its own repo's `docs/superpowers/README.md`.
+- Backlog rows in ai-devops (fails open on rc 2, 4 and 128; comment cites unreachable as 3) and in
+  ai-config (bare `command -v`, silent when absent, no triage), each in its own repo's
+  `docs/superpowers/README.md`.
 - Backlog row in this repo: ggshield drops a chunk on a 429 or other unhandled 4xx and still
   exits 0 (`handle_scan_chunk_error`); the hook cannot see it.
 
 ## Requirements
 
-- **R1.** `[PR1]` `scripts/pre-commit-hook.sh` exits 0 when the ggshield scan exits 0 or 3, or exits 4 with at most 20 staged paths.
-- **R2.** `[PR1]` `scripts/pre-commit-hook.sh` exits 1 when the ggshield scan exits 4 with more than 20 staged paths, or exits any value other than 0, 3 or 4.
-- **R3.** `[PR1]` The hook prints `SECRET SCAN DID NOT RUN` and the rc on stderr for scan rc 3, and for scan rc 4 with at most 20 staged paths; it does not print `SECRET SCAN DID NOT RUN` for scan rc 1 or for scan rc 4 with more than 20 staged paths.
+- **R1.** `[PR1]` `scripts/pre-commit-hook.sh` exits 0 when the ggshield scan exits 0 or 3.
+- **R2.** `[PR1]` `scripts/pre-commit-hook.sh` exits 1 when the ggshield scan exits any value other than 0 or 3.
+- **R3.** `[PR1]` For scan rc 3 the hook prints `SECRET SCAN DID NOT RUN` and `(exit 3)` on stderr; for scan rc 1 and rc 4 it does not print `SECRET SCAN DID NOT RUN`.
 - **R4.** `[PR1]` For every blocking scan rc other than 1 the hook prints the rc on stderr, and for rc 2 it also names ggshield 1.50.0.
 - **R5.** `[PR1]` The hook passes `--fail-on-server-error` to `ggshield secret scan pre-commit`.
-- **R6.** `[PR1]` `tests/scripts/pre_commit_hook.bats` covers scan rc 0, 1, 2, 3, 5 and 128, and rc 4 with 1, 20 and 21 staged paths, and the rc 0 case asserts the scanner was invoked with `--fail-on-server-error`.
-- **R7.** `[PR1]` The `CLAUDE.md` pre-commit bullet states the rc 3 and single-chunk rc 4 warn-and-continue rule.
-- **V1.** Mutation controls: mapping rc 3 to block, mapping the default arm to continue, changing the threshold comparison, and dropping `--fail-on-server-error` each turn at least one test red.
+- **R6.** `[PR1]` `tests/scripts/pre_commit_hook.bats` covers scan rc 0, 1, 2, 3, 4, 5 and 128, and the rc 0 and rc 3 cases assert the scanner was invoked with `--fail-on-server-error`.
+- **R7.** `[PR1]` The `CLAUDE.md` pre-commit bullet states that scan rc 3 warns and continues and every other non-zero scan rc blocks.
+- **V1.** Mutation controls: mapping rc 3 to block, mapping the default arm to continue, mapping rc 4 to continue, dropping `--fail-on-server-error`, and routing rc 3 to the unresolved-binary message each turn at least one test red.
 - **V2.** A commit in the feature worktree with ggshield ambient and authenticated prints ggshield's `No secrets have been found` and exits 0.
 - **N1.** No pre-flight `ggshield api-status` probe or any other extra network call.
 - **N2.** No change to how ggshield is resolved (`GGSHIELD_BIN`, `PATH`, `GGSHIELD_FALLBACK_PATHS`) or to the unresolved-binary branch.
 - **N3.** No edits to the ai-devops or ai-config hooks in this change.
 - **N4.** The hook does not set `GITGUARDIAN_API_TIMEOUT`.
+- **N5.** The hook does not count staged paths or read ggshield's server preferences.
 
 ## Multi-Lens Review
 
@@ -205,9 +204,9 @@ could take minutes (60 s timeout, 5 retries). The rc 0 test would pass if the ho
 scan. The warning is not persisted.
 Assumption: an outage reaches the hook as rc 4 quickly. Settled by measurement on 2026-10-30:
 28 s blackholed, 16 s with `GITGUARDIAN_API_TIMEOUT=10`.
-Disposition: Latency: Accepted, reason: 28 s measured, tolerable for a hook that then continues
-(N4). rc 0 test: Addressed, it now asserts the scanner was invoked with the pinned flag.
-Persistence: Accepted, reason: CI `secret-scan` gates every PR.
+Disposition: Latency: Accepted, reason: 28 s measured (N4). rc 0 test: Addressed, it now asserts
+the scanner was invoked with the pinned flag. Persistence: Accepted, reason: CI `secret-scan` gates
+every PR.
 
 ### Risk
 
@@ -218,11 +217,43 @@ A 401 during the scan is rc 2, so a revoked key still blocks for one commit. ggs
 fail-open re-implemented outside it. A 429 or other unhandled 4xx drops a chunk and exits 0
 (pre-existing, invisible to the hook).
 Assumption: rc 4 means no findings exist; true only when the commit is one chunk. Settled: chunks
-close at 20 documents for this account, and five recent commits touched 26-32 files.
-Disposition: Addressed: rc 4 warns and continues only at 20 staged paths or fewer, and blocks
-otherwise (operator decision, 2026-10-30). The rc 2 path is recorded in the comment. The
-429 hole goes to the backlog.
+close at 20 documents for this account, and recent commits touched up to 32 files.
+Disposition: Addressed: round 1 gated rc 4 on 20 staged paths or fewer (operator, 2026-10-30);
+superseded in round 2 by rc 4 always blocking. The rc 2 path is recorded in the comment. The 429
+hole goes to the backlog.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `c2010bea` (round-1 revision). All three lenses re-ran, because the revision
+changed design substance.
+
+- **Goal-Fit (`c2010bea`).** Finding: still worth building; rc 3 alone solves the stated harm.
+  The single-chunk rc 4 arm costs the most for the least value: a git subprocess, a constant that
+  mirrors a server preference and drifts silently, three tests and a mutation control. The
+  revision added a fail-open: a failed `git diff --cached` count reads 0 and admits rc 4. The rc 3
+  and rc 4 (1, 20 paths) tests pass through the unresolved-binary branch. Assumption: rc 4
+  outages are frequent enough to justify an arm; no outage data. Disposition: Addressed: rc 4
+  always blocks (operator, 2026-10-30), which removes the count, the constant and the fail-open;
+  every exit-0 test asserts the scanner was invoked.
+- **Ergonomics (`c2010bea`).** Finding: the rc 3 and rc 4 (1, 20 paths) exit-0 tests pass if the
+  hook never runs the scanner, because the unresolved-binary branch prints the same marker and
+  exits 0. The >20-path block is acceptable: 7 of 1101 commits since July exceeded 20 files, and
+  the PreToolUse guard already refuses the bypass flag for agents. Assumption: one document per
+  staged path. Disposition: Addressed: every exit-0 test asserts invocation and `(exit 3)`; a
+  mutation control routes rc 3 to the unresolved message. The path-count assumption is moot (N5).
+- **Risk (`c2010bea`).** Finding: the rc 4 allow-path fails open when the path count fails; only
+  the 21-path test exercises the counter. "Twenty documents of at most 1 MiB stay under the payload
+  ceiling" is false: the size limit is on raw bytes, chunks are sized on JSON-escaped bytes (up to
+  6x). Checked clean: path count bounds documents, renames, merges, `"$@"`, rc 4 from the metadata
+  step, the flag's existence. Assumption: the server's `maximum_documents_per_scan` stays at least
+  20 on every machine; nothing re-reads it. Disposition: Addressed: rc 4 always blocks, so the
+  count, the bound and the preference are no longer read (N5); the payload sentence is corrected
+  in the Chunking section.
+
+Stop signals after round 2: every round-2 finding sat in the rc 4 arm or the test apparatus, and
+the round-2 correction removed mechanism (path count, constant, three tests, one requirement)
+without adding any. Both signals point to stopping.
