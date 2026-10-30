@@ -173,14 +173,77 @@ setup() {
   [ "${_t}" -lt "$(( _f / 2 ))" ]
 }
 
-@test "all four renderings are distinct files" {
-  local _a="${REPO_ROOT}/requirements-ci.txt"
-  local _b="${REPO_ROOT}/requirements-runtime-ci.txt"
-  local _c="${REPO_ROOT}/requirements-ci-test.txt"
-  local _d="${REPO_ROOT}/requirements-ci-mutation.txt"
-  run ! diff -q "${_a}" "${_c}"
-  run ! diff -q "${_c}" "${_d}"
-  run ! diff -q "${_b}" "${_d}"
+# Print each pair of identical files among the arguments, one `<a> <b>` line per
+# pair, and return 1 if there is any. Every pair is compared, so a duplicate
+# anywhere in the set is caught, not only between neighbours.
+_identical_pairs() {
+  local -a _files=("$@")
+  local _i _j _found=0
+  for ((_i = 0; _i < ${#_files[@]}; _i++)); do
+    for ((_j = _i + 1; _j < ${#_files[@]}; _j++)); do
+      if cmp -s "${_files[_i]}" "${_files[_j]}"; then
+        printf '%s %s\n' "${_files[_i]##*/}" "${_files[_j]##*/}"
+        _found=1
+      fi
+    done
+  done
+  return "${_found}"
+}
+
+@test "all five renderings are pairwise distinct files" {
+  # Never harmonise them (see the header of scripts/sync-requirements-ci.sh):
+  # each consumer installs exactly one, so collapsing two would hand a job
+  # tools it does not run, or drop tools it does.
+  local -a _r=(
+    "${REPO_ROOT}/requirements-ci.txt"
+    "${REPO_ROOT}/requirements-runtime-ci.txt"
+    "${REPO_ROOT}/requirements-ci-test.txt"
+    "${REPO_ROOT}/requirements-ci-mutation.txt"
+    "${REPO_ROOT}/requirements-ci-audit.txt"
+  )
+  local _f
+  # Two missing or empty files would compare equal; an absent file is a
+  # different failure, so report it as one.
+  for _f in "${_r[@]}"; do
+    [ -s "${_f}" ] || { printf 'missing or empty: %s\n' "${_f}" >&2; return 1; }
+  done
+  run _identical_pairs "${_r[@]}"
+  if [ "${status}" -ne 0 ]; then
+    printf 'identical renderings:\n%s\n' "${output}" >&2
+    return 1
+  fi
+}
+
+@test "_identical_pairs catches a duplicate at every one of the 10 pairs of five files" {
+  local -a _fx
+  local _k _i _j
+  for ((_i = 0; _i < 5; _i++)); do
+    for ((_j = _i + 1; _j < 5; _j++)); do
+      _fx=()
+      for ((_k = 0; _k < 5; _k++)); do
+        printf 'pkg%s==1.0\n' "${_k}" > "${BATS_TEST_TMPDIR}/r${_k}.txt"
+        _fx+=("${BATS_TEST_TMPDIR}/r${_k}.txt")
+      done
+      cp "${_fx[_i]}" "${_fx[_j]}"
+      run _identical_pairs "${_fx[@]}"
+      if [ "${status}" -ne 1 ] || [ "${output}" != "r${_i}.txt r${_j}.txt" ]; then
+        printf 'pair %s,%s: status %s output %s\n' "${_i}" "${_j}" "${status}" "${output}" >&2
+        return 1
+      fi
+    done
+  done
+}
+
+@test "_identical_pairs passes five distinct files and reports nothing" {
+  local -a _fx=()
+  local _k
+  for ((_k = 0; _k < 5; _k++)); do
+    printf 'pkg%s==1.0\n' "${_k}" > "${BATS_TEST_TMPDIR}/r${_k}.txt"
+    _fx+=("${BATS_TEST_TMPDIR}/r${_k}.txt")
+  done
+  run _identical_pairs "${_fx[@]}"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
 }
 
 @test "check fails when the ci-audit rendering has drifted" {

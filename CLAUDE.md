@@ -194,7 +194,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 
 Renderings: `requirements-ci.txt` (`test-lint`, full local/dev set), `requirements-runtime-ci.txt` (`runtime`, no consumer), `requirements-ci-test.txt` (`ci-test`, per-PR jobs), `requirements-ci-mutation.txt` (`ci-mutation`), `requirements-ci-audit.txt` (`ci-audit`, dependency audit). → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 
-- Never harmonise the five requirements-CI renderings — `tests/setup_env/requirements_ci.bats` asserts distinctness: `test-lint` differs from `runtime`, and `test-lint`/`runtime`/`ci-test`/`ci-mutation` are four pairwise-distinct files. → `dotfiles-testing-toolchain.md` § `Requirements CI groups: do not harmonise (distinctness tests)`
+- Never harmonise the five requirements-CI renderings — `tests/setup_env/requirements_ci.bats` asserts distinctness: `test-lint` differs from `runtime`, and all five (`ci-audit` included) are pairwise distinct, every one of the 10 pairs compared. → `dotfiles-testing-toolchain.md` § `Requirements CI groups: do not harmonise (distinctness tests)`
 
 - Scope CI requirements groups by purpose, not by pruning uninvoked tools: each group installs only what its own job runs (`ci-test` per-PR test/lint, `ci-mutation` mutation); keep `bandit`, `radon` and `vulture` in `test-lint` only.
 - Never put provenance (a `uv.lock` SHA) in a rendering's header; provenance belongs on a consumer's own copy, at copy time.
