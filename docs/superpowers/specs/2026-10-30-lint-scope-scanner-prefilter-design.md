@@ -31,38 +31,90 @@ the suite, whatever the cause.
 first check. Filtering the loop's input on the same regex therefore cannot change the candidate
 set. It only removes iterations that would have been rejected anyway.
 
-1. Pipe `_join_continuations "${_f}"` through `grep -E` before the `while read` loop.
-2. The loop reads `<lineno>:<content>` lines, and `_MAKE_C_FORM_RE` begins with
-   `(^|[[:space:]])`, where `^` means the start of the content. The prefilter pattern therefore
-   replaces that leading group with `(^[0-9]+:|[[:space:]])`. It is derived from
-   `_MAKE_C_FORM_RE` in the file (one place builds it from the constant), not retyped. Otherwise
-   a line whose content begins with `-C` would be dropped.
-3. A `grep` that matches nothing exits 1. That must not abort the test or read as an error. A
-   genuine `grep` failure (exit 2) must fail the test.
-4. Nothing else changes: `_is_make_c_candidate`, the comment, `@test` and grep-led exclusions, and
-   the guarded/measuring classification are untouched.
+1. A new helper, `_make_c_prefilter_re`, prints the prefilter pattern. It derives it from
+   `_MAKE_C_FORM_RE` by replacing the leading `(^|` with `(^[0-9]+:|`: the loop reads
+   `<lineno>:<content>` lines, so the content-start anchor must sit after the line-number
+   prefix. If the replacement leaves the string unchanged (the constant no longer starts with
+   `(^|`), the helper prints `_make_c_prefilter_re: _MAKE_C_FORM_RE no longer starts with (^|`
+   to stderr and returns 1. The pattern is never retyped.
+2. A second helper, `_make_c_prefiltered_lines <file>`, captures `_join_continuations` into a
+   variable, then runs `PATH="${CLEAN_PATH}" LC_ALL=C grep -a -E "<pattern>"` over it, and
+   captures grep's own exit status on the next line (no pipe, no process substitution, which
+   would hide it). Status 0 prints the matching lines; status 1 prints nothing and returns 0;
+   any other status, or a failure of `_join_continuations` or of the derivation, prints the
+   file and status to stderr and returns 1. `LC_ALL=C` and `-a` keep a non-UTF-8 byte from
+   turning a line into a `Binary file matches` summary or a status 2.
+3. The partition test calls `_make_c_prefiltered_lines` once per file, failing the test on a
+   non-zero return, and feeds its output to the existing `while read` loop through a
+   here-string.
+4. Nothing else changes: `_is_make_c_candidate`, the comment, `@test` and grep-led exclusions,
+   the per-segment reclassification, and the guarded/measuring counts are untouched.
 
 ## Testing
 
-TDD in `tests/scripts/makefile_lint_scope.bats`:
+TDD in `tests/scripts/makefile_lint_scope.bats`. The real-tree differential in the first draft
+is dropped: run under bats, the unfiltered loop it compares against costs the same 62 s this
+spec removes (measured in a probe on `claude`: unfiltered 62,318 ms, prefiltered 1,236 ms, 55
+candidates each). Equivalence is proven on a fixture instead, where the unfiltered loop is
+cheap.
 
-- **Differential over the real tree:** the candidate list produced with the prefilter equals the
-  list produced by the unfiltered loop. The list is non-empty (55 today, asserted as more than
-  zero, not as 55).
-- **Anchor fixture:** a fixture file whose line's content begins with `make -C` at column 0 is
-  found by the prefiltered path. If the prefilter used a bare `^`, it would be dropped.
+- **Edge fixture.** One fixture file under `BATS_TEST_TMPDIR`, one line per case:
+  1. content starting at column 0 with `-C "$d" make print-X` (the anchor case);
+  2. content starting at column 0 with `--directory "$d" make print-X`;
+  3. `make -C"$d"`, `make -C'$d'` and `make -C$d`, one per line;
+  4. `make --directory "$d"`;
+  5. a tab before `-C`;
+  6. `make -Cfoo` (no separator; must not be a candidate);
+  7. `make \` with `-C "$d" print-X` on the next line (a continuation join);
+  8. a line with no `-C` at all.
+
+  A line that starts with `make -C` does not test the anchor: the space before `-C` matches the
+  `[[:space:]]` arm whatever the anchor is. Only content that starts with `-C` or
+  `--directory` does.
+- **Differential on the fixture.** The set of line numbers for which `_is_make_c_candidate`
+  holds on the unfiltered `_join_continuations` output equals the set obtained from
+  `_make_c_prefiltered_lines`. Both also equal a hand-typed expected set (every case except 6
+  and 8; case 7 reported at the line of `make \`). On a mismatch the test prints both sets and
+  their difference.
+- **Status handling.** `_make_c_prefiltered_lines` on the fixture's no-match line alone (a file
+  holding only case 8) returns 0 with empty output. With the derivation replaced by one that
+  yields an invalid pattern, it returns 1 and names the file.
+- **Derivation guard.** Called with a `_MAKE_C_FORM_RE` that lacks the leading `(^|`,
+  `_make_c_prefilter_re` returns 1 with the message above.
+- **Real tree.** The existing `${#_candidates[@]} -gt 0`, `_guarded -gt 0` and
+  `_measuring -gt 0` assertions stay, so a prefilter that drops everything still fails.
 - **Mutation controls**, each applied alone, must turn at least one test red:
-  1. Replace the prefilter regex with one that matches nothing.
-  2. Replace the `(^[0-9]+:|…)` group with a bare `^`.
-- **Timing:** `bats --timing` before and after, recorded in the PR body, not asserted.
+  1. a prefilter pattern that matches nothing;
+  2. the `(^[0-9]+:|` replacement changed to a bare `(^|`;
+  3. grep's status 2 treated like status 1.
+- **Timing.** `bats --timing` before and after, in the PR body.
+
+## Multi-Lens Review
+
+Round 1 against `a3c7b5e4` (goal-fit, ergonomics, risk). Dispositions proposed; operator to confirm.
+
+| # | Lens | Finding | Disposition |
+| - | ---- | ------- | ----------- |
+| 1 | all three | R2's real-tree differential runs the unfiltered loop under bats and restores the 62 s cost (probe: 62,318 ms vs 1,236 ms, 55 candidates each). | Accepted. Replaced with an edge-fixture differential (R2, R3); real-tree non-empty assertions kept. |
+| 2 | risk | R4 was unimplementable as designed: `done < <(... \| grep)` hides grep's exit status. | Accepted. grep runs over a captured variable and its status is read on the next line (Design 2). |
+| 3 | risk | Unpinned grep: locale and binary-file handling can change the match set or exit 2. | Accepted. `PATH="${CLEAN_PATH}" LC_ALL=C grep -a -E` (R1). |
+| 4 | ergonomics | A derivation whose substitution silently misses yields a pattern equal to the constant, and the anchor bug returns unseen. | Accepted. R5. |
+| 5 | ergonomics | A differential failure that prints only "not equal" is unreadable. | Accepted. Difference printed (R2). |
+| 6 | goal-fit | V2 should bound the file's total time, not only the one test. | Accepted. V2 bounds both. |
+| 7 | orchestrator | The first draft's anchor fixture (`make -C` at column 0) cannot catch a bare-`^` anchor: the space before `-C` matches `[[:space:]]`. | Accepted. Fixture cases 1 and 2 start with `-C` / `--directory`. |
+| 8 | goal-fit | BSD `grep` on macOS vs bash `=~` agreement is assumed, not shown. | Accepted. V3. |
+
+Checked and not raised: regex-dialect differences between ERE and bash `=~` for this pattern (risk lens found none); the per-segment loop, which runs only on candidate lines and is unchanged.
 
 ## Requirements
 
-- **R1.** `[PR1]` The make -C partition test filters each file's `_join_continuations` output with a `grep -E` pattern derived from `_MAKE_C_FORM_RE` before the per-line loop, with the content-start anchor mapped to the `<lineno>:` prefix.
-- **R2.** `[PR1]` A test asserts the prefiltered and unfiltered candidate lists over the real tree are identical and non-empty.
-- **R3.** `[PR1]` A fixture whose line's content starts with `make -C` at column 0 is found by the prefiltered path.
-- **R4.** `[PR1]` A prefilter `grep` exit of 1 (no match in a file) does not fail the test; any other non-zero exit does.
-- **V1.** Mutation controls: a never-matching prefilter and a bare-`^` anchor each turn at least one test red.
-- **V2.** `bats --timing tests/scripts/makefile_lint_scope.bats` on `claude` shows the partition test under 5 s, recorded in the PR body.
-- **N1.** No change to `_is_make_c_candidate`, the exclusion rules, or the guarded/measuring classification.
+- **R1.** `[PR1]` The make -C partition test filters each file's `_join_continuations` output with a `grep -a -E` pattern, run under `LC_ALL=C` and `PATH="${CLEAN_PATH}"`, derived from `_MAKE_C_FORM_RE` by replacing its leading `(^|` with `(^[0-9]+:|`.
+- **R2.** `[PR1]` A test asserts that, on the edge fixture, the candidate line numbers from the unfiltered loop, from the prefiltered path and from a hand-typed expected set are identical, and prints the difference when they are not.
+- **R3.** `[PR1]` The edge fixture includes content starting at column 0 with `-C` and with `--directory`, the `-C"`, `-C'` and `-C$` forms, a tab before `-C`, a continuation join, and `make -Cfoo`, which is not a candidate.
+- **R4.** `[PR1]` A prefilter `grep` exit of 1 yields no lines and does not fail the test; any other non-zero grep exit, a `_join_continuations` failure or a derivation failure fails the test and names the file.
+- **R5.** `[PR1]` If replacing the leading `(^|` leaves `_MAKE_C_FORM_RE` unchanged, the derivation prints an error naming `_MAKE_C_FORM_RE` and returns 1.
+- **V1.** Mutation controls: a never-matching prefilter, a bare `(^|` anchor, and grep status 2 treated as 1 each turn at least one test red.
+- **V2.** `bats --timing tests/scripts/makefile_lint_scope.bats` on `claude` shows the partition test under 5 s and the whole file under 15 s (73 s before), recorded in the PR body.
+- **V3.** The edge-fixture tests pass on the Studio under the bare `env -i` reproduction, so BSD `grep` is shown to agree with bash `=~` on every fixture case.
+- **N1.** No change to `_is_make_c_candidate`, the exclusion rules, the per-segment reclassification, or the guarded/measuring classification.
 - **N2.** No change to any other test in the file or the suite.
