@@ -3,6 +3,7 @@
 - **Date:** 2026-10-30
 - **Backlog row:** "`test-macos` takes 17-29 min on GitHub's 3-vCPU macOS runner, against a 30-min `timeout-minutes`" (P1 — performance)
 - **Designed with:** the ansible session (cross-session, 2026-10-30), which priced a self-hosted Studio runner against this approach.
+- **Approved:** 2026-10-31
 
 ## Problem
 
