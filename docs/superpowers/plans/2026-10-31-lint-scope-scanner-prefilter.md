@@ -2,6 +2,8 @@
 
 spec: docs/superpowers/specs/2026-10-30-lint-scope-scanner-prefilter-design.md
 
+> **Status: DONE** — dotfiles#410 (f17ad98b)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Cut the make -C partition test in `tests/scripts/makefile_lint_scope.bats` from ~67 s to under 5 s by grep-prefiltering each file before the per-line bash loop, without changing the candidate set.
