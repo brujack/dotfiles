@@ -119,3 +119,7 @@ Checked and not raised: regex-dialect differences between ERE and bash `=~` for 
 - **V3.** The edge-fixture tests pass on the Studio under the bare `env -i` reproduction, so BSD `grep` is shown to agree with bash `=~` on every fixture case.
 - **N1.** No change to `_is_make_c_candidate`, the exclusion rules, the per-segment reclassification, or the guarded/measuring classification.
 - **N2.** No change to any other test in the file or the suite.
+
+## Amendments
+
+- R1 -> The make -C partition test filters each file's `_join_continuations` output with a `grep -a -E` pattern, run under `PATH="${CLEAN_PATH}"` in the caller's locale, derived from `_MAKE_C_FORM_RE` by replacing its leading `(^|` with `(^[0-9]+:|`. — `LC_ALL=C` narrows grep's `[[:space:]]` to ASCII while bash `=~` follows the test's locale, so a line with a non-ASCII space (U+2003) was a bash candidate that grep dropped; same locale on both sides keeps the prefilter a superset, and `-a` alone covers binary input (Task 1 code review).
