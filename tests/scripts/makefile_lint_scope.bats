@@ -850,8 +850,9 @@ _words_missing_from() {
   [ "${#_domain_files[@]}" -gt 0 ]
 
   local -a _candidates=()
-  local _f _lineno _content
+  local _f _lineno _content _lines
   for _f in "${_domain_files[@]}"; do
+    _lines="$(_make_c_prefiltered_lines "${_f}")" || return 1
     while IFS=: read -r _lineno _content; do
       [ -z "${_lineno}" ] && continue
       _is_make_c_candidate "${_content}" || continue
@@ -870,7 +871,7 @@ _words_missing_from() {
         continue
       fi
       _candidates+=("${_f}:${_lineno}:${_content}")
-    done < <(_join_continuations "${_f}")
+    done <<< "${_lines}"
   done
   [ "${#_candidates[@]}" -gt 0 ]
 
