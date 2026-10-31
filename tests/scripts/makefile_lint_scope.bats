@@ -675,6 +675,112 @@ _is_make_c_candidate() {
   return 0
 }
 
+# The grep prefilter for the make -C partition test: _MAKE_C_FORM_RE with its
+# content-start anchor moved past the "<lineno>:" prefix _join_continuations
+# adds. $1 overrides the source regex (test seam only).
+_make_c_prefilter_re() {
+  local _form_re="${1:-${_MAKE_C_FORM_RE}}" _re
+  _re="${_form_re/#'(^|'/'(^[0-9]+:|'}"
+  if [[ "${_re}" == "${_form_re}" ]]; then
+    printf '_make_c_prefilter_re: _MAKE_C_FORM_RE no longer starts with (^|\n' >&2
+    return 1
+  fi
+  printf '%s\n' "${_re}"
+}
+
+# The "<lineno>:<content>" lines of $1 that can hold a make -C candidate.
+# grep's status is read directly: 1 is "no match", any other failure fails.
+# $2 overrides the pattern (test seam only).
+_make_c_prefiltered_lines() {
+  local _file="$1" _re _joined _out _rc
+  _re="${2:-$(_make_c_prefilter_re)}" || return 1
+  _joined="$(_join_continuations "${_file}")" || {
+    printf '_make_c_prefiltered_lines: _join_continuations failed on %s\n' "${_file}" >&2
+    return 1
+  }
+  _out="$(PATH="${CLEAN_PATH}" LC_ALL=C grep -a -E "${_re}" <<< "${_joined}")"
+  _rc=$?
+  case "${_rc}" in
+    0) printf '%s\n' "${_out}" ;;
+    1) ;;
+    *)
+      printf '_make_c_prefiltered_lines: grep exited %s on %s\n' "${_rc}" "${_file}" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Words of $2 that are absent from $1 (both space-separated lists).
+_words_missing_from() {
+  local _w _out=""
+  for _w in $2; do
+    [[ " $1 " == *" ${_w} "* ]] || _out+="${_w} "
+  done
+  printf '%s' "${_out% }"
+}
+
+@test "make -C prefilter: edge fixture candidates agree unfiltered, prefiltered and expected" {
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  local _expected="1 2 3 4 5 6 7 9" _unfiltered="" _prefiltered=""
+  local _ln _content
+
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _unfiltered+="${_ln} "
+  done < <(_join_continuations "${_fixture}")
+  _unfiltered="${_unfiltered% }"
+
+  local _lines
+  _lines="$(_make_c_prefiltered_lines "${_fixture}")"
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _prefiltered+="${_ln} "
+  done <<< "${_lines}"
+  _prefiltered="${_prefiltered% }"
+
+  if [[ "${_unfiltered}" != "${_expected}" || "${_prefiltered}" != "${_expected}" ]]; then
+    {
+      printf 'expected:    %s\n' "${_expected}"
+      printf 'unfiltered:  %s\n' "${_unfiltered}"
+      printf 'prefiltered: %s\n' "${_prefiltered}"
+      printf 'unfiltered missing: %s\n' "$(_words_missing_from "${_unfiltered}" "${_expected}")"
+      printf 'unfiltered extra: %s\n' "$(_words_missing_from "${_expected}" "${_unfiltered}")"
+      printf 'prefiltered missing: %s\n' "$(_words_missing_from "${_prefiltered}" "${_expected}")"
+      printf 'prefiltered extra: %s\n' "$(_words_missing_from "${_expected}" "${_prefiltered}")"
+    } >&2
+    return 1
+  fi
+}
+
+@test "make -C prefilter: a file with no candidate yields no lines and status 0" {
+  printf 'echo no flag here\n' > "${BATS_TEST_TMPDIR}/none.txt"
+  run _make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/none.txt"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "make -C prefilter: an invalid pattern fails and names the file" {
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  run _make_c_prefiltered_lines "${_fixture}" '('
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"grep exited 2"* ]]
+  [[ "${output}" == *"${_fixture}"* ]]
+}
+
+@test "make -C prefilter: a missing file fails and names it" {
+  local _missing="${BATS_TEST_TMPDIR}/does-not-exist.txt"
+  run _make_c_prefiltered_lines "${_missing}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"_join_continuations failed"* ]]
+  [[ "${output}" == *"${_missing}"* ]]
+}
+
+@test "make -C prefilter: derivation refuses a regex without the (^| anchor" {
+  run _make_c_prefilter_re '([[:space:]])-C'
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"_MAKE_C_FORM_RE no longer starts with (^|"* ]]
+}
+
 @test "every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty" {
   local -a _domain_files=()
   local _rel
