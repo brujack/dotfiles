@@ -51,7 +51,7 @@ Packing the 86 files into 3 shards at `ab92a62d`, each shard's CPU seconds:
 | Packed by              | CPU seconds per shard |
 | ---------------------- | --------------------- |
 | `@test` count          | 1056 / 881 / 743      |
-| serial wall seconds    | 1021 / 896 / 763      |
+| serial wall seconds    | 815 / 866 / 999       |
 | CPU seconds            | 893 / 894 / 894       |
 
 So the shards are weighted by CPU seconds. The heaviest file, `tests/setup_env/linux_ubuntu.bats`,
@@ -72,16 +72,25 @@ would start to bound five (536 s each).
 - **Raise `timeout-minutes` alone:** it would have saved 2 of #408's 5 retries, but every PR would
   still wait ~22 min.
 - **Split by directory:** `tests/setup_env/` alone is 78% of the tests.
-- **Weight by `@test` count:** see the table above. Count-packing leaves the slowest shard ~28%
-  above the seconds-packed one.
+- **Weight by `@test` count:** see the table above. Count-packing leaves the heaviest shard 18%
+  above the CPU-packed one (1056 against 894 CPU s).
 
 ## Decision
 
 Three shards (operator, 2026-10-30). GitHub allows 5 concurrent macOS jobs per account. With
 `lint-macos`, one dotfiles PR uses 4 of them. etch-config's CI also runs on `macos-latest`, so
 concurrent PRs, including a Monday Renovate burst, can queue. Estimated wall-clock per shard is
-about 1415 s / 3 ≈ 8 min (the JOBS=3 bare-metal figure split three ways) plus ~20 s of setup. The
-shard count lives in one place: the matrix list.
+about 1415 s / 3 ≈ 8 min (the JOBS=3 bare-metal figure split three ways) plus ~20 s of setup.
+
+That is a mean, and the gate waits for the slowest of three independent runners, whose speed
+varies ±25% run to run. Bootstrapping the 14 measured durations (max of 3 draws, divided by 3)
+gives the `Run tests` step p50 8.7 min and p90 9.7 min. Add ~20 s of shard setup, ~30-60 s for the
+ubuntu gate job (pickup, checkout, download), and any macOS queue: p90 is about 10.5-11 min before
+queueing, against V1's 10 min. Four shards would cut the step to ~6.5 min p90 but use all 5
+account macOS slots with `lint-macos`, so any concurrent macOS job, from etch-config or a second
+dotfiles PR, would queue.
+
+The shard count lives in one place: the matrix list.
 
 ## Design
 
@@ -104,15 +113,15 @@ names the commit and host it was measured on.
 ### Shard selection: `scripts/bats-shard.sh`
 
 `bats-shard.sh <index> <count>` prints, one per line, the `.bats` files shard `<index>` (1-based)
-of `<count>` runs.
+of `<count>` runs. It covers every file, `BATS_SERIAL_FILES` included; the Makefile decides how a
+listed file runs.
 
 1. Read `find tests -name '*.bats'`, sorted with `LC_ALL=C sort`. This is the same population as
-   the Makefile's `BATS_ALL_FILES`. Files named in `BATS_SHARD_EXCLUDE` (space-separated; the
-   Makefile passes `BATS_SERIAL_FILES`) are removed.
+   the Makefile's `BATS_ALL_FILES`.
 2. Weight each file by its value in `tests/bats-weights.tsv` (overridable as `BATS_WEIGHTS`).
    - A **live row** names a file in the list from step 1. A **dead row** names a file that is not
-     in it (deleted, renamed or excluded). Dead rows are ignored and each is named on stderr; they
-     never fail the run.
+     in it (deleted or renamed). Dead rows are ignored and each is named on stderr; they never
+     fail the run.
    - A file with no live row weighs its `^@test` count times the table's CPU seconds per test,
      which is the sum of live-row values divided by the sum of `^@test` over the live-row files.
      A new file needs no table edit.
@@ -122,36 +131,48 @@ of `<count>` runs.
    shard with the lowest running weight (ties broken by lowest index). Shard 1 starts with a
    handicap of `BATS_SHARD_HANDICAP` CPU seconds (default 40), because it also runs the `make test`
    prerequisites, measured at 38.8 CPU s above.
-4. Compute every shard's list fully, then print only shard `<index>`'s, one path per line. Print
-   nothing and exit 2, with a message on stderr, on: a non-integer or out-of-range argument,
-   `<count>` below 1, an unreadable weights file, a table error from step 2, or an empty file
-   list.
+4. Compute every shard's list fully, then print only shard `<index>`'s. Print nothing and exit 2,
+   with a message on stderr, on: a non-integer or out-of-range argument, `<count>` below 1, an
+   unreadable weights file, a table error from step 2, or an empty file list.
 
-The output is a pure function of the tree and the table, so every caller recomputes the same split.
+`BATS_WEIGHTS` and `BATS_SHARD_HANDICAP` are read from the script's own environment. Make never
+calls the script, so nothing has to forward them.
+
+The output is a pure function of the tree, the table and those two variables.
+
+### One list per shard, computed once
+
+Each CI shard runs `bats-shard.sh` once, in a bash step whose exit status fails the step, and
+writes `shard-<i>.files`. That single file is what make runs, what `ci-suite-report.sh` counts
+against, and what the gate checks. No second computation exists that could disagree with it, and
+GNU Make 3.81's blindness to a `$(shell)` exit status never touches the CI path.
 
 ### Makefile
 
-- **`BATS_SHARD`:** empty by default. When set to `i/N`, `BATS_PARALLEL_FILES` becomes
-  `$(shell bash scripts/bats-shard.sh i N)`, with `BATS_SHARD_EXCLUDE` set to `BATS_SERIAL_FILES`.
-  When empty, everything is as today.
-- **`BATS_RAN_FILES`:** lists exactly the files an invocation runs. That is the shard's
-  `BATS_PARALLEL_FILES`, plus `BATS_SERIAL_FILES` when `BATS_SHARD` is empty or `1/N`.
-- **`list-bats-ran-files`:** prints `BATS_RAN_FILES` one path per line, with no blank lines. This
-  is the file CI uploads. `print-%` prints one space-separated line, and a `tr` in the workflow
-  would be an untested second copy of the format.
+- **`BATS_FILES_FROM`:** empty by default. When set, it names a file of `.bats` paths, one per
+  line.
+  - The bats recipe runs only those paths. A listed path in `BATS_SERIAL_FILES` runs in the serial
+    pass, and the rest in the parallel pass, so a serial file stays serial in whichever shard it
+    lands.
+  - An unset or empty `BATS_FILES_FROM` leaves everything as today.
+  - A set `BATS_FILES_FROM` that names a missing file, or a file listing no paths, is refused with
+    a non-zero exit before bats starts.
+  - It is `unexport`ed. CI passes it as step `env:`, never as a make argument, because a
+    command-line variable reaches every nested make through `MAKEFLAGS`. Many bats tests run
+    `make`; under a shard they must see the unsharded Makefile, as they do locally.
+- **`BATS_RAN_FILES`:** the files an invocation runs. With `BATS_FILES_FROM` it is that file's
+  paths; without, `BATS_ALL_FILES`.
 - **`test-bats`:** the bats recipe moves from `test` into this new target. `test` becomes its
-  current prerequisites plus `test-bats`, so `make test` with no `BATS_SHARD` behaves exactly as
-  before.
-- **Empty-list refusal:** the existing refusal is extended to `BATS_RAN_FILES`. GNU Make 3.81 (the
-  macOS runner's `/usr/bin/make`) cannot see a `$(shell)` exit status, since `.SHELLSTATUS` needs
-  4.2. A failed `bats-shard.sh` therefore reaches make as an empty list, and this refusal turns it
-  into a red step.
+  current prerequisites plus `test-bats`, so `make test` with no `BATS_FILES_FROM` behaves exactly
+  as before.
+- **Empty-list refusal:** the existing refusal is extended to `BATS_RAN_FILES`.
 
 ### `scripts/ci-suite-report.sh`
 
-Gains `--files <listfile>`. In that mode the declared count is the `^@test` count over the listed
-files, and the executed count must equal it. The existing refusal of a zero declared count applies
-in both modes. The existing two-argument form is unchanged.
+Gains a `--files <listfile>` mode: `ci-suite-report.sh <log> --files <listfile>`. The executed
+count still comes from `<log>`; the declared count is the `^@test` count over the listed files,
+and the executed count must equal it. The existing refusal of a zero declared count applies in both
+modes. The existing two-argument form `ci-suite-report.sh <log> <dir>` is unchanged.
 
 ### `scripts/ci-shard-gate.sh`
 
@@ -166,12 +187,12 @@ file exists, and otherwise unless both of these hold:
 
 It prints which check failed and the offending files.
 
-**Coverage is the load-bearing check.** A shard's own `ci-suite-report.sh --files` proves only
-that it ran every test in the list it reported. A partial list, from a `bats-shard.sh` bug or a
-truncated `$(shell)`, passes that check. Only the gate's independent `find` sees the missing files.
-Executed-count totals and shard arity need no check of their own: the gate runs its checks only
-after every shard succeeded, every successful shard has passed its per-list count, and coverage plus
-disjointness then imply both.
+**Coverage proves every shard passed.** A shard uploads its list only after its tests and its
+`ci-suite-report.sh --files` check have passed (the step's default `success()` condition). A
+failed, cancelled or skipped shard leaves no list for this attempt, so the union misses its files.
+The gate's `needs.test-macos-shard.result` check is then a second, independent signal, not the only
+one. Whether that result aggregates matrix legs as documented is unverified, and with this design
+nothing depends on it alone.
 
 ### CI (`.github/workflows/ci.yml`)
 
@@ -179,44 +200,54 @@ disjointness then imply both.
   - `strategy.fail-fast: false`, matrix `shard: [1, 2, 3]`, `runs-on: macos-latest`,
     `timeout-minutes: 30`, `permissions: contents: read`.
   - The install steps are unchanged.
-  - Each shard sets `BATS_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}`, so the matrix list
-    is the only place the count is written. Shard 1 runs `make test`; the others run
-    `make test-bats`.
-  - Each shard writes `make list-bats-ran-files` to `shard-<i>.files`, then runs
-    `ci-suite-report.sh --files shard-<i>.files`.
-  - It uploads `shard-<i>.files` as artifact `test-macos-shard-<i>` on every run, and on failure or
-    cancel `test-macos-make-test-log-<i>`.
+  - A bash step runs
+    `bash scripts/bats-shard.sh ${{ matrix.shard }} ${{ strategy.job-total }} > shard-${{ matrix.shard }}.files`.
+    The matrix list is the only place the count is written.
+  - The test step sets `BATS_FILES_FROM: shard-${{ matrix.shard }}.files` in its `env:`. Shard 1
+    runs `make test`; the others run `make test-bats`.
+  - It runs `ci-suite-report.sh <log> --files shard-<i>.files`.
+  - On success only, it uploads `shard-<i>.files` as artifact
+    `test-macos-shard-${{ github.run_attempt }}-<i>`. The attempt number keeps a re-run from
+    colliding with, or being satisfied by, an earlier attempt's list. A "re-run failed jobs"
+    attempt therefore fails coverage, which enforces the never-`--failed` rule mechanically.
+  - On failure or cancel, it uploads its full log as `test-macos-make-test-log-<i>` with
+    `overwrite: true`, as the single job does today.
 - **`test-macos`** (the gate):
   - `runs-on: ubuntu-latest`, `needs: test-macos-shard`, `if: always()`, `timeout-minutes: 10`,
     `permissions: contents: read`.
-  - It prints `needs.test-macos-shard.result` and each shard's job result (from the matrix job
-    list).
-  - It fails if the aggregate result is anything other than `success`, which covers `failure`,
-    `cancelled` and `skipped`.
+  - It prints `needs.test-macos-shard.result` and fails unless it is `success`, which covers
+    `failure`, `cancelled` and `skipped`. Per-shard results are in the run UI; printing them would
+    need the jobs API and `actions: read`, for no change to the verdict.
   - It then checks out the repo and downloads the lists with `actions/download-artifact`, pinned
-    to a full commit SHA, with `pattern: test-macos-shard-*`, `merge-multiple: true` and
-    `path: shard-lists`. Without `merge-multiple`, each artifact lands in its own subdirectory and
-    the gate's `shard-lists/shard-*.files` glob finds nothing. It then runs
+    to a full commit SHA, with `pattern: test-macos-shard-${{ github.run_attempt }}-*`,
+    `merge-multiple: true` and `path: shard-lists`. Without `merge-multiple`, each artifact lands
+    in its own subdirectory and the gate's glob finds nothing. It then runs
     `ci-shard-gate.sh shard-lists`.
 - The job name `test-macos`, branch protection's required checks, and `auto-merge`'s `needs:`
-  list are unchanged.
+  list are unchanged. `auto-merge`'s own `if:` carries an implicit `success()`, so a red gate skips
+  it.
 
 ### Docs
 
 - **`CLAUDE.md`, CI section:**
   - Rewrite the `test-macos` bullet for the shard job plus gate.
-  - Local repro of a shard is `make test-bats BATS_SHARD=<i>/3`.
-  - Which shard runs a file is recomputed at each SHA (`bash scripts/bats-shard.sh <i> 3`), so
-    find it at the failing commit.
+  - Which files a shard ran: its `test-macos-shard-<attempt>-<i>` artifact is the authority.
+    `bash scripts/bats-shard.sh <i> 3` recomputes it from a clean tree at the same SHA; an
+    untracked `.bats` file changes the answer.
+  - Local repro of a failed shard: recompute its list, then
+    `BATS_FILES_FROM=<list> make test-bats`.
   - All three `test-macos-make-test-log-<i>` artifacts are replaced by a re-run, so download them
     first.
-  - Re-run all jobs, never `--failed` (ai-config `finishing-a-development-branch`).
+  - Re-run all jobs, never `--failed`; a `--failed` attempt fails the gate's coverage check.
 - **`CLAUDE.md`, the `needs:` rule:** amend "Every job in `needs:` is a gate with no advisory tier
   (no `continue-on-error`, no `always()`)" to: no `continue-on-error`, and the only `always()` is
   the `test-macos` aggregation gate, which fails on any shard result other than `success`.
+- **`CLAUDE.md`, the runner list:** `test-macos` moves to `ubuntu-latest`; `test-macos-shard`
+  runs on `macos-latest`.
 - **`CLAUDE.md`, timeouts:** the list adds `test-macos-shard` 30 and `test-macos` 10.
 - **`CLAUDE.md`, Testing:** a line on `tests/bats-weights.tsv`: what it measures, that it changes
-  balance only, and a pointer to the reseed procedure.
+  balance only, and a pointer to the reseed procedure. The table's `#` header also names the
+  procedure's location.
 - **ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md`:** the reseed command block
   and the measurements behind CPU weighting.
 - **ADR-0053:** records the sharded shape, CPU-seconds weighting and the self-hosted alternative. It
@@ -231,69 +262,74 @@ TDD, bats, in `tests/scripts/`. Every case that expects success also asserts a n
   - For N in 1..4 over the real tree: the shards' outputs are each non-empty, disjoint, and their
     union equals the full sorted list. The test also asserts the list has more than 80 entries, so
     an empty `find` cannot pass.
-  - Two runs give identical, non-empty output.
+  - **Golden fixture:** a fixture tree and table with tied weights and tied paths, where
+    `BATS_SHARD_HANDICAP=0` and a non-zero handicap each give known, different, exact per-shard
+    outputs. This pins the heaviest-first order, both tie-breaks and the handicap.
   - **Balance beats count-packing**, non-vacuous: for N = 3 with the committed table, the heaviest
     shard's table weight is below the heaviest shard's table weight when the same script packs by
     a generated table whose values are each file's `^@test` count. Measured: 894 against 1056.
-  - For N = 3 with the committed table, the heaviest shard's weight, handicap excluded, is at most
-    the lightest's plus the largest single file's weight.
-  - A file absent from a fixture weights table still lands in exactly one shard, and its weight is
-    its `^@test` count times the live rows' CPU seconds per test.
+  - A file absent from a fixture table lands in exactly one shard, and its weight is its `^@test`
+    count times the live rows' CPU seconds per test (shown by a fixture where that weight decides
+    the shard).
   - A dead row is named on stderr, does not change the output, and does not change the exit status.
-  - A table with no live rows and a table with a malformed line each exit 2 with empty stdout.
-  - `BATS_SHARD_EXCLUDE` removes a named file that is present without it.
-  - Bad arguments, an unreadable weights file and an empty fixture tree each exit 2 with empty
-    stdout.
+  - Bad arguments, an unreadable table, a table with no live rows, a malformed line and an empty
+    fixture tree each exit 2 with empty stdout.
 - **`ci_shard_gate.bats`**, over fixture directories:
   - A correct non-empty 3-shard partition passes.
   - A missing file and an overlap each fail, naming the check.
-  - A directory with no `shard-*.files`, a blank line and a duplicated path each fail.
+  - A directory with no `shard-*.files`, a blank line and an extra path each fail.
   - **Drop-one-file control:** start from the real 3-shard output, delete one line from one
     shard's list, and expect a failure naming coverage.
-  - **Real-print control:** write `make list-bats-ran-files BATS_SHARD=<i>/3` for i in 1..3 into
-    a fixture directory, the same command CI runs, and expect the gate to pass. Each list is
-    byte-identical to `bash scripts/bats-shard.sh <i> 3` when `BATS_SERIAL_FILES` is empty.
+  - **Real-output control:** write `bash scripts/bats-shard.sh <i> 3 > shard-<i>.files` for i in
+    1..3, the command CI runs, and expect the gate to pass.
 - **`ci_suite_report.bats`:**
-  - `--files` passes when executed equals declared over a non-empty list, fails one short, and
-    fails on an empty list.
+  - `<log> --files` passes when executed equals declared over a non-empty list, fails one short,
+    and fails on an empty list.
   - The two-argument form is unchanged.
-- **CI-shape tests:**
-  - The existing `ci_test_macos_log.bats` assertions move to `test-macos-shard`.
-  - New assertions:
-    - Parsed per job with the job-block `awk` pattern of `ci_runner_pins.bats`, never by
-      grepping the whole file: `always()` occurs exactly once in `ci.yml`, and that occurrence is
-      the `if:` of job `test-macos`, which also references `needs.test-macos-shard.result`. A
-      positive control shows the parser attributes a line to its own job, not a neighbour.
-    - The download step sets `merge-multiple: true` and its `path:` is the directory the gate
-      step passes to `ci-shard-gate.sh`.
-    - The matrix has `fail-fast: false`.
-    - `BATS_SHARD` occurs in the shard job and is built from `matrix.shard` and
-      `strategy.job-total`. The test asserts the occurrence count before checking the form.
-- **Makefile:**
-  - `make test` stays green.
-  - `make test-bats BATS_SHARD=2/3` executes a non-zero number of tests, all from shard 2's list.
-  - `make print-BATS_RAN_FILES BATS_SHARD=1/3` includes `BATS_SERIAL_FILES` when it is set to a
-    fixture value.
+- **Makefile** (`makefile_parallel_target.bats` style: a `PATH` shim stubs `bats` and records its
+  argv and environment, so no test runs real bats inside `make test`):
+  - With `BATS_FILES_FROM` unset, the recorded argv equals today's.
+  - With `BATS_FILES_FROM` set in the environment to a fixture list, the argv names exactly the
+    listed files, non-empty, and the stub's environment has no `BATS_FILES_FROM`.
+  - A listed file that is also in a fixture `BATS_SERIAL_FILES` goes to the serial invocation.
+  - A missing list file and an empty one each exit non-zero before the stub runs.
+- **CI-shape tests**, parsed per job with the job-block `awk` pattern of `ci_runner_pins.bats`,
+  never by grepping the whole file. The parser gains the step keys these need (`run:`, `env:`,
+  `with:` children such as `pattern:` and `merge-multiple:`):
+  - The existing `ci_test_macos_log.bats` assertions retarget to job `test-macos-shard`, and
+    `ci_runner_pins.bats`'s positive control retargets to it (the gate now runs on
+    `ubuntu-latest`).
+  - `always()` occurs exactly once in `ci.yml`, as the `if:` of job `test-macos`, which also
+    references `needs.test-macos-shard.result`. A positive control shows the parser attributes a
+    line to its own job, not a neighbour.
+  - The matrix has `fail-fast: false`.
+  - The shard job's `bats-shard.sh` call is built from `matrix.shard` and `strategy.job-total`;
+    the test asserts the occurrence count before checking the form.
+  - `BATS_FILES_FROM` is set under a step's `env:`, and never on a `make` command line.
+  - The list upload has no `if:` and its name contains `github.run_attempt`; the download
+    `pattern:` contains `github.run_attempt`, sets `merge-multiple: true`, and its `path:` is the
+    directory passed to `ci-shard-gate.sh`.
+- `make test` stays green.
 
 ## Requirements
 
-- **R1.** `[PR1]` `scripts/bats-shard.sh <i> <N>` prints shard `i` of `N` one path per line, assigning files heaviest-first by their CPU seconds in `tests/bats-weights.tsv` (or, with no live row, `^@test` count times the live rows' CPU seconds per test) to the lightest shard, with shard 1 starting at `BATS_SHARD_HANDICAP` (default 40); dead rows are named on stderr and ignored; it computes all shards before printing and exits 2 with empty stdout on bad arguments, an unreadable or malformed weights file, a table with no live rows, or an empty list.
-- **R2.** `[PR1]` For every N from 1 to 4, the shards' outputs over the real tree are non-empty, disjoint and their union equals `find tests -name '*.bats' | LC_ALL=C sort` minus `BATS_SHARD_EXCLUDE`; `BATS_RAN_FILES` adds `BATS_SERIAL_FILES` to shard 1 only.
-- **R3.** `[PR1]` With `BATS_SHARD` unset, `make test` runs the same prerequisites and the same bats file list as before this change; with `BATS_SHARD=i/N`, `make test-bats` runs only shard `i`'s files, and an empty `BATS_RAN_FILES` is refused with a non-zero exit.
-- **R4.** `[PR1]` `ci-suite-report.sh --files <list>` compares executed against the `^@test` count over the listed files only and refuses a zero declared count; the two-argument form is unchanged.
-- **R5.** `[PR1]` `ci-shard-gate.sh <dir>` reads `<dir>/shard-*.files` one path per line; it fails on no list files, fails naming the check on a file missing from every list, an entry not in the independent `find` or a file in two lists, passes on a correct non-empty partition including one written by `make list-bats-ran-files`, and fails naming coverage when one line is removed from one shard's list.
-- **R6.** `[PR1]` `ci.yml` runs `test-macos-shard` as a matrix over `[1, 2, 3]` with `fail-fast: false` and `BATS_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}`, and a job named `test-macos` on `ubuntu-latest` with `needs: test-macos-shard` and `if: always()` (the only `always()` in `ci.yml`) that prints each shard's result, fails unless `needs.test-macos-shard.result` is `success`, downloads the lists with `merge-multiple: true` into one directory, then runs `ci-shard-gate.sh` on it.
-- **R7.** `[PR1]` Each shard writes `make list-bats-ran-files` (one path per line) to `shard-<i>.files`, uploads it as `test-macos-shard-<i>` on every run, and uploads its full log as `test-macos-make-test-log-<i>` on failure or cancel.
+- **R1.** `[PR1]` `scripts/bats-shard.sh <i> <N>` prints shard `i` of `N` one path per line over every `.bats` file, assigning files heaviest-first by their CPU seconds in `tests/bats-weights.tsv` (or, with no live row, `^@test` count times the live rows' CPU seconds per test) to the lightest shard, ties by path then lowest index, with shard 1 starting at `BATS_SHARD_HANDICAP` (default 40); dead rows are named on stderr and ignored; it computes all shards before printing and exits 2 with empty stdout on bad arguments, an unreadable or malformed weights file, a table with no live rows, or an empty list.
+- **R2.** `[PR1]` For every N from 1 to 4, the shards' outputs over the real tree are non-empty, disjoint and their union equals `find tests -name '*.bats' | LC_ALL=C sort`.
+- **R3.** `[PR1]` With `BATS_FILES_FROM` unset, `make test` runs the same prerequisites and the same bats file list as before this change; with it set, `make test-bats` runs exactly the listed files (listed `BATS_SERIAL_FILES` serially), refuses a missing or empty list with a non-zero exit, and does not export `BATS_FILES_FROM` to its recipes.
+- **R4.** `[PR1]` `ci-suite-report.sh <log> --files <list>` compares the log's executed count against the `^@test` count over the listed files only and refuses a zero declared count; the two-argument form is unchanged.
+- **R5.** `[PR1]` `ci-shard-gate.sh <dir>` reads `<dir>/shard-*.files` one path per line; it fails on no list files, fails naming the check on a file missing from every list, an entry not in the independent `find` or a file in two lists, passes on a correct non-empty partition including one written by `bats-shard.sh` itself, and fails naming coverage when one line is removed from one shard's list.
+- **R6.** `[PR1]` `ci.yml` runs `test-macos-shard` as a matrix over `[1, 2, 3]` with `fail-fast: false`, writing `shard-<i>.files` with `bats-shard.sh ${{ matrix.shard }} ${{ strategy.job-total }}` in a bash step and passing it to make as step-`env:` `BATS_FILES_FROM`; and a job named `test-macos` on `ubuntu-latest` with `needs: test-macos-shard` and `if: always()` (the only `always()` in `ci.yml`) that fails unless `needs.test-macos-shard.result` is `success`, downloads this attempt's lists with `merge-multiple: true` into one directory, then runs `ci-shard-gate.sh` on it.
+- **R7.** `[PR1]` Each shard runs `ci-suite-report.sh <log> --files shard-<i>.files`, uploads the list as `test-macos-shard-<run_attempt>-<i>` only on success, and uploads its full log as `test-macos-make-test-log-<i>` on failure or cancel.
 - **R8.** `[PR1]` `tests/bats-weights.tsv` is committed with one line per `.bats` file holding CPU seconds of `bats --jobs 3 <file>` on macOS, measured at or after dotfiles#410, and the reseed procedure is documented in ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md`; no make target generates it.
-- **R9.** `[PR1]` `CLAUDE.md` describes the shard job and gate, the local repro command, the single `always()` exception, both jobs' timeouts, and the weights table.
+- **R9.** `[PR1]` `CLAUDE.md` describes the shard job and gate, the authoritative per-shard list, the local repro command, the single `always()` exception, both jobs' runners and timeouts, and the weights table.
 - **R10.** `[PR1]` ADR-0053 exists, is indexed, and ADR-0037's status notes the partial supersession.
 - **V1.** Over the first 10 PR runs after merge, at least one of them in a Monday Renovate window, p90 of `test-macos` gate completion minus the run's creation time (queue included) is at most 10 min. Otherwise, open a follow-up to move to 4 shards or to Phase 2 (self-hosted).
-- **V2.** In a CI run, the three shards' `Run tests` step durations are within 3 min of each other, or `BATS_SHARD_HANDICAP` and the weights table are re-tuned from them. This is the test of CPU weighting on a saturated runner, which no local run can make.
+- **V2.** Over at least 5 CI runs, take each shard's median `Run tests` duration divided by its table weight. If any shard's ratio is more than 10% from the three-shard mean, re-tune `BATS_SHARD_HANDICAP` and the weights table from them. Count-packing's spread (1056 against 743) would breach this; a 3-min wall-clock tolerance would not, which is why the ratio is used.
 - **N1.** No self-hosted runner and no new secret or token.
 - **N2.** No change to branch protection's required checks or to `auto-merge`'s `needs:` list.
 - **N3.** No change to the Linux `test`, `bash-coverage` or `powershell` jobs.
 - **N4.** No change to `JOBS` or to the bats flags within a shard.
-- **N5.** No change to what any existing test asserts; speed-ups to individual tests are separate changes.
+- **N5.** No change to what any existing test asserts, except retargeting the job named in `ci_test_macos_log.bats` and in `ci_runner_pins.bats`'s positive control from `test-macos` to `test-macos-shard`; speed-ups to individual tests are separate changes.
 
 ## Round 2 (2026-10-31)
 
@@ -306,9 +342,11 @@ Changes after the operator reviewed round 1:
   `makefile_lint_scope.bats`'s cost; the `faa2f993` serial table predates it. `make bats-weights`
   was dropped for a documented procedure.
 - **Handicap:** 60 → 40, from the measured 38.8 CPU s of the `make test` prerequisites.
-- **File-list format:** one path per line from a new `list-bats-ran-files` target, with a test
-  that feeds the real print to the gate.
-- **Artifact layout:** `merge-multiple: true` into one directory.
+- **File-list format:** one path per line, written once per shard by `bats-shard.sh` in a bash
+  step and read by make, `ci-suite-report.sh` and the gate alike (`BATS_FILES_FROM`). This replaced
+  a `BATS_SHARD` make variable after the round-2 lenses (below).
+- **Artifact layout:** attempt-scoped names, success-only upload, `merge-multiple: true` into one
+  directory.
 - **Fallback weight:** defined over live rows; dead rows reported, not fatal; an empty table exits 2.
 - **Balance test:** compares against count-packing, so it cannot pass on any packing.
 - **`always()` test:** parsed per job.
@@ -316,8 +354,8 @@ Changes after the operator reviewed round 1:
 
 ## Multi-Lens Review
 
-Reviewed at commit: `faa2f993` (Step 7 self-review commit, before Step 8 dispatch). Round 1 only;
-round 2 is reviewed below the round-1 lenses.
+Round 1 reviewed at commit `faa2f993` (Step 7 self-review commit, before Step 8 dispatch). Round 2
+reviewed at `b0a9c67a`; its record follows the round-1 lenses.
 
 ### Goal-Fit
 
@@ -360,6 +398,27 @@ Disposition: Addressed (operator, 2026-10-30). The script computes all shards be
 coverage check is documented as load-bearing. The empty-list refusal is extended to
 `BATS_RAN_FILES`. V1 requires a Monday window. Counts are updated. Weighting moved to measured
 seconds.
+
+### Round 2 lenses (`b0a9c67a`, 2026-10-31)
+
+- **Goal-Fit.** The CPU-seconds unit is right: the recipe runs `bats --jobs` with no
+  `--no-parallelize-within-files`, and a saturated runner overlaps waits. Findings: the serial-packing
+  row was mislabelled count-packing data (fixed: 815 / 866 / 999); the round-1 "~28%" was stale
+  (fixed: 18%); V2's 3-min tolerance could not fail for any considered packing (fixed: per-shard
+  ratio over at least 5 runs); the Decision estimated a mean where the gate waits for the slowest of
+  three (fixed: max-of-3 estimate; V1 left for the operator).
+- **Ergonomics.** Findings: a real `make test-bats` test would recurse into the suite; `BATS_SHARD`
+  as a make argument leaks into every nested make through `MAKEFLAGS`; Make 3.81's `$(shell)` sees
+  no make-level variables; handicap and tie-breaks were untested; `ci-suite-report.sh --files` had
+  lost its log argument; per-shard results need the jobs API; N5 was false for two retargeted test
+  files. Fixed by moving list computation out of make (`BATS_FILES_FROM`, step `env:`, `unexport`),
+  a stubbed-`bats` Makefile test, a golden fixture, the `<log> --files <list>` signature, dropping
+  the per-shard print, and an N5 exception.
+- **Risk.** No unconditional fail-open. Findings: a failed shard's uploaded list would satisfy
+  coverage, leaving `needs.result` as the only signal; artifacts persist across attempts; the
+  uploaded list came from a different make invocation from the one that ran; per-shard printing
+  needs `actions: read`. Fixed by success-only, attempt-scoped uploads and one list per shard read by
+  every consumer.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
