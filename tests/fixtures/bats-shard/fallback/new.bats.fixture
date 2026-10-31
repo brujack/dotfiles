@@ -1,0 +1,9 @@
+@test "t1" {
+  true
+}
+@test "t2" {
+  true
+}
+@test "t3" {
+  true
+}
