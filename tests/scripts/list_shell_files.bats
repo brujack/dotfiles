@@ -47,6 +47,33 @@ echo hi
   [ "${output}" = "a.sh" ]
 }
 
+@test "includes a file with #!/usr/bin/env -S bash -p" {
+  _commit_file "a.sh" "#!/usr/bin/env -S bash -p
+echo hi
+"
+  _run_script
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a.sh" ]
+}
+
+@test "includes a file with #!/usr/bin/env -S bash" {
+  _commit_file "a.sh" "#!/usr/bin/env -S bash
+echo hi
+"
+  _run_script
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "a.sh" ]
+}
+
+@test "excludes a file with #!/usr/bin/env -S zsh" {
+  _commit_file "a.sh" "#!/usr/bin/env -S zsh
+echo hi
+"
+  _run_script
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
 @test "includes a file with #!/bin/bash" {
   _commit_file "a.sh" "#!/bin/bash
 echo hi

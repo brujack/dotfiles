@@ -10,6 +10,14 @@ setup() {
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/makebin"
   source "${REPO_ROOT}/tests/helpers/new_session.bash"
   mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${BATS_TEST_TMPDIR}/tmp"
+  # gh stub, first on every hook run's PATH: the wiring's `gh auth token` never
+  # reaches the real gh or the network. Exit status via MOCK_GH_EXIT (default 1).
+  cat > "${MAKE_MOCK_DIR}/gh" <<GHEOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${BATS_TEST_TMPDIR}/gh.calls"
+exit "\${MOCK_GH_EXIT:-1}"
+GHEOF
+  chmod +x "${MAKE_MOCK_DIR}/gh"
   # Canonical (symlink-resolved) so the hook's make -C argument equals the mock's pwd -P (/var is a symlink on macOS).
   TMPDIR="$(_canon "${BATS_TEST_TMPDIR}/tmp")"
   export TMPDIR
@@ -99,9 +107,10 @@ _commit_file() {
 
 # These cases push to a FEATURE ref, not master, and that is deliberate. Their
 # subject is the inert set -- does this path make the suite run -- not master
-# policy. They used refs/heads/master incidentally until the direct-to-master
-# guard landed, at which point every one of them would have been answered by
-# the refusal instead of by the thing they assert. Do not switch them back.
+# policy. They used refs/heads/master incidentally until the shared
+# push-content gate landed, at which point every one of them would have been
+# answered by the gate (or its load failure) instead of by the thing they
+# assert. Do not switch them back.
 _run_pre_push() {
   local _stdin="${1}"
   local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
@@ -587,33 +596,6 @@ _assert_suite_ran() {
   _assert_suite_ran
 }
 
-# ── direct-to-master guard ──────────────────────────────────────────────────
-# The hook refuses a push whose target ref is master when the diff carries a
-# path _path_is_inert rejects (ADR-0038). Measured 2026-09-11: five such pushes reached master
-# in one session with no CI behind them, because ci.yml is pull_request-only.
-# The two allow-cases below are positive controls: without them a passing
-# refusal set cannot distinguish "correctly scoped" from "refuses everything".
-
-@test "pre-push refuses a .sh pushed to master and does not run the suite" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -ne 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-  [[ "$output" == *"deploy.sh"* ]]
-}
-
-@test "pre-push refuses a .bash pushed to master" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "tests/helpers/legacy_oracle.bash" "x" "test: oracle")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -ne 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-  [[ "$output" == *"legacy_oracle.bash"* ]]
-}
-
 @test "pre-push still runs the suite for a .sh pushed to a feature branch" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
@@ -623,341 +605,34 @@ _assert_suite_ran() {
   _assert_make_ran
 }
 
-@test "pre-push still permits a markdown push to master" {
+@test "pre-push markdown-only push skips the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "README.md" "v2" "docs: v2")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
-
-# ── default-deny master guard and recovery messages ─────────────────────────
-# Guard tests push to refs/heads/master. _on_branch sets the checkout the hook
-# sees, because a local_ref of HEAD is resolved from it.
 
 ZERO_SHA="0000000000000000000000000000000000000000"
 
-_on_branch() { _git_clean "checkout --quiet -B ${1}"; }
-
-_assert_refused() {
-  [ "$status" -eq 1 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-  [[ "$output" == *"gh pr merge --admin"* ]]
-  [[ "$output" != *"--no-verify"* ]]
-  # The rule text must name every exclusion, or a refused tests/a.md or
-  # shebang .md reads as contradicting it.
-  [[ "$output" == *"outside the root tests/"* ]]
-  [[ "$output" == *"#!"* ]]
-  [[ "$output" == *"symlink"* ]]
-}
-
-# Commit one path (content via printf) and push it to master; sets $output.
-_master_push_of() {
-  local _path="${1}" _content="${2:-x}" _base _sha
-  _base=$(_commit_file "README.md" "v1" "docs: v1")
-  _sha=$(_commit_file "${_path}" "${_content}" "chore: add path")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${_sha} refs/heads/master ${_base}\n"
-}
-
-@test "master guard refuses and names tests/mocks/x" {
-  _master_push_of "tests/mocks/x" "echo hi"
-  _assert_refused
-  [[ "$output" == *"tests/mocks/x"* ]]
-}
-
-@test "master guard refuses and names a.py" {
-  _master_push_of "a.py" "print(1)"
-  _assert_refused
-  [[ "$output" == *"a.py"* ]]
-}
-
-@test "master guard refuses and names .zshrc" {
-  _master_push_of ".zshrc" "echo hi"
-  _assert_refused
-  [[ "$output" == *".zshrc"* ]]
-}
-
-@test "master guard refuses and names uv.lock" {
-  _master_push_of "uv.lock" "lock"
-  _assert_refused
-  [[ "$output" == *"uv.lock"* ]]
-}
-
-@test "master guard refuses and names a workflow file" {
-  _master_push_of ".github/workflows/ci.yml" "name: CI"
-  _assert_refused
-  [[ "$output" == *".github/workflows/ci.yml"* ]]
-}
-
-@test "master guard refuses and names .warp/settings.toml" {
-  _master_push_of ".warp/settings.toml" "a = 1"
-  _assert_refused
-  [[ "$output" == *".warp/settings.toml"* ]]
-}
-
-@test "master guard refuses and names renovate.json" {
-  _master_push_of "renovate.json" "{}"
-  _assert_refused
-  [[ "$output" == *"renovate.json"* ]]
-}
-
-@test "master guard refuses and names a dotfile txt under docs" {
-  _master_push_of "docs/x/.state.txt" "s"
-  _assert_refused
-  [[ "$output" == *"docs/x/.state.txt"* ]]
-}
-
-@test "master guard refuses and names an unknown extension" {
-  _master_push_of "foo.unknown" "s"
-  _assert_refused
-  [[ "$output" == *"foo.unknown"* ]]
-}
-
-@test "master guard allows docs/a.md" {
-  _master_push_of "docs/a.md" "x"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows README.md" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows the root LICENSE" {
-  _master_push_of "LICENSE" "MIT"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows a non-ASCII markdown name" {
-  _master_push_of "docs/café.md" "x"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows a 300 KB markdown file" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  head -c 300000 /dev/zero | tr '\0' 'a' > "${BATS_TEST_TMPDIR}/big"
-  local_sha=$(_commit_raw "docs/big.md" "${BATS_TEST_TMPDIR}/big" "docs: big")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows foo/tests/a.md" {
-  _master_push_of "foo/tests/a.md" "x"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard allows deleting docs/old.md" {
-  _commit_file "docs/old.md" "x" "docs: old" > /dev/null
-  base_sha=$(_git_clean "rev-parse HEAD")
-  _git_clean "rm --quiet docs/old.md"
-  _git_clean "commit --quiet -m 'docs: rm'"
-  local_sha=$(_git_clean "rev-parse HEAD")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "master guard refuses a shebang .md" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/evil"
-  local_sha=$(_commit_raw "docs/evil.md" "${BATS_TEST_TMPDIR}/evil" "docs: evil")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/evil.md"* ]]
-}
-
-@test "master guard refuses a shebang LICENSE" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/lic"
-  local_sha=$(_commit_raw "LICENSE" "${BATS_TEST_TMPDIR}/lic" "chore: license")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-}
-
-@test "master guard refuses tests/a.md" {
-  _master_push_of "tests/a.md" "x"
-  _assert_refused
-  [[ "$output" == *"tests/a.md"* ]]
-}
-
-@test "master guard refuses x/LICENSE" {
-  _master_push_of "x/LICENSE" "MIT"
-  _assert_refused
-  [[ "$output" == *"x/LICENSE"* ]]
-}
-
-@test "master guard refuses a.md.sh" {
-  _master_push_of "a.md.sh" "echo hi"
-  _assert_refused
-  [[ "$output" == *"a.md.sh"* ]]
-}
-
-@test "master guard refuses a path containing a newline" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  bash -c "
-    export PATH='${CLEAN_PATH}'
-    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    p=\$'a\nb.md'
-    printf 'x\n' > '${REPO_DIR}/'\"\${p}\"
-    git -C '${REPO_DIR}' add -A
-    git -C '${REPO_DIR}' commit --quiet -m 'chore: newline name'
-  "
-  local_sha=$(_git_clean "rev-parse HEAD")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-}
-
-@test "master guard refuses the deletion of a shell script" {
-  _commit_file "x.sh" "echo hi" "feat: x" > /dev/null
-  base_sha=$(_git_clean "rev-parse HEAD")
-  _git_clean "rm --quiet x.sh"
-  _git_clean "commit --quiet -m 'chore: rm'"
-  local_sha=$(_git_clean "rev-parse HEAD")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"x.sh"* ]]
-}
-
-@test "master guard refuses x.sh renamed to x.md and names x.sh" {
-  _commit_file "x.sh" "echo hi" "feat: x" > /dev/null
-  base_sha=$(_git_clean "rev-parse HEAD")
-  _git_clean "mv x.sh x.md"
-  _git_clean "commit --quiet -m 'chore: rename'"
-  local_sha=$(_git_clean "rev-parse HEAD")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"x.sh"* ]]
-}
-
-@test "master guard with an unknown remote_sha says fetch and omits the PR recipe" {
-  local_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
-  [ "$status" -eq 1 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
-  [[ "$output" == *"git fetch"* ]]
-  [[ "$output" == *"refs/heads/master"* ]]
-  [[ "$output" != *"gh pr create"* ]]
-}
-
-@test "master recipe for local_ref master uses reset --keep, not a push of the current branch" {
-  _on_branch feat
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"git switch -c <name> master"* ]]
-  [[ "$output" == *"git reset --keep origin/master"* ]]
-  [[ "$output" != *"git push -u origin feat"* ]]
-}
-
-@test "branch recipe for local_ref feat names feat and lacks reset --keep" {
-  _on_branch feat
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/feat ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"git push -u origin feat"* ]]
-  [[ "$output" != *"reset --keep"* ]]
-}
-
-@test "HEAD on branch feat gives the feat recipe" {
-  _on_branch feat
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
-  _write_make_mock 0
-  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"git push -u origin feat"* ]]
-  [[ "$output" != *"reset --keep"* ]]
-}
-
-@test "HEAD on master gives the local-master recipe" {
-  _on_branch master
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
-  _write_make_mock 0
-  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"git reset --keep origin/master"* ]]
-}
-
-@test "detached HEAD gives git switch -c" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
-  _git_clean "checkout --quiet --detach"
-  _write_make_mock 0
-  run _run_pre_push "HEAD ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"git switch -c"* ]]
-  [[ "$output" != *"reset --keep"* ]]
-}
-
-@test "master guard refuses a docs commit stacked on an unpushed code commit" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  _commit_file "deploy.sh" "echo hi" "feat: deploy" > /dev/null
-  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"deploy.sh"* ]]
-}
-
 @test "non-inert path on a feature ref runs the suite and exits 0" {
-  _master_push_of "deploy.sh" "echo hi" # populates repo; ignore its result
-  rm -f "${MOCK_CALLS_FILE}"
-  base_sha=$(_git_clean "rev-parse HEAD~1")
-  local_sha=$(_git_clean "rev-parse HEAD")
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   _assert_suite_ran
 }
 
-@test "live_paths is reset per ref: a branch's non-inert path does not leak into a master ref" {
+@test "a non-inert path on the first of two refs still runs the suite when the second is inert" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   sha1=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
   sha2=$(_commit_file "docs/a.md" "x" "docs: a")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/feat/x ${sha2} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${sha2} refs/heads/master ${sha1}\n"
+  run _run_pre_push "refs/heads/feat/x ${sha2} refs/heads/feat/x ${base_sha}\nrefs/heads/feat/y ${sha2} refs/heads/feat/y ${sha1}\n"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"refusing"* ]]
   _assert_suite_ran
-}
-
-@test "first push to an empty master refuses a single commit carrying a.py" {
-  local_sha=$(_commit_file "a.py" "print(1)" "feat: first")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${ZERO_SHA}\n"
-  _assert_refused
-  [[ "$output" == *"a.py"* ]]
-}
-
-@test "first push to an empty master allows a single docs/a.md commit" {
-  local_sha=$(_commit_file "docs/a.md" "x" "docs: first")
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${ZERO_SHA}\n"
-  [ "$status" -eq 0 ]
-  [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
 @test "first push of a single-commit branch carrying a.py runs the suite" {
@@ -968,17 +643,40 @@ _master_push_of() {
   _assert_suite_ran
 }
 
-@test "a tag source is called not a branch, not detached HEAD" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+@test "first push of a single docs commit skips the suite" {
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: first")
   _write_make_mock 0
-  run _run_pre_push "refs/tags/v1 ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"not a branch"* ]]
-  [[ "$output" != *"detached"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${ZERO_SHA}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-# ── inertness is decided from the pushed tree entry, not the object ─────────
+@test "a master push with an unresolvable range is refused after the gate permits" {
+  local_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  bogus_sha="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/master ${local_sha} refs/heads/master ${bogus_sha}\n" permit
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot resolve the diff range"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# ── inert predicate: the verdict on a path, observed on a feature ref ───────
+# _path_is_inert decides whether the suite runs. These cases push to
+# refs/heads/feat/x so that the verdict is the only thing under test: "runs the
+# suite" where the path is not provably inert, "skips" where it is.
+
+_on_branch() { _git_clean "checkout --quiet -B ${1}"; }
+
+# Commit one path (content via printf) and push it to a feature ref; sets $output.
+_feat_push_of() {
+  local _path="${1}" _content="${2:-x}" _base _sha
+  _base=$(_commit_file "README.md" "v1" "docs: v1")
+  _sha=$(_commit_file "${_path}" "${_content}" "chore: add path")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${_sha} refs/heads/feat/x ${_base}\n"
+}
+
 # Commit a single index entry of any mode: _mode _object _path.
 _commit_entry() {
   local _mode="${1}" _obj="${2}" _path="${3}"
@@ -991,51 +689,128 @@ _commit_entry() {
   "
 }
 
-@test "master guard refuses a gitlink named .md whose commit is not in the repo" {
+# A cacheinfo-only commit leaves the working tree dirty, so the suite runs in a
+# temporary checkout; accept the run in either place.
+_assert_suite_ran_anywhere() {
+  command grep -qE '^make[ ]-C .+ test$' "${MOCK_CALLS_FILE}"
+}
+
+@test "inert predicate: tests/mocks/x runs the suite" {
+  _feat_push_of "tests/mocks/x" "echo hi"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: uv.lock runs the suite" {
+  _feat_push_of "uv.lock" "lock"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: renovate.json runs the suite" {
+  _feat_push_of "renovate.json" "{}"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: .warp/settings.toml runs the suite" {
+  _feat_push_of ".warp/settings.toml" "a = 1"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a dotfile txt under docs runs the suite" {
+  _feat_push_of "docs/x/.state.txt" "s"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: an unknown extension runs the suite" {
+  _feat_push_of "foo.unknown" "s"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a non-ASCII markdown name skips the suite" {
+  _feat_push_of "docs/café.md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: a path containing a newline runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    p=\$'a\nb.md'
+    printf 'x\n' > '${REPO_DIR}/'\"\${p}\"
+    git -C '${REPO_DIR}' add -A
+    git -C '${REPO_DIR}' commit --quiet -m 'chore: newline name'
+  "
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a docs commit stacked on an unpushed code commit runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "deploy.sh" "echo hi" "feat: deploy" > /dev/null
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+# ── inertness is decided from the pushed tree entry, not the object ─────────
+
+@test "inert predicate: a gitlink named .md whose commit is not in the repo runs the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_entry 160000 "1111111111111111111111111111111111111111" "docs/sub.md")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/sub.md"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
 }
 
-@test "master guard refuses a gitlink named .md whose commit IS in the repo" {
+@test "inert predicate: a gitlink named .md whose commit IS in the repo runs the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_entry 160000 "${base_sha}" "docs/sub2.md")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/sub2.md"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
 }
 
-@test "master guard refuses a symlink named .md" {
+@test "inert predicate: a symlink named .md runs the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   blob=$(printf '../scripts/s.sh' | _git_clean "hash-object -w --stdin")
   local_sha=$(_commit_entry 120000 "${blob}" "docs/link.md")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/link.md"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
 }
 
-@test "master guard allows a markdown name containing glob characters" {
-  _master_push_of "docs/[x].md" "x"
+@test "inert predicate: a markdown name containing glob characters skips the suite" {
+  _feat_push_of "docs/[x].md" "x"
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "master guard allows a markdown name that looks like pathspec magic" {
+@test "inert predicate: a markdown name that looks like pathspec magic skips the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   blob=$(printf 'x' | _git_clean "hash-object -w --stdin")
   local_sha=$(_commit_entry 100644 "${blob}" ":(x).md")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "master guard refuses a .md whose blob object is missing from the repo" {
+@test "inert predicate: a .md whose blob object is missing runs the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/evil"
   local_sha=$(_commit_raw "docs/gone.md" "${BATS_TEST_TMPDIR}/evil" "docs: gone")
@@ -1044,41 +819,45 @@ _commit_entry() {
   [ -f "${obj}" ]
   rm -f "${obj}"
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/gone.md"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
 }
 
-@test "master guard allows an executable-mode .md with no shebang" {
+@test "inert predicate: an executable-mode .md with no shebang skips the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   blob=$(printf 'plain text' | _git_clean "hash-object -w --stdin")
   local_sha=$(_commit_entry 100755 "${blob}" "docs/exec.md")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "master guard refuses an ordinary .md when head itself fails" {
+@test "inert predicate: an ordinary .md runs the suite when head itself fails" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
   mkdir -p "${BATS_TEST_TMPDIR}/headshim"
   printf '#!/bin/sh\nexit 1\n' > "${BATS_TEST_TMPDIR}/headshim/head"
   chmod +x "${BATS_TEST_TMPDIR}/headshim/head"
   _write_make_mock 0
-  # Control: without the shim the same push is allowed, so the refusal below
+  # Control: without the shim the same push skips the suite, so the run below
   # is caused by head failing and not by anything else in the fixture.
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/headshim:${MAKE_MOCK_DIR}"
-  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
-  _assert_refused
-  [[ "$output" == *"docs/a.md"* ]]
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
 }
 
 # ── the hook reads the PUSHED commit, not HEAD ──────────────────────────────
 # "On feat, push local master": HEAD and local_sha differ. _sha must reach
 # every read, so each fixture makes HEAD answer differently from local_sha.
+# The pushed ref is not at HEAD, so a push that needs the suite stops at the
+# wrong-tree refusal, which is only reachable once needs_test is set: that
+# message is how these cases observe "the predicate said not inert".
 _pushed_vs_head() {
   # _pushed_vs_head <pushed: shebang|plain|gone> <head: shebang|plain|absent>
   local _pushed="${1}" _head="${2}" _base _s
@@ -1102,31 +881,35 @@ _pushed_vs_head() {
     plain) _commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/pl" "docs: head" > /dev/null ;;
   esac
   _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${PUSHED_SHA} refs/heads/master ${BASE_SHA}\n"
+  run _run_pre_push "refs/heads/feat/x ${PUSHED_SHA} refs/heads/feat/x ${BASE_SHA}\n"
 }
 
-@test "pushed shebang .md is refused when HEAD's copy is plain text" {
+# The suite is wanted but the pushed commit is not this checkout's HEAD.
+_assert_needs_suite_not_run() {
+  [ "$status" -eq 1 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"the suite tests this checkout's working tree"* ]]
+}
+
+@test "inert predicate: a pushed shebang .md needs the suite when HEAD's copy is plain text" {
   _pushed_vs_head shebang plain
-  _assert_refused
-  [[ "$output" == *"docs/a.md"* ]]
+  _assert_needs_suite_not_run
 }
 
-@test "pushed shebang .md is refused when HEAD does not have the path at all" {
+@test "inert predicate: a pushed shebang .md needs the suite when HEAD does not have the path" {
   _pushed_vs_head shebang absent
-  _assert_refused
-  [[ "$output" == *"docs/a.md"* ]]
+  _assert_needs_suite_not_run
 }
 
-@test "pushed plain .md is allowed when HEAD's copy has a shebang" {
+@test "inert predicate: a pushed plain .md skips the suite when HEAD's copy has a shebang" {
   _pushed_vs_head plain shebang
   [ "$status" -eq 0 ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "pushed .md with a missing blob is refused when HEAD's copy is readable" {
+@test "inert predicate: a pushed .md with a missing blob needs the suite when HEAD's copy is readable" {
   _pushed_vs_head gone plain
-  _assert_refused
-  [[ "$output" == *"docs/a.md"* ]]
+  _assert_needs_suite_not_run
 }
 
 # ── CLAUDE.md byte-budget gate (ADR-0047) ───────────────────────────────────
@@ -1422,17 +1205,6 @@ _run_pre_push_at() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"unresolved"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
-}
-
-@test "wrong-tree: the master refusal wins over the wrong-tree refusal" {
-  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
-  sha1=$(_commit_file "a.sh" "echo 1" "feat: a")
-  _commit_file "b.sh" "echo 2" "feat: b" > /dev/null
-  _write_make_mock 0
-  run _run_pre_push "refs/heads/master ${sha1} refs/heads/master ${base_sha}\n"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"refusing a direct push to master"* ]]
-  [[ "$output" != *"not the pushed commit"* ]]
 }
 
 @test "wrong-tree: an exported GIT_DIR naming another worktree cannot fake a match" {
@@ -1826,4 +1598,145 @@ WRAP
   run _dirty_push
   chmod -R u+w "${TMPDIR}"
   [ "$status" -eq 0 ]
+}
+
+# _run_pre_push_wired <stdin> <verdict: permit|refuse>
+#
+# Runs a COPY of scripts/pre-push whose marked _pcg_fetch body is replaced by a
+# function printing a stub push-content-gate library. The wiring calls
+# /usr/bin/curl by absolute path, so the real file's load-success path cannot be
+# stubbed any other way; everything outside the markers is the shipped code. The
+# stub library writes its two arguments to pcg.args and permits or refuses.
+_run_pre_push_wired() {
+  local _stdin="${1}" _verdict="${2}" _copy="${BATS_TEST_TMPDIR}/pre-push.copy"
+  local _lib="${BATS_TEST_TMPDIR}/pcg.lib"
+  {
+    printf 'push_content_gate_refs() {\n'
+    printf "  printf '%%s\\n---\\n%%s\\n' \"\${1}\" \"\${2}\" > '%s'\n" "${BATS_TEST_TMPDIR}/pcg.args"
+    if [[ "${_verdict}" == refuse ]]; then
+      printf "  printf 'stub gate refused\\n' >&2\n  return 1\n"
+    else
+      printf '  return 0\n'
+    fi
+    printf '}\n'
+  } > "${_lib}"
+  awk -v lib="${_lib}" '
+    /^# >>> _pcg_fetch$/ { print; print "_pcg_fetch() { cat \"" lib "\"; }"; skipping = 1; next }
+    /^# <<< _pcg_fetch$/ { skipping = 0 }
+    !skipping { print }
+  ' "${REPO_ROOT}/scripts/pre-push" > "${_copy}" || return 1
+  if command grep -q 'api.github.com' "${_copy}"; then
+    printf '_run_pre_push_wired: _pcg_fetch markers not found; the copy would reach the network\n' >&2
+    return 1
+  fi
+  if ! command grep -q '^_pcg_fetch() { cat' "${_copy}"; then
+    printf '_run_pre_push_wired: stub _pcg_fetch not installed in the copy\n' >&2
+    return 1
+  fi
+  printf "%b" "${_stdin}" | bash -c "
+    export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    cd '${REPO_DIR}' && bash '${_copy}' origin https://example.invalid/r.git
+  "
+}
+
+@test "wiring: a feature-only push makes no gh call" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${BATS_TEST_TMPDIR}/gh.calls" ]
+}
+
+@test "wiring: a master push whose gate cannot load is refused before the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  command grep -q 'auth token' "${BATS_TEST_TMPDIR}/gh.calls"
+}
+
+@test "wiring: master on a later ref line whose gate cannot load is refused before the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# `git push origin feat:master` hands the hook a local ref that differs from the
+# remote ref; the wiring must key on the remote ref (field 3), not the local one.
+@test "wiring: a feature branch pushed onto master is judged by the gate" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# The wiring block is byte-identical fleet-wide, and four repos default to main.
+@test "wiring: a feature branch pushed onto main is judged by the gate" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/main ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: master on a later ref line is judged by the loaded gate" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${local_sha} refs/heads/master ${base_sha}\n" refuse
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"stub gate refused"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a loaded gate's refusal stops the push before the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n" refuse
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"stub gate refused"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a loaded gate's permit reaches the suite trigger" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n" permit
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  command grep -qF "refs/heads/master ${local_sha} refs/heads/master ${base_sha}" "${BATS_TEST_TMPDIR}/pcg.args"
+  # The stub writes ref text, a --- separator, then the second argument (the remote URL).
+  [ "$(sed -n '/^---$/{n;p;q;}' "${BATS_TEST_TMPDIR}/pcg.args")" = "https://example.invalid/r.git" ]
+}
+
+@test "wiring: two ref lines are both drained from _pcg_refs" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  code_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  # Both refs sit at HEAD (the wrong-tree check). The first has an empty range
+  # and cannot trigger the suite; only the second ref's .sh can, so make
+  # running proves the loop read past the first line.
+  run _run_pre_push_wired "refs/heads/feat/a ${code_sha} refs/heads/feat/a ${code_sha}\nrefs/heads/feat/b ${code_sha} refs/heads/feat/b ${base_sha}\n" permit
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "wiring: the hook starts with bash -p" {
+  [ "$(head -n 1 "${REPO_ROOT}/scripts/pre-push")" = '#!/usr/bin/env -S bash -p' ]
 }

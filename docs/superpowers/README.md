@@ -187,6 +187,7 @@ Master status index for all specs and implementation plans in this directory.
 | 2026-09-25 | [CLAUDE.md relocation](plans/2026-09-25-claude-md-relocation.md)                           | [spec](specs/2026-09-25-claude-md-relocation-design.md)                                                                                   | Done — #294 + ai-config#282; CLAUDE.md 179,422 → 122,627 B; ADR-0036                    |
 | 2026-10-02 | [macos-test-gate](plans/2026-10-02-macos-test-gate.md)                                     | [macos-test-gate](specs/2026-10-02-macos-test-gate-design.md)                                                                             | Done — #306; ADR-0037                                                                   |
 | 2026-10-02 | [master-guard-default-deny](plans/2026-10-02-master-guard-default-deny.md)                 | [spec](specs/2026-10-02-master-guard-default-deny-design.md)                                                                              | Done                                                                                    |
+| 2026-10-31 | [shared-push-content-gate-pr2](plans/2026-10-31-shared-push-content-gate-pr2.md) | ai-config spec: shared push-content gate (ADR-0091) | In Progress |
 
 ---
 

@@ -41,7 +41,7 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0035](0035-parallel-bats-under-a-validated-jobs-knob.md)        | `make test` runs bats in parallel under a validated `JOBS` knob                              | 2026-09-21 | Accepted                                              |
 | [0036](0036-claude-md-rule-bullets-with-knowledge-pointers.md) | CLAUDE.md carries rule bullets; narratives live in ai-config knowledge | 2026-09-26 | Accepted |
 | [0037](0037-macos-suite-gates-merge.md) | The macOS test suite gates merge | 2026-10-02 | Accepted |
-| [0038](0038-master-guard-default-deny.md) | The direct-to-master guard is default-deny | 2026-10-02 | Accepted |
+| [0038](0038-master-guard-default-deny.md) | The direct-to-master guard is default-deny | 2026-10-02 | Superseded by ai-config ADR-0091 (2026-10-31) |
 | [0039](0039-apt-keys-are-scoped-and-pinned.md) | Third-party apt keys are scoped and pinned, never global | 2026-10-03 | Accepted |
 | [0040](0040-apt-conffile-prompts-answered-unattended.md) | apt/dpkg conffile prompts are answered unattended | 2026-10-03 | Accepted |
 | [0041](0041-ubuntu-installs-stage-then-rename-and-stamp.md) | Ubuntu installs stage, then rename, and stamp on success | 2026-10-05 | Accepted |

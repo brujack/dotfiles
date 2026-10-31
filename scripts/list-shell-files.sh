@@ -25,6 +25,7 @@ env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     IFS= read -r first 2>/dev/null < "${f}" || [[ -n "${first}" ]] || continue
     case "${first}" in
       '#!'*/bash|'#!'*/bash\ *|'#!'*env\ bash|'#!'*env\ bash\ *|\
+      '#!'*env\ -S\ bash|'#!'*env\ -S\ bash\ *|\
       '#!'*/sh|'#!'*/sh\ *|'#!'*env\ sh|'#!'*env\ sh\ *) printf '%s\n' "${f}" ;;
     esac
   done

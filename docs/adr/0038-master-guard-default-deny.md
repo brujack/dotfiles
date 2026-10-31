@@ -1,7 +1,7 @@
 # ADR-0038: The direct-to-master guard is default-deny
 
 **Date:** 2026-10-02
-**Status:** Accepted.
+**Status:** Superseded by ai-config ADR-0091 (2026-10-31). The master-push content judgment moved from this repo's `_path_is_inert` guard to ai-config's shared push-content gate; `_path_is_inert` now decides only the suite trigger.
 
 ## Context
 

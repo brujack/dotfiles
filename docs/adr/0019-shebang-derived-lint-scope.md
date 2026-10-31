@@ -30,7 +30,7 @@ Derive `SHELL_FILES` from each tracked file's first line via a new script,
 every file `git ls-files` reports (with the standard four-variable `env -u GIT_DIR
 -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` strip, since a leaked `GIT_DIR` from a
 worktree push resolves against the wrong repository without erroring) and keeps the ones whose
-shebang names `bash`/`sh` — following `/` or `env `, so `#!/usr/bin/env zsh` and `#!/usr/bin/env
+shebang names `bash`/`sh` — following `/`, `env ` or `env -S ` (the last added 2026-10-31 for the `#!/usr/bin/env -S bash -p` pre-push shebang), so `#!/usr/bin/env zsh` and `#!/usr/bin/env
 fish` are not mistaken for `sh` by a naive suffix match. `SHELL_FILES` now holds 100 files (99
 plus the script itself, which is self-consistently linted by the gate it defines), and the two
 named-hook entries are no longer special-cased.
