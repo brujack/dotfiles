@@ -35,7 +35,8 @@ _job_steps() {
   # must fail here rather than let any single step satisfy the checks below.
   [ "$(printf '%s\n' "${_steps}" | command grep -c .)" -gt 1 ]
   local _upload
-  _upload="$(printf '%s\n' "${_steps}" | command grep -E 'uses: actions/upload-artifact@' || true)"
+  # The shard job has two upload steps (list and log); pick the log's by its path.
+  _upload="$(printf '%s\n' "${_steps}" | command grep -E 'uses: actions/upload-artifact@' | command grep -F 'path: /tmp/make-test.log;' || true)"
   if [[ -z "${_upload}" ]]; then
     printf 'test-macos-shard has no upload-artifact step\n' >&2
     return 1

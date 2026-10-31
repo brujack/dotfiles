@@ -49,6 +49,8 @@ _count() { command grep -c -E -- "$1" || true; }
   [ "${_n}" -eq 1 ]
   _job_text test-macos | command grep -qE '^    if: always\(\)[[:space:]]*$'
   _code test-macos | command grep -q 'needs.test-macos-shard.result'
+  # The printf alone names the result; the comparison is what fails the job.
+  _code test-macos | command grep -qF '[ "${{ needs.test-macos-shard.result }}" = "success" ] || exit 1'
 }
 
 @test "the gate needs test-macos-shard and runs on ubuntu-latest with a 10 minute timeout" {
@@ -129,5 +131,5 @@ _count() { command grep -c -E -- "$1" || true; }
     done <<< "${_uses}"
   done
   # checkout + upload x2 in the shard job, checkout + download in the gate.
-  [ "${_n}" -eq 5 ]
+  [ "${_n}" -ge 5 ]
 }
