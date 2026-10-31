@@ -1115,6 +1115,81 @@ FIXTURE
   done
 }
 
+@test "run-bash-coverage.sh --print-bats-args always passes --print-output-on-failure" {
+  run env -u COVERAGE_BATS_JOBS bash -c 'PATH="$(printf "%s" "${PATH}" | tr ":" "\n" | command grep -v tests/mocks | tr "\n" ":")" bash "$1" --print-bats-args' _ "${REPO_ROOT}/scripts/run-bash-coverage.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--print-output-on-failure"* ]]
+  [[ "$output" == *"--recursive"* ]]
+}
+
+@test "run-bash-coverage.sh --files prints exactly the listed paths, not --recursive" {
+  printf '%s\n' "tests/scripts/unit.bats" "tests/scripts/pre_push.bats" > "${BATS_TEST_TMPDIR}/list"
+  run env -u COVERAGE_BATS_JOBS bash -c 'PATH="$(printf "%s" "${PATH}" | tr ":" "\n" | command grep -v tests/mocks | tr "\n" ":")" bash "$1" --files "$2" --print-bats-args' _ "${REPO_ROOT}/scripts/run-bash-coverage.sh" "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "--print-output-on-failure" ]
+  [ "${lines[1]}" = "${REPO_ROOT}/tests/scripts/unit.bats" ]
+  [ "${lines[2]}" = "${REPO_ROOT}/tests/scripts/pre_push.bats" ]
+  [ "${lines[3]}" = "bats mode: serial" ]
+  [ "${#lines[@]}" -eq 4 ]
+  [[ "$output" != *"--recursive"* ]]
+}
+
+@test "run-bash-coverage.sh --files works after --print-bats-args and with a job count" {
+  printf '%s\n' "tests/scripts/unit.bats" > "${BATS_TEST_TMPDIR}/list"
+  COVERAGE_BATS_JOBS=4 run _run_coverage --print-bats-args --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--jobs"* ]]
+  [[ "$output" == *"${REPO_ROOT}/tests/scripts/unit.bats"* ]]
+  [[ "$output" == *"bats mode: parallel (--jobs 4)"* ]]
+  [[ "$output" != *"--recursive"* ]]
+}
+
+@test "run-bash-coverage.sh --files rejects bad input with exit 2 naming it" {
+  local _l="${BATS_TEST_TMPDIR}/list"
+
+  run _run_coverage --files "${BATS_TEST_TMPDIR}/absent" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no such readable list file: ${BATS_TEST_TMPDIR}/absent"* ]]
+
+  : > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"empty list: ${_l}"* ]]
+
+  printf 'tests/scripts/unit.bats\n\ntests/scripts/pre_push.bats\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"blank line 2"* ]]
+
+  printf 'tests/scripts/unit.bats\r\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"carriage return on line 1"* ]]
+
+  printf 'tests/scripts/unit.bats\ntests/nope/missing.bats\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"listed path does not exist"* ]]
+  [[ "$output" == *"tests/nope/missing.bats"* ]]
+
+  run _run_coverage --files
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--files requires a list file"* ]]
+}
+
+@test "run-bash-coverage.sh --files error exits before any bats run on the main path" {
+  run _run_coverage --files "${BATS_TEST_TMPDIR}/absent" --json "${BATS_TEST_TMPDIR}/out.json"
+  [ "$status" -eq 2 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/out.json" ]
+}
+
+@test "run-bash-coverage.sh -h documents --files and --print-output-on-failure" {
+  run _run_coverage -h
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--files LIST"* ]]
+  [[ "$output" == *"--print-output-on-failure"* ]]
+}
+
 @test "run-bash-coverage.sh main run captures the bats argv before the FIFO exists" {
   local _script="${REPO_ROOT}/scripts/run-bash-coverage.sh"
   local _caps _cap _fifo _mkdir
