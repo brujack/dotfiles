@@ -675,6 +675,171 @@ _is_make_c_candidate() {
   return 0
 }
 
+# The grep prefilter for the make -C partition test: _MAKE_C_FORM_RE with its
+# content-start anchor moved past the "<lineno>:" prefix _join_continuations
+# adds. $1 overrides the source regex (test seam only).
+_make_c_prefilter_re() {
+  local _form_re="${1:-${_MAKE_C_FORM_RE}}" _re
+  _re="${_form_re/#'(^|'/'(^[0-9]+:|'}"
+  if [[ "${_re}" == "${_form_re}" ]]; then
+    printf '_make_c_prefilter_re: _MAKE_C_FORM_RE no longer starts with (^|\n' >&2
+    return 1
+  fi
+  printf '%s\n' "${_re}"
+}
+
+# The "<lineno>:<content>" lines of $1 that can hold a make -C candidate.
+# grep's status is read directly: 1 is "no match", any other failure fails.
+# $2 overrides the pattern (test seam only).
+_make_c_prefiltered_lines() {
+  local _file="$1" _re _joined _out _rc=0
+  if [[ -n "${2:-}" ]]; then
+    _re="$2"
+  else
+    _re="$(_make_c_prefilter_re)" || {
+      printf '_make_c_prefiltered_lines: pattern derivation failed for %s\n' "${_file}" >&2
+      return 1
+    }
+  fi
+  _joined="$(_join_continuations "${_file}")" || {
+    printf '_make_c_prefiltered_lines: _join_continuations failed on %s\n' "${_file}" >&2
+    return 1
+  }
+  # Caller's locale on purpose: grep's [[:space:]] must match bash =~'s.
+  _out="$(PATH="${CLEAN_PATH}" grep -a -E "${_re}" <<< "${_joined}")" || _rc=$?
+  case "${_rc}" in
+    0) printf '%s\n' "${_out}" ;;
+    1) ;;
+    *)
+      printf '_make_c_prefiltered_lines: grep exited %s on %s\n' "${_rc}" "${_file}" >&2
+      return 1
+      ;;
+  esac
+}
+
+# Words of $2 that are absent from $1 (both space-separated lists).
+_words_missing_from() {
+  local _w _out=""
+  for _w in $2; do
+    [[ " $1 " == *" ${_w} "* ]] || _out+="${_w} "
+  done
+  printf '%s' "${_out% }"
+}
+
+@test "make -C prefilter: edge fixture candidates agree unfiltered, prefiltered and expected" {
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  local _expected="1 2 3 4 5 6 7 9" _unfiltered="" _prefiltered=""
+  local _ln _content
+
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _unfiltered+="${_ln} "
+  done < <(_join_continuations "${_fixture}")
+  _unfiltered="${_unfiltered% }"
+
+  local _lines
+  _lines="$(_make_c_prefiltered_lines "${_fixture}")"
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _prefiltered+="${_ln} "
+  done <<< "${_lines}"
+  _prefiltered="${_prefiltered% }"
+
+  # A prefilter that drops nothing would pass the agreement check above, so
+  # also require that the non-candidate lines (8 and 11) are filtered out.
+  [[ $'\n'"${_lines}" != *$'\n8:'* ]]
+  [[ $'\n'"${_lines}" != *$'\n11:'* ]]
+
+  if [[ "${_unfiltered}" != "${_expected}" || "${_prefiltered}" != "${_expected}" ]]; then
+    {
+      printf 'expected:    %s\n' "${_expected}"
+      printf 'unfiltered:  %s\n' "${_unfiltered}"
+      printf 'prefiltered: %s\n' "${_prefiltered}"
+      printf 'unfiltered missing: %s\n' "$(_words_missing_from "${_unfiltered}" "${_expected}")"
+      printf 'unfiltered extra: %s\n' "$(_words_missing_from "${_expected}" "${_unfiltered}")"
+      printf 'prefiltered missing: %s\n' "$(_words_missing_from "${_prefiltered}" "${_expected}")"
+      printf 'prefiltered extra: %s\n' "$(_words_missing_from "${_expected}" "${_prefiltered}")"
+    } >&2
+    return 1
+  fi
+}
+
+@test "make -C prefilter: a direct call on a no-match file survives errexit" {
+  printf 'echo no flag here\n' > "${BATS_TEST_TMPDIR}/none.txt"
+  # No run, no $(): bats errexit applies to the helper's own body here.
+  _make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/none.txt" > "${BATS_TEST_TMPDIR}/out.txt"
+  printf 'reached\n' > "${BATS_TEST_TMPDIR}/after.txt"
+  [ -f "${BATS_TEST_TMPDIR}/after.txt" ]
+  [ ! -s "${BATS_TEST_TMPDIR}/out.txt" ]
+}
+
+@test "make -C prefilter: a non-ASCII space line is classified the same unfiltered and prefiltered" {
+  # U+2003 is a space only under a UTF-8 locale, so pin one: under C or a bare
+  # env -i neither bash =~ nor grep sees a space and the comparison is vacuous.
+  local _utf8_locale _installed
+  _installed="$(locale -a 2>/dev/null)"
+  _utf8_locale="$(PATH="${CLEAN_PATH}" grep -i -m1 -x 'c\.utf-\?8' <<< "${_installed}")" \
+    || _utf8_locale="$(PATH="${CLEAN_PATH}" grep -i -m1 -x 'en_US\.utf-\?8' <<< "${_installed}")" \
+    || skip "no C.UTF-8 or en_US.UTF-8 locale installed; U+2003 cannot be classified as a space"
+  export LC_ALL="${_utf8_locale}"
+
+  printf 'make\xe2\x80\x83-C x print-X\n' > "${BATS_TEST_TMPDIR}/emspace.txt"
+  local _unfiltered="" _prefiltered="" _ln _content _lines
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _unfiltered+="${_ln} "
+  done < <(_join_continuations "${BATS_TEST_TMPDIR}/emspace.txt")
+  _lines="$(_make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/emspace.txt")"
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _prefiltered+="${_ln} "
+  done <<< "${_lines}"
+  printf 'unfiltered: [%s] prefiltered: [%s] LC_ALL=%s\n' "${_unfiltered}" "${_prefiltered}" "${LC_ALL:-}" >&2
+  if [[ -z "${_unfiltered}" ]]; then
+    printf 'locale %s does not treat U+2003 as a space; the test would be vacuous\n' "${_utf8_locale}" >&2
+    return 1
+  fi
+  [ "${_unfiltered}" = "${_prefiltered}" ]
+}
+
+@test "make -C prefilter: a file with no candidate yields no lines and status 0" {
+  printf 'echo no flag here\n' > "${BATS_TEST_TMPDIR}/none.txt"
+  run _make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/none.txt"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "make -C prefilter: an invalid pattern fails and names the file" {
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  run _make_c_prefiltered_lines "${_fixture}" '('
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"grep exited 2"* ]]
+  [[ "${output}" == *"${_fixture}"* ]]
+}
+
+@test "make -C prefilter: a failed pattern derivation fails and names the file" {
+  _make_c_prefilter_re() { return 1; }
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  run _make_c_prefiltered_lines "${_fixture}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pattern derivation failed for"* ]]
+  [[ "${output}" == *"${_fixture}"* ]]
+}
+
+@test "make -C prefilter: a missing file fails and names it" {
+  local _missing="${BATS_TEST_TMPDIR}/does-not-exist.txt"
+  run _make_c_prefiltered_lines "${_missing}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"_join_continuations failed"* ]]
+  [[ "${output}" == *"${_missing}"* ]]
+}
+
+@test "make -C prefilter: derivation refuses a regex without the (^| anchor" {
+  run _make_c_prefilter_re '([[:space:]])-C'
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"_MAKE_C_FORM_RE no longer starts with (^|"* ]]
+}
+
 @test "every stdout-capturing make -C invocation in-domain is guarded or measuring, both sets nonempty" {
   local -a _domain_files=()
   local _rel
@@ -685,8 +850,9 @@ _is_make_c_candidate() {
   [ "${#_domain_files[@]}" -gt 0 ]
 
   local -a _candidates=()
-  local _f _lineno _content
+  local _f _lineno _content _lines
   for _f in "${_domain_files[@]}"; do
+    _lines="$(_make_c_prefiltered_lines "${_f}")" || return 1
     while IFS=: read -r _lineno _content; do
       [ -z "${_lineno}" ] && continue
       _is_make_c_candidate "${_content}" || continue
@@ -705,7 +871,7 @@ _is_make_c_candidate() {
         continue
       fi
       _candidates+=("${_f}:${_lineno}:${_content}")
-    done < <(_join_continuations "${_f}")
+    done <<< "${_lines}"
   done
   [ "${#_candidates[@]}" -gt 0 ]
 

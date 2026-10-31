@@ -1,0 +1,11 @@
+-C "$d" make print-X
+--directory "$d" make print-X
+make -C"$d" print-X
+make -C'$d' print-X
+make -C$d print-X
+make --directory "$d" print-X
+make	-C "$d" print-X
+make -Cfoo print-X
+make \
+  -C "$d" print-X
+echo no flag here
