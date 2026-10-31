@@ -87,13 +87,14 @@ shard() {
 }
 
 # score_shard <table> <counts>: stdin is a shard list; prints its CPU weight. A file
-# with no table row weighs its @test count times the live rows' CPU s per test,
+# with no table row weighs its @test count times the live rows' CPU s per test
+# (dead rows, absent from the counts, are excluded),
 # the packer's own fallback, so a missing row is not scored as free.
 score_shard() {
   awk -F'\t' '
     FILENAME == ARGV[1] { if ($0 !~ /^#/) row[$1] = $2; next }
     FILENAME == ARGV[2] { cnt[$1] = $2; next }
-    FNR == 1 && !rated { for (f in row) { c += cnt[f]; t += row[f] } rate = t / c; rated = 1 }
+    FNR == 1 && !rated { for (f in row) if (f in cnt) { c += cnt[f]; t += row[f] } rate = t / c; rated = 1 }
     { s += ($0 in row) ? row[$0] : cnt[$0] * rate }
     END { print s + 0 }
   ' "$1" "$2" -
