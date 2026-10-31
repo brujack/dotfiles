@@ -12,11 +12,13 @@
 bats_require_minimum_version 1.5.0
 
 _strip_make_leak_env() {
-  unset MAKEFLAGS MFLAGS MAKELEVEL JOBS BATS_FILES_FROM
+  unset MAKEFLAGS MFLAGS MAKELEVEL JOBS
 }
 
 setup() {
   _strip_make_leak_env
+  # An outer run's shard list must not leak into the unset case.
+  unset BATS_FILES_FROM
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
@@ -109,7 +111,7 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
   export BATS_FILES_FROM="${BATS_TEST_TMPDIR}/nope.files"
   _run_test_bats JOBS=4
   [ "$status" -ne 0 ]
-  [ -n "$stderr" ]
+  [[ "$stderr" == *"refusing to report a pass over zero tests"* ]]
   [ "$(_calls)" -eq 0 ]
 }
 
@@ -118,6 +120,6 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
   export BATS_FILES_FROM="${LIST}"
   _run_test_bats JOBS=4
   [ "$status" -ne 0 ]
-  [ -n "$stderr" ]
+  [[ "$stderr" == *"refusing to report a pass over zero tests"* ]]
   [ "$(_calls)" -eq 0 ]
 }
