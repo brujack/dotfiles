@@ -18,7 +18,7 @@ _strip_make_leak_env() {
 setup() {
   _strip_make_leak_env
   # An outer run's shard list must not leak into the unset case.
-  unset BATS_FILES_FROM
+  unset BATS_FILES_FROM COVERAGE_TRACE_DIR _OVERRIDE_COVERAGE_ROOT
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
@@ -28,7 +28,7 @@ setup() {
   : > "${RECORD}"
 
   local b
-  for b in make git env bash sed awk grep mktemp find sort file tr cut head cat; do
+  for b in make git env bash sed awk grep mktemp find sort file tr cut head cat python3; do
     if command -v "${b}" > /dev/null 2>&1; then
       ln -s "$(command -v "${b}")" "${SHIM}/${b}"
     fi
@@ -133,4 +133,117 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
     -C "${REPO_ROOT}" test JOBS=4
   [ "$status" -eq 0 ]
   [[ "$output" == *"bats --jobs 4 --print-output-on-failure tests/"* ]]
+}
+
+# --- make test-prereqs and make bash-coverage forwarding -------------------
+#
+# The coverage script is a recording stub: the `bash` on SHIM passes through
+# to the real bash for everything except scripts/run-bash-coverage.sh, so the
+# Makefile's parse-time `bash scripts/...` calls still work. No traced suite
+# runs here.
+
+_install_coverage_stub() {
+  COV_RECORD="${BATS_TEST_TMPDIR}/coverage.calls"
+  : > "${COV_RECORD}"
+  rm -f "${SHIM}/bash"
+  cat > "${SHIM}/bash" << STUBEOF
+#!$(command -v bash)
+if [[ "\$1" == scripts/run-bash-coverage.sh ]]; then
+  shift
+  printf 'args=%s | files=%s trace=%s root=%s\\n' "\$*" "\${BATS_FILES_FROM-unset}" \\
+    "\${COVERAGE_TRACE_DIR-unset}" "\${_OVERRIDE_COVERAGE_ROOT-unset}" >> "${COV_RECORD}"
+  exit 0
+fi
+exec $(command -v bash) "\$@"
+STUBEOF
+  chmod +x "${SHIM}/bash"
+}
+
+_run_bash_coverage() {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory \
+    -C "${REPO_ROOT}" bash-coverage HAVE_PARALLEL=
+}
+
+@test "make -n test runs test-prereqs' work once, before the bats call" {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory -n \
+    -C "${REPO_ROOT}" test JOBS=4
+  [ "$status" -eq 0 ]
+  [ "$(command grep -c 'claude_md_budget.py' <<< "${output}")" -eq 1 ]
+  local budget_line bats_line
+  budget_line="$(command grep -n 'claude_md_budget.py' <<< "${output}" | cut -d: -f1)"
+  bats_line="$(command grep -n 'bats --jobs 4' <<< "${output}" | head -1 | cut -d: -f1)"
+  [ -n "${bats_line}" ]
+  [ "${budget_line}" -lt "${bats_line}" ]
+}
+
+@test "make -n test-prereqs plans no bats call" {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory -n \
+    -C "${REPO_ROOT}" test-prereqs JOBS=4
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"claude_md_budget.py"* ]]
+  # An executed bats call is a line starting with `bats` (lint merely prints
+  # .bats file names inside other commands).
+  ! command grep -qE '^[[:space:]]*bats[[:space:]]' <<< "${output}"
+}
+
+@test "bash-coverage: both variables set pass --files and --trace-only as arguments, never as environment" {
+  _install_coverage_stub
+  export BATS_FILES_FROM="${LIST}"
+  export COVERAGE_TRACE_DIR="${BATS_TEST_TMPDIR}/trace-out"
+  _run_bash_coverage
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args=--files ${LIST} --trace-only ${BATS_TEST_TMPDIR}/trace-out | files=unset trace=unset root=unset" ]
+}
+
+@test "bash-coverage: an exported _OVERRIDE_COVERAGE_ROOT does not reach the script" {
+  _install_coverage_stub
+  export _OVERRIDE_COVERAGE_ROOT="${BATS_TEST_TMPDIR}/elsewhere"
+  _run_bash_coverage
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args= | files=unset trace=unset root=unset" ]
+}
+
+@test "bash-coverage: both variables unset gives today's argv" {
+  _install_coverage_stub
+  _run_bash_coverage
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args= | files=unset trace=unset root=unset" ]
+}
+
+@test "bash-coverage: only the list set passes only --files" {
+  _install_coverage_stub
+  export BATS_FILES_FROM="${LIST}"
+  _run_bash_coverage
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args=--files ${LIST} | files=unset trace=unset root=unset" ]
+}
+
+@test "bash-coverage: only the trace dir set passes only --trace-only" {
+  _install_coverage_stub
+  export COVERAGE_TRACE_DIR="${BATS_TEST_TMPDIR}/trace-out"
+  _run_bash_coverage
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args=--trace-only ${BATS_TEST_TMPDIR}/trace-out | files=unset trace=unset root=unset" ]
+}
+
+@test "bash-coverage: a missing list is refused before the script runs" {
+  _install_coverage_stub
+  export BATS_FILES_FROM="${BATS_TEST_TMPDIR}/nope.files"
+  _run_bash_coverage
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"refusing"* ]]
+  [ ! -s "${COV_RECORD}" ]
+}
+
+@test "bash-coverage: an empty list is refused before the script runs" {
+  _install_coverage_stub
+  : > "${LIST}"
+  export BATS_FILES_FROM="${LIST}"
+  _run_bash_coverage
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"refusing"* ]]
+  [ ! -s "${COV_RECORD}" ]
 }
