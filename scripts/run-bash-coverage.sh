@@ -22,7 +22,46 @@ _coverage_bats_args() {
             printf '%s\n' "--jobs" "${_jobs}"
             ;;
     esac
-    printf '%s\n' "--recursive" "${REPO_ROOT}/tests/"
+    # Failing tests print their own output into the TAP log, which is all a
+    # CI reader gets from a traced run that goes red.
+    printf '%s\n' "--print-output-on-failure"
+    if (( ${#_FILES_LIST[@]} )); then
+        printf '%s\n' "${_FILES_LIST[@]}"
+    else
+        printf '%s\n' "--recursive" "${REPO_ROOT}/tests/"
+    fi
+}
+
+# Reads a --files list into _FILES_LIST as absolute paths under REPO_ROOT.
+# Every failure exits 2 naming the input; a bad list must never fall back to
+# the full recursive suite.
+_FILES_LIST=()
+_load_files_list() {
+    local _list="${1}" _line _n=0
+    if [[ ! -f "${_list}" || ! -r "${_list}" ]]; then
+        printf "ERROR: --files: no such readable list file: %s\n" "${_list}" >&2
+        exit 2
+    fi
+    while IFS= read -r _line || [[ -n "${_line}" ]]; do
+        _n=$(( _n + 1 ))
+        if [[ "${_line}" == *$'\r'* ]]; then
+            printf "ERROR: --files: carriage return on line %d of %s\n" "${_n}" "${_list}" >&2
+            exit 2
+        fi
+        if [[ -z "${_line//[[:space:]]/}" ]]; then
+            printf "ERROR: --files: blank line %d in %s\n" "${_n}" "${_list}" >&2
+            exit 2
+        fi
+        if [[ ! -e "${REPO_ROOT}/${_line}" ]]; then
+            printf "ERROR: --files: listed path does not exist (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            exit 2
+        fi
+        _FILES_LIST+=("${REPO_ROOT}/${_line}")
+    done < "${_list}"
+    if (( ${#_FILES_LIST[@]} == 0 )); then
+        printf "ERROR: --files: empty list: %s\n" "${_list}" >&2
+        exit 2
+    fi
 }
 
 # Mode line from an argument array, shared by --print-bats-args and the main run.
@@ -43,7 +82,8 @@ Usage: run-bash-coverage.sh [--json /path/out.json]
        run-bash-coverage.sh --list-sources
        run-bash-coverage.sh --count-coverable <file>
        run-bash-coverage.sh --file-coverage <file> <trace_file>
-       run-bash-coverage.sh --print-bats-args
+       run-bash-coverage.sh --print-bats-args [--files LIST]
+       run-bash-coverage.sh --files LIST [--json /path/out.json]
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
@@ -70,6 +110,15 @@ Inspecting the figure without a full run (all of these exit immediately):
   --print-bats-args       Print the bats arguments the full run would use,
                           one per line, then the mode line. Exits 2 on an
                           invalid COVERAGE_BATS_JOBS
+
+  --files LIST            Trace only the bats files named in LIST (one
+                          repo-relative path per line) instead of
+                          --recursive tests/. Combines with --print-bats-args
+                          and with the full run. Exits 2 on a missing,
+                          unreadable or empty list, a blank line, a carriage
+                          return, or a listed path that does not exist
+
+Every traced run passes --print-output-on-failure to bats.
 
 COVERAGE_BATS_JOBS=<n>    Run the traced suite with bats --jobs <n> (a positive
                           integer, no leading zero). Unset or empty runs
@@ -711,6 +760,24 @@ if [[ "${1:-}" == "--check-red-suite" ]]; then
     _check_red_suite "${2}" "${3}"
     exit $?
 fi
+
+# --files LIST may appear anywhere among the remaining arguments. It is
+# consumed here so the flag handlers below keep reading $1/$2 unchanged.
+_rest=()
+while (( $# )); do
+    if [[ "${1}" == "--files" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            printf "ERROR: --files requires a list file\n" >&2
+            exit 2
+        fi
+        _load_files_list "${2}"
+        shift 2
+    else
+        _rest+=("${1}")
+        shift
+    fi
+done
+set -- "${_rest[@]}"
 
 # Shows the bats argv without running the suite; exits before the main run.
 if [[ "${1:-}" == "--print-bats-args" ]]; then
