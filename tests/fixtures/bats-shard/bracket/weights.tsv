@@ -1,0 +1,4 @@
+# brackets the default handicap of 40
+tests/x.bats	39.5
+tests/y.bats	0.5
+tests/z.bats	0.5

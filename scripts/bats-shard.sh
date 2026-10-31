@@ -27,23 +27,26 @@ shard_die() {
 shard_pack() {
   local _weights="$1" _index="$2" _count="$3" _handicap="$4"
   shift 4
-  awk -F'\t' -v wfile="${_weights}" -v idx="${_index}" -v n="${_count}" -v hc="${_handicap}" '
+  # LC_ALL=C: string comparison (path ties, dead-row order) and decimal parsing
+  # must not depend on the caller's locale. ARGV is the weights table then every
+  # .bats path, so a zero-byte file (no records) is still a file.
+  LC_ALL=C awk -F'\t' -v idx="${_index}" -v n="${_count}" -v hc="${_handicap}" '
     function fail(msg) { printf "bats-shard: %s\n", msg > "/dev/stderr"; failed = 1; exit 2 }
+    BEGIN {
+      wfile = ARGV[1]
+      for (i = 2; i < ARGC; i++) { nfiles++; path[nfiles] = ARGV[i]; known[ARGV[i]] = 1 }
+    }
     FILENAME == wfile {
-      if ($0 ~ /^#/ || $0 == "") next
-      if (NF != 2 || $2 !~ /^[0-9]+(\.[0-9]+)?$/) fail("malformed weights line " FNR ": " $0)
+      if ($0 ~ /^#/) next
+      if ($0 ~ /\r$/) fail(wfile ": line " FNR " is a CRLF line")
+      if (NF != 2 || $2 !~ /^[0-9]+(\.[0-9]+)?$/) fail(wfile ": malformed line " FNR ": " $0)
+      if ($1 in row) fail(wfile ": duplicate row at line " FNR ": " $1)
       row[$1] = $2 + 0
       next
     }
-    {
-      if (FILENAME != cur) { cur = FILENAME; nfiles++; path[nfiles] = FILENAME }
-      if ($0 ~ /^@test/) tests[FILENAME]++
-    }
+    /^@test/ { tests[FILENAME]++ }
     END {
       if (failed) exit 2
-      # Every argument file is in path[]; a bats file with no @test line has no
-      # tests[] entry but is still a file.
-      for (i = 1; i <= nfiles; i++) known[path[i]] = 1
       live = 0; cpu = 0; cnt = 0
       for (r in row) {
         if (r in known) { live++; cpu += row[r]; cnt += tests[r] + 0 }
@@ -52,8 +55,8 @@ shard_pack() {
       # Name dead rows in path order so stderr is deterministic.
       for (a = 2; a <= nd; a++) { v = dead[a]; b = a - 1; while (b >= 1 && dead[b] > v) { dead[b + 1] = dead[b]; b-- } dead[b + 1] = v }
       for (a = 1; a <= nd; a++) printf "bats-shard: dead row: %s\n", dead[a] > "/dev/stderr"
-      if (live == 0) fail("weights table has no live rows")
-      if (cnt == 0) fail("live rows hold no @test lines")
+      if (live == 0) fail(wfile ": no live rows")
+      if (cnt == 0) fail(wfile ": live rows hold no @test lines")
       per = cpu / cnt
       for (i = 1; i <= nfiles; i++) w[i] = (path[i] in row) ? row[path[i]] : (tests[path[i]] + 0) * per
       # Order: heaviest first, ties by path ascending (insertion sort; ~90 files).
@@ -76,7 +79,7 @@ shard_pack() {
 }
 
 main() {
-  local _index="${1:-}" _count="${2:-}" _weights _handicap _files _out _rc
+  local _index="${1:-}" _count="${2:-}" _weights _handicap _found _files _out _rc
   if [[ $# -ne 2 ]]; then
     shard_die "usage: bats-shard.sh <index> <count>" || return 2
   fi
@@ -94,17 +97,27 @@ main() {
   if [[ ! -f "${_weights}" || ! -r "${_weights}" ]]; then
     shard_die "weights file unreadable: ${_weights}" || return 2
   fi
-  _files="$(find tests -name '*.bats' 2>/dev/null | LC_ALL=C sort)" || return 2
-  if [[ -z "${_files}" ]]; then
+  # find's own status is checked: a pipeline would report sort's.
+  _found="$(find tests -name '*.bats')" || {
+    shard_die "find tests failed" || return 2
+  }
+  _files="$(printf '%s\n' "${_found}" | LC_ALL=C sort)"
+  if [[ -z "${_found}" ]]; then
     shard_die "no .bats files under tests/" || return 2
   fi
-  # shellcheck disable=SC2086 # paths hold no whitespace in this repo; one per line, word-split on purpose
-  _out="$(IFS=$'\n'; shard_pack "${_weights}" "$((10#${_index}))" "$((10#${_count}))" "${_handicap}" ${_files})"
+  # One path per line, split on newline only; set -f stops a glob character in a
+  # path expanding. Paths with a newline are not supported.
+  # shellcheck disable=SC2086 # deliberate newline word-splitting with globbing off
+  _out="$(set -f; IFS=$'\n'; shard_pack "${_weights}" "$((10#${_index}))" "$((10#${_count}))" "${_handicap}" ${_files})"
   _rc=$?
   if [[ ${_rc} -ne 0 ]]; then
     return 2
   fi
-  printf '%s\n' "${_out}"
+  # An empty shard prints nothing; make refuses the empty list downstream.
+  if [[ -n "${_out}" ]]; then
+    printf '%s\n' "${_out}"
+  fi
+  return 0
 }
 
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0

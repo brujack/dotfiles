@@ -1,0 +1,3 @@
+# zero-byte file with a row
+tests/a.bats	10
+tests/z.bats	3

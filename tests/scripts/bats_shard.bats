@@ -45,7 +45,7 @@ shard() {
       [ -n "${output}" ]
       _got+="${output}"$'\n'
     done
-    # sort -u equal to sort means no file appeared twice; equality with _all means full cover.
+    # Sorted concatenation equal to the full list means every file appeared exactly once.
     [ "$(printf '%s' "${_got}" | LC_ALL=C sort)" = "${_all}" ]
   done
 }
@@ -72,14 +72,31 @@ shard() {
   [ "${output}" = $'tests/a.bats\ntests/c.bats\ntests/e.bats' ]
 }
 
-@test "default handicap is 40: shard 1 of 2 gets only the lightest file" {
-  stage_fixture golden
-  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv"
+@test "default handicap is 40, not 39 or 41" {
+  stage_fixture bracket
+  export BATS_WEIGHTS="${FIXTURES}/bracket/weights.tsv"
   shard 1 2
   [ "${status}" -eq 0 ]
-  [ -n "${output}" ]
-  # 40 outweighs every file, so shard 2 takes a,b,c,d,e before shard 1 gets f.
-  [ "${output}" = "tests/f.bats" ]
+  [ "${output}" = "tests/z.bats" ]
+  BATS_SHARD_HANDICAP=39 shard 1 2
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'tests/y.bats\ntests/z.bats' ]
+  BATS_SHARD_HANDICAP=41 shard 1 2
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+# score_shard <table> <counts>: stdin is a shard list; prints its CPU weight. A file
+# with no table row weighs its @test count times the live rows' CPU s per test,
+# the packer's own fallback, so a missing row is not scored as free.
+score_shard() {
+  awk -F'\t' '
+    FILENAME == ARGV[1] { if ($0 !~ /^#/) row[$1] = $2; next }
+    FILENAME == ARGV[2] { cnt[$1] = $2; next }
+    FNR == 1 && !rated { for (f in row) { c += cnt[f]; t += row[f] } rate = t / c; rated = 1 }
+    { s += ($0 in row) ? row[$0] : cnt[$0] * rate }
+    END { print s + 0 }
+  ' "$1" "$2" -
 }
 
 @test "weights by CPU seconds beat count-packing on the real tree" {
@@ -91,15 +108,17 @@ shard() {
   done) > "${_counts}"
   export BATS_SHARD_HANDICAP=0
   for _i in 1 2 3; do
-    BATS_WEIGHTS="${_table}" run bash -c 'cd "$1" && bash "$2" "$3" 3' _ "${REPO_ROOT}" "${SCRIPT}" "${_i}"
+    BATS_WEIGHTS="${_table}" run --separate-stderr bash -c 'cd "$1" && bash "$2" "$3" 3' _ "${REPO_ROOT}" "${SCRIPT}" "${_i}"
     [ "${status}" -eq 0 ]
     [ -n "${output}" ]
-    _w="$(printf '%s\n' "${output}" | awk -F'\t' 'NR==FNR{if($0!~/^#/)w[$1]=$2;next}{s+=w[$0]}END{print s+0}' "${_table}" -)"
+    [ -z "${stderr}" ]
+    _w="$(printf '%s\n' "${output}" | score_shard "${_table}" "${_counts}")"
     awk -v a="${_w}" -v b="${_cpu_max}" 'BEGIN{exit !(a>b)}' && _cpu_max="${_w}"
-    BATS_WEIGHTS="${_counts}" run bash -c 'cd "$1" && bash "$2" "$3" 3' _ "${REPO_ROOT}" "${SCRIPT}" "${_i}"
+    BATS_WEIGHTS="${_counts}" run --separate-stderr bash -c 'cd "$1" && bash "$2" "$3" 3' _ "${REPO_ROOT}" "${SCRIPT}" "${_i}"
     [ "${status}" -eq 0 ]
     [ -n "${output}" ]
-    _w="$(printf '%s\n' "${output}" | awk -F'\t' 'NR==FNR{if($0!~/^#/)w[$1]=$2;next}{s+=w[$0]}END{print s+0}' "${_table}" -)"
+    [ -z "${stderr}" ]
+    _w="$(printf '%s\n' "${output}" | score_shard "${_table}" "${_counts}")"
     awk -v a="${_w}" -v b="${_cnt_max}" 'BEGIN{exit !(a>b)}' && _cnt_max="${_w}"
   done
   # Both heaviest shards scored in CPU seconds with the committed table.
@@ -144,7 +163,7 @@ shard() {
     shard ${_args}
     [ "${status}" -eq 2 ]
     [ -z "${output}" ]
-    [ -n "${stderr}" ]
+    [[ "${stderr}" == "bats-shard: "* ]]
   done
 }
 
@@ -154,7 +173,7 @@ shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [ -n "${stderr}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "an unreadable weights file exits 2 with empty stdout" {
@@ -163,7 +182,7 @@ shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [ -n "${stderr}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "a table with no live rows exits 2 with empty stdout" {
@@ -173,7 +192,7 @@ shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [ -n "${stderr}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "live rows whose files hold no @test exit 2 with empty stdout" {
@@ -183,19 +202,86 @@ shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [ -n "${stderr}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "a malformed table line exits 2 with empty stdout" {
   stage_fixture golden
   local _bad
-  for _bad in 'tests/a.bats\tabc' 'tests/a.bats' 'tests/a.bats\t-3' 'tests/a.bats\t1\t2'; do
+  for _bad in 'tests/a.bats\tabc' 'tests/a.bats' 'tests/a.bats\t-3' 'tests/a.bats\t1\t2' \
+    'tests/a.bats\t5\r' 'tests/a.bats\t1.' '' 'tests/a.bats\t5\ntests/a.bats\t6'; do
     { printf '# header\n'; printf "${_bad}\n"; printf 'tests/b.bats\t4\n'; } > "${BATS_TEST_TMPDIR}/bad.tsv"
     BATS_WEIGHTS="${BATS_TEST_TMPDIR}/bad.tsv" shard 1 2
     [ "${status}" -eq 2 ]
     [ -z "${output}" ]
-    [ -n "${stderr}" ]
+    [[ "${stderr}" == "bats-shard: "* ]]
   done
+}
+
+@test "a CRLF table line is reported as CRLF and names the table" {
+  stage_fixture golden
+  printf 'tests/a.bats\t5\r\n' > "${BATS_TEST_TMPDIR}/crlf.tsv"
+  BATS_WEIGHTS="${BATS_TEST_TMPDIR}/crlf.tsv" shard 1 2
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+  [[ "${stderr}" == "bats-shard: "*"CRLF"* ]]
+  [[ "${stderr}" == *"${BATS_TEST_TMPDIR}/crlf.tsv"* ]]
+}
+
+@test "a duplicate table row exits 2 and names the row" {
+  stage_fixture golden
+  printf 'tests/a.bats\t5\ntests/a.bats\t6\n' > "${BATS_TEST_TMPDIR}/dup.tsv"
+  BATS_WEIGHTS="${BATS_TEST_TMPDIR}/dup.tsv" shard 1 2
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+  [[ "${stderr}" == "bats-shard: "*"duplicate"*"tests/a.bats"* ]]
+}
+
+@test "leading-zero arguments mean the same shard as plain ones" {
+  stage_fixture golden
+  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv" BATS_SHARD_HANDICAP=0
+  shard 1 2
+  local _plain="${output}"
+  [ -n "${_plain}" ]
+  shard 01 02
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${_plain}" ]
+}
+
+@test "a zero-byte .bats file with a table row lands in exactly one shard, no dead row" {
+  stage_fixture zero
+  export BATS_WEIGHTS="${FIXTURES}/zero/weights.tsv" BATS_SHARD_HANDICAP=0
+  shard 1 2
+  [ "${status}" -eq 0 ]
+  [ -z "${stderr}" ]
+  local _s1="${output}"
+  shard 2 2
+  [ "${status}" -eq 0 ]
+  [ -z "${stderr}" ]
+  [ "$(printf '%s\n%s\n' "${_s1}" "${output}" | command grep -c '^tests/z.bats$')" -eq 1 ]
+  [ "$(printf '%s\n%s\n' "${_s1}" "${output}" | command grep -c '^tests/a.bats$')" -eq 1 ]
+}
+
+@test "an empty shard prints no bytes and exits 0" {
+  stage_fixture golden
+  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv" BATS_SHARD_HANDICAP=0
+  # Six files over eight shards: shard 8 is empty.
+  run bash -c 'cd "$1" && bash "$2" 8 8 > "$3"' _ "${WORK}" "${SCRIPT}" "${BATS_TEST_TMPDIR}/out"
+  [ "${status}" -eq 0 ]
+  [ -f "${BATS_TEST_TMPDIR}/out" ]
+  [ ! -s "${BATS_TEST_TMPDIR}/out" ]
+}
+
+@test "a find error exits 2 with empty stdout even when find printed files" {
+  stage_fixture golden
+  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv"
+  mkdir "${WORK}/tests/locked"
+  chmod 000 "${WORK}/tests/locked"
+  shard 1 2
+  chmod 755 "${WORK}/tests/locked"
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+  [[ "${stderr}" == *"bats-shard: "* ]]
 }
 
 @test "an empty tree exits 2 with empty stdout" {
@@ -203,7 +289,7 @@ shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [ -n "${stderr}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "the committed weights table is a commented, C-sorted list of numeric rows" {
@@ -213,6 +299,8 @@ shard() {
   [ -n "${_rows}" ]
   [ "$(printf '%s\n' "${_rows}" | wc -l)" -gt 80 ]
   [ "${_rows}" = "$(printf '%s\n' "${_rows}" | LC_ALL=C sort)" ]
+  # No path appears twice.
+  [ -z "$(printf '%s\n' "${_rows}" | cut -f1 | LC_ALL=C sort | uniq -d)" ]
   # Every row is <tests/...bats> TAB <non-negative number>.
   ! printf '%s\n' "${_rows}" | command grep -qvE '^tests/[^	]+\.bats	[0-9]+(\.[0-9]+)?$'
 }
