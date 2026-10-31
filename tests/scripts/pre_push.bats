@@ -1683,11 +1683,11 @@ _run_pre_push_wired() {
 }
 
 # The wiring block is byte-identical fleet-wide, and four repos default to main.
-@test "wiring: a push to main is judged by the gate" {
+@test "wiring: a feature branch pushed onto main is judged by the gate" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
   _write_make_mock 0
-  run _run_pre_push "refs/heads/main ${local_sha} refs/heads/main ${base_sha}\n"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/main ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot load the push-content gate"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
