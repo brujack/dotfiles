@@ -168,6 +168,10 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # the real scripts/bash-tracer.sh next to this file, so a fixture tree needs no
 # copy of it.
 REPO_ROOT="${_OVERRIDE_COVERAGE_ROOT:-${SCRIPT_ROOT}}"
+# A stray export would otherwise score the wrong tree without a word.
+if [[ -n "${_OVERRIDE_COVERAGE_ROOT:-}" ]]; then
+    printf "run-bash-coverage: _OVERRIDE_COVERAGE_ROOT in effect: %s\n" "${_OVERRIDE_COVERAGE_ROOT}" >&2
+fi
 TRACER="${SCRIPT_ROOT}/scripts/bash-tracer.sh"
 OUTPUT_DIR="${REPO_ROOT}/coverage"
 TRACE_FILE="${OUTPUT_DIR}/bash_trace.txt"

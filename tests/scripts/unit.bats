@@ -2350,6 +2350,18 @@ _run_cov_tree() {
   [[ "$output" == *"--score cannot be combined"* ]]
 }
 
+@test "run-bash-coverage.sh announces _OVERRIDE_COVERAGE_ROOT on stderr only when it is set" {
+  _make_cov_tree
+  run --separate-stderr _run_cov_tree --list-sources
+  [ "$status" -eq 0 ]
+  [[ "${stderr}" == *"run-bash-coverage: _OVERRIDE_COVERAGE_ROOT in effect: ${COV_TREE}"* ]]
+  [[ "${output}" == *"${COV_TREE}/lib/tiny.sh"* ]]
+  run --separate-stderr _run_coverage --list-sources
+  [ "$status" -eq 0 ]
+  [ -n "${output}" ]
+  [[ "${stderr}" != *"_OVERRIDE_COVERAGE_ROOT"* ]]
+}
+
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
   run bash "${REPO_ROOT}/scripts/.osx.sh" -h
   [ "$status" -eq 0 ]
