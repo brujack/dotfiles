@@ -1,5 +1,7 @@
 # test-macos Shard Implementation Plan
 
+> **Status: DONE** (dotfiles#411, merged 2026-10-31 as 5161dbd8)
+
 spec: docs/superpowers/specs/2026-10-30-test-macos-shard-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development (the local override) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
