@@ -67,7 +67,9 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
   [ "$status" -eq 0 ]
   [ "$(_calls)" -eq 1 ]
   local expected
-  expected="$(cd "${REPO_ROOT}" && find tests -name '*.bats' | LC_ALL=C sort | tr '\n' ' ')"
+  # Mirrors the Makefile's BATS_ALL_FILES derivation, plain `sort` included: it
+  # collates in the caller's locale, so LC_ALL=C here would disagree on a dev box.
+  expected="$(cd "${REPO_ROOT}" && find tests -name '*.bats' 2>/dev/null | sort | tr '\n' ' ')"
   [ "$(cat "${RECORD}")" = "--jobs 4 --print-output-on-failure ${expected}| from=unset" ]
 }
 
