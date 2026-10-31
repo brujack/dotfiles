@@ -1,7 +1,7 @@
 # ADR-0037: The macOS test suite gates merge
 
 **Date:** 2026-10-02
-**Status:** Accepted.
+**Status:** Accepted. Partly superseded by ADR-0053: the single-job shape (decision 1's one `test-macos` job) is now a three-leg `test-macos-shard` matrix behind a `test-macos` gate; the rest stands.
 
 ## Context
 
