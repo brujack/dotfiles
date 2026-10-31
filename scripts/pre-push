@@ -268,7 +268,7 @@ if [[ ${_status_ok} -eq 1 && -z "${_status}" ]]; then
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
     printf "Running tests locally (pre-push)...\n"
-    make -C "${REPO_ROOT}" test
+    env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u BATS_FILES_FROM make -C "${REPO_ROOT}" test
     exit $?
 fi
 
@@ -304,7 +304,7 @@ _tmp_status=0
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 
     printf "Running tests locally (pre-push)...\n"
-    if make -C "${_tree}" test; then
+    if env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u BATS_FILES_FROM make -C "${_tree}" test; then
         exit 0
     else
         _rc=$?
