@@ -27,9 +27,9 @@ _job_steps() {
   ' "${WF}"
 }
 
-@test "test-macos uploads the full make test log when the job fails or is cancelled" {
+@test "test-macos-shard uploads the full make test log when the job fails or is cancelled" {
   local _steps
-  _steps="$(_job_steps test-macos)"
+  _steps="$(_job_steps test-macos-shard)"
   # Structural control: a layout the scanner does not understand (another
   # step indent, a renamed job) collapses the job to one record or none, and
   # must fail here rather than let any single step satisfy the checks below.
@@ -37,7 +37,7 @@ _job_steps() {
   local _upload
   _upload="$(printf '%s\n' "${_steps}" | command grep -E 'uses: actions/upload-artifact@' || true)"
   if [[ -z "${_upload}" ]]; then
-    printf 'test-macos has no upload-artifact step\n' >&2
+    printf 'test-macos-shard has no upload-artifact step\n' >&2
     return 1
   fi
   # A job timeout ends as cancelled, where failure() alone is false; that is
@@ -49,17 +49,17 @@ _job_steps() {
   [[ "${_upload}" == *"overwrite: true;"* ]]
 }
 
-@test "the test-macos log upload runs after the step that writes the log" {
+@test "the test-macos-shard log upload runs after the step that writes the log" {
   local _order
-  _order="$(_job_steps test-macos | awk '/name: Run tests;/ { t=NR } /upload-artifact@/ { u=NR } END { print t+0, u+0 }')"
+  _order="$(_job_steps test-macos-shard | awk '/name: Run tests;/ { t=NR } /upload-artifact@/ { u=NR } END { print t+0, u+0 }')"
   read -r _tests _upload <<< "${_order}"
   [ "${_tests}" -gt 0 ]
   [ "${_upload}" -gt "${_tests}" ]
 }
 
-@test "the test-macos log upload is pinned to a full commit SHA" {
+@test "the test-macos-shard log upload is pinned to a full commit SHA" {
   local _uses
-  _uses="$(_job_steps test-macos | command grep -oE 'uses: actions/upload-artifact@[^;]*' || true)"
+  _uses="$(_job_steps test-macos-shard | command grep -oE 'uses: actions/upload-artifact@[^;]*' || true)"
   [ -n "${_uses}" ]
   [[ "${_uses}" =~ @[0-9a-f]{40}( |$) ]]
 }
