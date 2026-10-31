@@ -33,34 +33,54 @@ _coverage_bats_args() {
 }
 
 # Reads a --files list into _FILES_LIST as absolute paths under REPO_ROOT.
-# Every failure exits 2 naming the input; a bad list must never fall back to
-# the full recursive suite.
+# Every failure returns 2 naming the input; a bad list must never fall back to
+# the full recursive suite. Entries must be distinct, repo-relative regular
+# .bats files: a duplicate would run a file twice and inflate the executed count.
 _FILES_LIST=()
 _load_files_list() {
-    local _list="${1}" _line _n=0
+    local _list="${1}" _line _n=0 _seen=$'\n'
     if [[ ! -f "${_list}" || ! -r "${_list}" ]]; then
         printf "ERROR: --files: no such readable list file: %s\n" "${_list}" >&2
-        exit 2
+        return 2
     fi
     while IFS= read -r _line || [[ -n "${_line}" ]]; do
         _n=$(( _n + 1 ))
         if [[ "${_line}" == *$'\r'* ]]; then
             printf "ERROR: --files: carriage return on line %d of %s\n" "${_n}" "${_list}" >&2
-            exit 2
+            return 2
         fi
         if [[ -z "${_line//[[:space:]]/}" ]]; then
             printf "ERROR: --files: blank line %d in %s\n" "${_n}" "${_list}" >&2
-            exit 2
+            return 2
         fi
+        if [[ "${_line}" == /* ]]; then
+            printf "ERROR: --files: absolute path not allowed (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        case "/${_line}/" in
+            */../*)
+                printf "ERROR: --files: '..' component not allowed (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+                return 2
+                ;;
+        esac
         if [[ ! -e "${REPO_ROOT}/${_line}" ]]; then
             printf "ERROR: --files: listed path does not exist (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
-            exit 2
+            return 2
         fi
+        if [[ ! -f "${REPO_ROOT}/${_line}" || "${_line}" != *.bats ]]; then
+            printf "ERROR: --files: not a regular .bats file (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        if [[ "${_seen}" == *$'\n'"${_line}"$'\n'* ]]; then
+            printf "ERROR: --files: duplicate entry (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        _seen+="${_line}"$'\n'
         _FILES_LIST+=("${REPO_ROOT}/${_line}")
     done < "${_list}"
     if (( ${#_FILES_LIST[@]} == 0 )); then
         printf "ERROR: --files: empty list: %s\n" "${_list}" >&2
-        exit 2
+        return 2
     fi
 }
 
@@ -764,13 +784,19 @@ fi
 # --files LIST may appear anywhere among the remaining arguments. It is
 # consumed here so the flag handlers below keep reading $1/$2 unchanged.
 _rest=()
+_files_seen=0
 while (( $# )); do
     if [[ "${1}" == "--files" ]]; then
         if [[ -z "${2:-}" ]]; then
             printf "ERROR: --files requires a list file\n" >&2
             exit 2
         fi
-        _load_files_list "${2}"
+        if (( _files_seen )); then
+            printf "ERROR: --files given more than once\n" >&2
+            exit 2
+        fi
+        _files_seen=1
+        _load_files_list "${2}" || exit 2
         shift 2
     else
         _rest+=("${1}")

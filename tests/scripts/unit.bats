@@ -1177,6 +1177,42 @@ FIXTURE
   [[ "$output" == *"--files requires a list file"* ]]
 }
 
+@test "run-bash-coverage.sh --files rejects non-bats, directory, escaping, absolute and duplicate entries" {
+  local _l="${BATS_TEST_TMPDIR}/list"
+
+  printf 'tests/scripts\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"line 1"* && "$output" == *"tests/scripts"* ]]
+
+  printf 'tests/scripts/unit.bats\nscripts/run-bash-coverage.sh\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"line 2"* && "$output" == *"scripts/run-bash-coverage.sh"* && "$output" == *".bats"* ]]
+
+  printf 'tests/../tests/scripts/unit.bats\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"line 1"* && "$output" == *"tests/../tests/scripts/unit.bats"* ]]
+
+  printf '%s\n' "${REPO_ROOT}/tests/scripts/unit.bats" > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"line 1"* && "$output" == *"absolute"* ]]
+
+  printf 'tests/scripts/unit.bats\ntests/scripts/unit.bats\n' > "${_l}"
+  run _run_coverage --files "${_l}" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"line 2"* && "$output" == *"duplicate"* && "$output" == *"tests/scripts/unit.bats"* ]]
+}
+
+@test "run-bash-coverage.sh repeated --files exits 2 naming the flag" {
+  printf 'tests/scripts/unit.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_coverage --files "${BATS_TEST_TMPDIR}/list" --files "${BATS_TEST_TMPDIR}/list" --print-bats-args
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--files given more than once"* ]]
+}
+
 @test "run-bash-coverage.sh --files error exits before any bats run on the main path" {
   run _run_coverage --files "${BATS_TEST_TMPDIR}/absent" --json "${BATS_TEST_TMPDIR}/out.json"
   [ "$status" -eq 2 ]
