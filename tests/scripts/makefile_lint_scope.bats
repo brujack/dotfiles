@@ -692,14 +692,21 @@ _make_c_prefilter_re() {
 # grep's status is read directly: 1 is "no match", any other failure fails.
 # $2 overrides the pattern (test seam only).
 _make_c_prefiltered_lines() {
-  local _file="$1" _re _joined _out _rc
-  _re="${2:-$(_make_c_prefilter_re)}" || return 1
+  local _file="$1" _re _joined _out _rc=0
+  if [[ -n "${2:-}" ]]; then
+    _re="$2"
+  else
+    _re="$(_make_c_prefilter_re)" || {
+      printf '_make_c_prefiltered_lines: pattern derivation failed for %s\n' "${_file}" >&2
+      return 1
+    }
+  fi
   _joined="$(_join_continuations "${_file}")" || {
     printf '_make_c_prefiltered_lines: _join_continuations failed on %s\n' "${_file}" >&2
     return 1
   }
-  _out="$(PATH="${CLEAN_PATH}" LC_ALL=C grep -a -E "${_re}" <<< "${_joined}")"
-  _rc=$?
+  # Caller's locale on purpose: grep's [[:space:]] must match bash =~'s.
+  _out="$(PATH="${CLEAN_PATH}" grep -a -E "${_re}" <<< "${_joined}")" || _rc=$?
   case "${_rc}" in
     0) printf '%s\n' "${_out}" ;;
     1) ;;
@@ -738,6 +745,11 @@ _words_missing_from() {
   done <<< "${_lines}"
   _prefiltered="${_prefiltered% }"
 
+  # A prefilter that drops nothing would pass the agreement check above, so
+  # also require that the non-candidate lines (8 and 11) are filtered out.
+  [[ $'\n'"${_lines}" != *$'\n8:'* ]]
+  [[ $'\n'"${_lines}" != *$'\n11:'* ]]
+
   if [[ "${_unfiltered}" != "${_expected}" || "${_prefiltered}" != "${_expected}" ]]; then
     {
       printf 'expected:    %s\n' "${_expected}"
@@ -750,6 +762,31 @@ _words_missing_from() {
     } >&2
     return 1
   fi
+}
+
+@test "make -C prefilter: a direct call on a no-match file survives errexit" {
+  printf 'echo no flag here\n' > "${BATS_TEST_TMPDIR}/none.txt"
+  # No run, no $(): bats errexit applies to the helper's own body here.
+  _make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/none.txt" > "${BATS_TEST_TMPDIR}/out.txt"
+  printf 'reached\n' > "${BATS_TEST_TMPDIR}/after.txt"
+  [ -f "${BATS_TEST_TMPDIR}/after.txt" ]
+  [ ! -s "${BATS_TEST_TMPDIR}/out.txt" ]
+}
+
+@test "make -C prefilter: a non-ASCII space line is classified the same unfiltered and prefiltered" {
+  printf 'make\xe2\x80\x83-C x print-X\n' > "${BATS_TEST_TMPDIR}/emspace.txt"
+  local _unfiltered="" _prefiltered="" _ln _content _lines
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _unfiltered+="${_ln} "
+  done < <(_join_continuations "${BATS_TEST_TMPDIR}/emspace.txt")
+  _lines="$(_make_c_prefiltered_lines "${BATS_TEST_TMPDIR}/emspace.txt")"
+  while IFS=: read -r _ln _content; do
+    [[ -z "${_ln}" ]] && continue
+    _is_make_c_candidate "${_content}" && _prefiltered+="${_ln} "
+  done <<< "${_lines}"
+  printf 'unfiltered: [%s] prefiltered: [%s] LC_ALL=%s\n' "${_unfiltered}" "${_prefiltered}" "${LC_ALL:-}" >&2
+  [ "${_unfiltered}" = "${_prefiltered}" ]
 }
 
 @test "make -C prefilter: a file with no candidate yields no lines and status 0" {
