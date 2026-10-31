@@ -271,6 +271,8 @@ good_partition() {
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"pairing:"* ]]
   [[ "${output}" == *"shard-7"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+  [[ "${output}" != *"shard-2"* ]]
 }
 
 @test "--with-traces names every offending shard, one line each, and skips coverage" {
@@ -278,9 +280,11 @@ good_partition() {
   printf 'tests/c.bats\n' > "${LISTS}/shard-2.files"
   run_gate_in "${TREE}" --with-traces lists
   [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
   [[ "${output}" == *"shard-1"* ]]
   [[ "${output}" == *"shard-2"* ]]
   [[ "${output}" != *"coverage:"* ]]
+  [ "$(printf '%s\n' "${output}" | command grep -c '^shard-')" -eq 2 ]
 }
 
 @test "--with-traces runs coverage after a passing pairing" {
@@ -296,7 +300,7 @@ good_partition() {
   good_partition
   run_gate_in "${TREE}" --bogus lists
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"ci-shard-gate:"* ]]
+  [[ "${output}" == *"unknown option: --bogus"* ]]
 }
 
 @test "a repeated --with-traces exits 2" {
@@ -309,4 +313,26 @@ good_partition() {
 @test "--with-traces without a directory exits 2" {
   run_gate_in "${TREE}" --with-traces
   [ "${status}" -eq 2 ]
+}
+
+@test "--with-traces refuses a symlinked trace naming the shard" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  printf 'real\n' > "${TREE}/real.trace"
+  ln -s ../real.trace "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-2: trace is a symlink"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+}
+
+@test "--with-traces reports a directory trace as not a regular file, not missing" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  mkdir "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"shard-2: "*"not a regular file"* ]]
+  [[ "${output}" != *"missing"* ]]
 }

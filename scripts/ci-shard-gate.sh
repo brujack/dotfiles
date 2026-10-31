@@ -58,8 +58,14 @@ gate_pairing() {
   for _f in "${_dir}"/shard-*.files; do
     [[ -e "${_f}" || -L "${_f}" ]] || continue
     _name="$(basename "${_f}" .files)"
-    if [[ ! -f "${_dir}/${_name}.trace" ]]; then
+    if [[ -L "${_dir}/${_name}.trace" ]]; then
+      printf '%s: trace is a symlink\n' "${_name}"
+      _bad=1
+    elif [[ ! -e "${_dir}/${_name}.trace" ]]; then
       printf '%s: missing %s.trace\n' "${_name}" "${_name}"
+      _bad=1
+    elif [[ ! -f "${_dir}/${_name}.trace" ]]; then
+      printf '%s: %s.trace is not a regular file\n' "${_name}" "${_name}"
       _bad=1
     elif [[ ! -s "${_dir}/${_name}.trace" ]]; then
       printf '%s: empty %s.trace\n' "${_name}" "${_name}"
