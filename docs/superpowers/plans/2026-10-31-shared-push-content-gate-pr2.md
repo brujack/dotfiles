@@ -1,5 +1,7 @@
 # Shared Push-Content Gate — PR2 (dotfiles) Implementation Plan
 
+> **Status: DONE** — merged via [dotfiles#412](https://github.com/brujack/dotfiles/pull/412) (2026-10-31, `056494d8`).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** ai-config `docs/superpowers/specs/2026-10-30-shared-push-content-gate-design.md` (cross-repo; no `spec:` line). R13 (dotfiles) and R14, with R14 as amended 2026-10-31, are copied verbatim under Global Constraints. The plan carries no `spec:` line because the spec tooling reads a spec only from the pushing repo. So `spec-alignment-review` records SKIP for this PR, with that reason (operator decision, 2026-10-31).
