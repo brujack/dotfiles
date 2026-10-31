@@ -139,6 +139,19 @@ score_shard() {
   [ "${output}" = $'tests/a.bats\ntests/b.bats' ]
 }
 
+@test "a dead row's weight never enters the fallback rate" {
+  stage_fixture fallback-dead
+  export BATS_WEIGHTS="${FIXTURES}/fallback-dead/weights.tsv" BATS_SHARD_HANDICAP=0
+  # Live rows: a, b = 10 s over 4 tests -> 5 s per test; new (1 test) weighs 5 s,
+  # lighter than a or b. Counting gone.bats (100 s) would make it 30 s and heaviest.
+  shard 1 2
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'tests/a.bats\ntests/new.bats' ]
+  shard 2 2
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "tests/b.bats" ]
+}
+
 @test "a dead row is named on stderr and changes neither output nor exit" {
   stage_fixture dead
   export BATS_SHARD_HANDICAP=0
@@ -193,7 +206,7 @@ score_shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [[ "${stderr}" == "bats-shard: "* ]]
+  [[ "${stderr}" == *"no live rows"* ]]
 }
 
 @test "live rows whose files hold no @test exit 2 with empty stdout" {
@@ -249,6 +262,21 @@ score_shard() {
   [ "${output}" = "${_plain}" ]
 }
 
+@test "leading zeros are decimal: 08 of 09 is shard 8, and 09 of 08 is out of range" {
+  stage_fixture golden
+  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv" BATS_SHARD_HANDICAP=0
+  shard 8 9
+  local _plain="${output}"
+  [ "${status}" -eq 0 ]
+  shard 08 09
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${_plain}" ]
+  shard 09 08
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+  [[ "${stderr}" == "bats-shard: index must be within 1..count"* ]]
+}
+
 @test "a zero-byte .bats file with a table row lands in exactly one shard, no dead row" {
   stage_fixture zero
   export BATS_WEIGHTS="${FIXTURES}/zero/weights.tsv" BATS_SHARD_HANDICAP=0
@@ -290,7 +318,7 @@ score_shard() {
   shard 1 2
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
-  [[ "${stderr}" == "bats-shard: "* ]]
+  [[ "${stderr}" == "bats-shard: no .bats files under tests/" ]]
 }
 
 @test "the committed weights table is a commented, C-sorted list of numeric rows" {

@@ -126,3 +126,11 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
   [[ "$stderr" == *"refusing to report a pass over zero tests"* ]]
   [ "$(_calls)" -eq 0 ]
 }
+
+@test "make test reaches the bats phase through test-bats" {
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory -n \
+    -C "${REPO_ROOT}" test JOBS=4
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bats --jobs 4 --print-output-on-failure tests/"* ]]
+}

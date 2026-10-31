@@ -1,0 +1,6 @@
+@test "t1" {
+  true
+}
+@test "t2" {
+  true
+}

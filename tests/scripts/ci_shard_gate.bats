@@ -110,7 +110,7 @@ good_partition() {
 @test "a missing directory exits 2 with the prefixed message" {
   run_gate_in "${TREE}" no-such-dir
   [ "${status}" -eq 2 ]
-  [[ "${output}" == "ci-shard-gate: "* ]]
+  [[ "${output}" == "ci-shard-gate: not a directory: no-such-dir" ]]
 }
 
 @test "a directory with no shard-*.files exits 2" {
@@ -140,7 +140,19 @@ good_partition() {
   rm -rf "${TREE}/tests"
   run_gate_in "${TREE}" lists
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"find"* ]]
+  [[ "${output}" == *"ci-shard-gate: find tests failed"* ]]
+}
+
+@test "a find error exits 2 with the find-failed message even when find printed files" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads everything"
+  good_partition
+  mkdir "${TREE}/tests/locked"
+  chmod 000 "${TREE}/tests/locked"
+  run_gate_in "${TREE}" lists
+  chmod 755 "${TREE}/tests/locked"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"ci-shard-gate: find tests failed"* ]]
+  [[ "${output}" != *"PASS"* ]]
 }
 
 @test "real 3-shard output written by bats-shard.sh passes" {
@@ -161,7 +173,9 @@ good_partition() {
   done
   _dropped="$(sed -n '1p' "${LISTS}/shard-2.files")"
   [ -n "${_dropped}" ]
-  sed -i '1d' "${LISTS}/shard-2.files"
+  # tail + mv, not sed -i: GNU and BSD sed disagree on -i's argument.
+  tail -n +2 "${LISTS}/shard-2.files" > "${LISTS}/shard-2.tmp"
+  mv "${LISTS}/shard-2.tmp" "${LISTS}/shard-2.files"
   run_gate_in "${REPO_ROOT}" "${LISTS}"
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"coverage:"* ]]

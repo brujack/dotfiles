@@ -149,7 +149,18 @@ make_files_list() {
   printf 'ok 1 one\n' > "${LOG}"
   run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
   [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read listed file"* ]]
   [[ "${output}" == *"ghost.bats"* ]]
+}
+
+@test "--files: a listed path that is a directory exits 2 as unreadable" {
+  make_files_list
+  printf '%s\n' "${TESTS_DIR}/sub" >> "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read listed file"* ]]
+  [[ "${output}" == *"${TESTS_DIR}/sub"* ]]
 }
 
 @test "--files: a blank line in the list exits 2" {
