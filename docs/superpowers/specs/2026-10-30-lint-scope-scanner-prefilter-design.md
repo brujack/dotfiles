@@ -1,6 +1,7 @@
 # makefile_lint_scope partition scanner: prefilter before the per-line loop
 
 - **Date:** 2026-10-30
+- **Approved:** 2026-10-31
 - **Context:** found by the per-file timing taken for the `test-macos` shard spec
   (`docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`). Ships before that spec.
 
@@ -91,7 +92,7 @@ cheap.
 
 ## Multi-Lens Review
 
-Round 1 against `a3c7b5e4` (goal-fit, ergonomics, risk). Dispositions proposed; operator to confirm.
+Round 1 against `a3c7b5e4` (goal-fit, ergonomics, risk). Dispositions accepted by the operator 2026-10-31.
 
 | # | Lens | Finding | Disposition |
 | - | ---- | ------- | ----------- |
