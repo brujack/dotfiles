@@ -18,8 +18,12 @@ _pcg_fetch() { # <api path>; prints the raw file. curl reads no user-writable co
         "https://api.github.com/${1}"
 }
 # <<< _pcg_fetch
-_pcg_refs="$(cat)" || { printf 'pre-push: cannot read the pushed refs\n' >&2; exit 1; }
-if printf '%s\n' "${_pcg_refs}" | awk '$3 == "refs/heads/master" || $3 == "refs/heads/main" { f = 1 } END { exit !f }'; then
+_pcg_refs="$(</dev/stdin)" || { printf 'pre-push: cannot read the pushed refs\n' >&2; exit 1; }
+_pcg_hit=1
+while read -r _ _ _pcg_rref _; do
+  case "${_pcg_rref}" in refs/heads/master | refs/heads/main) _pcg_hit=0 ;; esac
+done <<< "${_pcg_refs}"
+if [[ "${_pcg_hit}" -eq 0 ]]; then
   # shellcheck disable=SC1090 # the library is fetched at runtime; there is no file to follow
   if _pcg_src="$(_pcg_fetch 'repos/brujack/ai-config/contents/.claude/hooks/push-content-gate.sh?ref=master')" \
     && source <(printf '%s\n' "${_pcg_src}") \

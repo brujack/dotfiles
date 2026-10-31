@@ -1660,6 +1660,55 @@ _run_pre_push_wired() {
   command grep -q 'auth token' "${BATS_TEST_TMPDIR}/gh.calls"
 }
 
+# The wiring decides master/main in bash and reads stdin with a builtin, so
+# neither a PATH awk that says "no match" nor a PATH cat that prints nothing can
+# make a master push look like a feature push (ai-config#345).
+@test "wiring: a PATH awk or cat cannot hide a master push from the gate" {
+  local stub
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  for stub in 'awk:exit 1' 'cat:exit 0'; do
+    printf '#!/usr/bin/env bash\n%s\n' "${stub#*:}" > "${MAKE_MOCK_DIR}/${stub%%:*}"
+    chmod +x "${MAKE_MOCK_DIR}/${stub%%:*}"
+    rm -f "${BATS_TEST_TMPDIR}/gh.calls"
+    run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+    rm -f "${MAKE_MOCK_DIR}/${stub%%:*}"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"cannot load the push-content gate"* ]]
+    command grep -q 'auth token' "${BATS_TEST_TMPDIR}/gh.calls"
+  done
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# git always hands pre-push a pipe, but run as `bash -p` with fd 0 closed the
+# read fails, and the hook must refuse rather than read "no refs".
+@test "wiring: an unreadable stdin refuses before any gh call" {
+  _write_make_mock 0
+  # A `$(cat)` read blocks on a closed fd 0 instead of failing, so a regression
+  # to it would hang the suite. The watchdog turns that into a failure after 30s.
+  # `set -m` gives the hook its own process group so the kill also reaches the
+  # blocked `cat`, which otherwise keeps bats' output pipe open. `timeout` is
+  # not on the macOS runners.
+  run bash -c "
+    set -m
+    export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    cd '${REPO_DIR}' || exit 2
+    bash -p '${REPO_ROOT}/scripts/pre-push' <&- &
+    hook=\$!
+    ( sleep 30; kill -- -\"\${hook}\" 2>/dev/null ) &
+    dog=\$!
+    wait \"\${hook}\"; rc=\$?
+    kill -- -\"\${dog}\" 2>/dev/null
+    exit \"\${rc}\"
+  "
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot read the pushed refs"* ]]
+  [ ! -f "${BATS_TEST_TMPDIR}/gh.calls" ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
 @test "wiring: master on a later ref line whose gate cannot load is refused before the suite" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
