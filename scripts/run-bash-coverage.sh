@@ -158,8 +158,17 @@ USAGE
   exit 0
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TRACER="${REPO_ROOT}/scripts/bash-tracer.sh"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Test seam: _OVERRIDE_COVERAGE_ROOT replaces the tree this script measures
+# (instrumented set, tests/ dir, output dir, --files paths). Production leaves
+# it unset and measures the checkout the script lives in. Tests need it so the
+# REAL script runs against a small fixture tree: a copy of the script under a
+# temp tree is itself invisible to the suite's own coverage trace, which
+# measurably dropped the figure below the CI floor. TRACER deliberately stays
+# the real scripts/bash-tracer.sh next to this file, so a fixture tree needs no
+# copy of it.
+REPO_ROOT="${_OVERRIDE_COVERAGE_ROOT:-${SCRIPT_ROOT}}"
+TRACER="${SCRIPT_ROOT}/scripts/bash-tracer.sh"
 OUTPUT_DIR="${REPO_ROOT}/coverage"
 TRACE_FILE="${OUTPUT_DIR}/bash_trace.txt"
 TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
@@ -939,17 +948,43 @@ while (( $# )); do
     elif [[ "${1}" == "--score" ]]; then
         _score_seen=1
         shift
-        # Traces run up to the next flag; --json stays for the badge step.
+        # Traces run up to the next flag. Only an optional trailing
+        # `--json <path>` may follow: anything else (a trace after --json, a
+        # stray flag) would otherwise be dropped silently and score fewer
+        # traces than the caller named.
         while (( $# )) && [[ "${1}" != -* ]]; do
             _SCORE_TRACES+=("${1}")
             shift
         done
+        if (( $# )); then
+            if [[ "${1}" == "--json" && -n "${2:-}" && $# -eq 2 ]]; then
+                _rest+=("${1}" "${2}")
+                shift 2
+            else
+                printf "ERROR: --score: unexpected argument after the traces (only a trailing --json PATH is allowed): %s\n" "${*}" >&2
+                exit 2
+            fi
+        fi
     else
         _rest+=("${1}")
         shift
     fi
 done
 set -- "${_rest[@]}"
+
+# Modes that cannot combine are refused rather than one silently winning.
+if (( _score_seen )) && { [[ -n "${_TRACE_ONLY_DIR}" ]] || (( _files_seen )); }; then
+    printf "ERROR: --score cannot be combined with --trace-only or --files\n" >&2
+    exit 2
+fi
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    for _a in "$@"; do
+        if [[ "${_a}" == "--json" ]]; then
+            printf "ERROR: --trace-only cannot be combined with --json (it never scores)\n" >&2
+            exit 2
+        fi
+    done
+fi
 
 # Shows the bats argv without running the suite; exits before the main run.
 if [[ "${1:-}" == "--print-bats-args" ]]; then

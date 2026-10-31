@@ -2186,16 +2186,16 @@ FIXTURE
 }
 
 # ── run-bash-coverage.sh --trace-only / --score ─────────────────────────────
-# A real traced run needs REPO_ROOT to be a git tree holding the script, its
-# tracer, an instrumented lib file and the bats files to trace. Build one in
-# BATS_TEST_TMPDIR from tests/fixtures/coverage-shard (fixtures end in
-# .fixture so the suite never discovers them as tests), so a traced run takes
-# seconds instead of the full suite's minutes.
+# The REAL script runs against a small fixture tree through the
+# _OVERRIDE_COVERAGE_ROOT seam (it replaces the measured root; the tracer stays
+# the real scripts/bash-tracer.sh). Running a COPY of the script instead made
+# the suite's own coverage trace miss the new code: measured 90% against the
+# 91% floor. Fixtures end in .fixture so the suite never discovers them as
+# tests; a traced run over them takes seconds.
 _make_cov_tree() {
   local _fx="${REPO_ROOT}/tests/fixtures/coverage-shard"
   COV_TREE="$(cd "${BATS_TEST_TMPDIR}" && pwd -P)/tree"
-  mkdir -p "${COV_TREE}/scripts" "${COV_TREE}/lib" "${COV_TREE}/tests"
-  cp "${REPO_ROOT}/scripts/run-bash-coverage.sh" "${REPO_ROOT}/scripts/bash-tracer.sh" "${COV_TREE}/scripts/"
+  mkdir -p "${COV_TREE}/lib" "${COV_TREE}/tests"
   cp "${_fx}/tiny.sh.fixture" "${COV_TREE}/lib/tiny.sh"
   cp "${_fx}/setup_env.sh.fixture" "${COV_TREE}/setup_env.sh"
   local _n
@@ -2206,14 +2206,16 @@ _make_cov_tree() {
   local _clean_path
   _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   PATH="${_clean_path}" git -C "${COV_TREE}" init -q
-  PATH="${_clean_path}" git -C "${COV_TREE}" add \
-    scripts/run-bash-coverage.sh scripts/bash-tracer.sh lib/tiny.sh setup_env.sh
+  PATH="${_clean_path}" git -C "${COV_TREE}" add lib/tiny.sh setup_env.sh
+  COV_TMP="${BATS_TEST_TMPDIR}/t"
+  mkdir -p "${COV_TMP}"
 }
 
 _run_cov_tree() {
   local _clean_path
   _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
-  PATH="${_clean_path}" bash "${COV_TREE}/scripts/run-bash-coverage.sh" "$@" < /dev/null
+  PATH="${_clean_path}" TMPDIR="${COV_TMP}" _OVERRIDE_COVERAGE_ROOT="${COV_TREE}" \
+    bash "${REPO_ROOT}/scripts/run-bash-coverage.sh" "$@" < /dev/null
 }
 
 @test "run-bash-coverage.sh --trace-only on a green run writes a sorted unique trace and the log, and does not score" {
@@ -2225,14 +2227,13 @@ _run_cov_tree() {
   [ -s "${BATS_TEST_TMPDIR}/out/bash_trace.txt" ]
   grep -q '^ok 1 fixture green a' "${BATS_TEST_TMPDIR}/out/bats_run.log"
   [[ "$output" != *"Overall bash coverage"* ]]
-  # The trace holds absolute, tiny.sh lines and is sorted unique.
+  # The trace holds absolute lib/tiny.sh lines and is sorted unique.
   command grep -q "^${COV_TREE}/lib/tiny.sh:[0-9]*\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
   LC_ALL=C sort -u "${BATS_TEST_TMPDIR}/out/bash_trace.txt" | cmp - "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
-  # The printed count is the trace's line count.
   local _n
   _n="$(wc -l < "${BATS_TEST_TMPDIR}/out/bash_trace.txt")"
   [ "${_n}" -gt 0 ]
-  [[ "$output" == *"${_n}"* ]]
+  [[ "$output" == *"Trace: ${_n} unique lines"* ]]
 }
 
 @test "run-bash-coverage.sh --trace-only on a red run exits 1 with the failing test's output in the log" {
@@ -2246,6 +2247,32 @@ _run_cov_tree() {
   [[ "$output" != *"Overall bash coverage"* ]]
 }
 
+@test "run-bash-coverage.sh --trace-only rejects a missing directory, a repeat and --json with exit 2" {
+  _make_cov_tree
+  run _run_cov_tree --trace-only
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--trace-only requires a directory"* ]]
+  run _run_cov_tree --trace-only "${BATS_TEST_TMPDIR}/o1" --trace-only "${BATS_TEST_TMPDIR}/o2"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--trace-only given more than once"* ]]
+  run _run_cov_tree --trace-only "${BATS_TEST_TMPDIR}/o1" --json "${BATS_TEST_TMPDIR}/b.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--trace-only cannot be combined with --json"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/b.json" ]
+}
+
+@test "run-bash-coverage.sh --files errors through the fixture seam exit 2 naming the entry" {
+  _make_cov_tree
+  printf 'tests/nope.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"tests/nope.bats"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/out/bats_run.log" ]
+}
+
+# The union-equality assertion below is structural (a union is order- and
+# duplication-insensitive); the specific TOTAL covered count is the real check
+# that the traces were scored at all.
 @test "run-bash-coverage.sh --score of two traces equals --score of their concatenation" {
   _make_cov_tree
   printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" "${COV_TREE}/lib/tiny.sh:3" > "${BATS_TEST_TMPDIR}/a.trace"
@@ -2257,12 +2284,12 @@ _run_cov_tree() {
   run _run_cov_tree --score "${BATS_TEST_TMPDIR}/ab.trace"
   [ "$status" -eq 0 ]
   [ "${output}" = "${_two}" ]
-  # Three distinct lines (2, 3, 5) are covered in tiny.sh: assert the number.
-  [[ "${_two}" =~ tiny.sh[[:space:]]+3[[:space:]]+([0-9]+) ]]
+  # Three distinct lines (2, 3, 5) are covered in tiny.sh.
+  [[ "${_two}" =~ tiny.sh[[:space:]]+3[[:space:]]+[0-9]+ ]]
   [[ "${_two}" =~ TOTAL[[:space:]]+3[[:space:]]+[0-9]+ ]]
   [[ "${_two}" == *"Overall bash coverage: "* ]]
-  # No union temp file is left behind in the output tree.
-  [ -z "$(find "${COV_TREE}/coverage" -name '*union*' 2>/dev/null)" ]
+  # The union temp file is removed on success.
+  [ -z "$(ls -A "${COV_TMP}")" ]
 }
 
 @test "run-bash-coverage.sh --score writes --json like a full run" {
@@ -2270,7 +2297,11 @@ _run_cov_tree() {
   printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" > "${BATS_TEST_TMPDIR}/a.trace"
   run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --json "${BATS_TEST_TMPDIR}/badge.json"
   [ "$status" -eq 0 ]
+  [[ "$output" =~ Overall\ bash\ coverage:\ ([0-9]+)% ]]
+  local _pct="${BASH_REMATCH[1]}"
   grep -q '"label":"bash coverage"' "${BATS_TEST_TMPDIR}/badge.json"
+  grep -q "\"message\":\"${_pct}%\"" "${BATS_TEST_TMPDIR}/badge.json"
+  [ -z "$(ls -A "${COV_TMP}")" ]
 }
 
 @test "run-bash-coverage.sh --score exits 2 naming a missing or empty trace, and with none" {
@@ -2285,13 +2316,38 @@ _run_cov_tree() {
   [[ "$output" == *"empty.trace"* ]]
   run _run_cov_tree --score
   [ "$status" -eq 2 ]
+  [[ "$output" == *"--score requires at least one trace file"* ]]
+  [ -z "$(ls -A "${COV_TMP}")" ]
 }
 
-@test "run-bash-coverage.sh --trace-only without a directory exits 2" {
+@test "run-bash-coverage.sh --score refuses anything after the traces except a trailing --json PATH" {
   _make_cov_tree
-  run _run_cov_tree --trace-only
+  printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" > "${BATS_TEST_TMPDIR}/a.trace"
+  printf '%s\n' "${COV_TREE}/lib/tiny.sh:3" > "${BATS_TEST_TMPDIR}/b.trace"
+  # A trace after --json would be dropped silently: refuse it.
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --json "${BATS_TEST_TMPDIR}/badge.json" "${BATS_TEST_TMPDIR}/b.trace"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"--trace-only requires a directory"* ]]
+  [[ "$output" == *"unexpected argument after the traces"* ]]
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --bogus
+  [ "$status" -eq 2 ]
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --json
+  [ "$status" -eq 2 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/badge.json" ]
+}
+
+@test "run-bash-coverage.sh --score cannot be combined with --trace-only or --files" {
+  _make_cov_tree
+  printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" > "${BATS_TEST_TMPDIR}/a.trace"
+  printf 'tests/green_a.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --trace-only "${BATS_TEST_TMPDIR}/out" --score "${BATS_TEST_TMPDIR}/a.trace"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--score cannot be combined"* ]]
+  # The other order is also refused (a flag after the traces), never run.
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 2 ]
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --score "${BATS_TEST_TMPDIR}/a.trace"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--score cannot be combined"* ]]
 }
 
 @test ".osx.sh -h prints usage and exits 0 without writing any defaults" {
