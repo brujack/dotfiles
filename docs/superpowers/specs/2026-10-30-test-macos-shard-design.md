@@ -86,9 +86,10 @@ That is a mean, and the gate waits for the slowest of three independent runners,
 varies ±25% run to run. Bootstrapping the 14 measured durations (max of 3 draws, divided by 3)
 gives the `Run tests` step p50 8.7 min and p90 9.7 min. Add ~20 s of shard setup, ~30-60 s for the
 ubuntu gate job (pickup, checkout, download), and any macOS queue: p90 is about 10.5-11 min before
-queueing, against V1's 10 min. Four shards would cut the step to ~6.5 min p90 but use all 5
+queueing. Four shards would cut the step to ~6.5 min p90 but use all 5
 account macOS slots with `lint-macos`, so any concurrent macOS job, from etch-config or a second
-dotfiles PR, would queue.
+dotfiles PR, would queue. The operator kept 3 shards and set V1 to 12 min, queue included
+(2026-10-31), leaving one macOS slot free.
 
 The shard count lives in one place: the matrix list.
 
@@ -323,7 +324,7 @@ TDD, bats, in `tests/scripts/`. Every case that expects success also asserts a n
 - **R8.** `[PR1]` `tests/bats-weights.tsv` is committed with one line per `.bats` file holding CPU seconds of `bats --jobs 3 <file>` on macOS, measured at or after dotfiles#410, and the reseed procedure is documented in ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md`; no make target generates it.
 - **R9.** `[PR1]` `CLAUDE.md` describes the shard job and gate, the authoritative per-shard list, the local repro command, the single `always()` exception, both jobs' runners and timeouts, and the weights table.
 - **R10.** `[PR1]` ADR-0053 exists, is indexed, and ADR-0037's status notes the partial supersession.
-- **V1.** Over the first 10 PR runs after merge, at least one of them in a Monday Renovate window, p90 of `test-macos` gate completion minus the run's creation time (queue included) is at most 10 min. Otherwise, open a follow-up to move to 4 shards or to Phase 2 (self-hosted).
+- **V1.** Over the first 10 PR runs after merge, at least one of them in a Monday Renovate window, p90 of `test-macos` gate completion minus the run's creation time (queue included) is at most 12 min. Otherwise, open a follow-up to move to 4 shards or to Phase 2 (self-hosted).
 - **V2.** Over at least 5 CI runs, take each shard's median `Run tests` duration divided by its table weight. If any shard's ratio is more than 10% from the three-shard mean, re-tune `BATS_SHARD_HANDICAP` and the weights table from them. Count-packing's spread (1056 against 743) would breach this; a 3-min wall-clock tolerance would not, which is why the ratio is used.
 - **N1.** No self-hosted runner and no new secret or token.
 - **N2.** No change to branch protection's required checks or to `auto-merge`'s `needs:` list.
@@ -406,7 +407,7 @@ seconds.
   row was mislabelled count-packing data (fixed: 815 / 866 / 999); the round-1 "~28%" was stale
   (fixed: 18%); V2's 3-min tolerance could not fail for any considered packing (fixed: per-shard
   ratio over at least 5 runs); the Decision estimated a mean where the gate waits for the slowest of
-  three (fixed: max-of-3 estimate; V1 left for the operator).
+  three (fixed: max-of-3 estimate; operator set V1 to 12 min at 3 shards).
 - **Ergonomics.** Findings: a real `make test-bats` test would recurse into the suite; `BATS_SHARD`
   as a make argument leaks into every nested make through `MAKEFLAGS`; Make 3.81's `$(shell)` sees
   no make-level variables; handicap and tie-breaks were untested; `ci-suite-report.sh --files` had
