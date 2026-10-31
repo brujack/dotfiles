@@ -142,7 +142,7 @@ score_shard() {
 @test "a dead row's weight never enters the fallback rate" {
   stage_fixture fallback-dead
   export BATS_WEIGHTS="${FIXTURES}/fallback-dead/weights.tsv" BATS_SHARD_HANDICAP=0
-  # Live rows: a, b = 10 s over 4 tests -> 5 s per test; new (1 test) weighs 5 s,
+  # Live rows: a, b = 20 s over 4 tests -> 5 s per test; new (1 test) weighs 5 s,
   # lighter than a or b. Counting gone.bats (100 s) would make it 30 s and heaviest.
   shard 1 2
   [ "${status}" -eq 0 ]
@@ -311,6 +311,19 @@ score_shard() {
   [ "${status}" -eq 2 ]
   [ -z "${output}" ]
   [[ "${stderr}" == *"bats-shard: "* ]]
+}
+
+@test "a missing packer awk file exits 2 with empty stdout and a bats-shard message" {
+  stage_fixture golden
+  # The script finds lib/ from its own location; a copy with no sibling lib/ has none.
+  mkdir -p "${BATS_TEST_TMPDIR}/nolib/scripts"
+  cp "${REPO_ROOT}/scripts/bats-shard.sh" "${BATS_TEST_TMPDIR}/nolib/scripts/bats-shard.sh"
+  SCRIPT="${BATS_TEST_TMPDIR}/nolib/scripts/bats-shard.sh"
+  export BATS_WEIGHTS="${FIXTURES}/golden/weights.tsv"
+  shard 1 2
+  [ "${status}" -eq 2 ]
+  [ -z "${output}" ]
+  [[ "${stderr}" == "bats-shard: "* ]]
 }
 
 @test "an empty tree exits 2 with empty stdout" {
