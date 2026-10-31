@@ -219,7 +219,7 @@ Renderings: `requirements-ci.txt` (`test-lint`, full local/dev set), `requiremen
 - Once the suite would run, every non-deletion pushed ref must be at `HEAD` of `REPO_ROOT` (read with the four `GIT_*` stripped) or the push is refused before `make test`: push a branch from its own worktree, one ref per push when refs differ.
 - When the working tree has uncommitted or untracked (not ignored) changes, the hook tests the pushed commit in a locked temporary clean checkout (`pre-push-<sha7>` under `mktemp -d "${TMPDIR:-/tmp}/pre-push.XXXXXX"`) instead of the dirty tree, and never refuses for dirtiness alone; a `kill -9` leftover shows in `git worktree list -v` with reason `pre-push pid <n> testing <sha7>` and clears with `git worktree remove -f -f <path>`. → `dotfiles-bats-test-infrastructure.md` § `Testing: pre-commit and pre-push hooks`
 - Emergency route (`hotfix-cycle`, `rollback-cycle`): a fast PR, or the operator's own push; never bypass the hook. `.git/hooks/pre-push` symlinks the main checkout's copy, so a broken hook blocks every worktree; the one sanctioned recovery is a fix branch pushed with `--no-verify`, then a PR.
-- `tests/scripts/docs_inert_premise.bats` pins that no test reads a tracked `.md` outside `tests/`; keep inert-set tests in `pre_push.bats` on feature refs and guard tests on master refs. → `dotfiles-bats-test-infrastructure.md` § `Testing: pre-commit and pre-push hooks`
+- `tests/scripts/docs_inert_premise.bats` pins that no test reads a tracked `.md` outside `tests/`; keep inert-set tests in `pre_push.bats` on feature refs; master and main refs belong only to the `wiring:` tests. → `dotfiles-bats-test-infrastructure.md` § `Testing: pre-commit and pre-push hooks`
 
 ### ShellCheck
 
