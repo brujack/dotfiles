@@ -100,3 +100,129 @@ setup() {
   run bash "${SCRIPT}" "${TESTS_DIR}" "${TESTS_DIR}"
   [ "${status}" -eq 2 ]
 }
+
+# --files mode: declared count comes from an explicit shard list, not a dir walk.
+# The fixture list names a.bats (2 tests) and sub/b.bats (1 test); notes.txt and
+# an unlisted c.bats (5 tests) must not count.
+
+make_files_list() {
+  LIST="${BATS_TEST_TMPDIR}/shard.files"
+  printf '@test "c1" {\n}\n@test "c2" {\n}\n@test "c3" {\n}\n@test "c4" {\n}\n@test "c5" {\n}\n' > "${TESTS_DIR}/c.bats"
+  printf '%s\n%s\n' "${TESTS_DIR}/a.bats" "${TESTS_DIR}/sub/b.bats" > "${LIST}"
+}
+
+@test "--files: executed equal to declared over the list exits 0" {
+  make_files_list
+  printf 'ok 1 one\nok 2 two\nok 3 three\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"executed=3 declared=3"* ]]
+}
+
+@test "--files: one short of the list exits 1 and names both counts" {
+  make_files_list
+  printf 'ok 1 one\nok 2 two\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executed=2 declared=3"* ]]
+}
+
+@test "--files: an empty list exits 1 with declared=0" {
+  make_files_list
+  : > "${LIST}"
+  : > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executed=0 declared=0"* ]]
+}
+
+@test "--files: an unreadable list file exits 2 and names it" {
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${BATS_TEST_TMPDIR}/no-such.files"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"no-such.files"* ]]
+}
+
+@test "--files: an unreadable listed path exits 2 and names it" {
+  make_files_list
+  printf '%s\n' "${TESTS_DIR}/ghost.bats" >> "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read listed file"* ]]
+  [[ "${output}" == *"ghost.bats"* ]]
+}
+
+@test "--files: a listed path that is a directory exits 2 as unreadable" {
+  make_files_list
+  printf '%s\n' "${TESTS_DIR}/sub" >> "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read listed file"* ]]
+  [[ "${output}" == *"${TESTS_DIR}/sub"* ]]
+}
+
+@test "--files: a blank line in the list exits 2" {
+  make_files_list
+  printf '\n%s\n' "${TESTS_DIR}/a.bats" > "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"blank line"* ]]
+}
+
+@test "--files: a listed file with no tests contributes 0" {
+  make_files_list
+  : > "${TESTS_DIR}/empty.bats"
+  printf '%s\n' "${TESTS_DIR}/empty.bats" >> "${LIST}"
+  printf 'ok 1 one\nok 2 two\nok 3 three\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"executed=3 declared=3"* ]]
+}
+
+@test "--files: a missing log exits 2 and names it" {
+  make_files_list
+  run bash "${SCRIPT}" "${BATS_TEST_TMPDIR}/nope.log" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"nope.log"* ]]
+}
+
+@test "--files: no list argument is a usage error" {
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"usage: ci-suite-report.sh <log> --files <list-file>"* ]]
+}
+
+@test "--files: an extra argument is a usage error" {
+  make_files_list
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}" extra
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"usage: ci-suite-report.sh <log> --files <list-file>"* ]]
+}
+
+@test "--files: a CRLF list line is rejected naming the line number" {
+  make_files_list
+  printf '%s\n%s\r\n' "${TESTS_DIR}/a.bats" "${TESTS_DIR}/sub/b.bats" > "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"carriage return in list file"* ]]
+  [[ "${output}" == *"line 2"* ]]
+  [[ "${output}" != *$'\r'* ]]
+}
+
+@test "--files: a non-numeric grep count exits 2 naming the path" {
+  make_files_list
+  mkdir -p "${BATS_TEST_TMPDIR}/shim"
+  printf '#!/bin/sh\necho oops\nexit 2\n' > "${BATS_TEST_TMPDIR}/shim/grep"
+  chmod +x "${BATS_TEST_TMPDIR}/shim/grep"
+  printf 'ok 1 one\n' > "${LOG}"
+  PATH="${BATS_TEST_TMPDIR}/shim:${PATH}" run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"a.bats"* ]]
+  [[ "${output}" != *"syntax error"* ]]
+}

@@ -1,0 +1,4 @@
+# live: a + b = 20 cpu s over 4 tests = 5 s per test; gone.bats is a dead row
+tests/a.bats	10
+tests/b.bats	10
+tests/gone.bats	100

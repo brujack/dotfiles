@@ -98,7 +98,11 @@ jobs:
           fi
           printf '%s\n' "${files}" | xargs -I{} zsh -n {}
 
-  test-macos:
+  test-macos-shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: macos-latest
     timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
     # The repo's default token is read-write, and this job runs unpinned
@@ -145,19 +149,41 @@ jobs:
           make --version | head -1
           parallel --version | head -1
 
+      # One list per shard, computed once: make, the suite report and the
+      # gate all read this file. The matrix list is the only place the shard
+      # count is written.
+      - name: Compute shard list
+        run: bash scripts/bats-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}" > "shard-${{ matrix.shard }}.files"
+
       - name: Run tests
+        env:
+          BATS_FILES_FROM: shard-${{ matrix.shard }}.files
         run: |
           set +e
-          make test > /tmp/make-test.log 2>&1 < /dev/null
+          if [ "${{ matrix.shard }}" = "1" ]; then
+            make test > /tmp/make-test.log 2>&1 < /dev/null
+          else
+            make test-bats > /tmp/make-test.log 2>&1 < /dev/null
+          fi
           rc=$?
-          bash scripts/ci-suite-report.sh /tmp/make-test.log tests
+          bash scripts/ci-suite-report.sh /tmp/make-test.log --files "shard-${{ matrix.shard }}.files"
           report_rc=$?
           if [ "${rc}" -ne 0 ]; then
-            printf 'make test exited %d\n' "${rc}" >&2
+            printf 'make exited %d\n' "${rc}" >&2
             tail -40 /tmp/make-test.log
             exit 1
           fi
           exit "${report_rc}"
+
+      # Default success() condition on purpose: a shard that failed leaves no
+      # list for this attempt, so the gate's coverage check fails too.
+      - name: Upload the shard list
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-macos-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: shard-${{ matrix.shard }}.files
+          retention-days: 7
+          if-no-files-found: error
 
       # The tail above can miss the cause: on dotfiles#358 it showed 3327 ok,
       # no `not ok`, and bats still exiting 1. Keep the whole log. cancelled()
@@ -169,11 +195,38 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: test-macos-make-test-log
+          name: test-macos-make-test-log-${{ matrix.shard }}
           path: /tmp/make-test.log
           retention-days: 7
           if-no-files-found: warn
           overwrite: true
+
+  # Required check and auto-merge gate. Runs even when a shard failed so the
+  # check reports red rather than skipped. The shard result is one signal;
+  # list coverage is the independent one.
+  test-macos:
+    needs: test-macos-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Require every shard to have succeeded
+        run: |
+          printf 'test-macos-shard result: %s\n' "${{ needs.test-macos-shard.result }}"
+          [ "${{ needs.test-macos-shard.result }}" = "success" ] || exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: test-macos-shard-${{ github.run_attempt }}-*
+          merge-multiple: true
+          path: shard-lists
+
+      - name: Check the shard lists cover every test file once
+        run: bash scripts/ci-shard-gate.sh shard-lists
 
   powershell:
     # Pinned: packages.microsoft.com/ubuntu/26.04 has no powershell package, and

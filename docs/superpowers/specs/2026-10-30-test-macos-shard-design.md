@@ -354,6 +354,13 @@ TDD, bats, in `tests/scripts/`. Every case that expects success also asserts a n
 - **N4.** No change to `JOBS` or to the bats flags within a shard.
 - **N5.** No change to what any existing test asserts, except retargeting the job named in `ci_test_macos_log.bats` and in `ci_runner_pins.bats`'s positive control from `test-macos` to `test-macos-shard`; speed-ups to individual tests are separate changes.
 
+## Amendments
+
+- N5 -> No change to what any existing test asserts, except retargeting the job named in `ci_test_macos_log.bats` and in `ci_runner_pins.bats`'s positive control from `test-macos` to `test-macos-shard`, and adding `test-bats` to `ALLOWED_TEST_PREREQS` in `tests/scripts/docs_inert_premise.bats`; speed-ups to individual tests are separate changes. — `test-bats` becomes a `make test` prerequisite, and that test's own failure message prescribes the allow-list addition for a target that reads no tracked `.md`; its property (no prerequisite reads a tracked `.md` from the working tree) is unchanged.
+- finding R8 (2026-10-31, reviewer both): DIFFERS — tests/bats-weights.tsv has 86 rows, but the diff adds four .bats files that have no row: tests/makefile_shard_list.bats, tests/scripts/bats_shard.bats, tests/scripts/ci_shard_gate.bats and tests/scripts/ci_test_macos_shard.bats, so the table is not one line per .bats file. Its header names `Studio @ ab92a62d` and nothing ties that to dotfiles#410 or later. The ai-config reseed-procedure doc is a different repo and is not in this diff.
+- R8 -> `tests/bats-weights.tsv` is committed with one line per `.bats` file present at its seed commit, holding CPU seconds of `bats --jobs 3 <file>` on macOS, with a header naming the seed commit and host; a `.bats` file added later has no row and is weighted by R1's fallback rule; no make target generates it. — By design the table is a dated measurement that a new file never needs to edit (Design, Weights), so 'one line per file' holds only at the seed; the reseed doc and the post-#410 provenance are evidence outside this diff and move to V3.
+- adds V3: ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md` has the section `Shard weights: reseed procedure` (ai-config `6f3335bd`), and the seed commit `ab92a62d` descends from dotfiles#410's merge `f17ad98b` (`git merge-base --is-ancestor f17ad98b ab92a62d`). — A requirement whose evidence lives in another repo or in history is re-raised by every alignment run; it belongs in a V.
+
 ## Round 2 (2026-10-31)
 
 Changes after the operator reviewed round 1:
@@ -453,3 +460,25 @@ seconds.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-10-31)
+
+- spec: docs/superpowers/specs/2026-10-30-test-macos-shard-design.md
+- anchor: e7b0c032ce4cf4b6fc8fc40fc6645c3b5894ff6f
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R8 | both | DIFFERS | tests/bats-weights.tsv has 86 rows, but the diff adds four .bats files that have no row: tests/makefile_shard_list.bats, tests/scripts/bats_shard.bats, tests/scripts/ci_shard_gate.bats and tests/scripts/ci_test_macos_shard.bats, so the table is not one line per .bats file. Its header names `Studio @ ab92a62d` and nothing ties that to dotfiles#410 or later. The ai-config reseed-procedure doc is a different repo and is not in this diff. | - R8 -> `tests/bats-weights.tsv` is committed with one line per `.bats` file present at its seed commit, holding CPU seconds of `bats --jobs 3 <file>` on macOS, with a header naming the seed commit and host; a `.bats` file added later has no row and is weighted by R1's fallback rule; no make target generates it. — By design the table is a dated measurement that a new file never needs to edit (Design, Weights), so 'one line per file' holds only at the seed; the reseed doc and the post-#410 provenance are evidence outside this diff and move to V3. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded

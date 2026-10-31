@@ -1,0 +1,4 @@
+# dead row
+tests/a.bats	10
+tests/b.bats	4
+tests/gone.bats	99

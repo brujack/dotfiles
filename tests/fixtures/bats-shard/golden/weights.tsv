@@ -1,0 +1,7 @@
+# golden
+tests/a.bats	10
+tests/b.bats	10
+tests/c.bats	10
+tests/d.bats	5
+tests/e.bats	5
+tests/f.bats	5

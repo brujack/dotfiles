@@ -28,9 +28,9 @@ _runs_on() {
 
 @test "_runs_on reads a job's runs-on, not a neighbour's" {
   # positive control: the first job in the file runs on ubuntu-latest and
-  # test-macos on macos-latest, so a parser that returned the first runs-on in
+  # test-macos-shard on macos-latest, so a parser that returned the first runs-on in
   # the file would fail here.
-  run _runs_on test-macos
+  run _runs_on test-macos-shard
   [ "$output" = "macos-latest" ]
   run _runs_on no-such-job
   [ -z "$output" ]

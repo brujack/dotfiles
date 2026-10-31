@@ -76,11 +76,11 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [Makefile, tests/makefile_shard_list.bats]
+files_touched: [Makefile, tests/makefile_shard_list.bats, tests/scripts/docs_inert_premise.bats]
 depends_on: []
 ```
 
-**Files:** `Makefile` (bats recipe at the `test:` rule, `BATS_*` variables near `BATS_SERIAL_FILES`), new `tests/makefile_shard_list.bats`. `tests/makefile_parallel_target.bats` must pass unmodified (N5): `make -n test` still prints the `test-bats` recipe as a prerequisite. If it cannot, stop and report a blocker; do not edit it.
+**Files:** `Makefile` (bats recipe at the `test:` rule, `BATS_*` variables near `BATS_SERIAL_FILES`), new `tests/makefile_shard_list.bats`. `tests/makefile_parallel_target.bats` must pass unmodified (N5): `make -n test` still prints the `test-bats` recipe as a prerequisite. If it cannot, stop and report a blocker; do not edit it. Add `test-bats` to `ALLOWED_TEST_PREREQS` in `tests/scripts/docs_inert_premise.bats` (re-plan 1, spec amendment N5): it reads no tracked `.md`.
 
 **Behaviour:** spec "Makefile". `test:` keeps its prerequisites and adds `test-bats`; `test-bats` holds the recipe. `BATS_RAN_FILES` = `$(shell cat $(BATS_FILES_FROM))` when set, else `BATS_ALL_FILES`. Refuse (non-zero, message on stderr, before bats) when `BATS_FILES_FROM` is set and `$(wildcard …)` is empty, or when `BATS_RAN_FILES` is empty. Serial pass `$(filter $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))`, parallel pass the `filter-out`, each in its own `ifneq ($(strip …),)`; keep the HAVE_PARALLEL serial fallback and its message. `unexport BATS_FILES_FROM`. Keep the existing comments that still apply.
 

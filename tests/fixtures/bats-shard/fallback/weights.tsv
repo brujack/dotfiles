@@ -1,0 +1,3 @@
+# fallback: 20 cpu s over 4 tests = 5 s per test
+tests/a.bats	10
+tests/b.bats	10
