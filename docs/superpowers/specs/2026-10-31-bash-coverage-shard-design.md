@@ -3,6 +3,7 @@
 - **Date:** 2026-10-31
 - **Follows:** dotfiles#411 (`test-macos` shard, ADR-0053, `docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`)
 - **Backlog rows closed:** "The pre-push hook's `make test` honours make-input env vars" (P2 CI), for `BATS_FILES_FROM` only.
+- **Approved:** 2026-10-31
 
 ## Problem
 
