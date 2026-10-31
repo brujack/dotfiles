@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Print the .bats files one CI shard runs, packed by CPU weight.
+#
+# Usage: bats-shard.sh <index> <count>      (index is 1-based)
+#
+# Environment:
+#   BATS_WEIGHTS         weights table, default tests/bats-weights.tsv
+#   BATS_SHARD_HANDICAP  CPU seconds shard 1 starts with, default 40 (it also
+#                        runs the `make test` prerequisites)
+#
+# Every `find tests -name '*.bats'` file is weighted from the table (a file
+# with no row weighs its @test count times the table's CPU seconds per test),
+# visited heaviest first (ties by path) and given to the lightest shard (ties
+# by lowest index). Run from the repo root. Every error prints a message on
+# stderr, nothing on stdout, and exits 2.
+
+readonly _SHARD_DEFAULT_HANDICAP=40
+
+shard_die() {
+  printf 'bats-shard: %s\n' "$1" >&2
+  return 2
+}
+
+# The packing itself. Input files: the weights table, then every .bats file.
+# Prints the selected shard's paths in path order, or a message on stderr and
+# exit 2 from awk.
+shard_pack() {
+  local _weights="$1" _index="$2" _count="$3" _handicap="$4"
+  shift 4
+  awk -F'\t' -v wfile="${_weights}" -v idx="${_index}" -v n="${_count}" -v hc="${_handicap}" '
+    function fail(msg) { printf "bats-shard: %s\n", msg > "/dev/stderr"; failed = 1; exit 2 }
+    FILENAME == wfile {
+      if ($0 ~ /^#/ || $0 == "") next
+      if (NF != 2 || $2 !~ /^[0-9]+(\.[0-9]+)?$/) fail("malformed weights line " FNR ": " $0)
+      row[$1] = $2 + 0
+      next
+    }
+    {
+      if (FILENAME != cur) { cur = FILENAME; nfiles++; path[nfiles] = FILENAME }
+      if ($0 ~ /^@test/) tests[FILENAME]++
+    }
+    END {
+      if (failed) exit 2
+      # Every argument file is in path[]; a bats file with no @test line has no
+      # tests[] entry but is still a file.
+      for (i = 1; i <= nfiles; i++) known[path[i]] = 1
+      live = 0; cpu = 0; cnt = 0
+      for (r in row) {
+        if (r in known) { live++; cpu += row[r]; cnt += tests[r] + 0 }
+        else dead[++nd] = r
+      }
+      # Name dead rows in path order so stderr is deterministic.
+      for (a = 2; a <= nd; a++) { v = dead[a]; b = a - 1; while (b >= 1 && dead[b] > v) { dead[b + 1] = dead[b]; b-- } dead[b + 1] = v }
+      for (a = 1; a <= nd; a++) printf "bats-shard: dead row: %s\n", dead[a] > "/dev/stderr"
+      if (live == 0) fail("weights table has no live rows")
+      if (cnt == 0) fail("live rows hold no @test lines")
+      per = cpu / cnt
+      for (i = 1; i <= nfiles; i++) w[i] = (path[i] in row) ? row[path[i]] : (tests[path[i]] + 0) * per
+      # Order: heaviest first, ties by path ascending (insertion sort; ~90 files).
+      for (i = 1; i <= nfiles; i++) ord[i] = i
+      for (i = 2; i <= nfiles; i++) {
+        v = ord[i]; j = i - 1
+        while (j >= 1 && (w[ord[j]] < w[v] || (w[ord[j]] == w[v] && path[ord[j]] > path[v]))) { ord[j + 1] = ord[j]; j-- }
+        ord[j + 1] = v
+      }
+      for (s = 1; s <= n; s++) load[s] = 0
+      load[1] = hc + 0
+      for (i = 1; i <= nfiles; i++) {
+        f = ord[i]; best = 1
+        for (s = 2; s <= n; s++) if (load[s] < load[best]) best = s
+        load[best] += w[f]; owner[f] = best
+      }
+      for (i = 1; i <= nfiles; i++) if (owner[i] == idx + 0) print path[i]
+    }
+  ' "${_weights}" "$@" || return 1
+}
+
+main() {
+  local _index="${1:-}" _count="${2:-}" _weights _handicap _files _out _rc
+  if [[ $# -ne 2 ]]; then
+    shard_die "usage: bats-shard.sh <index> <count>" || return 2
+  fi
+  if [[ ! "${_index}" =~ ^[0-9]+$ || ! "${_count}" =~ ^[0-9]+$ ]]; then
+    shard_die "index and count must be integers: '${_index}' '${_count}'" || return 2
+  fi
+  if (( 10#${_count} < 1 || 10#${_index} < 1 || 10#${_index} > 10#${_count} )); then
+    shard_die "index must be within 1..count: '${_index}' of '${_count}'" || return 2
+  fi
+  _weights="${BATS_WEIGHTS:-tests/bats-weights.tsv}"
+  _handicap="${BATS_SHARD_HANDICAP:-${_SHARD_DEFAULT_HANDICAP}}"
+  if [[ ! "${_handicap}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+    shard_die "BATS_SHARD_HANDICAP must be a non-negative number: '${_handicap}'" || return 2
+  fi
+  if [[ ! -f "${_weights}" || ! -r "${_weights}" ]]; then
+    shard_die "weights file unreadable: ${_weights}" || return 2
+  fi
+  _files="$(find tests -name '*.bats' 2>/dev/null | LC_ALL=C sort)" || return 2
+  if [[ -z "${_files}" ]]; then
+    shard_die "no .bats files under tests/" || return 2
+  fi
+  # shellcheck disable=SC2086 # paths hold no whitespace in this repo; one per line, word-split on purpose
+  _out="$(IFS=$'\n'; shard_pack "${_weights}" "$((10#${_index}))" "$((10#${_count}))" "${_handicap}" ${_files})"
+  _rc=$?
+  if [[ ${_rc} -ne 0 ]]; then
+    return 2
+  fi
+  printf '%s\n' "${_out}"
+}
+
+[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
+main "$@"
