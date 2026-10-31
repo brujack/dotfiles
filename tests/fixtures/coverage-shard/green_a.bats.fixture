@@ -1,0 +1,6 @@
+@test "fixture green a" {
+  source "${BATS_TEST_DIRNAME}/../lib/tiny.sh"
+  run tiny_add 1
+  [ "$status" -eq 0 ]
+  [ "$output" = "2" ]
+}

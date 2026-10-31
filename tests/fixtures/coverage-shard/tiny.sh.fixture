@@ -1,0 +1,7 @@
+tiny_add() {
+    local a="${1}"
+    printf '%s\n' "$((a + 1))"
+}
+tiny_unused() {
+    printf 'never\n'
+}
