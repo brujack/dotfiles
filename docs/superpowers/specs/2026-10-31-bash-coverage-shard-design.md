@@ -312,7 +312,7 @@ Finding: a red shard leaves nothing to read. `--trace-only` copied the log only 
 failure upload was empty, and the traced run passes no `--print-output-on-failure`, which `make test` has.
 The pre-push test could not work as written, because `pre_push.bats` mocks `make`.
 Assumption: same as Goal-Fit (stability of the split on 4-vCPU runners).
-Disposition: Addressed, revision presented to the operator 2026-10-31: log written before the red check;
+Disposition: Addressed, revision presented to the operator and accepted 2026-10-31: log written before the red check;
 `--print-output-on-failure` on every traced run (closes a Backlog row); pre-push cases assert the mock's
 environment.
 
@@ -326,7 +326,7 @@ required, and `strict: false` lets an old open PR merge by hand without the cove
 red-run log gap above.
 Assumption: the merged trace equals a full CI run's within the 26-line margin; percentages hide tens of
 lines, so compare unique traces.
-Disposition: Addressed, revision presented to the operator 2026-10-31: (1) strip `MAKEFLAGS`, `MFLAGS`,
+Disposition: Addressed, revision presented to the operator and accepted 2026-10-31: (1) strip `MAKEFLAGS`, `MFLAGS`,
 `MAKELEVEL`; (2) `ci-shard-gate.sh --with-traces` (R10); (3) accepted and recorded in ADR-0054 (operator,
 2026-10-31); (4) required-check removal before the final run, open PRs rebased after merge; (5) as
 Ergonomics.
@@ -352,7 +352,7 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
   a hand-exported `GNUMAKEFLAGS` or `MAKEFILES` still narrows `make test`; make blanks `GNUMAKEFLAGS` for
   children, so the in-recipe trigger is closed. Assumption: the split covers at least as much as one run
   on 4 vCPU; false means a false red near the floor, not a false green.
-- **Disposition:** Addressed, revision presented to the operator 2026-10-31: V1 rewritten (existing job
+- **Disposition:** Addressed, revision presented to the operator and accepted 2026-10-31: V1 rewritten (existing job
   as baseline, two runs, one-sided, non-empty guard, named fallback; the temporary job removed); headroom
   restated; `COVERAGE_TRACE_DIR` unexported and tested; the `ci-suite-report.sh` step pinned; abandon
   restores the check; V2 response named; `GNUMAKEFLAGS`/`MAKEFILES` added to the Backlog allowlist row.
