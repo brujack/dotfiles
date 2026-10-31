@@ -6,6 +6,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Status      | Meaning                                                                 |
 | ----------- | ----------------------------------------------------------------------- |
+| 2026-10-31 | [Linux test shard](plans/2026-10-31-bash-coverage-shard.md) | [shard the traced Linux suite as the single Linux gate, `test`](specs/2026-10-31-bash-coverage-shard-design.md) | Pending |
 | Done        | Implemented and merged to master                                        |
 | In Progress | Currently being implemented                                             |
 | Pending     | Not yet started                                                         |

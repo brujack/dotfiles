@@ -175,8 +175,8 @@ a PR waits forever on a check that never reports. And this PR's own `auto-merge`
 `gh pr merge --squash` as soon as its `needs:` are green, which branch protection refuses while
 `bash-coverage` is still required. So the order is:
 
-1. The PR is opened as a draft. The headroom proof runs on it (below), with today's `bash-coverage` job
-   still present, so the required check still reports.
+1. The PR is opened as a draft and the headroom proof runs on it (below). A draft cannot merge, so the
+   required `bash-coverage` check not reporting during this step costs nothing.
 2. After the proof, and before the final CI run, the operator removes `bash-coverage` from the required
    checks with the `gh api` call the PR body carries. Then the PR is marked ready, the final run goes
    green, and `auto-merge` merges it.
@@ -197,9 +197,11 @@ open question is whether running about 30 files per leg on a 4-vCPU runner fires
 timing-dependent lines as all 90 in one run. The one equal run on `claude` (48 threads) does not settle
 that.
 
-While the PR is a draft, today's `bash-coverage` job stays in `ci.yml` beside the shards as the same-SHA
-baseline. It gains one step that uploads its `sort -u` trace, and the gate gains one temporary step that
-diffs the shard union against it and prints the lost and gained lines by file. Over two CI runs of the
+While the PR is a draft, one temporary commit adds two jobs beside the shards: `headroom-baseline`,
+today's single `bash-coverage` traced run on the same SHA uploading its `sort -u` trace, and
+`headroom-diff`, which diffs the shard union against it and prints the lost and gained lines by file.
+They cannot keep the name `bash-coverage`: the CI-shape tests assert no such job, so `make test` and the
+pre-push hook would refuse the branch. Neither job is in `auto-merge`'s `needs:`. Over two CI runs of the
 draft:
 
 - the baseline trace is non-empty;
@@ -207,8 +209,8 @@ draft:
 - every line the baseline covers and the union does not is listed in the PR body by file.
 
 If any run fails the floor, or loses lines outside known timing-dependent branches, the PR stays a draft
-and a separate PR adds tests to raise the margin first. The baseline job, its upload step and the diff
-step are deleted before the PR is marked ready.
+and a separate PR adds tests to raise the margin first. The temporary commit is reverted before the PR
+is marked ready.
 
 ### Docs
 
@@ -289,6 +291,11 @@ TDD, bats. Every success case also asserts a non-empty result.
 - **N2.** No change to the macOS jobs or to `bats-shard.sh`'s packing.
 - **N3.** No new secret, token or self-hosted runner.
 - **N4.** No change to what any existing test asserts, except retargeting tests that name the untraced `test` job's steps or the deleted `bash-coverage` job, and adding `test-prereqs` to `ALLOWED_TEST_PREREQS`.
+
+## Amendments
+
+- N4 -> No change to what any existing test asserts, except retargeting tests that name the untraced `test` job's steps or the deleted `bash-coverage` job, adding `test-prereqs` to `ALLOWED_TEST_PREREQS`, and changing `tests/scripts/ci_test_macos_shard.bats`' "always() occurs once" assertion to "exactly twice, as the `if:` of `test-macos` and of `test`". — Plan-time non-goal check: the new `test` gate needs its own `if: always()`, so the single-`always()` pin cannot stay true; its property (no advisory `always()` anywhere else) is kept.
+- V1 -> On the draft PR, over two CI runs with a temporary `headroom-baseline` job (today's single traced run on the same SHA) and a `headroom-diff` job, the baseline trace is non-empty, the shard union scores at least 91% each time, and every line the baseline covers and the union does not is listed in the PR body by file; otherwise a margin-raising PR merges first. — Plan-time: a job named `bash-coverage` cannot stay on the branch, because the CI-shape tests assert none exists and the pre-push `make test` would refuse the push.
 
 ## Multi-Lens Review
 
