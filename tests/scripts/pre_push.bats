@@ -661,6 +661,257 @@ ZERO_SHA="0000000000000000000000000000000000000000"
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
+# ── inert predicate: the verdict on a path, observed on a feature ref ───────
+# _path_is_inert decides whether the suite runs. These cases push to
+# refs/heads/feat/x so that the verdict is the only thing under test: "runs the
+# suite" where the path is not provably inert, "skips" where it is.
+
+_on_branch() { _git_clean "checkout --quiet -B ${1}"; }
+
+# Commit one path (content via printf) and push it to a feature ref; sets $output.
+_feat_push_of() {
+  local _path="${1}" _content="${2:-x}" _base _sha
+  _base=$(_commit_file "README.md" "v1" "docs: v1")
+  _sha=$(_commit_file "${_path}" "${_content}" "chore: add path")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${_sha} refs/heads/feat/x ${_base}\n"
+}
+
+# Commit a single index entry of any mode: _mode _object _path.
+_commit_entry() {
+  local _mode="${1}" _obj="${2}" _path="${3}"
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    git -C '${REPO_DIR}' update-index --add --cacheinfo '${_mode},${_obj},${_path}'
+    git -C '${REPO_DIR}' commit --quiet -m 'chore: entry'
+    git -C '${REPO_DIR}' rev-parse HEAD
+  "
+}
+
+# A cacheinfo-only commit leaves the working tree dirty, so the suite runs in a
+# temporary checkout; accept the run in either place.
+_assert_suite_ran_anywhere() {
+  command grep -qE '^make[ ]-C .+ test$' "${MOCK_CALLS_FILE}"
+}
+
+@test "inert predicate: tests/mocks/x runs the suite" {
+  _feat_push_of "tests/mocks/x" "echo hi"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: uv.lock runs the suite" {
+  _feat_push_of "uv.lock" "lock"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: renovate.json runs the suite" {
+  _feat_push_of "renovate.json" "{}"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: .warp/settings.toml runs the suite" {
+  _feat_push_of ".warp/settings.toml" "a = 1"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a dotfile txt under docs runs the suite" {
+  _feat_push_of "docs/x/.state.txt" "s"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: an unknown extension runs the suite" {
+  _feat_push_of "foo.unknown" "s"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a non-ASCII markdown name skips the suite" {
+  _feat_push_of "docs/café.md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: a path containing a newline runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  bash -c "
+    export PATH='${CLEAN_PATH}'
+    unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+    p=\$'a\nb.md'
+    printf 'x\n' > '${REPO_DIR}/'\"\${p}\"
+    git -C '${REPO_DIR}' add -A
+    git -C '${REPO_DIR}' commit --quiet -m 'chore: newline name'
+  "
+  local_sha=$(_git_clean "rev-parse HEAD")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: a docs commit stacked on an unpushed code commit runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _commit_file "deploy.sh" "echo hi" "feat: deploy" > /dev/null
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+# ── inertness is decided from the pushed tree entry, not the object ─────────
+
+@test "inert predicate: a gitlink named .md whose commit is not in the repo runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_entry 160000 "1111111111111111111111111111111111111111" "docs/sub.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
+}
+
+@test "inert predicate: a gitlink named .md whose commit IS in the repo runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_entry 160000 "${base_sha}" "docs/sub2.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
+}
+
+@test "inert predicate: a symlink named .md runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf '../scripts/s.sh' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 120000 "${blob}" "docs/link.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_suite_ran_anywhere
+}
+
+@test "inert predicate: a markdown name containing glob characters skips the suite" {
+  _feat_push_of "docs/[x].md" "x"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: a markdown name that looks like pathspec magic skips the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf 'x' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 100644 "${blob}" ":(x).md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: a .md whose blob object is missing runs the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/evil"
+  local_sha=$(_commit_raw "docs/gone.md" "${BATS_TEST_TMPDIR}/evil" "docs: gone")
+  blob=$(_git_clean "rev-parse ${local_sha}:docs/gone.md")
+  obj="${REPO_DIR}/.git/objects/${blob:0:2}/${blob:2}"
+  [ -f "${obj}" ]
+  rm -f "${obj}"
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+@test "inert predicate: an executable-mode .md with no shebang skips the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  blob=$(printf 'plain text' | _git_clean "hash-object -w --stdin")
+  local_sha=$(_commit_entry 100755 "${blob}" "docs/exec.md")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: an ordinary .md runs the suite when head itself fails" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/a.md" "x" "docs: a")
+  mkdir -p "${BATS_TEST_TMPDIR}/headshim"
+  printf '#!/bin/sh\nexit 1\n' > "${BATS_TEST_TMPDIR}/headshim/head"
+  chmod +x "${BATS_TEST_TMPDIR}/headshim/head"
+  _write_make_mock 0
+  # Control: without the shim the same push skips the suite, so the run below
+  # is caused by head failing and not by anything else in the fixture.
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/headshim:${MAKE_MOCK_DIR}"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+}
+
+# ── the hook reads the PUSHED commit, not HEAD ──────────────────────────────
+# "On feat, push local master": HEAD and local_sha differ. _sha must reach
+# every read, so each fixture makes HEAD answer differently from local_sha.
+# The pushed ref is not at HEAD, so a push that needs the suite stops at the
+# wrong-tree refusal, which is only reachable once needs_test is set: that
+# message is how these cases observe "the predicate said not inert".
+_pushed_vs_head() {
+  # _pushed_vs_head <pushed: shebang|plain|gone> <head: shebang|plain|absent>
+  local _pushed="${1}" _head="${2}" _base _s
+  printf '#!/usr/bin/env bash\necho hi\n' > "${BATS_TEST_TMPDIR}/sb"
+  printf 'plain text\n' > "${BATS_TEST_TMPDIR}/pl"
+  _on_branch master
+  _base=$(_commit_file "README.md" "v1" "docs: v1")
+  if [[ "${_pushed}" == "plain" ]]; then
+    PUSHED_SHA=$(_commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/pl" "docs: pushed")
+  else
+    PUSHED_SHA=$(_commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/sb" "docs: pushed")
+  fi
+  if [[ "${_pushed}" == "gone" ]]; then
+    _s=$(_git_clean "rev-parse ${PUSHED_SHA}:docs/a.md")
+    rm -f "${REPO_DIR}/.git/objects/${_s:0:2}/${_s:2}"
+  fi
+  BASE_SHA="${_base}"
+  _git_clean "checkout --quiet -B feat ${_base}"
+  case "${_head}" in
+    shebang) _commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/sb" "docs: head" > /dev/null ;;
+    plain) _commit_raw "docs/a.md" "${BATS_TEST_TMPDIR}/pl" "docs: head" > /dev/null ;;
+  esac
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${PUSHED_SHA} refs/heads/feat/x ${BASE_SHA}\n"
+}
+
+# The suite is wanted but the pushed commit is not this checkout's HEAD.
+_assert_needs_suite_not_run() {
+  [ "$status" -eq 1 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  [[ "$output" == *"the suite tests this checkout's working tree"* ]]
+}
+
+@test "inert predicate: a pushed shebang .md needs the suite when HEAD's copy is plain text" {
+  _pushed_vs_head shebang plain
+  _assert_needs_suite_not_run
+}
+
+@test "inert predicate: a pushed shebang .md needs the suite when HEAD does not have the path" {
+  _pushed_vs_head shebang absent
+  _assert_needs_suite_not_run
+}
+
+@test "inert predicate: a pushed plain .md skips the suite when HEAD's copy has a shebang" {
+  _pushed_vs_head plain shebang
+  [ "$status" -eq 0 ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "inert predicate: a pushed .md with a missing blob needs the suite when HEAD's copy is readable" {
+  _pushed_vs_head gone plain
+  _assert_needs_suite_not_run
+}
+
 # ── CLAUDE.md byte-budget gate (ADR-0047) ───────────────────────────────────
 # The hook runs the checker from the PUSHED commit, so these fixtures commit a
 # copy of the real checker. The over-ceiling case is refused before the
