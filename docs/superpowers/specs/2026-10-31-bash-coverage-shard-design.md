@@ -70,8 +70,10 @@ drops only `bash-coverage`. Its shard job is `test-shard`. The untraced `test` j
   tracked `.md`.
 - **`bash-coverage`:** with `BATS_FILES_FROM` empty, it behaves as today. With it set, the recipe passes
   the list to the script as an argument, `--files $(BATS_FILES_FROM)`, plus `--trace-only <dir>` when
-  `COVERAGE_TRACE_DIR` is set. The variable stays `unexport`ed, so neither the script's environment nor
-  any test sees it. The empty and missing list refusals from `test-bats` apply here too.
+  `COVERAGE_TRACE_DIR` is set. Both variables are `unexport`ed (`BATS_FILES_FROM` already is), so neither
+  the script's environment nor any test sees them. Without that, a nested `make bash-coverage` inside a
+  test would inherit `COVERAGE_TRACE_DIR` from the CI step and pass in CI only by accident, the same class
+  as the measured `not ok 162`. The empty and missing list refusals from `test-bats` apply here too.
 
 ### `scripts/run-bash-coverage.sh`
 
@@ -172,26 +174,40 @@ a PR waits forever on a check that never reports. And this PR's own `auto-merge`
 `gh pr merge --squash` as soon as its `needs:` are green, which branch protection refuses while
 `bash-coverage` is still required. So the order is:
 
-1. The PR is opened as a draft. The headroom proof runs on it (below).
+1. The PR is opened as a draft. The headroom proof runs on it (below), with today's `bash-coverage` job
+   still present, so the required check still reports.
 2. After the proof, and before the final CI run, the operator removes `bash-coverage` from the required
    checks with the `gh api` call the PR body carries. Then the PR is marked ready, the final run goes
    green, and `auto-merge` merges it.
 3. After merge, every open PR is rebased or re-run. Their old runs carry an untraced `test` that reads
    green, and with `strict: false` a hand merge through the UI would skip the coverage gate.
 
-If the PR is reverted, `bash-coverage` returns to the required list the same way.
+If the PR is reverted, or is abandoned after the check was removed, `bash-coverage` returns to the
+required list the same way.
 
 ### Headroom proof (draft PR, before merge)
 
-CI coverage sits 26 to 34 lines above the floor (6433 / 7031 = 91.49% on run 41240902996), and the
-2026-10-17 spec measured up to 160 timing-dependent lines. The one-run equality on `claude` does not
-settle the 4-vCPU CI case. So while the PR is a draft, `ci.yml` carries a temporary `test-full-trace`
-job: today's single traced run on the same SHA, writing its `sort -u` trace as an artifact. A temporary
-gate step compares it with the shard union and prints the line diff by file.
+The margin above the floor is small. The latest master run (41244276701, after #412) scored
+6395 / 7006; the gate floors `covered*100/coverable`, so 91% needs 6376, a margin of 19 lines. The
+2026-10-17 spec measured up to 160 timing-dependent lines between serial and parallel runs. A full
+traced CI run is itself deterministic: across 25 recent `bash-coverage` runs, every repeated denominator
+came with the same numerator (6888 -> 6303 four times, 6890 -> 6305, 6907 -> 6318, 6876 -> 6294). So the
+open question is whether running about 30 files per leg on a 4-vCPU runner fires the same
+timing-dependent lines as all 90 in one run. The one equal run on `claude` (48 threads) does not settle
+that.
 
-Over three CI runs of the draft, the shard union must score at least 91% each time, and its covered
-count must fall within the full job's own run-to-run spread over those same runs. The temporary job and
-step are deleted before the PR is marked ready, and the PR body records the three runs' figures.
+While the PR is a draft, today's `bash-coverage` job stays in `ci.yml` beside the shards as the same-SHA
+baseline. It gains one step that uploads its `sort -u` trace, and the gate gains one temporary step that
+diffs the shard union against it and prints the lost and gained lines by file. Over two CI runs of the
+draft:
+
+- the baseline trace is non-empty;
+- the shard union scores at least 91% against its own denominator;
+- every line the baseline covers and the union does not is listed in the PR body by file.
+
+If any run fails the floor, or loses lines outside known timing-dependent branches, the PR stays a draft
+and a separate PR adds tests to raise the margin first. The baseline job, its upload step and the diff
+step are deleted before the PR is marked ready.
 
 ### Docs
 
@@ -208,7 +224,7 @@ step are deleted before the PR is marked ready, and the PR body records the thre
   - The Coverage > Bash section names `--files`, `--trace-only`, `--score` and `ci-shard-gate.sh --with-traces`.
   - Re-run all jobs, never failed-only, now applies to the Linux gate too.
 - **`README.md`:** the CI job list.
-- **Backlog:** the env-var row is narrowed to the allowlist follow-up. The "re-size the 60-minute
+- **Backlog:** the env-var row is narrowed to the allowlist follow-up, and gains the residual inputs a stripped `MAKEFLAGS` does not cover (a hand-exported `GNUMAKEFLAGS` or `MAKEFILES`). The "re-size the 60-minute
   `bash-coverage` cap" row is closed, because that job no longer exists. The "prints only the names of
   failing tests" row is closed by `--print-output-on-failure`.
 
@@ -230,8 +246,9 @@ TDD, bats. Every success case also asserts a non-empty result.
     ran (a positive control) and that no list-carrying variable reached it.
 - **Makefile** (`tests/makefile_shard_list.bats`, stubbed `bats`/`bash`):
   - `make test` runs `test-prereqs` before `test-bats`.
-  - `make bash-coverage` with `BATS_FILES_FROM` set passes `--files <path>` on the script's command line,
-    and the script's environment has no `BATS_FILES_FROM`.
+  - `make bash-coverage` with `BATS_FILES_FROM` and `COVERAGE_TRACE_DIR` set passes `--files <path>` and
+    `--trace-only <dir>` on the script's command line, and the script's environment has neither variable.
+    The test unsets both before its own calls.
   - Unset, the argv is today's.
 - **`ci-shard-gate.sh`:** without a flag, a directory holding `shard-*.files` and `shard-*.trace`
   passes on the lists alone. With `--with-traces`: a missing trace, an empty trace and a trace with no
@@ -240,7 +257,10 @@ TDD, bats. Every success case also asserts a non-empty result.
   - No `bash-coverage` job, `auto-merge` `needs:` lacks it and still lists `test`, and job `test` is the gate (`needs: test-shard`).
   - The shard matrix is `[1, 2, 3]` with `fail-fast: false`.
   - `make test-prereqs` runs only on shard 1.
-  - `BATS_FILES_FROM` is set only in step `env:`.
+  - `BATS_FILES_FROM` and `COVERAGE_TRACE_DIR` are set only in step `env:`.
+  - Every `test-shard` leg runs `ci-suite-report.sh` with no `if:`, on `<COVERAGE_TRACE_DIR>/bats_run.log`,
+    with `--files` naming the same list the `make bash-coverage` step reads. This step replaces the
+    deleted ≥ 840 floor, so it is pinned like #411's equivalent (`tests/scripts/ci_test_macos_shard.bats`).
   - The upload is success-only and attempt-scoped.
   - The gate's `if: always()` and `needs` result check, plus the download pattern and `merge-multiple`.
   - The gate is the only job with `contents: write`.
@@ -255,15 +275,15 @@ TDD, bats. Every success case also asserts a non-empty result.
 - **R2.** `[PR1]` `scripts/run-bash-coverage.sh --files <list>` traces exactly the listed `.bats` paths and exits 2, naming the input, on a missing, unreadable, empty, blank-line, CR-bearing or nonexistent-path list; with no `--files` the bats arguments are unchanged.
 - **R3.** `[PR1]` Every traced bats run passes `--print-output-on-failure`; `--trace-only <dir>` writes the bats log before the red-suite check on every run, writes a `LC_ALL=C sort -u` trace only after a green run, never scores, and exits 1 on a red run with the log in place.
 - **R4.** `[PR1]` `--score <trace>...` scores the union of the given traces with the existing per-file loop and prints `Overall bash coverage: N%`; the result for several traces equals the result for their concatenation; a missing or empty trace exits 2.
-- **R5.** `[PR1]` `make bash-coverage` passes `BATS_FILES_FROM` to the script only as `--files <path>` on the command line (and `--trace-only` when `COVERAGE_TRACE_DIR` is set), never through the script's environment, and behaves as today when it is unset.
+- **R5.** `[PR1]` `make bash-coverage` passes `BATS_FILES_FROM` to the script only as `--files <path>` and `COVERAGE_TRACE_DIR` only as `--trace-only <dir>` on the command line; both are `unexport`ed, so neither reaches the script's environment; with both unset it behaves as today.
 - **R6.** `[PR1]` `ci.yml` has a `test-shard` matrix over `[1, 2, 3]` with `fail-fast: false` in which only shard 1 runs `make test-prereqs`, each leg checks executed = declared with `ci-suite-report.sh --files` and uploads its list and trace only on success under `test-shard-<run_attempt>-<i>`; and a `test` gate with `if: always()` that fails unless the shard result is `success`, runs `ci-shard-gate.sh --with-traces` and `run-bash-coverage.sh --score` over this attempt's artifacts, enforces 91% and publishes the badge.
 - **R7.** `[PR1]` `ci.yml` has no `bash-coverage` job and no untraced `test` job, `auto-merge`'s `needs:` lists `test` but not `bash-coverage`, and only the `test` gate job has `contents: write`.
 - **R8.** `[PR1]` Both `make test` calls in `scripts/pre-push` run with `MAKEFLAGS`, `MFLAGS`, `MAKELEVEL` and `BATS_FILES_FROM` removed from the environment, and tests show neither an exported `BATS_FILES_FROM` nor an exported `MAKEFLAGS` reaches make.
 - **R9.** `[PR1]` ADR-0054 exists and is indexed; `CLAUDE.md`, `README.md` and the Backlog are updated as listed under Docs.
 - **R10.** `[PR1]` `ci-shard-gate.sh --with-traces <dir>` fails, naming the shard, unless every `shard-<i>.files` has exactly one non-empty `shard-<i>.trace` and no trace lacks a list; without the flag its behaviour is unchanged.
-- **V1.** On the draft PR, over three CI runs, the shard union scores at least 91% each time and its covered count falls within the temporary full traced job's own spread over those runs; the PR body records the figures and the per-file line diffs.
-- **V2.** Over the first 5 PR runs after merge, the `test` gate completes before the `test-macos` gate in at least 4.
-- **V3.** Before the PR's final CI run the operator removes `bash-coverage` from branch protection's required checks (the PR body records the call), and after merge every open PR is rebased or re-run.
+- **V1.** On the draft PR, over two CI runs with today's `bash-coverage` job kept as the same-SHA baseline, the baseline trace is non-empty, the shard union scores at least 91% each time, and every line the baseline covers and the union does not is listed in the PR body by file; otherwise a margin-raising PR merges first.
+- **V2.** Over the first 5 PR runs after merge, the `test` gate completes before the `test-macos` gate in at least 4; otherwise open a follow-up to revisit the shard count.
+- **V3.** Before the PR's final CI run the operator removes `bash-coverage` from branch protection's required checks (the PR body records the call); after merge every open PR is rebased or re-run; if the PR is abandoned or reverted, the check is restored.
 - **N1.** No change to the 91% floor or to how a file's covered and coverable lines are counted.
 - **N2.** No change to the macOS jobs or to `bats-shard.sh`'s packing.
 - **N3.** No new secret, token or self-hosted runner.
@@ -314,3 +334,25 @@ Ergonomics.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (`cc2e9817`, all three lenses)
+
+- **Goal-Fit.** Worth building; no simpler path. Findings: headroom is 19 lines, not 26-34 (master run
+  41244276701: 6395 / 7006); a full traced CI run is deterministic (25 runs: equal denominators gave
+  equal numerators), so a three-run spread is about 0 and adds nothing; the temporary full job duplicates
+  the existing one; V2 had no response. Assumption: ~30 files per leg on 4 vCPU fire the same
+  timing-dependent lines as 90 in one run, within 19 lines; one draft run with a same-SHA diff settles it.
+- **Ergonomics.** Finding: "within the full job's spread" fails a correct design ~80% of the time
+  (both extremes of six draws must fall on the full side) and fails a union that covers more. Make it
+  one-sided and per run. Assumption: same as Goal-Fit.
+- **Risk.** No silent pass found; every traced path fails closed. Findings: the per-leg
+  `ci-suite-report.sh --files` step replaces the ≥ 840 floor but no shape test pinned it;
+  `COVERAGE_TRACE_DIR` leaks into the suite like the measured `not ok 162`; V1 had no non-empty guard on
+  the baseline; an abandoned PR left `bash-coverage` unrequired. Residual (Backlog allowlist row):
+  a hand-exported `GNUMAKEFLAGS` or `MAKEFILES` still narrows `make test`; make blanks `GNUMAKEFLAGS` for
+  children, so the in-recipe trigger is closed. Assumption: the split covers at least as much as one run
+  on 4 vCPU; false means a false red near the floor, not a false green.
+- **Disposition:** Addressed, revision presented to the operator 2026-10-31: V1 rewritten (existing job
+  as baseline, two runs, one-sided, non-empty guard, named fallback; the temporary job removed); headroom
+  restated; `COVERAGE_TRACE_DIR` unexported and tested; the `ci-suite-report.sh` step pinned; abandon
+  restores the check; V2 response named; `GNUMAKEFLAGS`/`MAKEFILES` added to the Backlog allowlist row.
