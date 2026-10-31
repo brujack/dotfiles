@@ -104,6 +104,8 @@ Usage: run-bash-coverage.sh [--json /path/out.json]
        run-bash-coverage.sh --file-coverage <file> <trace_file>
        run-bash-coverage.sh --print-bats-args [--files LIST]
        run-bash-coverage.sh --files LIST [--json /path/out.json]
+       run-bash-coverage.sh [--files LIST] --trace-only DIR
+       run-bash-coverage.sh --score TRACE... [--json /path/out.json]
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
@@ -139,6 +141,15 @@ Inspecting the figure without a full run (all of these exit immediately):
                           return, or a listed path that does not exist
 
 Every traced run passes --print-output-on-failure to bats.
+
+  --trace-only DIR        Run the traced bats, copy the TAP log to
+                          DIR/bats_run.log (before the red check, so a red run
+                          leaves it), then on green write DIR/bash_trace.txt
+                          (LC_ALL=C sort -u of the trace) and exit 0 without
+                          scoring. Combines with --files
+  --score TRACE...        No bats run: union the traces and print the same
+                          table, TOTAL and Overall bash coverage as a full
+                          run. Exits 2 on a missing or empty trace
 
 COVERAGE_BATS_JOBS=<n>    Run the traced suite with bats --jobs <n> (a positive
                           integer, no leading zero). Unset or empty runs
@@ -768,6 +779,119 @@ _check_red_suite() {
     return 1
 }
 
+# Scores TRACE ($1) against the instrumented set: the per-file table, TOTAL,
+# "Overall bash coverage: N%" and the heuristic-disagreement list. Sets the
+# global `overall` for the --json step. Shared by the main run and --score so
+# both report through one loop. Returns 1 on an untrustworthy denominator.
+_score_trace() {
+    local _trace="${1}"
+    local src_file covered coverable disagreement_lines pct basename relpath _dline _d
+    local _report
+    # States what the run below actually measures, so an operator reading a
+    # percentage does not have to reverse-engineer the predicate from the source.
+    # Deliberately separate from the "Overall bash coverage: %d%%" line further
+    # down — CI's `.github/workflows/ci.yml` greps that exact line for every
+    # integer on it, so a denominator appended there would make the parsed
+    # percentage multi-line and break the `-lt` comparison.
+    printf "Instrumented set: setup_env.sh + tracked config/*.sh lib/*.sh scripts/*.sh + hooks, less bash-tracer.sh (%d files)\n" "${#INCLUDE_FILES[@]}"
+
+    # Compute per-file coverage
+    printf "%-30s  %8s  %8s  %8s\n" "File" "Covered" "Total" "Pct"
+    printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
+
+    total_covered=0
+    total_coverable=0
+    all_disagreements=()
+
+    for src_file in "${INCLUDE_FILES[@]}"; do
+        _warn_if_source_missing "${src_file}" || continue
+
+        if ! _report="$(_file_coverage_report "${src_file}" "${_trace}")"; then
+            printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
+            return 1
+        fi
+
+        covered=$(printf '%s\n' "${_report}" | sed -n '1p')
+        coverable=$(printf '%s\n' "${_report}" | sed -n '2p')
+        disagreement_lines=$(printf '%s\n' "${_report}" | sed -n '3,$p')
+
+        # Invariant: covered can never legitimately exceed coverable — coverable
+        # is now the UNION of the static heuristic count and whatever the trace
+        # file actually contains for this file, so a traced line is always a
+        # member of its own denominator by construction. This stays as a
+        # structural guard rather than being removed: if it fires now, the union
+        # computation itself has a bug, not an exclusion heuristic. See tdd.md's
+        # Coverage Denominators section.
+        if [[ "${covered}" -gt "${coverable}" ]]; then
+            printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
+                "${src_file}" "${covered}" "${coverable}" >&2
+            return 1
+        fi
+
+        if [[ "${coverable}" -gt 0 ]]; then
+            pct=$(( covered * 100 / coverable ))
+        else
+            pct=100
+        fi
+
+        basename="${src_file##*/}"
+        printf "%-30s  %8d  %8d  %7d%%\n" "${basename}" "${covered}" "${coverable}" "${pct}"
+
+        total_covered=$((total_covered + covered))
+        total_coverable=$((total_coverable + coverable))
+
+        if [[ -n "${disagreement_lines}" ]]; then
+            relpath="${src_file#"${REPO_ROOT}/"}"
+            while IFS= read -r _dline; do
+                [[ -n "${_dline}" ]] && all_disagreements+=("${relpath}:${_dline}")
+            done <<< "${disagreement_lines}"
+        fi
+    done
+
+    if [[ "${total_coverable}" -gt 0 ]]; then
+        overall=$(( total_covered * 100 / total_coverable ))
+    else
+        overall=0
+    fi
+
+    printf "\n%-30s  %8d  %8d  %7d%%\n" "TOTAL" "${total_covered}" "${total_coverable}" "${overall}"
+    printf "\nOverall bash coverage: %d%%\n" "${overall}"
+
+    # The union above means a wrongly-excluded line raises the denominator
+    # instead of silently vanishing from it — but a heuristic that is
+    # systematically wrong should still be fixed, not just neutralized forever.
+    # This is the list that makes that possible: every line an exclusion rule
+    # dropped that the trace actually emitted, so the specific rule can be
+    # tightened later. Printed unconditionally, with an explicit "none" and
+    # "total: 0" when clean, so the absence is visible rather than inferred.
+    printf "\nHeuristic disagreements (excluded but traced) — these indicate an over-matching rule:\n"
+    if [[ "${#all_disagreements[@]}" -eq 0 ]]; then
+        printf "  none\n"
+    else
+        for _d in "${all_disagreements[@]}"; do
+            printf "  %s\n" "${_d}"
+        done
+    fi
+    printf "  total: %d\n" "${#all_disagreements[@]}"
+}
+
+# Writes the shields.io badge JSON for the global `overall` when the
+# remaining arguments are `--json <path>`. Shared by the main run and --score.
+_write_badge() {
+    [[ "${1:-}" == "--json" && -n "${2:-}" ]] || return 0
+    local color
+    if [[ "${overall}" -ge 90 ]]; then
+        color="brightgreen"
+    elif [[ "${overall}" -ge 75 ]]; then
+        color="yellow"
+    else
+        color="red"
+    fi
+    printf '{"schemaVersion":1,"label":"bash coverage","message":"%d%%","color":"%s"}\n' \
+        "${overall}" "${color}" > "${2}" || return 1
+    printf "Badge JSON written to %s\n" "${2}"
+}
+
 if [[ "${1:-}" == "--check-red-suite" ]]; then
     if [[ -z "${2:-}" || -z "${3:-}" ]]; then
         printf "ERROR: --check-red-suite requires a status and a log file\n" >&2
@@ -785,6 +909,9 @@ fi
 # consumed here so the flag handlers below keep reading $1/$2 unchanged.
 _rest=()
 _files_seen=0
+_TRACE_ONLY_DIR=""
+_score_seen=0
+_SCORE_TRACES=()
 while (( $# )); do
     if [[ "${1}" == "--files" ]]; then
         if [[ -z "${2:-}" ]]; then
@@ -798,6 +925,25 @@ while (( $# )); do
         _files_seen=1
         _load_files_list "${2}" || exit 2
         shift 2
+    elif [[ "${1}" == "--trace-only" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            printf "ERROR: --trace-only requires a directory\n" >&2
+            exit 2
+        fi
+        if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+            printf "ERROR: --trace-only given more than once\n" >&2
+            exit 2
+        fi
+        _TRACE_ONLY_DIR="${2}"
+        shift 2
+    elif [[ "${1}" == "--score" ]]; then
+        _score_seen=1
+        shift
+        # Traces run up to the next flag; --json stays for the badge step.
+        while (( $# )) && [[ "${1}" != -* ]]; do
+            _SCORE_TRACES+=("${1}")
+            shift
+        done
     else
         _rest+=("${1}")
         shift
@@ -845,6 +991,38 @@ if [[ "${1:-}" == -* && "${1:-}" != "--json" ]]; then
     exit 2
 fi
 
+# --score: no bats run. Union the given traces and score them exactly as a
+# full run would. Placed after the unknown-flag guard and before the bats check,
+# since scoring needs no bats.
+if (( _score_seen )); then
+    if (( ${#_SCORE_TRACES[@]} == 0 )); then
+        printf "ERROR: --score requires at least one trace file\n" >&2
+        exit 2
+    fi
+    for _t in "${_SCORE_TRACES[@]}"; do
+        if [[ ! -f "${_t}" || ! -r "${_t}" ]]; then
+            printf "ERROR: --score: no such readable trace file: %s\n" "${_t}" >&2
+            exit 2
+        fi
+        if [[ ! -s "${_t}" ]]; then
+            printf "ERROR: --score: empty trace file: %s\n" "${_t}" >&2
+            exit 2
+        fi
+    done
+    _union="$(mktemp "${TMPDIR:-/tmp}/cov-union.XXXXXX")" || exit 1
+    if ! LC_ALL=C sort -u "${_SCORE_TRACES[@]}" > "${_union}"; then
+        rm -f "${_union}"
+        printf "ERROR: --score: could not union the traces\n" >&2
+        exit 1
+    fi
+    _score_trace "${_union}"
+    _score_status=$?
+    rm -f "${_union}"
+    (( _score_status == 0 )) || exit 1
+    _write_badge "$@" || exit 1
+    exit 0
+fi
+
 # Without bats, the background FIFO reader started below blocks forever in
 # open() waiting for a write end nothing ever opens — bats never runs to open
 # it, and wait(1) on that reader below never returns, so the script hangs
@@ -865,6 +1043,9 @@ _out="$(_coverage_bats_args)" || exit 2
 mapfile -t _bats_args <<<"${_out}"
 _coverage_bats_mode "${_bats_args[@]}"
 
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    mkdir -p "${_TRACE_ONLY_DIR}" || exit 1
+fi
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
@@ -916,6 +1097,12 @@ wait "${grep_pid}" 2>/dev/null || true
 # instrument that measures the repo. Capture bats's own status directly, and
 # refuse to report coverage measured over a suite that did not pass —
 # _check_red_suite (defined above, alongside --check-red-suite) is what does it.
+#
+# --trace-only keeps the log BEFORE that check: a red shard must leave its TAP
+# log (with --print-output-on-failure output) where the CI job uploads it from.
+if [[ -n "${_TRACE_ONLY_DIR}" && ! "${bats_log}" -ef "${_TRACE_ONLY_DIR}/bats_run.log" ]]; then
+    cp "${bats_log}" "${_TRACE_ONLY_DIR}/bats_run.log" || exit 1
+fi
 _check_red_suite "${bats_status}" "${bats_log}" || exit 1
 
 if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
@@ -923,106 +1110,19 @@ if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
     exit 1
 fi
 
+# --trace-only stops here: publish the sorted unique trace and leave scoring to
+# a later --score over all shards' traces. Written via a temp file because the
+# directory may be OUTPUT_DIR, where TRACE_FILE is the sort's own input.
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    LC_ALL=C sort -u "${TRACE_FILE}" > "${_TRACE_ONLY_DIR}/bash_trace.txt.tmp" || exit 1
+    mv -f "${_TRACE_ONLY_DIR}/bash_trace.txt.tmp" "${_TRACE_ONLY_DIR}/bash_trace.txt" || exit 1
+    wc -l < "${_TRACE_ONLY_DIR}/bash_trace.txt" | awk '{printf "Trace: %d unique lines\n", $1}'
+    exit 0
+fi
+
 trace_lines=$(wc -l < "${TRACE_FILE}")
 printf "\nTrace: %d filtered lines\n\n" "${trace_lines}"
 
-# States what the run below actually measures, so an operator reading a
-# percentage does not have to reverse-engineer the predicate from the source.
-# Deliberately separate from the "Overall bash coverage: %d%%" line further
-# down — CI's `.github/workflows/ci.yml` greps that exact line for every
-# integer on it, so a denominator appended there would make the parsed
-# percentage multi-line and break the `-lt` comparison.
-printf "Instrumented set: setup_env.sh + tracked config/*.sh lib/*.sh scripts/*.sh + hooks, less bash-tracer.sh (%d files)\n" "${#INCLUDE_FILES[@]}"
+_score_trace "${TRACE_FILE}" || exit 1
 
-# Compute per-file coverage
-printf "%-30s  %8s  %8s  %8s\n" "File" "Covered" "Total" "Pct"
-printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
-
-total_covered=0
-total_coverable=0
-all_disagreements=()
-
-for src_file in "${INCLUDE_FILES[@]}"; do
-    _warn_if_source_missing "${src_file}" || continue
-
-    if ! _report="$(_file_coverage_report "${src_file}" "${TRACE_FILE}")"; then
-        printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
-        exit 1
-    fi
-
-    covered=$(printf '%s\n' "${_report}" | sed -n '1p')
-    coverable=$(printf '%s\n' "${_report}" | sed -n '2p')
-    disagreement_lines=$(printf '%s\n' "${_report}" | sed -n '3,$p')
-
-    # Invariant: covered can never legitimately exceed coverable — coverable
-    # is now the UNION of the static heuristic count and whatever the trace
-    # file actually contains for this file, so a traced line is always a
-    # member of its own denominator by construction. This stays as a
-    # structural guard rather than being removed: if it fires now, the union
-    # computation itself has a bug, not an exclusion heuristic. See tdd.md's
-    # Coverage Denominators section.
-    if [[ "${covered}" -gt "${coverable}" ]]; then
-        printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
-            "${src_file}" "${covered}" "${coverable}" >&2
-        exit 1
-    fi
-
-    if [[ "${coverable}" -gt 0 ]]; then
-        pct=$(( covered * 100 / coverable ))
-    else
-        pct=100
-    fi
-
-    basename="${src_file##*/}"
-    printf "%-30s  %8d  %8d  %7d%%\n" "${basename}" "${covered}" "${coverable}" "${pct}"
-
-    total_covered=$((total_covered + covered))
-    total_coverable=$((total_coverable + coverable))
-
-    if [[ -n "${disagreement_lines}" ]]; then
-        relpath="${src_file#"${REPO_ROOT}/"}"
-        while IFS= read -r _dline; do
-            [[ -n "${_dline}" ]] && all_disagreements+=("${relpath}:${_dline}")
-        done <<< "${disagreement_lines}"
-    fi
-done
-
-if [[ "${total_coverable}" -gt 0 ]]; then
-    overall=$(( total_covered * 100 / total_coverable ))
-else
-    overall=0
-fi
-
-printf "\n%-30s  %8d  %8d  %7d%%\n" "TOTAL" "${total_covered}" "${total_coverable}" "${overall}"
-printf "\nOverall bash coverage: %d%%\n" "${overall}"
-
-# The union above means a wrongly-excluded line raises the denominator
-# instead of silently vanishing from it — but a heuristic that is
-# systematically wrong should still be fixed, not just neutralized forever.
-# This is the list that makes that possible: every line an exclusion rule
-# dropped that the trace actually emitted, so the specific rule can be
-# tightened later. Printed unconditionally, with an explicit "none" and
-# "total: 0" when clean, so the absence is visible rather than inferred.
-printf "\nHeuristic disagreements (excluded but traced) — these indicate an over-matching rule:\n"
-if [[ "${#all_disagreements[@]}" -eq 0 ]]; then
-    printf "  none\n"
-else
-    for _d in "${all_disagreements[@]}"; do
-        printf "  %s\n" "${_d}"
-    done
-fi
-printf "  total: %d\n" "${#all_disagreements[@]}"
-
-# Optionally write shields.io badge JSON
-if [[ "${1:-}" == "--json" && -n "${2:-}" ]]; then
-    if [[ "${overall}" -ge 90 ]]; then
-        color="brightgreen"
-    elif [[ "${overall}" -ge 75 ]]; then
-        color="yellow"
-    else
-        color="red"
-    fi
-    printf '{"schemaVersion":1,"label":"bash coverage","message":"%d%%","color":"%s"}\n' \
-        "${overall}" "${color}" > "${2}"
-    printf "Badge JSON written to %s\n" "${2}"
-fi
+_write_badge "$@" || exit 1
