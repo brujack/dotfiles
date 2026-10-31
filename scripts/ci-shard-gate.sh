@@ -56,7 +56,7 @@ main() {
     gate_die "not a directory: ${_dir}" || return 2
   fi
   for _f in "${_dir}"/shard-*.files; do
-    [[ -e "${_f}" ]] && _lists+=("${_f}")
+    [[ -e "${_f}" || -L "${_f}" ]] && _lists+=("${_f}")
   done
   if [[ ${#_lists[@]} -eq 0 ]]; then
     gate_die "no shard-*.files in ${_dir}" || return 2
@@ -82,7 +82,7 @@ main() {
     if [[ ${_GATE_BLANKS} -gt 0 ]]; then printf 'extra: \n'; fi
   fi
 
-  _dups="$(printf '%s' "${_GATE_ALL}" | LC_ALL=C sort | uniq -d)"
+  _dups="$(printf '%s' "${_GATE_ALL}" | LC_ALL=C sort | LC_ALL=C uniq -d)"
   if [[ -n "${_dups}" ]]; then
     _rc=1
     printf 'disjointness: a path appears more than once\n'

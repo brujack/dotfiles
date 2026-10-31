@@ -167,3 +167,38 @@ good_partition() {
   [[ "${output}" == *"coverage:"* ]]
   [[ "${output}" == *"missing: ${_dropped}"* ]]
 }
+
+@test "a dangling symlink list exits 2 as unreadable instead of being ignored" {
+  good_partition
+  ln -s "${TREE}/nowhere" "${LISTS}/shard-3.files"
+  run_gate_in "${TREE}" lists
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read list file"* ]]
+  [[ "${output}" == *"shard-3.files"* ]]
+}
+
+@test "a list that is a directory exits 2" {
+  good_partition
+  mkdir "${LISTS}/shard-3.files"
+  run_gate_in "${TREE}" lists
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read list file"* ]]
+}
+
+@test "a tree with no .bats files exits 2 with the prefixed message" {
+  good_partition
+  rm -f "${TREE}/tests/a.bats" "${TREE}/tests/c.bats" "${TREE}/tests/sub/b.bats"
+  run_gate_in "${TREE}" lists
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == "ci-shard-gate: "* ]]
+  [[ "${output}" == *"no .bats files"* ]]
+}
+
+@test "a list with no trailing newline still passes" {
+  printf 'tests/a.bats\ntests/sub/b.bats' > "${LISTS}/shard-1.files"
+  printf 'tests/c.bats' > "${LISTS}/shard-2.files"
+  run_gate_in "${TREE}" lists
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"PASS"* ]]
+  [[ "${output}" == *"3 files"* ]]
+}
