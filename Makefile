@@ -114,11 +114,12 @@ BATS_PARALLEL_RAN := $(filter-out $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats test-prereqs
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
+	@printf "  make test-prereqs      Run the non-bats half of make test (lint, lock and requirements drift, python, CLAUDE.md budget)\n"
 	@printf "  make test-unit         Run unit tests only\n"
 	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES, lib EXIT-trap ratchet\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"

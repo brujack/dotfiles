@@ -150,6 +150,7 @@ _install_coverage_stub() {
 #!$(command -v bash)
 if [[ "\$1" == scripts/run-bash-coverage.sh ]]; then
   shift
+  printf 'jobs=%s\\n' "\${COVERAGE_BATS_JOBS-unset}" >> "${COV_RECORD}.jobs"
   printf 'args=%s | files=%s trace=%s root=%s\\n' "\$*" "\${BATS_FILES_FROM-unset}" \\
     "\${COVERAGE_TRACE_DIR-unset}" "\${_OVERRIDE_COVERAGE_ROOT-unset}" >> "${COV_RECORD}"
   exit 0
@@ -246,4 +247,29 @@ _run_bash_coverage() {
   [ "$status" -ne 0 ]
   [[ "$stderr" == *"refusing"* ]]
   [ ! -s "${COV_RECORD}" ]
+}
+
+@test "bash-coverage: the parallel arm forwards both arguments too, with COVERAGE_BATS_JOBS set" {
+  _install_coverage_stub
+  export BATS_FILES_FROM="${LIST}"
+  export COVERAGE_TRACE_DIR="${BATS_TEST_TMPDIR}/trace-out"
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory \
+    -C "${REPO_ROOT}" bash-coverage HAVE_PARALLEL=yes BATS_SERIAL_FILES= JOBS=6
+  [ "$status" -eq 0 ]
+  [ "$(cat "${COV_RECORD}")" = "args=--files ${LIST} --trace-only ${BATS_TEST_TMPDIR}/trace-out | files=unset trace=unset root=unset" ]
+  [ "$(cat "${COV_RECORD}.jobs")" = "jobs=6" ]
+}
+
+# `test:` keeps its prerequisites spelled out (other tests read that line), so
+# test-prereqs could drift from it unseen. Pin: test-prereqs' set equals the
+# set on `test:` minus test-prereqs and test-bats.
+@test "test-prereqs lists exactly the non-bats prerequisites of test" {
+  local pre test_line expected
+  pre="$(sed -n 's/^test-prereqs:[[:space:]]*//p' "${REPO_ROOT}/Makefile" | tr ' ' '\n' | sed '/^$/d' | sort)"
+  test_line="$(sed -n 's/^test:[[:space:]]*//p' "${REPO_ROOT}/Makefile")"
+  expected="$(printf '%s\n' ${test_line} | command grep -vxE 'test-prereqs|test-bats' | sort)"
+  [ -n "${pre}" ]
+  [ -n "${expected}" ]
+  [ "${pre}" = "${expected}" ]
 }
