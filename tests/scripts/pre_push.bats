@@ -107,9 +107,10 @@ _commit_file() {
 
 # These cases push to a FEATURE ref, not master, and that is deliberate. Their
 # subject is the inert set -- does this path make the suite run -- not master
-# policy. They used refs/heads/master incidentally until the direct-to-master
-# guard landed, at which point every one of them would have been answered by
-# the refusal instead of by the thing they assert. Do not switch them back.
+# policy. They used refs/heads/master incidentally until the shared
+# push-content gate landed, at which point every one of them would have been
+# answered by the gate (or its load failure) instead of by the thing they
+# assert. Do not switch them back.
 _run_pre_push() {
   local _stdin="${1}"
   local _path_with_make="${MAKE_MOCK_DIR}:${CLEAN_PATH}"
@@ -631,7 +632,6 @@ ZERO_SHA="0000000000000000000000000000000000000000"
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${sha2} refs/heads/feat/x ${base_sha}\nrefs/heads/feat/y ${sha2} refs/heads/feat/y ${sha1}\n"
   [ "$status" -eq 0 ]
-  [[ "$output" != *"refusing"* ]]
   _assert_suite_ran
 }
 
@@ -1636,7 +1636,7 @@ _run_pre_push_wired() {
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    cd '${REPO_DIR}' && bash '${_copy}' origin
+    cd '${REPO_DIR}' && bash '${_copy}' origin https://example.invalid/r.git
   "
 }
 
@@ -1656,6 +1656,27 @@ _run_pre_push_wired() {
   run _run_pre_push "refs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
   [ "$status" -eq 1 ]
   [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+  command grep -q 'auth token' "${BATS_TEST_TMPDIR}/gh.calls"
+}
+
+@test "wiring: master on a later ref line whose gate cannot load is refused before the suite" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${local_sha} refs/heads/master ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot load the push-content gate"* ]]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: master on a later ref line is judged by the loaded gate" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\nrefs/heads/master ${local_sha} refs/heads/master ${base_sha}\n" refuse
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"stub gate refused"* ]]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
@@ -1677,6 +1698,8 @@ _run_pre_push_wired() {
   [ "$status" -eq 0 ]
   _assert_make_ran
   command grep -qF "refs/heads/master ${local_sha} refs/heads/master ${base_sha}" "${BATS_TEST_TMPDIR}/pcg.args"
+  # The stub writes ref text, a --- separator, then the second argument (the remote URL).
+  [ "$(sed -n '/^---$/{n;p;q;}' "${BATS_TEST_TMPDIR}/pcg.args")" = "https://example.invalid/r.git" ]
 }
 
 @test "wiring: two ref lines are both drained from _pcg_refs" {
