@@ -354,6 +354,10 @@ TDD, bats, in `tests/scripts/`. Every case that expects success also asserts a n
 - **N4.** No change to `JOBS` or to the bats flags within a shard.
 - **N5.** No change to what any existing test asserts, except retargeting the job named in `ci_test_macos_log.bats` and in `ci_runner_pins.bats`'s positive control from `test-macos` to `test-macos-shard`; speed-ups to individual tests are separate changes.
 
+## Amendments
+
+- N5 -> No change to what any existing test asserts, except retargeting the job named in `ci_test_macos_log.bats` and in `ci_runner_pins.bats`'s positive control from `test-macos` to `test-macos-shard`, and adding `test-bats` to `ALLOWED_TEST_PREREQS` in `tests/scripts/docs_inert_premise.bats`; speed-ups to individual tests are separate changes. — `test-bats` becomes a `make test` prerequisite, and that test's own failure message prescribes the allow-list addition for a target that reads no tracked `.md`; its property (no prerequisite reads a tracked `.md` from the working tree) is unchanged.
+
 ## Round 2 (2026-10-31)
 
 Changes after the operator reviewed round 1:
