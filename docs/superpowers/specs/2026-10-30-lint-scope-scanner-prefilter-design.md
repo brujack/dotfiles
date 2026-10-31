@@ -123,3 +123,25 @@ Checked and not raised: regex-dialect differences between ERE and bash `=~` for 
 ## Amendments
 
 - R1 -> The make -C partition test filters each file's `_join_continuations` output with a `grep -a -E` pattern, run under `PATH="${CLEAN_PATH}"` in the caller's locale, derived from `_MAKE_C_FORM_RE` by replacing its leading `(^|` with `(^[0-9]+:|`. — `LC_ALL=C` narrows grep's `[[:space:]]` to ASCII while bash `=~` follows the test's locale, so a line with a non-ASCII space (U+2003) was a bash candidate that grep dropped; same locale on both sides keeps the prefilter a superset, and `-a` alone covers binary input (Task 1 code review).
+
+## Spec alignment (2026-10-31)
+
+- spec: docs/superpowers/specs/2026-10-30-lint-scope-scanner-prefilter-design.md
+- anchor: c5f03121b8b7c43d23af7330cb6a78756bd1ea0d
+- in scope: R1, R2, R3, R4, R5
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Mutation controls run in Phase 2 and re-run by the orchestrator: a prefilter that drops everything (early return 0) -> partition test red; a prefilter that matches everything ('.') -> edge-fixture drop asserts red; bare (^| anchor (emit un-derived regex) -> edge-fixture test red, prefiltered missing lines 1 2; grep status 2 treated as 1 (*) ;;) -> invalid-pattern test red.
+- V2: claude, bats --timing: partition test 65339 ms -> 2247 ms; whole file 73 s -> 9 s (41 ok). Recorded in PR body.
+- V3: Studio, git archive of a57550ca under env -i HOME=tmp PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin: all 8 'make -C prefilter' tests ok, including the U+2003 test (ran, not skipped). Partition test not judged there: tarball has no .git.
