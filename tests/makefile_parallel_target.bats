@@ -203,7 +203,7 @@ _run_make_dry() {
   _disable_parallel
   _run_make_dry JOBS=12 BATS_SERIAL_FILES=tests/setup_env/git_hooks.bats
   [ "$status" -eq 0 ]
-  # The serial branch must run BATS_PARALLEL_FILES, not BATS_ALL_FILES:
+  # The serial branch must run BATS_PARALLEL_RAN, not BATS_ALL_FILES:
   # the carve-out phase below it runs the carved file, so the unfiltered
   # list would run it a second time. No other assertion catches that,
   # because both runs pass.

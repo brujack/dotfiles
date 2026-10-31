@@ -6,8 +6,8 @@
 #
 # bats is a recording stub on a from-scratch PATH: nothing here runs a real
 # suite. The list variable is set in the ENVIRONMENT, the way CI sets it,
-# never as a make argument (a command-line variable would be exported by
-# make regardless of `unexport`).
+# never as a make argument (under `unexport` a command-line assignment does
+# not reach recipes, but it rides MAKEFLAGS into every nested make).
 
 bats_require_minimum_version 1.5.0
 
@@ -66,8 +66,9 @@ _calls() { wc -l < "${RECORD}" | tr -d ' '; }
   _run_test_bats JOBS=4
   [ "$status" -eq 0 ]
   [ "$(_calls)" -eq 1 ]
-  grep -q -- 'tests/makefile_shard_list.bats' "${RECORD}"
-  grep -q -- 'tests/setup_env/unit.bats' "${RECORD}"
+  local expected
+  expected="$(cd "${REPO_ROOT}" && find tests -name '*.bats' | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$(cat "${RECORD}")" = "--jobs 4 --print-output-on-failure ${expected}| from=unset" ]
 }
 
 @test "BATS_FILES_FROM set in the environment: bats gets exactly the listed files, and does not see the variable" {

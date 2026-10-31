@@ -90,7 +90,6 @@ BATS_SERIAL_FILES :=
 # what a TDD red step produces, and a tracked-only list would report it green
 # by never running it. This is the same set `bats --recursive tests/` walks.
 BATS_ALL_FILES := $(shell find tests -name '*.bats' 2>/dev/null | sort)
-BATS_PARALLEL_FILES := $(filter-out $(BATS_SERIAL_FILES),$(BATS_ALL_FILES))
 
 # What test-bats runs: the shard list when BATS_FILES_FROM is set, else every
 # file. A set-but-missing list yields empty (the wildcard guard also keeps
@@ -115,7 +114,7 @@ BATS_PARALLEL_RAN := $(filter-out $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats
 
 help:
 	@printf "Available targets:\n"
@@ -180,8 +179,9 @@ test: lint check-lock check-requirements-ci test-python check-claude-md-budget t
 # The bats phase of `make test`, separate so a CI shard can run it on its own
 # list. BATS_FILES_FROM names a file of one .bats path per line (a shard);
 # unset, the whole find-derived set runs. Read in the ENVIRONMENT by design and
-# unexported below: bats must not see it, and a command-line assignment would
-# be exported by make regardless.
+# unexported above: bats must not inherit it. A command-line assignment would
+# not reach recipes under unexport, but it rides MAKEFLAGS into every nested
+# make, which is why callers set it in the environment instead.
 test-bats:
 ifndef BATS
 	$(error $(BATS_MISSING))
@@ -217,8 +217,10 @@ endif
 # manifest checker. Each ships with its suite rather than untested: a repo
 # gating at 90% coverage does not take unverified code to unblock a gate.
 #
-# This runs SERIAL, and as a prerequisite of `test` -- so it finishes before
-# the parallel bats phase starts and gets none of `--jobs`. Adding a second
+# This runs SERIAL, and as a prerequisite of `test` -- so under a serial
+# `make test` (what CI and pre-push run; not under -j, which may overlap
+# prerequisites) it finishes before the parallel bats phase starts and gets
+# none of `--jobs`. Adding a second
 # suite here is what makes that worth saying: the figure a `make test` run
 # reports for wall-clock is the bats phase, and this phase is invisible in it.
 # Parallelising it is backlogged, not done.
