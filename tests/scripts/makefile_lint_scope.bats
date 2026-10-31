@@ -774,6 +774,15 @@ _words_missing_from() {
 }
 
 @test "make -C prefilter: a non-ASCII space line is classified the same unfiltered and prefiltered" {
+  # U+2003 is a space only under a UTF-8 locale, so pin one: under C or a bare
+  # env -i neither bash =~ nor grep sees a space and the comparison is vacuous.
+  local _utf8_locale _installed
+  _installed="$(locale -a 2>/dev/null)"
+  _utf8_locale="$(PATH="${CLEAN_PATH}" grep -i -m1 -x 'c\.utf-\?8' <<< "${_installed}")" \
+    || _utf8_locale="$(PATH="${CLEAN_PATH}" grep -i -m1 -x 'en_US\.utf-\?8' <<< "${_installed}")" \
+    || skip "no C.UTF-8 or en_US.UTF-8 locale installed; U+2003 cannot be classified as a space"
+  export LC_ALL="${_utf8_locale}"
+
   printf 'make\xe2\x80\x83-C x print-X\n' > "${BATS_TEST_TMPDIR}/emspace.txt"
   local _unfiltered="" _prefiltered="" _ln _content _lines
   while IFS=: read -r _ln _content; do
@@ -786,6 +795,10 @@ _words_missing_from() {
     _is_make_c_candidate "${_content}" && _prefiltered+="${_ln} "
   done <<< "${_lines}"
   printf 'unfiltered: [%s] prefiltered: [%s] LC_ALL=%s\n' "${_unfiltered}" "${_prefiltered}" "${LC_ALL:-}" >&2
+  if [[ -z "${_unfiltered}" ]]; then
+    printf 'locale %s does not treat U+2003 as a space; the test would be vacuous\n' "${_utf8_locale}" >&2
+    return 1
+  fi
   [ "${_unfiltered}" = "${_prefiltered}" ]
 }
 
@@ -801,6 +814,15 @@ _words_missing_from() {
   run _make_c_prefiltered_lines "${_fixture}" '('
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"grep exited 2"* ]]
+  [[ "${output}" == *"${_fixture}"* ]]
+}
+
+@test "make -C prefilter: a failed pattern derivation fails and names the file" {
+  _make_c_prefilter_re() { return 1; }
+  local _fixture="${REPO_ROOT}/tests/fixtures/make_c_prefilter_edges.txt"
+  run _make_c_prefiltered_lines "${_fixture}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pattern derivation failed for"* ]]
   [[ "${output}" == *"${_fixture}"* ]]
 }
 
