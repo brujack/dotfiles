@@ -23,12 +23,18 @@ count_declared() {
 # Sum '^@test' over the paths in a list file. Prints the total; returns 2 after
 # naming the problem on stderr when the list or a listed path is unusable.
 count_declared_from_list() {
-  local _list="$1" _path _total=0 _n
+  local _list="$1" _path _total=0 _n _line=0
   if [[ ! -r "${_list}" || -d "${_list}" ]]; then
     printf 'ci-suite-report: cannot read list file: %s\n' "${_list}" >&2
     return 2
   fi
   while IFS= read -r _path || [[ -n "${_path}" ]]; do
+    _line=$((_line + 1))
+    if [[ "${_path}" == *$'\r'* ]]; then
+      printf 'ci-suite-report: carriage return in list file %s at line %s\n' \
+        "${_list}" "${_line}" >&2
+      return 2
+    fi
     if [[ -z "${_path}" ]]; then
       printf 'ci-suite-report: blank line in list file: %s\n' "${_list}" >&2
       return 2
@@ -39,6 +45,10 @@ count_declared_from_list() {
     fi
     # grep -c exits 1 on zero matches but still prints 0: that is not an error.
     _n="$(grep -c '^@test' "${_path}")"
+    if [[ ! "${_n}" =~ ^[0-9]+$ ]]; then
+      printf 'ci-suite-report: no test count for listed file: %s\n' "${_path}" >&2
+      return 2
+    fi
     _total=$((_total + _n))
   done < "${_list}"
   printf '%s\n' "${_total}"
@@ -57,7 +67,11 @@ main() {
     return 2
   fi
   if [[ "${_dir}" == "--files" ]]; then
-    _declared="$(count_declared_from_list "${3:-}")"
+    if [[ $# -ne 3 ]]; then
+      printf 'usage: ci-suite-report.sh <log> --files <list-file>\n' >&2
+      return 2
+    fi
+    _declared="$(count_declared_from_list "$3")"
     _rc=$?
     [[ "${_rc}" -eq 0 ]] || return "${_rc}"
   elif [[ ! -d "${_dir}" ]]; then

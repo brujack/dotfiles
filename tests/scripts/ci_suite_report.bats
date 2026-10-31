@@ -130,10 +130,10 @@ make_files_list() {
 @test "--files: an empty list exits 1 with declared=0" {
   make_files_list
   : > "${LIST}"
-  printf 'ok 1 one\n' > "${LOG}"
+  : > "${LOG}"
   run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"executed=1 declared=0"* ]]
+  [[ "${output}" == *"executed=0 declared=0"* ]]
 }
 
 @test "--files: an unreadable list file exits 2 and names it" {
@@ -176,4 +176,42 @@ make_files_list() {
   run bash "${SCRIPT}" "${BATS_TEST_TMPDIR}/nope.log" --files "${LIST}"
   [ "${status}" -eq 2 ]
   [[ "${output}" == *"nope.log"* ]]
+}
+
+@test "--files: no list argument is a usage error" {
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"usage: ci-suite-report.sh <log> --files <list-file>"* ]]
+}
+
+@test "--files: an extra argument is a usage error" {
+  make_files_list
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}" extra
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"usage: ci-suite-report.sh <log> --files <list-file>"* ]]
+}
+
+@test "--files: a CRLF list line is rejected naming the line number" {
+  make_files_list
+  printf '%s\n%s\r\n' "${TESTS_DIR}/a.bats" "${TESTS_DIR}/sub/b.bats" > "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"carriage return in list file"* ]]
+  [[ "${output}" == *"line 2"* ]]
+  [[ "${output}" != *$'\r'* ]]
+}
+
+@test "--files: a non-numeric grep count exits 2 naming the path" {
+  make_files_list
+  mkdir -p "${BATS_TEST_TMPDIR}/shim"
+  printf '#!/bin/sh\necho oops\nexit 2\n' > "${BATS_TEST_TMPDIR}/shim/grep"
+  chmod +x "${BATS_TEST_TMPDIR}/shim/grep"
+  printf 'ok 1 one\n' > "${LOG}"
+  PATH="${BATS_TEST_TMPDIR}/shim:${PATH}" run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"a.bats"* ]]
+  [[ "${output}" != *"syntax error"* ]]
 }
