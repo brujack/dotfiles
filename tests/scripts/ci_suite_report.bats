@@ -100,3 +100,80 @@ setup() {
   run bash "${SCRIPT}" "${TESTS_DIR}" "${TESTS_DIR}"
   [ "${status}" -eq 2 ]
 }
+
+# --files mode: declared count comes from an explicit shard list, not a dir walk.
+# The fixture list names a.bats (2 tests) and sub/b.bats (1 test); notes.txt and
+# an unlisted c.bats (5 tests) must not count.
+
+make_files_list() {
+  LIST="${BATS_TEST_TMPDIR}/shard.files"
+  printf '@test "c1" {\n}\n@test "c2" {\n}\n@test "c3" {\n}\n@test "c4" {\n}\n@test "c5" {\n}\n' > "${TESTS_DIR}/c.bats"
+  printf '%s\n%s\n' "${TESTS_DIR}/a.bats" "${TESTS_DIR}/sub/b.bats" > "${LIST}"
+}
+
+@test "--files: executed equal to declared over the list exits 0" {
+  make_files_list
+  printf 'ok 1 one\nok 2 two\nok 3 three\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"executed=3 declared=3"* ]]
+}
+
+@test "--files: one short of the list exits 1 and names both counts" {
+  make_files_list
+  printf 'ok 1 one\nok 2 two\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executed=2 declared=3"* ]]
+}
+
+@test "--files: an empty list exits 1 with declared=0" {
+  make_files_list
+  : > "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"executed=1 declared=0"* ]]
+}
+
+@test "--files: an unreadable list file exits 2 and names it" {
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${BATS_TEST_TMPDIR}/no-such.files"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"no-such.files"* ]]
+}
+
+@test "--files: an unreadable listed path exits 2 and names it" {
+  make_files_list
+  printf '%s\n' "${TESTS_DIR}/ghost.bats" >> "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"ghost.bats"* ]]
+}
+
+@test "--files: a blank line in the list exits 2" {
+  make_files_list
+  printf '\n%s\n' "${TESTS_DIR}/a.bats" > "${LIST}"
+  printf 'ok 1 one\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"blank line"* ]]
+}
+
+@test "--files: a listed file with no tests contributes 0" {
+  make_files_list
+  : > "${TESTS_DIR}/empty.bats"
+  printf '%s\n' "${TESTS_DIR}/empty.bats" >> "${LIST}"
+  printf 'ok 1 one\nok 2 two\nok 3 three\n' > "${LOG}"
+  run bash "${SCRIPT}" "${LOG}" --files "${LIST}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"executed=3 declared=3"* ]]
+}
+
+@test "--files: a missing log exits 2 and names it" {
+  make_files_list
+  run bash "${SCRIPT}" "${BATS_TEST_TMPDIR}/nope.log" --files "${LIST}"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"nope.log"* ]]
+}
