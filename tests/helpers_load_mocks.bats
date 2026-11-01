@@ -117,23 +117,104 @@ setup() {
   run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude
   [ "${status}" -eq 0 ]
   [ "${output}" = "settings.json" ]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .cursor
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "rules" ]
+}
+
+# _git_clean <args...> -- git with the repo-pinning variables stripped.
+_git_clean() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git "$@"
+}
+
+# _guard_scan <root> -- scan the tracked bats files under <root> for direct calls
+# to run_setup_user / setup_dotfile_symlinks. Prints "CALLER <file>" for each file
+# with a call, and "FLAGGED <file>" when that file neither sets LOAD_MOCKS_AI_CONFIG=1
+# nor assigns _OVERRIDE_AI_CONFIG_DIR at the start of a statement.
+# A call is in command position: after line start, `;` `&&` `||` `|` `(` `$(` `!`
+# `if` or `then`, optionally behind VAR=value assignments and `run` with flags.
+# Out of scope: `run bash setup_env.sh -t setup_user`, which has no direct call.
+_guard_scan() {
+  local _root="$1" _file _sep _assign _run _name _call _optin
+  _sep='(^|[;&|(!]|(^|[[:space:]])(if|then))'
+  _assign='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
+  _run='(run([[:space:]]+-[^[:space:]]+)*[[:space:]]+)?'
+  _name='(run_setup_user|setup_dotfile_symlinks)([[:space:];&|)]|$)'
+  _call="${_sep}[[:space:]]*${_assign}${_run}${_name}"
+  _optin='^[[:space:]]*(export[[:space:]]+|local[[:space:]]+)?(LOAD_MOCKS_AI_CONFIG=1|_OVERRIDE_AI_CONFIG_DIR=)'
+  while IFS= read -r _file; do
+    # drop comments, @test titles and declare -f before matching
+    if command grep -vE '^[[:space:]]*(#|@test|declare[[:space:]]+-f)' "${_root}/${_file}" | command grep -qE "${_call}"; then
+      printf 'CALLER %s\n' "${_file}"
+      command grep -qE "${_optin}" "${_root}/${_file}" || printf 'FLAGGED %s\n' "${_file}"
+    fi
+  done < <(_git_clean -C "${_root}" ls-files '*.bats' | LC_ALL=C sort)
 }
 
 @test "every bats file calling run_setup_user or setup_dotfile_symlinks opts in or overrides the ai-config dir" {
   # A per-test stub redefinition is deliberately not an exemption: workflows.bats
   # stubs setup_dotfile_symlinks in one test but its other tests need the fixture.
-  local _file _bad=0 _callers=() _lines
-  while IFS= read -r _file; do
-    _lines="$(grep -E '^[[:space:]]*(run[[:space:]]+)?(run_setup_user|setup_dotfile_symlinks)([[:space:]]|$)' "${REPO_ROOT}/${_file}" || true)"
-    [[ -n ${_lines} ]] || continue
-    _callers+=("${_file}")
-    if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?LOAD_MOCKS_AI_CONFIG=1|_OVERRIDE_AI_CONFIG_DIR=' "${REPO_ROOT}/${_file}"; then
-      printf '%s: calls run_setup_user/setup_dotfile_symlinks without LOAD_MOCKS_AI_CONFIG=1\n' "${_file}" >&2
-      _bad=1
-    fi
-  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" ls-files 'tests/*.bats' | LC_ALL=C sort)
+  local _out
+  _out="$(cd "${REPO_ROOT}" && _guard_scan "${REPO_ROOT}")"
   # positive control: the scan finds the known caller
-  [ "${#_callers[@]}" -gt 0 ]
-  printf '%s\n' "${_callers[@]}" | grep -qx 'tests/setup_env/workflows.bats'
-  [ "${_bad}" -eq 0 ]
+  printf '%s\n' "${_out}" | command grep -qx 'CALLER tests/setup_env/workflows.bats'
+  if printf '%s\n' "${_out}" | command grep -q '^FLAGGED '; then
+    printf '%s\n' "${_out}" | command grep '^FLAGGED ' >&2
+    return 1
+  fi
+}
+
+@test "static guard scan flags every call form and ignores comments, titles and declare -f" {
+  local _repo="${BATS_TEST_TMPDIR}/guard-probe" _f _out _i=0
+  local -a _forms=(
+    '  run run_setup_user'
+    '  run -1 run_setup_user'
+    '  run --separate-stderr run_setup_user'
+    '  MACOS=1 run run_setup_user'
+    '  PATH=/x:$PATH run_setup_user'
+    '  DRY_RUN=1 run setup_dotfile_symlinks'
+    '  true && run_setup_user'
+    '  _o="$(setup_dotfile_symlinks 2>&1)"'
+    '  run_setup_user;'
+    '  if run_setup_user; then :; fi'
+    '  setup_dotfile_symlinks'
+  )
+  local -a _inert=(
+    '  declare -f run_setup_user'
+    '  # run_setup_user'
+    '@test "run_setup_user does a thing" {'
+    '  setup_dotfile_symlinks() { return 1; }'
+  )
+  mkdir -p "${_repo}"
+  _git_clean -C "${_repo}" init -q
+  for _f in "${_forms[@]}"; do
+    _i=$((_i + 1))
+    printf '%s\n' "${_f}" > "${_repo}/form${_i}.bats"
+  done
+  _i=0
+  for _f in "${_inert[@]}"; do
+    _i=$((_i + 1))
+    printf '%s\n' "${_f}" > "${_repo}/inert${_i}.bats"
+  done
+  # a comment-only override must not count as an opt-in
+  printf '%s\n' '  # export _OVERRIDE_AI_CONFIG_DIR=x' '  run_setup_user' > "${_repo}/commented_override.bats"
+  # real overrides do count
+  printf '%s\n' '  export _OVERRIDE_AI_CONFIG_DIR=x' '  run_setup_user' > "${_repo}/real_override.bats"
+  printf '%s\n' '  export LOAD_MOCKS_AI_CONFIG=1' '  run_setup_user' > "${_repo}/real_optin.bats"
+  _git_clean -C "${_repo}" add -- .
+  _out="$(_guard_scan "${_repo}")"
+  for ((_i = 1; _i <= ${#_forms[@]}; _i++)); do
+    printf '%s\n' "${_out}" | command grep -qx "FLAGGED form${_i}.bats" || { printf 'not flagged: %s\n' "${_forms[_i-1]}" >&2; return 1; }
+  done
+  printf '%s\n' "${_out}" | command grep -qx 'FLAGGED commented_override.bats'
+  # bats does not fail on a mid-test `!`, so test the negatives explicitly
+  if printf '%s\n' "${_out}" | command grep -qE '^FLAGGED (inert|real_)'; then
+    printf '%s\n' "${_out}" >&2
+    return 1
+  fi
+  # inert forms are not even callers
+  if printf '%s\n' "${_out}" | command grep -q '^CALLER inert'; then
+    printf '%s\n' "${_out}" >&2
+    return 1
+  fi
 }

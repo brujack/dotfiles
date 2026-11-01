@@ -30,8 +30,10 @@ load_mocks() {
   # the real-HOME AI_CONFIG_DIR: missing on CI, the real checkout locally. The
   # tracked fixture costs several git spawns, so build it only for a file that
   # sets LOAD_MOCKS_AI_CONFIG=1 (workflows.bats). Otherwise point at a missing
-  # path whose name carries the remedy, so a forgotten opt-in fails loudly via
-  # "Cannot list tracked items in <path>". A test needing another layout
+  # path whose name carries the remedy. It stays missing until setup_ai_config's
+  # mock clone mkdirs it as an empty non-repo; listing it still fails, so a
+  # forgotten opt-in fails loudly via "Cannot list tracked items in <path>".
+  # A test needing another layout
   # overrides it and calls track_ai_config_fixture.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
     if [[ ${LOAD_MOCKS_AI_CONFIG:-} == 1 ]]; then
