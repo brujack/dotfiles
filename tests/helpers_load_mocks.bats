@@ -62,9 +62,10 @@ setup() {
   [ "$(cat "${BATS_TEST_TMPDIR}/brew-calls")" = "x y" ]
 }
 
-@test "load_mocks: execs no cat or chmod and at least one mkdir" {
-  # track_ai_config_fixture runs its own mkdir, so the positive control is
-  # "at least one mkdir" rather than an exact count.
+@test "load_mocks: execs no cat or chmod and exactly one mkdir" {
+  # The ai-config fixture is built only under LOAD_MOCKS_AI_CONFIG=1 and would
+  # add its own mkdir, so with the opt-in unset load_mocks' one mkdir is the count.
+  unset LOAD_MOCKS_AI_CONFIG
   local _shim="${BATS_TEST_TMPDIR}/execshim" _c _real
   mkdir -p "${_shim}"
   for _c in mkdir cat chmod; do
@@ -78,7 +79,7 @@ setup() {
   load_mocks
   [ "$(grep -c '^cat$' "${BATS_TEST_TMPDIR}/execlog")" -eq 0 ]
   [ "$(grep -c '^chmod$' "${BATS_TEST_TMPDIR}/execlog")" -eq 0 ]
-  [ "$(grep -c '^mkdir$' "${BATS_TEST_TMPDIR}/execlog")" -ge 1 ]
+  [ "$(grep -c '^mkdir$' "${BATS_TEST_TMPDIR}/execlog")" -eq 1 ]
 }
 
 @test "load_mocks: _AI_CONFIG_GIT is the real git for every placement of tests/mocks on PATH" {
@@ -99,4 +100,40 @@ setup() {
   _out="$(PATH="${REPO_ROOT}/tests/mocks" load_mocks 2>&1)" || _rc=$?
   [ "${_rc}" -eq 1 ]
   [[ ${_out} == *"load_mocks: no real git outside tests/mocks on PATH"* ]]
+}
+
+@test "load_mocks: without LOAD_MOCKS_AI_CONFIG the ai-config dir is a missing, self-describing path" {
+  unset LOAD_MOCKS_AI_CONFIG
+  load_mocks
+  [ "${_OVERRIDE_AI_CONFIG_DIR}" = "${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1" ]
+  [ ! -e "${_OVERRIDE_AI_CONFIG_DIR}" ]
+}
+
+@test "load_mocks: with LOAD_MOCKS_AI_CONFIG=1 the ai-config dir is a tracked fixture under BATS_TEST_TMPDIR" {
+  export LOAD_MOCKS_AI_CONFIG=1
+  load_setup_env
+  load_mocks
+  [[ ${_OVERRIDE_AI_CONFIG_DIR} == "${BATS_TEST_TMPDIR}/"* ]]
+  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "settings.json" ]
+}
+
+@test "every bats file calling run_setup_user or setup_dotfile_symlinks opts in or overrides the ai-config dir" {
+  # A per-test stub redefinition is deliberately not an exemption: workflows.bats
+  # stubs setup_dotfile_symlinks in one test but its other tests need the fixture.
+  local _file _bad=0 _callers=() _lines
+  while IFS= read -r _file; do
+    _lines="$(grep -E '^[[:space:]]*(run[[:space:]]+)?(run_setup_user|setup_dotfile_symlinks)([[:space:]]|$)' "${REPO_ROOT}/${_file}" || true)"
+    [[ -n ${_lines} ]] || continue
+    _callers+=("${_file}")
+    if ! grep -qE '^[[:space:]]*(export[[:space:]]+)?LOAD_MOCKS_AI_CONFIG=1|_OVERRIDE_AI_CONFIG_DIR=' "${REPO_ROOT}/${_file}"; then
+      printf '%s: calls run_setup_user/setup_dotfile_symlinks without LOAD_MOCKS_AI_CONFIG=1\n' "${_file}" >&2
+      _bad=1
+    fi
+  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" ls-files 'tests/*.bats' | LC_ALL=C sort)
+  # positive control: the scan finds the known caller
+  [ "${#_callers[@]}" -gt 0 ]
+  printf '%s\n' "${_callers[@]}" | grep -qx 'tests/setup_env/workflows.bats'
+  [ "${_bad}" -eq 0 ]
 }

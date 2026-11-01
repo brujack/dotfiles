@@ -27,12 +27,19 @@ load_mocks() {
   fi
   export _AI_CONFIG_GIT="${_real_git}"
   # run_setup_user tests reach setup_dotfile_symlinks, which would otherwise read
-  # the real-HOME AI_CONFIG_DIR: missing on CI, the real checkout locally. Default
-  # to a tracked fixture; a test needing another layout overrides it and calls
-  # track_ai_config_fixture.
+  # the real-HOME AI_CONFIG_DIR: missing on CI, the real checkout locally. The
+  # tracked fixture costs several git spawns, so build it only for a file that
+  # sets LOAD_MOCKS_AI_CONFIG=1 (workflows.bats). Otherwise point at a missing
+  # path whose name carries the remedy, so a forgotten opt-in fails loudly via
+  # "Cannot list tracked items in <path>". A test needing another layout
+  # overrides it and calls track_ai_config_fixture.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-default"
-    track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}" || return 1
+    if [[ ${LOAD_MOCKS_AI_CONFIG:-} == 1 ]]; then
+      export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-default"
+      track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}" || return 1
+    else
+      export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1"
+    fi
   fi
   # Default pyenv-which to the mock python so run_update's pip section never
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
