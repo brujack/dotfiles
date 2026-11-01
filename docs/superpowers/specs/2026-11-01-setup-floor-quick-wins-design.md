@@ -61,29 +61,55 @@ The environment `load_mocks` leaves behind is unchanged: the same exports, the s
 `BATS_TEST_TMPDIR`, and `tests/mocks` first on `PATH`. The only observable difference is that
 `load_mocks` itself no longer writes to `MOCK_CALLS_FILE` (or its `/tmp/mock_calls` fallback).
 
-### `setup_env.sh` resolves its directory once
+### `setup_env.sh` resolves its directory once for the lib block
 
-Before the first `source` line, set `_SETUP_ENV_DIR="$(dirname "${BASH_SOURCE[0]}")"`, and use
-`"${_SETUP_ENV_DIR}/lib/<name>.sh"` in the 13 `source` lines and
-`"${_SETUP_ENV_DIR}/config/local.sh"` for `_LOCAL_CFG`. `dirname` keeps its exact semantics,
-including `.` for a bare `setup_env.sh`, because it is still `dirname`, called once.
+Before the first `source` line, set `_SETUP_ENV_DIR="$(dirname "${BASH_SOURCE[0]}")"`, use
+`"${_SETUP_ENV_DIR}/lib/<name>.sh"` in the 13 `source` lines, and `unset _SETUP_ENV_DIR`
+immediately after the last of them, before the sourcing guard. `dirname` keeps its exact
+semantics, including `.` for a bare `setup_env.sh`. Fourteen forks become two.
+
+The `_LOCAL_CFG` line keeps its own `$(dirname "${BASH_SOURCE[0]}")`. It sits after the
+sourcing guard, so it runs only when the script is executed; moving it above the guard would
+set `_LOCAL_CFG` in every sourced shell, which every test is, and that is a behaviour change
+this PR does not make.
+
+The unset matters because the value depends on the caller: `load_setup_env` sources
+`${REPO_ROOT}/setup_env.sh`, so in tests it is absolute, while `./setup_env.sh` in production
+gives `.`. A lib function that reused a leftover `_SETUP_ENV_DIR` would pass every test and
+break after a `cd`, the hazard `tests/setup_env/developer.bats` already documents for
+`update_aws_cli`'s verifier. Unset, nothing can reuse it.
+
+### Stale comment
+
+`load_mocks`' comment about resolving the real git "before the prepend below" stays true after
+the move (the prepend is still below it), but is reworded to say the prepend is the function's
+last statement and why.
 
 ## Testing
 
-TDD, bats, red first:
+TDD, bats:
 
-- `tests/helpers_git_env.bats` or a new `tests/helpers_load_mocks.bats` (the plan decides,
-  following where `tests/helpers/common.bash` is already tested): with `MOCK_CALLS_FILE` set to
-  an existing empty file before `load_mocks`, the file is still empty afterwards, and the first
-  `PATH` entry afterwards is `${REPO_ROOT}/tests/mocks`. Red on master: six `chmod`/`cp` lines.
-- `tests/setup_env/unit.bats`: sourcing `setup_env.sh` by a relative path from a directory
-  other than the repo root defines one function from each of the 13 lib files.
+- **R1, red on master.** In the file that already tests `tests/helpers/common.bash` (the plan
+  names it), with `MOCK_CALLS_FILE` set to an existing empty file before `load_mocks`: the file
+  is still empty afterwards, and the first `PATH` entry afterwards is
+  `${REPO_ROOT}/tests/mocks`. Measured on `88cf9aca` in an archive copy: master writes 6 lines
+  (5 `chmod`, 1 `cp`).
+- **R2, red on master.** `tests/setup_env/unit.bats`: `setup_env.sh` contains exactly two
+  `dirname` calls, and `_SETUP_ENV_DIR` is unset after sourcing it. Master has 14 `dirname`
+  calls and no such variable, so the count half is red there.
+- **R3, a characterization guard, green on master by design.** `tests/setup_env/unit.bats`:
+  sourcing `setup_env.sh` by a relative path from a directory other than the repo root leaves a
+  marker from each of the 13 lib files defined: a function for the 12 libs that define one, and
+  the variable `GO_VER` for `lib/constants.sh`, which defines no function. It fails if any lib
+  is not sourced; it pins the refactor rather than proving it.
 - The full suite stays green.
 
-## Measurement
+## Measurement (informational)
 
-Repeat the A/B on the Studio (bash from Homebrew, BSD userland), where process creation costs
-more, and record both machines' figures in the PR body.
+The `claude` A/B above is the measurement of record. For macOS, the PR body quotes this PR's own
+`test-macos-shard` leg timings beside master's most recent run. No separate Studio run, and no
+threshold: neither figure can block the PR, because both fixes stand on their own (fewer forks,
+no writes outside the test tmpdir).
 
 ## Out of scope
 
@@ -95,9 +121,36 @@ more, and record both machines' figures in the PR body.
 ## Requirements
 
 - **R1.** `[PR1]` `load_mocks` prepends `${REPO_ROOT}/tests/mocks` to `PATH` as its last statement, so with `MOCK_CALLS_FILE` set to an empty file before the call the file is still empty afterwards, and the first `PATH` entry afterwards is `${REPO_ROOT}/tests/mocks`.
-- **R2.** `[PR1]` `setup_env.sh` calls `dirname` once to set `_SETUP_ENV_DIR` and uses it for all 13 lib `source` lines and for `_LOCAL_CFG`.
-- **R3.** `[PR1]` Sourcing `setup_env.sh` by a relative path from a directory other than the repo root defines a function from each of the 13 lib files, under a test that fails if any lib is not sourced.
-- **V1.** The three-file A/B (`linux_ubuntu.bats`, `workflows.bats`, `install_guards.bats`, `bats --jobs 8`, two runs per arm) is run on `claude` and on the Studio with all tests ok in every run, and the PR body records wall, user and sys for each arm on each machine.
+- **R2.** `[PR1]` `setup_env.sh` contains exactly two `dirname` calls: one sets `_SETUP_ENV_DIR`, used by all 13 lib `source` lines and unset before the sourcing guard, and one in the `_LOCAL_CFG` line; a test asserts the count and that `_SETUP_ENV_DIR` is unset after sourcing.
+- **R3.** `[PR1]` Sourcing `setup_env.sh` by a relative path from a directory other than the repo root leaves a marker defined from each of the 13 lib files (a function for each of the 12 that define one, `GO_VER` for `lib/constants.sh`), under a test that fails if any lib is not sourced.
+- **V1.** The PR body records the `claude` three-file A/B figures from this spec and this PR's `test-macos-shard` leg timings beside master's most recent run, as information only.
 - **N1.** No change to any file under `tests/mocks/`.
 - **N2.** No change to what any existing test asserts.
 - **N3.** No change to bats structure: no `setup_file`, no cached or exported function definitions.
+
+## Multi-Lens Review
+
+Round 1 reviewed at commit: `88cf9aca` (spec as first written, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: No issues; worth building. Premise verified: `/tmp/mock_calls` on `claude` held 990,713 `chmod` and 197,957 `cp` lines (ratio 5.005, the 5:1 inside `load_mocks`), about 97% of the file; no test greps a `chmod`/`cp` line that only `load_mocks` writes. V1 was decoration: no threshold, the `claude` arm repeated the spec's A/B, and the Studio hosts no sessions.
+Assumption: no genuinely uncertain one; closest was that no test passes only because of `load_mocks`' own log lines, settled by the full suite.
+Disposition: Accepted (operator, 2026-11-01); V1 reworked under the Ergonomics item.
+
+### Ergonomics
+
+Finding: `_SETUP_ENV_DIR` would leak into every sourced shell with a caller-dependent value (absolute in tests, `.` in production), inviting a lib to reuse it and break after a `cd`; V1 had no decision rule and its Studio "all tests ok" could block on Studio-local noise.
+Assumption: the gain has the same direction on the Studio; refuted or confirmed by a Studio A/B.
+Disposition: Addressed (operator, 2026-11-01): `_SETUP_ENV_DIR` unset before the sourcing guard, `_LOCAL_CFG` keeps its own `dirname` (2 forks, not 1); V1 informational, macOS figure taken from the PR's own CI shard timings, no Studio run.
+
+### Risk
+
+Finding: R3 impossible as written (`lib/constants.sh` defines no function) and green on master; R2 had no test, and the `_LOCAL_CFG` path is unreached by a sourced test. Checked clean: lines between the old and new prepend position need no mock; both early `return 1` paths precede the old prepend; no file sets `MOCK_CALLS_FILE` before `load_mocks`.
+Assumption: no test reads the shared `/tmp/mock_calls` fallback; settled by the orchestrator: `git grep -n '/tmp/mock_calls' -- tests ':!tests/mocks'` outside the `${MOCK_CALLS_FILE:-/tmp/mock_calls}` writes returned nothing.
+Disposition: Addressed (operator, 2026-11-01): R3 uses `GO_VER` for constants and is labelled a characterization guard; R2 gains a static count test (2, red on master's 14) plus an unset check; stale comment reworded.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
