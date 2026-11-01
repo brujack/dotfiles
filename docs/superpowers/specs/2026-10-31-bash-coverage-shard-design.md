@@ -297,6 +297,8 @@ TDD, bats. Every success case also asserts a non-empty result.
 - N4 -> No change to what any existing test asserts, except retargeting tests that name the untraced `test` job's steps or the deleted `bash-coverage` job, adding `test-prereqs` to `ALLOWED_TEST_PREREQS`, and changing `tests/scripts/ci_test_macos_shard.bats`' "always() occurs once" assertion to "exactly twice, as the `if:` of `test-macos` and of `test`". — Plan-time non-goal check: the new `test` gate needs its own `if: always()`, so the single-`always()` pin cannot stay true; its property (no advisory `always()` anywhere else) is kept.
 - V1 -> On the draft PR, over two CI runs with a temporary `headroom-baseline` job (today's single traced run on the same SHA) and a `headroom-diff` job, the baseline trace is non-empty, the shard union scores at least 91% each time, and every line the baseline covers and the union does not is listed in the PR body by file; otherwise a margin-raising PR merges first. — Plan-time: a job named `bash-coverage` cannot stay on the branch, because the CI-shape tests assert none exists and the pre-push `make test` would refuse the push.
 - R7 -> `ci.yml` has no `bash-coverage` job and no untraced `test` job, `auto-merge`'s `needs:` lists `test` but not `bash-coverage`, and of the jobs this PR adds, only the `test` gate has `contents: write` (`test-shard` has `contents: read`). — Phase 2: `powershell` and `auto-merge` already hold `contents: write` for reasons outside this PR, so "only the `test` gate" was false of the whole workflow; the property meant is that the shard legs cannot write.
+- finding R5 (2026-11-01, reviewer B): NOT-BUILT — The diff passes BATS_FILES_FROM only as `--files '$(BATS_FILES_FROM)'` and COVERAGE_TRACE_DIR only as `--trace-only` via COVERAGE_ARGS (Makefile:255-261, 277/279), and adds `unexport COVERAGE_TRACE_DIR` (253), but it contains no `unexport BATS_FILES_FROM`; the comment at 248 implies one exists outside the shown hunks, which the diff cannot confirm.
+- R5 reviewed: `unexport BATS_FILES_FROM` already exists at Makefile:100 on the base (dotfiles#411, `git show origin/master:Makefile`), so the diff did not need to add it; `tests/makefile_shard_list.bats` asserts the script's environment has no `BATS_FILES_FROM` under `make bash-coverage`, and reviewer A judged R5 MET.
 
 ## Multi-Lens Review
 
@@ -365,3 +367,26 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
   as baseline, two runs, one-sided, non-empty guard, named fallback; the temporary job removed); headroom
   restated; `COVERAGE_TRACE_DIR` unexported and tested; the `ci-suite-report.sh` step pinned; abandon
   restores the check; V2 response named; `GNUMAKEFLAGS`/`MAKEFILES` added to the Backlog allowlist row.
+
+## Spec alignment (2026-11-01)
+
+- spec: docs/superpowers/specs/2026-10-31-bash-coverage-shard-design.md
+- anchor: 85ab3a081f8cdf0e74cc052ca480cae8cc875f10
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R5 | B | NOT-BUILT | The diff passes BATS_FILES_FROM only as `--files '$(BATS_FILES_FROM)'` and COVERAGE_TRACE_DIR only as `--trace-only` via COVERAGE_ARGS (Makefile:255-261, 277/279), and adds `unexport COVERAGE_TRACE_DIR` (253), but it contains no `unexport BATS_FILES_FROM`; the comment at 248 implies one exists outside the shown hunks, which the diff cannot confirm. | - R5 reviewed: `unexport BATS_FILES_FROM` already exists at Makefile:100 on the base (dotfiles#411, `git show origin/master:Makefile`), so the diff did not need to add it; `tests/makefile_shard_list.bats` asserts the script's environment has no `BATS_FILES_FROM` under `make bash-coverage`, and reviewer A judged R5 MET. |
+
+### Reviewed
+
+- R5 reviewed: `unexport BATS_FILES_FROM` already exists at Makefile:100 on the base (dotfiles#411, `git show origin/master:Makefile`), so the diff did not need to add it; `tests/makefile_shard_list.bats` asserts the script's environment has no `BATS_FILES_FROM` under `make bash-coverage`, and reviewer A judged R5 MET.
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
