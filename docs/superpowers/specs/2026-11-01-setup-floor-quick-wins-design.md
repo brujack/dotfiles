@@ -1,5 +1,7 @@
 # Setup floor, part 1: two quick wins in the bats setup helpers
 
+- **Approved:** 2026-11-01
+
 ## Problem
 
 The P1 backlog row "Per-test setup floor dominates many bats files" measured, serially on the
