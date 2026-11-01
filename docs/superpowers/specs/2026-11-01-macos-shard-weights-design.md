@@ -169,3 +169,56 @@ CI shape, parsed per job:
 - **N2.** `scripts/bats-shard.sh` and `lib/bats_shard_pack.awk` are unchanged.
 - **N3.** The shard count of either platform is unchanged.
 - **N4.** The new workflow has no `schedule`, `push` or `pull_request` trigger.
+
+## Multi-Lens Review
+
+Reviewed at commit: `2a3e2b29` (Step 7 self-review commit, before Step 8 dispatch)
+
+All three lenses independently refuted the premise. `Run tests` step times per leg over the five
+`test-macos-shard` runs since the job existed (shard lists downloaded and diffed; same image
+`macos-26-arm64` on every leg):
+
+| Run | Leg 1 (`setup_env/unit`) | Leg 2 (`linux_ubuntu`) | Leg 3 (`workflows`) | max/mean |
+| --- | --- | --- | --- | --- |
+| 41323131527 (#415) | 359 s | 141 s | 418 s | 1.37 |
+| 41262365883 (#414) | 443 s | 370 s | 152 s | 1.38 |
+| 41252117611 | 468 s | 166 s | 409 s | 1.35 |
+| 41244276701 | 316 s | 433 s | 422 s | 1.11 |
+| 41240902996 | 347 s | 495 s | 308 s | 1.29 |
+
+Leg 2's list was byte-identical in #414 and #415 and took 370 s then 141 s. The Problem section's
+reading of #414 as "the same shape" is wrong: its short leg was leg 3.
+
+### Goal-Fit
+
+Finding: Premise false. The imbalance does not follow the files, so a static table cannot fix it,
+and the design's own `measure` matrix spreads files over three runner instances and would freeze one
+run's per-instance noise into the table. V2's 1.15 bound passed in 1 of 5 runs with today's table,
+so it would pass or fail by chance. Simpler path: keep per-file `bats --timing` output from shard
+legs on success for three runs and find where the variance lives.
+Assumption: runner speed is equal across a run's three legs and stable between runs. Refuted or
+confirmed by comparing one file's per-file time across legs and runs.
+Disposition:
+
+### Ergonomics
+
+Finding: Premise false (same data). Secondary, only if it survived: the Linux table would still be
+reseeded on the Studio, which hosts no sessions; no signal says either table is stale (the current
+table already lacks rows for 6 of 92 files); the header should record the runner image version.
+Assumption: a leg's `Run tests` time is a stable function of its file list on a fixed SHA.
+Settled by re-running all jobs of one CI run two or three times on the same SHA.
+Disposition:
+
+### Risk
+
+Finding: Premise false (same data). Per-file CPU is a sound predictor of leg wall time on equal
+hosts (the Linux legs balance on this table); the defect is host variance, which also inflates CPU
+seconds on a slow instance. Minor gaps if it survived: the build job needs `actions/checkout`; the
+measure script must keep timer stderr apart from bats stderr; it drops the Studio procedure's `env -i`.
+Assumption: one file's CPU seconds on one `macos-latest` instance predict its cost on another.
+Settled by a dispatch where all three legs measure the same list and rows are compared.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
