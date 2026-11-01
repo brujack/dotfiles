@@ -1,5 +1,7 @@
 # Setup Floor Quick Wins Implementation Plan
 
+> **Status: DONE** (dotfiles#415, merged 2026-11-01 as 591e7a6f)
+
 spec: docs/superpowers/specs/2026-11-01-setup-floor-quick-wins-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development (the local override) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
