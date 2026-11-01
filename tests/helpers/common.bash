@@ -15,7 +15,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 load_mocks() {
   # _ai_config_tracked_items needs a git that really answers ls-files, but
   # tests/mocks/git answers it with rc 0 and empty output. Resolve the real git
-  # with tests/mocks removed from PATH, before the prepend below.
+  # with tests/mocks removed from PATH, before the prepend at the end of this
+  # function.
   local _clean_path _entry _real_git
   local -a _entries
   IFS=: read -r -a _entries <<< "${PATH}"
@@ -37,7 +38,6 @@ load_mocks() {
     export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-default"
     track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}" || return 1
   fi
-  export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
   # Default pyenv-which to the mock python so run_update's pip section never
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
   # network, and mutates the ansible venv). Individual tests may override it.
@@ -168,6 +168,10 @@ STUB
   # dirty the working tree (`git status` showing `M tests/fixtures/...`).
   cp "${REPO_ROOT}/tests/fixtures/claude-settings.json" "${BATS_TEST_TMPDIR}/claude-settings.json"
   export _OVERRIDE_CLAUDE_SETTINGS="${BATS_TEST_TMPDIR}/claude-settings.json"
+  # Keep this the last statement: once tests/mocks leads PATH, chmod/cp/ln/mv/
+  # tee/rm resolve to logging mocks, which append to MOCK_CALLS_FILE (default
+  # /tmp/mock_calls, outside the test tmpdir) when a test has not set it yet.
+  export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
 }
 
 # Assert a pattern is ABSENT from a file.
