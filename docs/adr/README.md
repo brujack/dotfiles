@@ -57,3 +57,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0051](0051-pre-push-tests-a-dirty-tree-in-a-clean-checkout.md) | pre-push tests a dirty tree's pushed commit in a clean checkout | 2026-10-25 | Accepted |
 | [0052](0052-pre-commit-triages-the-ggshield-exit-code.md) | pre-commit triages the ggshield scan exit code | 2026-10-30 | Accepted |
 | [0053](0053-shard-test-macos-by-cpu-seconds.md) | Shard test-macos across three runners, weighted by CPU seconds | 2026-10-31 | Accepted |
+| [0054](0054-single-linux-gate-sharded-coverage.md) | One sharded, traced Linux gate replaces the untraced test job and bash-coverage | 2026-10-31 | Accepted |
