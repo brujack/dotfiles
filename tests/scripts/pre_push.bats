@@ -342,10 +342,14 @@ _assert_make_inputs_stripped() {
 @test "pre-push in-place run strips an exported MAKEFLAGS from make's environment" {
   _input_env_fixture
   export MAKEFLAGS="BATS_FILES_FROM=${BATS_TEST_TMPDIR}/narrow.files"
+  export MFLAGS="-j8"
+  export MAKELEVEL=2
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   _assert_make_ran
   _assert_make_inputs_stripped MAKEFLAGS
+  _assert_make_inputs_stripped MFLAGS
+  _assert_make_inputs_stripped MAKELEVEL
 }
 
 @test "pre-push clean-checkout run strips an exported BATS_FILES_FROM from make's environment" {
@@ -362,10 +366,14 @@ _assert_make_inputs_stripped() {
   _input_env_fixture
   printf '%s\n' "dirty" > "${REPO_DIR}/a.sh"
   export MAKEFLAGS="BATS_FILES_FROM=${BATS_TEST_TMPDIR}/narrow.files"
+  export MFLAGS="-j8"
+  export MAKELEVEL=2
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   grep -qE "^make -C ${TMPDIR}/pre-push\.[^ ]+/pre-push-[0-9a-f]{7} test$" "${MOCK_CALLS_FILE}"
   _assert_make_inputs_stripped MAKEFLAGS
+  _assert_make_inputs_stripped MFLAGS
+  _assert_make_inputs_stripped MAKELEVEL
 }
 
 @test "pre-push runs make test when only ubuntu_common_packages.txt changed" {

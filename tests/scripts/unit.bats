@@ -2231,7 +2231,8 @@ _run_cov_tree() {
   command grep -q "^${COV_TREE}/lib/tiny.sh:[0-9]*\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
   LC_ALL=C sort -u "${BATS_TEST_TMPDIR}/out/bash_trace.txt" | cmp - "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
   local _n
-  _n="$(wc -l < "${BATS_TEST_TMPDIR}/out/bash_trace.txt")"
+  # BSD wc pads its count with spaces; arithmetic expansion strips them.
+  _n=$(( $(wc -l < "${BATS_TEST_TMPDIR}/out/bash_trace.txt") ))
   [ "${_n}" -gt 0 ]
   [[ "$output" == *"Trace: ${_n} unique lines"* ]]
 }
@@ -2290,6 +2291,45 @@ _run_cov_tree() {
   [[ "${_two}" == *"Overall bash coverage: "* ]]
   # The union temp file is removed on success.
   [ -z "$(ls -A "${COV_TMP}")" ]
+}
+
+# An unterminated multi-line python3 -c body makes the heuristic denominator
+# uncomputable (same shape as the --file-coverage test above). Tracked in the
+# fixture tree so INCLUDE_FILES contains it. The other `return 1` in
+# _score_trace (covered > coverable) is unreachable: coverable is the union of
+# the heuristic and the trace, so a traced line is always in its denominator.
+_add_unterminated_lib() {
+  printf '#!/usr/bin/env bash\n_x=$(python3 -c "\nimport json\n' > "${COV_TREE}/lib/unterm.sh"
+  PATH="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')" \
+    git -C "${COV_TREE}" add lib/unterm.sh
+}
+
+@test "run-bash-coverage.sh --score exits 1 without a coverage line when a denominator cannot be computed" {
+  _make_cov_tree
+  _add_unterminated_lib
+  printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" > "${BATS_TEST_TMPDIR}/a.trace"
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot compute a trustworthy denominator"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+}
+
+@test "run-bash-coverage.sh traced run exits 1 without a coverage line when a denominator cannot be computed" {
+  _make_cov_tree
+  _add_unterminated_lib
+  printf 'tests/green_a.bats\ntests/green_b.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"cannot compute a trustworthy denominator"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+}
+
+@test "run-bash-coverage.sh --score exits 1 when the badge JSON cannot be written" {
+  _make_cov_tree
+  printf '%s\n' "${COV_TREE}/lib/tiny.sh:2" > "${BATS_TEST_TMPDIR}/a.trace"
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/a.trace" --json "${BATS_TEST_TMPDIR}/nodir/badge.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Badge JSON written"* ]]
 }
 
 @test "run-bash-coverage.sh --score writes --json like a full run" {
