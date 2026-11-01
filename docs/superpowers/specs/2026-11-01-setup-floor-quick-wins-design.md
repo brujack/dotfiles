@@ -66,7 +66,7 @@ The environment `load_mocks` leaves behind is unchanged: the same exports, the s
 Before the first `source` line, set `_SETUP_ENV_DIR="$(dirname "${BASH_SOURCE[0]}")"`, use
 `"${_SETUP_ENV_DIR}/lib/<name>.sh"` in the 13 `source` lines, and `unset _SETUP_ENV_DIR`
 immediately after the last of them, before the sourcing guard. `dirname` keeps its exact
-semantics, including `.` for a bare `setup_env.sh`. Fourteen forks become two.
+semantics, including `.` for a bare `setup_env.sh`. Fourteen forks become two when the script is executed, and one when it is sourced (every test), since the `_LOCAL_CFG` line runs only after the sourcing guard.
 
 The `_LOCAL_CFG` line keeps its own `$(dirname "${BASH_SOURCE[0]}")`. It sits after the
 sourcing guard, so it runs only when the script is executed; moving it above the guard would
@@ -94,14 +94,21 @@ TDD, bats:
   is still empty afterwards, and the first `PATH` entry afterwards is
   `${REPO_ROOT}/tests/mocks`. Measured on `88cf9aca` in an archive copy: master writes 6 lines
   (5 `chmod`, 1 `cp`).
-- **R2, red on master.** `tests/setup_env/unit.bats`: `setup_env.sh` contains exactly two
-  `dirname` calls, and `_SETUP_ENV_DIR` is unset after sourcing it. Master has 14 `dirname`
-  calls and no such variable, so the count half is red there.
-- **R3, a characterization guard, green on master by design.** `tests/setup_env/unit.bats`:
-  sourcing `setup_env.sh` by a relative path from a directory other than the repo root leaves a
-  marker from each of the 13 lib files defined: a function for the 12 libs that define one, and
-  the variable `GO_VER` for `lib/constants.sh`, which defines no function. It fails if any lib
-  is not sourced; it pins the refactor rather than proving it.
+- **R2, red on master.** `tests/setup_env/unit.bats`, structural, not a text count: every
+  top-level `source` line in `setup_env.sh` above the sourcing guard references
+  `${_SETUP_ENV_DIR}` and none contains `$(dirname`; and `_SETUP_ENV_DIR` is unset after
+  sourcing it. Master has 13 lines of the old form, so the structural half is red there. A count
+  of the text `dirname` was rejected: a harmless comment or an unrelated later use would turn it
+  red with no hint of the cause.
+- **R3, a characterization guard, green on master by design.** `tests/setup_env/unit.bats`,
+  in a separate process: `run env -u GO_VER bash -c 'cd <dir other than the repo root> &&
+  source <relative path>/setup_env.sh && declare -F <12 functions> && [[ -n ${GO_VER+x} ]]'`.
+  A marker from each of the 13 lib files: a function for the 12 that define one, and `GO_VER`
+  for `lib/constants.sh`, which defines no function. The separate process is load-bearing:
+  `unit.bats`' `setup()` already runs `load_setup_env`, so in the test's own shell every marker
+  exists before the test starts, and a same-shell check stays green with a lib's `source` line
+  deleted (measured in round 2: same shell green, fresh `bash -c` red). It pins the refactor
+  rather than proving it.
 - The full suite stays green.
 
 ## Measurement (informational)
@@ -121,8 +128,8 @@ no writes outside the test tmpdir).
 ## Requirements
 
 - **R1.** `[PR1]` `load_mocks` prepends `${REPO_ROOT}/tests/mocks` to `PATH` as its last statement, so with `MOCK_CALLS_FILE` set to an empty file before the call the file is still empty afterwards, and the first `PATH` entry afterwards is `${REPO_ROOT}/tests/mocks`.
-- **R2.** `[PR1]` `setup_env.sh` contains exactly two `dirname` calls: one sets `_SETUP_ENV_DIR`, used by all 13 lib `source` lines and unset before the sourcing guard, and one in the `_LOCAL_CFG` line; a test asserts the count and that `_SETUP_ENV_DIR` is unset after sourcing.
-- **R3.** `[PR1]` Sourcing `setup_env.sh` by a relative path from a directory other than the repo root leaves a marker defined from each of the 13 lib files (a function for each of the 12 that define one, `GO_VER` for `lib/constants.sh`), under a test that fails if any lib is not sourced.
+- **R2.** `[PR1]` `setup_env.sh` sets `_SETUP_ENV_DIR` with one `dirname` call, uses it in all 13 lib `source` lines and unsets it before the sourcing guard, while `_LOCAL_CFG` keeps its own `dirname`; a test asserts that every top-level `source` line above the guard references `${_SETUP_ENV_DIR}` and none contains `$(dirname`, and that `_SETUP_ENV_DIR` is unset after sourcing.
+- **R3.** `[PR1]` Sourcing `setup_env.sh` by a relative path from a directory other than the repo root, in a separate process started with `GO_VER` unset, leaves a marker defined from each of the 13 lib files (a function for each of the 12 that define one, `GO_VER` for `lib/constants.sh`), under a test that fails if any lib is not sourced.
 - **V1.** The PR body records the `claude` three-file A/B figures from this spec and this PR's `test-macos-shard` leg timings beside master's most recent run, as information only.
 - **N1.** No change to any file under `tests/mocks/`.
 - **N2.** No change to what any existing test asserts.
@@ -153,4 +160,10 @@ Disposition: Addressed (operator, 2026-11-01): R3 uses `GO_VER` for constants an
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (`95e571d2`)
+
+- **Goal-Fit.** Lens skipped: the dispatch was denied by the auto-mode classifier. Disposition: Accepted (operator, 2026-11-01); round 1 found no issues and the revision did not change goal or scope.
+- **Ergonomics.** Finding: R2's exact text count of `dirname` is brittle (a harmless comment or an unrelated later use turns it red with no cause shown). Premise re-verified on a fresh copy: 6 log lines, 14 `dirname`. Disposition: Addressed (operator, 2026-11-01): R2 is now structural.
+- **Risk.** Finding: R3 cannot fail in `unit.bats`' own shell, because `setup()` already ran `load_setup_env` (same shell green with a lib line deleted, fresh `bash -c` red); "fourteen forks become two" holds only when executed. Checked clean: nothing reads `_SETUP_ENV_DIR`, `GO_VER` is top-level in `lib/constants.sh`, each other lib defines a top-level function; the orchestrator confirmed no lib runs `$(command -v` at top level. Disposition: Addressed (operator, 2026-11-01): R3 runs in a separate process with `GO_VER` unset; wording corrected.
 
