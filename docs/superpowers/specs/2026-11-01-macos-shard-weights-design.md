@@ -223,3 +223,21 @@ Disposition: Accepted, reason: premise refuted by the five-run table; spec retir
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Probe after retirement (operator-approved re-runs, same SHA)
+
+All jobs of run 41323131527 (`d4851db1`) re-run twice; identical file lists per leg on every attempt:
+
+| `Run tests` | Leg 1 | Leg 2 | Leg 3 | max/mean |
+| --- | --- | --- | --- | --- |
+| macOS, attempt 1 | 359 s | 141 s | 418 s | 1.37 |
+| macOS, attempt 2 | 380 s | 319 s | 345 s | 1.09 |
+| macOS, attempt 3 | 281 s | 318 s | 337 s | 1.08 |
+| Linux, attempt 1 | 214 s | 289 s | 299 s | 1.12 |
+| Linux, attempt 2 | 269 s | 283 s | 291 s | 1.05 |
+| Linux, attempt 3 | 152 s | 276 s | 312 s | 1.32 |
+
+The same leg on the same SHA ranged 141-319 s (macOS leg 2) and 152-269 s (Linux leg 1). With
+attempt 1's outlier set aside, the Studio-measured table already balances the macOS legs to about
+1.08, so the slowest leg is set by which runner a leg lands on, consistent with the operator's
+reading that hosted runners are sometimes overloaded.
