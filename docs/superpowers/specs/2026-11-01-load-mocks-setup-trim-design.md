@@ -229,6 +229,10 @@ sources the file with a `uname` stub first on `PATH`:
 - **N3.** `tests/stubs/` is not added to `PATH` anywhere.
 - **N4.** No `setup_file` caching of a sourced environment or fixture.
 
+## Amendments
+
+- R11 -> A static guard test fails, naming the file and `LOAD_MOCKS_AI_CONFIG=1`, for any `tests/**/*.bats` file that calls `run_setup_user` or `setup_dotfile_symlinks` without either a line setting `LOAD_MOCKS_AI_CONFIG=1` or one setting `_OVERRIDE_AI_CONFIG_DIR`; it finds at least one calling file. — a redefinition exemption let `workflows.bats` pass with its opt-in deleted, because one of its tests stubs `setup_dotfile_symlinks`; measured in Task 2's mutation control.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `78c1a781` (Step 7 self-review commit, before Step 8 dispatch)
