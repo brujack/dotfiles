@@ -210,7 +210,6 @@ None open.
 
 | Feature | Notes |
 |---------|-------|
-| `test-macos` takes 17-29 min on GitHub's 3-vCPU macOS runner, against a 30-min `timeout-minutes` | Shipped in dotfiles#411 (2026-10-31): three `test-macos-shard` legs packed by CPU seconds plus the ubuntu `test-macos` gate (ADR-0053). First run: shards 6m09s / 8m46s / 5m30s, gate done at ~9 min. Open: V1 (p90 gate completion <= 12 min over 10 PR runs incl. a Monday Renovate window) and V2 (per-shard time/weight ratio within 10% over 5 runs) in `docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`; close this row when both are measured. |
 | Per-test setup floor dominates many bats files | Measured 2026-10-30 on the Studio (serial per-file timing, 86 files, 3613 tests, 2043 s): `load_setup_env` ~95 ms plus `load_mocks` ~95 ms per test, so `tests/setup_env/linux_ubuntu.bats` spends ~61% of its time in setup. The test-macos shard imbalance under `--jobs` (388/458/535 s) is not explained by this floor: CPU seconds under `bats --jobs 3` explain it (spec Measurements). The floor itself stands. Candidate fixes: `setup_file` for state that tests do not mutate, or caching the sourced env. Spec: `docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`. |
 
 ### P2 — bugs and security
