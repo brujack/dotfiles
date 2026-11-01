@@ -1,5 +1,7 @@
 # Linux `test` Shard Implementation Plan
 
+> **Status: DONE** (dotfiles#414, merged 2026-11-01 as 4e91f3e6)
+
 spec: docs/superpowers/specs/2026-10-31-bash-coverage-shard-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development (the local override) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
