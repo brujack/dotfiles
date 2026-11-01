@@ -39,19 +39,23 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   unset _OS _REQUIRES_BREW_PREREQ local_prev
 fi
 
-source "$(dirname "${BASH_SOURCE[0]}")/lib/constants.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/helpers.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/detect_env.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/macos.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/linux_shared.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/linux_ubuntu.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/developer.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/update_summary.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/workflows.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/git_sync.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/legacy_rsync.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/git_hooks.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/lib/launch_agents.sh"
+_SETUP_ENV_DIR="$(dirname "${BASH_SOURCE[0]}")"
+source "${_SETUP_ENV_DIR}/lib/constants.sh"
+source "${_SETUP_ENV_DIR}/lib/helpers.sh"
+source "${_SETUP_ENV_DIR}/lib/detect_env.sh"
+source "${_SETUP_ENV_DIR}/lib/macos.sh"
+source "${_SETUP_ENV_DIR}/lib/linux_shared.sh"
+source "${_SETUP_ENV_DIR}/lib/linux_ubuntu.sh"
+source "${_SETUP_ENV_DIR}/lib/developer.sh"
+source "${_SETUP_ENV_DIR}/lib/update_summary.sh"
+source "${_SETUP_ENV_DIR}/lib/workflows.sh"
+source "${_SETUP_ENV_DIR}/lib/git_sync.sh"
+source "${_SETUP_ENV_DIR}/lib/legacy_rsync.sh"
+source "${_SETUP_ENV_DIR}/lib/git_hooks.sh"
+source "${_SETUP_ENV_DIR}/lib/launch_agents.sh"
+# Unset so no lib reuses it: its value depends on how the caller named this
+# file ("." for ./setup_env.sh, absolute when tests source it by full path).
+unset _SETUP_ENV_DIR
 
 # Allow sourcing for unit testing without executing the main script body
 [[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0
