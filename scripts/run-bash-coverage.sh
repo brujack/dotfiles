@@ -22,7 +22,66 @@ _coverage_bats_args() {
             printf '%s\n' "--jobs" "${_jobs}"
             ;;
     esac
-    printf '%s\n' "--recursive" "${REPO_ROOT}/tests/"
+    # Failing tests print their own output into the TAP log, which is all a
+    # CI reader gets from a traced run that goes red.
+    printf '%s\n' "--print-output-on-failure"
+    if (( ${#_FILES_LIST[@]} )); then
+        printf '%s\n' "${_FILES_LIST[@]}"
+    else
+        printf '%s\n' "--recursive" "${REPO_ROOT}/tests/"
+    fi
+}
+
+# Reads a --files list into _FILES_LIST as absolute paths under REPO_ROOT.
+# Every failure returns 2 naming the input; a bad list must never fall back to
+# the full recursive suite. Entries must be distinct, repo-relative regular
+# .bats files: a duplicate would run a file twice and inflate the executed count.
+_FILES_LIST=()
+_load_files_list() {
+    local _list="${1}" _line _n=0 _seen=$'\n'
+    if [[ ! -f "${_list}" || ! -r "${_list}" ]]; then
+        printf "ERROR: --files: no such readable list file: %s\n" "${_list}" >&2
+        return 2
+    fi
+    while IFS= read -r _line || [[ -n "${_line}" ]]; do
+        _n=$(( _n + 1 ))
+        if [[ "${_line}" == *$'\r'* ]]; then
+            printf "ERROR: --files: carriage return on line %d of %s\n" "${_n}" "${_list}" >&2
+            return 2
+        fi
+        if [[ -z "${_line//[[:space:]]/}" ]]; then
+            printf "ERROR: --files: blank line %d in %s\n" "${_n}" "${_list}" >&2
+            return 2
+        fi
+        if [[ "${_line}" == /* ]]; then
+            printf "ERROR: --files: absolute path not allowed (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        case "/${_line}/" in
+            */../*)
+                printf "ERROR: --files: '..' component not allowed (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+                return 2
+                ;;
+        esac
+        if [[ ! -e "${REPO_ROOT}/${_line}" ]]; then
+            printf "ERROR: --files: listed path does not exist (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        if [[ ! -f "${REPO_ROOT}/${_line}" || "${_line}" != *.bats ]]; then
+            printf "ERROR: --files: not a regular .bats file (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        if [[ "${_seen}" == *$'\n'"${_line}"$'\n'* ]]; then
+            printf "ERROR: --files: duplicate entry (line %d of %s): %s\n" "${_n}" "${_list}" "${_line}" >&2
+            return 2
+        fi
+        _seen+="${_line}"$'\n'
+        _FILES_LIST+=("${REPO_ROOT}/${_line}")
+    done < "${_list}"
+    if (( ${#_FILES_LIST[@]} == 0 )); then
+        printf "ERROR: --files: empty list: %s\n" "${_list}" >&2
+        return 2
+    fi
 }
 
 # Mode line from an argument array, shared by --print-bats-args and the main run.
@@ -43,7 +102,10 @@ Usage: run-bash-coverage.sh [--json /path/out.json]
        run-bash-coverage.sh --list-sources
        run-bash-coverage.sh --count-coverable <file>
        run-bash-coverage.sh --file-coverage <file> <trace_file>
-       run-bash-coverage.sh --print-bats-args
+       run-bash-coverage.sh --print-bats-args [--files LIST]
+       run-bash-coverage.sh --files LIST [--json /path/out.json]
+       run-bash-coverage.sh [--files LIST] --trace-only DIR
+       run-bash-coverage.sh --score TRACE... [--json /path/out.json]
 
 Measures bash line coverage using BASH_ENV + PS4 xtrace tracing of the
 full bats suite. Prints a per-file coverage table and overall percentage.
@@ -71,6 +133,24 @@ Inspecting the figure without a full run (all of these exit immediately):
                           one per line, then the mode line. Exits 2 on an
                           invalid COVERAGE_BATS_JOBS
 
+  --files LIST            Trace only the bats files named in LIST (one
+                          repo-relative path per line) instead of
+                          --recursive tests/. Combines with --print-bats-args
+                          and with the full run. Exits 2 on a missing,
+                          unreadable or empty list, a blank line, a carriage
+                          return, or a listed path that does not exist
+
+Every traced run passes --print-output-on-failure to bats.
+
+  --trace-only DIR        Run the traced bats, copy the TAP log to
+                          DIR/bats_run.log (before the red check, so a red run
+                          leaves it), then on green write DIR/bash_trace.txt
+                          (LC_ALL=C sort -u of the trace) and exit 0 without
+                          scoring. Combines with --files
+  --score TRACE...        No bats run: union the traces and print the same
+                          table, TOTAL and Overall bash coverage as a full
+                          run. Exits 2 on a missing or empty trace
+
 COVERAGE_BATS_JOBS=<n>    Run the traced suite with bats --jobs <n> (a positive
                           integer, no leading zero). Unset or empty runs
                           serially; any other value exits 2 before the run.
@@ -78,8 +158,21 @@ USAGE
   exit 0
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TRACER="${REPO_ROOT}/scripts/bash-tracer.sh"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Test seam: _OVERRIDE_COVERAGE_ROOT replaces the tree this script measures
+# (instrumented set, tests/ dir, output dir, --files paths). Production leaves
+# it unset and measures the checkout the script lives in. Tests need it so the
+# REAL script runs against a small fixture tree: a copy of the script under a
+# temp tree is itself invisible to the suite's own coverage trace, which
+# measurably dropped the figure below the CI floor. TRACER deliberately stays
+# the real scripts/bash-tracer.sh next to this file, so a fixture tree needs no
+# copy of it.
+REPO_ROOT="${_OVERRIDE_COVERAGE_ROOT:-${SCRIPT_ROOT}}"
+# A stray export would otherwise score the wrong tree without a word.
+if [[ -n "${_OVERRIDE_COVERAGE_ROOT:-}" ]]; then
+    printf "run-bash-coverage: _OVERRIDE_COVERAGE_ROOT in effect: %s\n" "${_OVERRIDE_COVERAGE_ROOT}" >&2
+fi
+TRACER="${SCRIPT_ROOT}/scripts/bash-tracer.sh"
 OUTPUT_DIR="${REPO_ROOT}/coverage"
 TRACE_FILE="${OUTPUT_DIR}/bash_trace.txt"
 TRACE_FIFO="${OUTPUT_DIR}/bash_trace.fifo"
@@ -699,6 +792,119 @@ _check_red_suite() {
     return 1
 }
 
+# Scores TRACE ($1) against the instrumented set: the per-file table, TOTAL,
+# "Overall bash coverage: N%" and the heuristic-disagreement list. Sets the
+# global `overall` for the --json step. Shared by the main run and --score so
+# both report through one loop. Returns 1 on an untrustworthy denominator.
+_score_trace() {
+    local _trace="${1}"
+    local src_file covered coverable disagreement_lines pct basename relpath _dline _d
+    local _report
+    # States what the run below actually measures, so an operator reading a
+    # percentage does not have to reverse-engineer the predicate from the source.
+    # Deliberately separate from the "Overall bash coverage: %d%%" line further
+    # down — CI's `.github/workflows/ci.yml` greps that exact line for every
+    # integer on it, so a denominator appended there would make the parsed
+    # percentage multi-line and break the `-lt` comparison.
+    printf "Instrumented set: setup_env.sh + tracked config/*.sh lib/*.sh scripts/*.sh + hooks, less bash-tracer.sh (%d files)\n" "${#INCLUDE_FILES[@]}"
+
+    # Compute per-file coverage
+    printf "%-30s  %8s  %8s  %8s\n" "File" "Covered" "Total" "Pct"
+    printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
+
+    total_covered=0
+    total_coverable=0
+    all_disagreements=()
+
+    for src_file in "${INCLUDE_FILES[@]}"; do
+        _warn_if_source_missing "${src_file}" || continue
+
+        if ! _report="$(_file_coverage_report "${src_file}" "${_trace}")"; then
+            printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
+            return 1
+        fi
+
+        covered=$(printf '%s\n' "${_report}" | sed -n '1p')
+        coverable=$(printf '%s\n' "${_report}" | sed -n '2p')
+        disagreement_lines=$(printf '%s\n' "${_report}" | sed -n '3,$p')
+
+        # Invariant: covered can never legitimately exceed coverable — coverable
+        # is now the UNION of the static heuristic count and whatever the trace
+        # file actually contains for this file, so a traced line is always a
+        # member of its own denominator by construction. This stays as a
+        # structural guard rather than being removed: if it fires now, the union
+        # computation itself has a bug, not an exclusion heuristic. See tdd.md's
+        # Coverage Denominators section.
+        if [[ "${covered}" -gt "${coverable}" ]]; then
+            printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
+                "${src_file}" "${covered}" "${coverable}" >&2
+            return 1
+        fi
+
+        if [[ "${coverable}" -gt 0 ]]; then
+            pct=$(( covered * 100 / coverable ))
+        else
+            pct=100
+        fi
+
+        basename="${src_file##*/}"
+        printf "%-30s  %8d  %8d  %7d%%\n" "${basename}" "${covered}" "${coverable}" "${pct}"
+
+        total_covered=$((total_covered + covered))
+        total_coverable=$((total_coverable + coverable))
+
+        if [[ -n "${disagreement_lines}" ]]; then
+            relpath="${src_file#"${REPO_ROOT}/"}"
+            while IFS= read -r _dline; do
+                [[ -n "${_dline}" ]] && all_disagreements+=("${relpath}:${_dline}")
+            done <<< "${disagreement_lines}"
+        fi
+    done
+
+    if [[ "${total_coverable}" -gt 0 ]]; then
+        overall=$(( total_covered * 100 / total_coverable ))
+    else
+        overall=0
+    fi
+
+    printf "\n%-30s  %8d  %8d  %7d%%\n" "TOTAL" "${total_covered}" "${total_coverable}" "${overall}"
+    printf "\nOverall bash coverage: %d%%\n" "${overall}"
+
+    # The union above means a wrongly-excluded line raises the denominator
+    # instead of silently vanishing from it — but a heuristic that is
+    # systematically wrong should still be fixed, not just neutralized forever.
+    # This is the list that makes that possible: every line an exclusion rule
+    # dropped that the trace actually emitted, so the specific rule can be
+    # tightened later. Printed unconditionally, with an explicit "none" and
+    # "total: 0" when clean, so the absence is visible rather than inferred.
+    printf "\nHeuristic disagreements (excluded but traced) — these indicate an over-matching rule:\n"
+    if [[ "${#all_disagreements[@]}" -eq 0 ]]; then
+        printf "  none\n"
+    else
+        for _d in "${all_disagreements[@]}"; do
+            printf "  %s\n" "${_d}"
+        done
+    fi
+    printf "  total: %d\n" "${#all_disagreements[@]}"
+}
+
+# Writes the shields.io badge JSON for the global `overall` when the
+# remaining arguments are `--json <path>`. Shared by the main run and --score.
+_write_badge() {
+    [[ "${1:-}" == "--json" && -n "${2:-}" ]] || return 0
+    local color
+    if [[ "${overall}" -ge 90 ]]; then
+        color="brightgreen"
+    elif [[ "${overall}" -ge 75 ]]; then
+        color="yellow"
+    else
+        color="red"
+    fi
+    printf '{"schemaVersion":1,"label":"bash coverage","message":"%d%%","color":"%s"}\n' \
+        "${overall}" "${color}" > "${2}" || return 1
+    printf "Badge JSON written to %s\n" "${2}"
+}
+
 if [[ "${1:-}" == "--check-red-suite" ]]; then
     if [[ -z "${2:-}" || -z "${3:-}" ]]; then
         printf "ERROR: --check-red-suite requires a status and a log file\n" >&2
@@ -710,6 +916,78 @@ if [[ "${1:-}" == "--check-red-suite" ]]; then
     fi
     _check_red_suite "${2}" "${3}"
     exit $?
+fi
+
+# --files LIST may appear anywhere among the remaining arguments. It is
+# consumed here so the flag handlers below keep reading $1/$2 unchanged.
+_rest=()
+_files_seen=0
+_TRACE_ONLY_DIR=""
+_score_seen=0
+_SCORE_TRACES=()
+while (( $# )); do
+    if [[ "${1}" == "--files" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            printf "ERROR: --files requires a list file\n" >&2
+            exit 2
+        fi
+        if (( _files_seen )); then
+            printf "ERROR: --files given more than once\n" >&2
+            exit 2
+        fi
+        _files_seen=1
+        _load_files_list "${2}" || exit 2
+        shift 2
+    elif [[ "${1}" == "--trace-only" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            printf "ERROR: --trace-only requires a directory\n" >&2
+            exit 2
+        fi
+        if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+            printf "ERROR: --trace-only given more than once\n" >&2
+            exit 2
+        fi
+        _TRACE_ONLY_DIR="${2}"
+        shift 2
+    elif [[ "${1}" == "--score" ]]; then
+        _score_seen=1
+        shift
+        # Traces run up to the next flag. Only an optional trailing
+        # `--json <path>` may follow: anything else (a trace after --json, a
+        # stray flag) would otherwise be dropped silently and score fewer
+        # traces than the caller named.
+        while (( $# )) && [[ "${1}" != -* ]]; do
+            _SCORE_TRACES+=("${1}")
+            shift
+        done
+        if (( $# )); then
+            if [[ "${1}" == "--json" && -n "${2:-}" && $# -eq 2 ]]; then
+                _rest+=("${1}" "${2}")
+                shift 2
+            else
+                printf "ERROR: --score: unexpected argument after the traces (only a trailing --json PATH is allowed): %s\n" "${*}" >&2
+                exit 2
+            fi
+        fi
+    else
+        _rest+=("${1}")
+        shift
+    fi
+done
+set -- "${_rest[@]}"
+
+# Modes that cannot combine are refused rather than one silently winning.
+if (( _score_seen )) && { [[ -n "${_TRACE_ONLY_DIR}" ]] || (( _files_seen )); }; then
+    printf "ERROR: --score cannot be combined with --trace-only or --files\n" >&2
+    exit 2
+fi
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    for _a in "$@"; do
+        if [[ "${_a}" == "--json" ]]; then
+            printf "ERROR: --trace-only cannot be combined with --json (it never scores)\n" >&2
+            exit 2
+        fi
+    done
 fi
 
 # Shows the bats argv without running the suite; exits before the main run.
@@ -752,6 +1030,38 @@ if [[ "${1:-}" == -* && "${1:-}" != "--json" ]]; then
     exit 2
 fi
 
+# --score: no bats run. Union the given traces and score them exactly as a
+# full run would. Placed after the unknown-flag guard and before the bats check,
+# since scoring needs no bats.
+if (( _score_seen )); then
+    if (( ${#_SCORE_TRACES[@]} == 0 )); then
+        printf "ERROR: --score requires at least one trace file\n" >&2
+        exit 2
+    fi
+    for _t in "${_SCORE_TRACES[@]}"; do
+        if [[ ! -f "${_t}" || ! -r "${_t}" ]]; then
+            printf "ERROR: --score: no such readable trace file: %s\n" "${_t}" >&2
+            exit 2
+        fi
+        if [[ ! -s "${_t}" ]]; then
+            printf "ERROR: --score: empty trace file: %s\n" "${_t}" >&2
+            exit 2
+        fi
+    done
+    _union="$(mktemp "${TMPDIR:-/tmp}/cov-union.XXXXXX")" || exit 1
+    if ! LC_ALL=C sort -u "${_SCORE_TRACES[@]}" > "${_union}"; then
+        rm -f "${_union}"
+        printf "ERROR: --score: could not union the traces\n" >&2
+        exit 1
+    fi
+    _score_trace "${_union}"
+    _score_status=$?
+    rm -f "${_union}"
+    (( _score_status == 0 )) || exit 1
+    _write_badge "$@" || exit 1
+    exit 0
+fi
+
 # Without bats, the background FIFO reader started below blocks forever in
 # open() waiting for a write end nothing ever opens — bats never runs to open
 # it, and wait(1) on that reader below never returns, so the script hangs
@@ -772,6 +1082,9 @@ _out="$(_coverage_bats_args)" || exit 2
 mapfile -t _bats_args <<<"${_out}"
 _coverage_bats_mode "${_bats_args[@]}"
 
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    mkdir -p "${_TRACE_ONLY_DIR}" || exit 1
+fi
 mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
@@ -823,6 +1136,12 @@ wait "${grep_pid}" 2>/dev/null || true
 # instrument that measures the repo. Capture bats's own status directly, and
 # refuse to report coverage measured over a suite that did not pass —
 # _check_red_suite (defined above, alongside --check-red-suite) is what does it.
+#
+# --trace-only keeps the log BEFORE that check: a red shard must leave its TAP
+# log (with --print-output-on-failure output) where the CI job uploads it from.
+if [[ -n "${_TRACE_ONLY_DIR}" && ! "${bats_log}" -ef "${_TRACE_ONLY_DIR}/bats_run.log" ]]; then
+    cp "${bats_log}" "${_TRACE_ONLY_DIR}/bats_run.log" || exit 1
+fi
 _check_red_suite "${bats_status}" "${bats_log}" || exit 1
 
 if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
@@ -830,106 +1149,19 @@ if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
     exit 1
 fi
 
+# --trace-only stops here: publish the sorted unique trace and leave scoring to
+# a later --score over all shards' traces. Written via a temp file because the
+# directory may be OUTPUT_DIR, where TRACE_FILE is the sort's own input.
+if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
+    LC_ALL=C sort -u "${TRACE_FILE}" > "${_TRACE_ONLY_DIR}/bash_trace.txt.tmp" || exit 1
+    mv -f "${_TRACE_ONLY_DIR}/bash_trace.txt.tmp" "${_TRACE_ONLY_DIR}/bash_trace.txt" || exit 1
+    wc -l < "${_TRACE_ONLY_DIR}/bash_trace.txt" | awk '{printf "Trace: %d unique lines\n", $1}'
+    exit 0
+fi
+
 trace_lines=$(wc -l < "${TRACE_FILE}")
 printf "\nTrace: %d filtered lines\n\n" "${trace_lines}"
 
-# States what the run below actually measures, so an operator reading a
-# percentage does not have to reverse-engineer the predicate from the source.
-# Deliberately separate from the "Overall bash coverage: %d%%" line further
-# down — CI's `.github/workflows/ci.yml` greps that exact line for every
-# integer on it, so a denominator appended there would make the parsed
-# percentage multi-line and break the `-lt` comparison.
-printf "Instrumented set: setup_env.sh + tracked config/*.sh lib/*.sh scripts/*.sh + hooks, less bash-tracer.sh (%d files)\n" "${#INCLUDE_FILES[@]}"
+_score_trace "${TRACE_FILE}" || exit 1
 
-# Compute per-file coverage
-printf "%-30s  %8s  %8s  %8s\n" "File" "Covered" "Total" "Pct"
-printf "%-30s  %8s  %8s  %8s\n" "----" "-------" "-----" "---"
-
-total_covered=0
-total_coverable=0
-all_disagreements=()
-
-for src_file in "${INCLUDE_FILES[@]}"; do
-    _warn_if_source_missing "${src_file}" || continue
-
-    if ! _report="$(_file_coverage_report "${src_file}" "${TRACE_FILE}")"; then
-        printf "ERROR: cannot compute a trustworthy denominator for %s\n" "${src_file}" >&2
-        exit 1
-    fi
-
-    covered=$(printf '%s\n' "${_report}" | sed -n '1p')
-    coverable=$(printf '%s\n' "${_report}" | sed -n '2p')
-    disagreement_lines=$(printf '%s\n' "${_report}" | sed -n '3,$p')
-
-    # Invariant: covered can never legitimately exceed coverable — coverable
-    # is now the UNION of the static heuristic count and whatever the trace
-    # file actually contains for this file, so a traced line is always a
-    # member of its own denominator by construction. This stays as a
-    # structural guard rather than being removed: if it fires now, the union
-    # computation itself has a bug, not an exclusion heuristic. See tdd.md's
-    # Coverage Denominators section.
-    if [[ "${covered}" -gt "${coverable}" ]]; then
-        printf "ERROR: %s: covered (%d) exceeds coverable (%d) — an exclusion heuristic over-matched\n" \
-            "${src_file}" "${covered}" "${coverable}" >&2
-        exit 1
-    fi
-
-    if [[ "${coverable}" -gt 0 ]]; then
-        pct=$(( covered * 100 / coverable ))
-    else
-        pct=100
-    fi
-
-    basename="${src_file##*/}"
-    printf "%-30s  %8d  %8d  %7d%%\n" "${basename}" "${covered}" "${coverable}" "${pct}"
-
-    total_covered=$((total_covered + covered))
-    total_coverable=$((total_coverable + coverable))
-
-    if [[ -n "${disagreement_lines}" ]]; then
-        relpath="${src_file#"${REPO_ROOT}/"}"
-        while IFS= read -r _dline; do
-            [[ -n "${_dline}" ]] && all_disagreements+=("${relpath}:${_dline}")
-        done <<< "${disagreement_lines}"
-    fi
-done
-
-if [[ "${total_coverable}" -gt 0 ]]; then
-    overall=$(( total_covered * 100 / total_coverable ))
-else
-    overall=0
-fi
-
-printf "\n%-30s  %8d  %8d  %7d%%\n" "TOTAL" "${total_covered}" "${total_coverable}" "${overall}"
-printf "\nOverall bash coverage: %d%%\n" "${overall}"
-
-# The union above means a wrongly-excluded line raises the denominator
-# instead of silently vanishing from it — but a heuristic that is
-# systematically wrong should still be fixed, not just neutralized forever.
-# This is the list that makes that possible: every line an exclusion rule
-# dropped that the trace actually emitted, so the specific rule can be
-# tightened later. Printed unconditionally, with an explicit "none" and
-# "total: 0" when clean, so the absence is visible rather than inferred.
-printf "\nHeuristic disagreements (excluded but traced) — these indicate an over-matching rule:\n"
-if [[ "${#all_disagreements[@]}" -eq 0 ]]; then
-    printf "  none\n"
-else
-    for _d in "${all_disagreements[@]}"; do
-        printf "  %s\n" "${_d}"
-    done
-fi
-printf "  total: %d\n" "${#all_disagreements[@]}"
-
-# Optionally write shields.io badge JSON
-if [[ "${1:-}" == "--json" && -n "${2:-}" ]]; then
-    if [[ "${overall}" -ge 90 ]]; then
-        color="brightgreen"
-    elif [[ "${overall}" -ge 75 ]]; then
-        color="yellow"
-    else
-        color="red"
-    fi
-    printf '{"schemaVersion":1,"label":"bash coverage","message":"%d%%","color":"%s"}\n' \
-        "${overall}" "${color}" > "${2}"
-    printf "Badge JSON written to %s\n" "${2}"
-fi
+_write_badge "$@" || exit 1

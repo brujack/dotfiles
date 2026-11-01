@@ -114,11 +114,12 @@ BATS_PARALLEL_RAN := $(filter-out $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats test-prereqs
 
 help:
 	@printf "Available targets:\n"
 	@printf "  make test              Run all BATS tests\n"
+	@printf "  make test-prereqs      Run the non-bats half of make test (lint, lock and requirements drift, python, CLAUDE.md budget)\n"
 	@printf "  make test-unit         Run unit tests only\n"
 	@printf "  make lint              bash -n + ShellCheck over SHELL_FILES, zsh -n over ZSH_FILES, lib EXIT-trap ratchet\n"
 	@printf "  make bash-coverage     Measure bash line coverage via PS4 xtrace tracer\n"
@@ -174,7 +175,12 @@ lint:
 	fi; \
 	exit $$failed
 
-test: lint check-lock check-requirements-ci test-python check-claude-md-budget test-bats
+# The non-bats half of `make test`, separate so one CI shard can run it while
+# the others skip it. The literal prerequisites are repeated on the `test:`
+# line below on purpose: tests read that line, and make runs each target once.
+test-prereqs: lint check-lock check-requirements-ci test-python check-claude-md-budget
+
+test: test-prereqs lint check-lock check-requirements-ci test-python check-claude-md-budget test-bats
 
 # The bats phase of `make test`, separate so a CI shard can run it on its own
 # list. BATS_FILES_FROM names a file of one .bats path per line (a shard);
@@ -239,17 +245,38 @@ else
 	python3 scripts/claude_md_budget.py HEAD
 endif
 
+# Shard inputs reach run-bash-coverage.sh as arguments only. COVERAGE_TRACE_DIR
+# is read from the environment like BATS_FILES_FROM and unexported for the same
+# reason; _OVERRIDE_COVERAGE_ROOT is the script's test seam and a stray export
+# must never reach a real coverage run. --trace-only and --json are mutually
+# exclusive in the script; this target never passes --json.
+unexport COVERAGE_TRACE_DIR
+unexport _OVERRIDE_COVERAGE_ROOT
+COVERAGE_ARGS :=
+ifneq ($(strip $(BATS_FILES_FROM)),)
+COVERAGE_ARGS += --files '$(BATS_FILES_FROM)'
+endif
+ifneq ($(strip $(COVERAGE_TRACE_DIR)),)
+COVERAGE_ARGS += --trace-only '$(COVERAGE_TRACE_DIR)'
+endif
+
 bash-coverage:
 ifndef BATS
 	$(error $(BATS_MISSING))
+endif
+ifneq ($(strip $(BATS_FILES_FROM)),)
+ifeq ($(strip $(BATS_RAN_FILES)),)
+# Same refusal as test-bats: a missing or empty shard list is a fault, not a pass.
+	@printf "no .bats files to trace (BATS_RAN_FILES is empty; BATS_FILES_FROM='%s') -- refusing to report a pass over zero tests\n" "$(BATS_FILES_FROM)" >&2; exit 1
+endif
 endif
 # Parse-time conditional so `make -n` shows one arm; env -u keeps an exported
 # value from turning a serial run parallel; a non-empty BATS_SERIAL_FILES
 # sends the whole run serial.
 ifeq ($(HAVE_PARALLEL)|$(strip $(BATS_SERIAL_FILES)),yes|)
-	@COVERAGE_BATS_JOBS=$(JOBS) bash scripts/run-bash-coverage.sh
+	@COVERAGE_BATS_JOBS=$(JOBS) bash scripts/run-bash-coverage.sh $(COVERAGE_ARGS)
 else
-	@env -u COVERAGE_BATS_JOBS bash scripts/run-bash-coverage.sh
+	@env -u COVERAGE_BATS_JOBS bash scripts/run-bash-coverage.sh $(COVERAGE_ARGS)
 endif
 
 ledger-symlink:

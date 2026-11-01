@@ -19,14 +19,20 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  test:
+  test-shard:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
-    timeout-minutes: 20 # p90 342s, measured 2026-08-27
+    timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install dependencies
-        run: sudo apt-get install -y bats zsh
+        run: sudo apt-get install -y bats zsh parallel
 
       - name: Install shellcheck (pinned)
         env:
@@ -62,17 +68,124 @@ jobs:
           /usr/bin/sort --version | head -1
           /usr/bin/comm --version | head -1
 
-      - name: Run tests
-        run: make test
+      # One list per shard, computed once: make, the suite report and the
+      # gate all read this file. The matrix list is the only place the shard
+      # count is written.
+      - name: Compute shard list
+        run: bash scripts/bats-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}" > "shard-${{ matrix.shard }}.files"
 
-      - name: Verify test count floor (≥ 840)
+      # Only shard 1 carries the non-bats half of `make test`.
+      - name: Run test prerequisites (shard 1 only)
+        if: matrix.shard == 1
+        run: make test-prereqs < /dev/null
+
+      # The list and trace dir reach the script as arguments, built by the
+      # Makefile from these step-env entries; never put them on a command line.
+      - name: Run traced suite
+        env:
+          BATS_FILES_FROM: shard-${{ matrix.shard }}.files
+          COVERAGE_TRACE_DIR: shard-out
+        run: make bash-coverage < /dev/null
+
+      # No `if:`: a green make over fewer tests than declared must fail.
+      - name: Check executed tests equal declared
+        run: bash scripts/ci-suite-report.sh shard-out/bats_run.log --files "shard-${{ matrix.shard }}.files"
+
+      - name: Stage the list and trace
         run: |
-          COUNT=$(grep -r "^@test" tests/ | wc -l | tr -d ' ')
-          printf "Test count: %d\n" "${COUNT}"
-          if [ "${COUNT}" -lt 840 ]; then
-            printf "FAIL: test count %d is below the floor of 840\n" "${COUNT}" >&2
+          mkdir -p shard-upload
+          cp "shard-${{ matrix.shard }}.files" shard-upload/
+          cp shard-out/bash_trace.txt "shard-upload/shard-${{ matrix.shard }}.trace"
+
+      # Default success() condition on purpose: a shard that failed leaves no
+      # list or trace for this attempt, so the gate's pairing check fails too.
+      - name: Upload the shard list and trace
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-shard-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: shard-upload
+          retention-days: 7
+          if-no-files-found: error
+
+      # The script writes the log before its red check, so it exists on a
+      # failed run. overwrite lets a re-run attempt upload at all and replaces
+      # the earlier attempt's log: download it before re-running.
+      - name: Upload the full traced log
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-shard-log-${{ matrix.shard }}
+          path: shard-out/bats_run.log
+          retention-days: 7
+          if-no-files-found: warn
+          overwrite: true
+
+  # Required check and auto-merge gate. Runs even when a shard failed so the
+  # check reports red rather than skipped.
+  test:
+    needs: test-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the badge push
+    steps:
+      - name: Require every shard to have succeeded
+        run: |
+          printf 'test-shard result: %s\n' "${{ needs.test-shard.result }}"
+          [ "${{ needs.test-shard.result }}" = "success" ] || exit 1
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: test-shard-${{ github.run_attempt }}-*
+          merge-multiple: true
+          path: cov-shards
+
+      - name: Check lists cover every test file once and each has a trace
+        run: bash scripts/ci-shard-gate.sh --with-traces cov-shards
+
+      - name: Score the union of the shard traces (gate at 91%)
+        run: |
+          bash scripts/run-bash-coverage.sh --score cov-shards/shard-*.trace > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
+          cat /tmp/bash-cov-out.txt
+          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
+          if [ -z "${PCT}" ]; then
+            printf "FAIL: coverage output not found\n" >&2
             exit 1
           fi
+          printf "Coverage: %d%%\n" "${PCT}"
+          if [ "${PCT}" -lt 91 ]; then
+            printf "FAIL: bash coverage %d%% is below the 91%% gate\n" "${PCT}" >&2
+            exit 1
+          fi
+
+      - name: Publish bash coverage badge
+        run: |
+          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
+          if   [ "$PCT" -ge 90 ]; then COLOR="brightgreen"
+          elif [ "$PCT" -ge 80 ]; then COLOR="green"
+          elif [ "$PCT" -ge 70 ]; then COLOR="yellow"
+          elif [ "$PCT" -ge 60 ]; then COLOR="orange"
+          else                         COLOR="red"
+          fi
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git fetch origin coverage-data 2>/dev/null && \
+            git worktree add /tmp/cov-data coverage-data || \
+            git worktree add -b coverage-data --orphan /tmp/cov-data
+          printf '{"schemaVersion":1,"label":"bash coverage","message":"%s%%","color":"%s"}\n' \
+            "$PCT" "$COLOR" > /tmp/cov-data/bash.json
+          cd /tmp/cov-data
+          git add .
+          git diff --staged --quiet && exit 0
+          for i in 1 2 3; do
+            git pull origin coverage-data --rebase 2>/dev/null || true
+            git diff --staged --quiet || git commit -m "coverage: bash.json → ${PCT}%"
+            git push origin coverage-data && break
+            sleep $((RANDOM % 5 + 1))
+          done
 
   lint-macos:
     runs-on: macos-latest
@@ -285,82 +398,6 @@ jobs:
             sleep $((RANDOM % 5 + 1))
           done
 
-  bash-coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60 # runs 14-24 min measured 2026-10-17 (p90 492s on 2026-08-27; slowdown backlogged)
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Install dependencies
-        run: sudo apt-get install -y bats zsh
-
-      - name: Install shellcheck (pinned)
-        env:
-          SC_VER: "0.11.0"
-          SC_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
-        run: |
-          curl -fsSL -o /tmp/sc.tar.xz \
-            "https://github.com/koalaman/shellcheck/releases/download/v${SC_VER}/shellcheck-v${SC_VER}.linux.x86_64.tar.xz"
-          echo "${SC_SHA256}  /tmp/sc.tar.xz" | sha256sum -c -
-          tar -xJf /tmp/sc.tar.xz -C /tmp
-          sudo install -m755 "/tmp/shellcheck-v${SC_VER}/shellcheck" /usr/local/bin/shellcheck
-          shellcheck --version | grep -q "version: ${SC_VER}"
-
-      - name: Install uv (pinned)
-        env:
-          UV_VER: "0.13.0"
-          UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
-        run: |
-          curl -fsSL -o /tmp/uv.tar.gz \
-            "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
-          echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/uv.tar.gz -C /tmp
-          sudo install -m755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
-          uv --version | grep -q "uv ${UV_VER}"
-
-      - name: Run bash coverage (gate at 91%)
-        run: |
-          make bash-coverage > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }
-          cat /tmp/bash-cov-out.txt
-          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
-          if [ -z "${PCT}" ]; then
-            printf "FAIL: coverage output not found\n" >&2
-            exit 1
-          fi
-          printf "Coverage: %d%%\n" "${PCT}"
-          if [ "${PCT}" -lt 91 ]; then
-            printf "FAIL: bash coverage %d%% is below the 91%% gate\n" "${PCT}" >&2
-            exit 1
-          fi
-
-      - name: Publish bash coverage badge
-        run: |
-          PCT=$(grep "^Overall bash coverage:" /tmp/bash-cov-out.txt | grep -oE '[0-9]+')
-          if   [ "$PCT" -ge 90 ]; then COLOR="brightgreen"
-          elif [ "$PCT" -ge 80 ]; then COLOR="green"
-          elif [ "$PCT" -ge 70 ]; then COLOR="yellow"
-          elif [ "$PCT" -ge 60 ]; then COLOR="orange"
-          else                         COLOR="red"
-          fi
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git fetch origin coverage-data 2>/dev/null && \
-            git worktree add /tmp/cov-data coverage-data || \
-            git worktree add -b coverage-data --orphan /tmp/cov-data
-          printf '{"schemaVersion":1,"label":"bash coverage","message":"%s%%","color":"%s"}\n' \
-            "$PCT" "$COLOR" > /tmp/cov-data/bash.json
-          cd /tmp/cov-data
-          git add .
-          git diff --staged --quiet && exit 0
-          for i in 1 2 3; do
-            git pull origin coverage-data --rebase 2>/dev/null || true
-            git diff --staged --quiet || git commit -m "coverage: bash.json → ${PCT}%"
-            git push origin coverage-data && break
-            sleep $((RANDOM % 5 + 1))
-          done
-
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10 # p90 8s, floor, measured 2026-08-27
@@ -387,7 +424,7 @@ jobs:
             --verbose
 
   auto-merge:
-    needs: [test, lint-macos, test-macos, powershell, bash-coverage, secret-scan]
+    needs: [test, lint-macos, test-macos, powershell, secret-scan]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10 # p90 11s, floor, measured 2026-08-27

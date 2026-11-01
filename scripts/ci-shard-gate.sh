@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Check that the shards' file lists cover the suite exactly once.
 #
-# Usage: ci-shard-gate.sh <dir>        (run from the repo root)
+# Usage: ci-shard-gate.sh [--with-traces] <dir>   (run from the repo root)
 #
 # Reads every <dir>/shard-*.files, one path per line, and checks:
 #   coverage      the union of the lists equals an independent
@@ -9,6 +9,11 @@
 #                 blank line, an extra path or a path split at a space fails);
 #   disjointness  no path appears twice, within or across lists.
 # Both checks run and both are reported before exiting.
+#
+# With --with-traces (once, before <dir>) a pairing check runs first: every
+# shard-<i>.files needs a regular, non-empty shard-<i>.trace and every
+# shard-*.trace needs its .files. A violation prints `pairing:` and one line
+# per offending shard, then exits 1 without running the other checks.
 #
 # Exit 0 pass; 1 a check failed; 2 usage or input error (missing argument or
 # directory, no shard-*.files, unreadable list, carriage return in a list,
@@ -46,12 +51,62 @@ gate_collect() {
   done
 }
 
+# Print one line per shard that breaks the list/trace pairing in <dir>.
+# Returns 1 when any line was printed.
+gate_pairing() {
+  local _dir="$1" _f _name _bad=0
+  for _f in "${_dir}"/shard-*.files; do
+    [[ -e "${_f}" || -L "${_f}" ]] || continue
+    _name="$(basename "${_f}" .files)"
+    if [[ -L "${_dir}/${_name}.trace" ]]; then
+      printf '%s: trace is a symlink\n' "${_name}"
+      _bad=1
+    elif [[ ! -e "${_dir}/${_name}.trace" ]]; then
+      printf '%s: missing %s.trace\n' "${_name}" "${_name}"
+      _bad=1
+    elif [[ ! -f "${_dir}/${_name}.trace" ]]; then
+      printf '%s: %s.trace is not a regular file\n' "${_name}" "${_name}"
+      _bad=1
+    elif [[ ! -s "${_dir}/${_name}.trace" ]]; then
+      printf '%s: empty %s.trace\n' "${_name}" "${_name}"
+      _bad=1
+    fi
+  done
+  for _f in "${_dir}"/shard-*.trace; do
+    [[ -e "${_f}" || -L "${_f}" ]] || continue
+    _name="$(basename "${_f}" .trace)"
+    if [[ ! -e "${_dir}/${_name}.files" && ! -L "${_dir}/${_name}.files" ]]; then
+      printf '%s: orphan %s.trace has no %s.files\n' "${_name}" "${_name}" "${_name}"
+      _bad=1
+    fi
+  done
+  return "${_bad}"
+}
+
 main() {
-  local _dir="${1:-}" _found _expected _union _missing _extra _dups _rc=0
-  local _lists=() _f
+  local _dir _found _expected _union _missing _extra _dups _rc=0
+  local _lists=() _f _with_traces=0 _pairing
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --with-traces)
+        if [[ ${_with_traces} -eq 1 ]]; then
+          gate_die "--with-traces given more than once" || return 2
+        fi
+        _with_traces=1
+        shift
+        ;;
+      -*)
+        gate_die "unknown option: $1" || return 2
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
   if [[ $# -ne 1 ]]; then
-    gate_die "usage: ci-shard-gate.sh <dir>" || return 2
+    gate_die "usage: ci-shard-gate.sh [--with-traces] <dir>" || return 2
   fi
+  _dir="$1"
   if [[ ! -d "${_dir}" ]]; then
     gate_die "not a directory: ${_dir}" || return 2
   fi
@@ -60,6 +115,13 @@ main() {
   done
   if [[ ${#_lists[@]} -eq 0 ]]; then
     gate_die "no shard-*.files in ${_dir}" || return 2
+  fi
+  if [[ ${_with_traces} -eq 1 ]]; then
+    _pairing="$(gate_pairing "${_dir}")" || {
+      printf 'pairing: shard lists and traces do not pair\n'
+      printf '%s\n' "${_pairing}"
+      return 1
+    }
   fi
   # find's own status is checked: a pipeline would report sort's.
   _found="$(find tests -name '*.bats')" || {

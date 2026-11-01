@@ -304,6 +304,78 @@ _run_pre_push_leaked() {
   run ! grep -qE "^GIT_(DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)=" "${MOCK_CALLS_FILE}"
 }
 
+# Mock make that records the make-input variables present in its environment,
+# plus a marker that must pass through (positive control: an empty record would
+# otherwise satisfy every "absent" assertion).
+_write_make_input_env_mock() {
+  cat > "${MAKE_MOCK_DIR}/make" <<EOF
+#!/usr/bin/env bash
+printf "make %s\n" "\$*" >> "${MOCK_CALLS_FILE}"
+env | grep -E '^(MAKEFLAGS|MFLAGS|MAKELEVEL|BATS_FILES_FROM|PREPUSH_PASSTHROUGH_MARKER)=' >> "${MOCK_CALLS_FILE}" || true
+exit 0
+EOF
+  chmod +x "${MAKE_MOCK_DIR}/make"
+}
+
+_input_env_fixture() {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "a.sh" "echo 1" "feat: a")
+  _write_make_input_env_mock
+  export PREPUSH_PASSTHROUGH_MARKER=kept
+}
+
+_assert_make_inputs_stripped() {
+  local _var="${1}"
+  grep -qxF "PREPUSH_PASSTHROUGH_MARKER=kept" "${MOCK_CALLS_FILE}"
+  run ! grep -qE "^${_var}=" "${MOCK_CALLS_FILE}"
+}
+
+@test "pre-push in-place run strips an exported BATS_FILES_FROM from make's environment" {
+  _input_env_fixture
+  export BATS_FILES_FROM="${BATS_TEST_TMPDIR}/narrow.files"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  _assert_make_inputs_stripped BATS_FILES_FROM
+}
+
+@test "pre-push in-place run strips an exported MAKEFLAGS from make's environment" {
+  _input_env_fixture
+  export MAKEFLAGS="BATS_FILES_FROM=${BATS_TEST_TMPDIR}/narrow.files"
+  export MFLAGS="-j8"
+  export MAKELEVEL=2
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  _assert_make_ran
+  _assert_make_inputs_stripped MAKEFLAGS
+  _assert_make_inputs_stripped MFLAGS
+  _assert_make_inputs_stripped MAKELEVEL
+}
+
+@test "pre-push clean-checkout run strips an exported BATS_FILES_FROM from make's environment" {
+  _input_env_fixture
+  printf '%s\n' "dirty" > "${REPO_DIR}/a.sh"
+  export BATS_FILES_FROM="${BATS_TEST_TMPDIR}/narrow.files"
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C ${TMPDIR}/pre-push\.[^ ]+/pre-push-[0-9a-f]{7} test$" "${MOCK_CALLS_FILE}"
+  _assert_make_inputs_stripped BATS_FILES_FROM
+}
+
+@test "pre-push clean-checkout run strips an exported MAKEFLAGS from make's environment" {
+  _input_env_fixture
+  printf '%s\n' "dirty" > "${REPO_DIR}/a.sh"
+  export MAKEFLAGS="BATS_FILES_FROM=${BATS_TEST_TMPDIR}/narrow.files"
+  export MFLAGS="-j8"
+  export MAKELEVEL=2
+  run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  grep -qE "^make -C ${TMPDIR}/pre-push\.[^ ]+/pre-push-[0-9a-f]{7} test$" "${MOCK_CALLS_FILE}"
+  _assert_make_inputs_stripped MAKEFLAGS
+  _assert_make_inputs_stripped MFLAGS
+  _assert_make_inputs_stripped MAKELEVEL
+}
+
 @test "pre-push runs make test when only ubuntu_common_packages.txt changed" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "ubuntu_common_packages.txt" "curl" "chore: touch ubuntu packages")

@@ -216,3 +216,123 @@ good_partition() {
   [[ "${output}" == *"PASS"* ]]
   [[ "${output}" == *"3 files"* ]]
 }
+
+# --with-traces: every shard-<i>.files needs one non-empty shard-<i>.trace and
+# no trace may lack its list; the pairing is checked before coverage.
+
+@test "without the flag, traces next to the lists are ignored and the lists alone pass" {
+  good_partition
+  printf 'trace line\n' > "${LISTS}/shard-1.trace"
+  : > "${LISTS}/shard-2.trace"
+  printf 'orphan\n' > "${LISTS}/shard-9.trace"
+  run_gate_in "${TREE}" lists
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"PASS"* ]]
+}
+
+@test "--with-traces passes a complete pairing with the PASS summary" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  printf 'trace 2\n' > "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"PASS"* ]]
+  [[ "${output}" == *"3 files"* ]]
+  [[ "${output}" == *"2 lists"* ]]
+}
+
+@test "--with-traces fails a missing trace naming the shard" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-2"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+}
+
+@test "--with-traces fails an empty trace naming the shard" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  : > "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-2"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+}
+
+@test "--with-traces fails an orphan trace naming the shard" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  printf 'trace 2\n' > "${LISTS}/shard-2.trace"
+  printf 'trace 7\n' > "${LISTS}/shard-7.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-7"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+  [[ "${output}" != *"shard-2"* ]]
+}
+
+@test "--with-traces names every offending shard, one line each, and skips coverage" {
+  printf 'tests/a.bats\n' > "${LISTS}/shard-1.files"
+  printf 'tests/c.bats\n' > "${LISTS}/shard-2.files"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-1"* ]]
+  [[ "${output}" == *"shard-2"* ]]
+  [[ "${output}" != *"coverage:"* ]]
+  [ "$(printf '%s\n' "${output}" | command grep -c '^shard-')" -eq 2 ]
+}
+
+@test "--with-traces runs coverage after a passing pairing" {
+  printf 'tests/a.bats\n' > "${LISTS}/shard-1.files"
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"coverage:"* ]]
+  [[ "${output}" != *"pairing:"* ]]
+}
+
+@test "an unknown flag exits 2" {
+  good_partition
+  run_gate_in "${TREE}" --bogus lists
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"unknown option: --bogus"* ]]
+}
+
+@test "a repeated --with-traces exits 2" {
+  good_partition
+  run_gate_in "${TREE}" --with-traces --with-traces lists
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"ci-shard-gate:"* ]]
+}
+
+@test "--with-traces without a directory exits 2" {
+  run_gate_in "${TREE}" --with-traces
+  [ "${status}" -eq 2 ]
+}
+
+@test "--with-traces refuses a symlinked trace naming the shard" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  printf 'real\n' > "${TREE}/real.trace"
+  ln -s ../real.trace "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"pairing:"* ]]
+  [[ "${output}" == *"shard-2: trace is a symlink"* ]]
+  [[ "${output}" != *"shard-1"* ]]
+}
+
+@test "--with-traces reports a directory trace as not a regular file, not missing" {
+  good_partition
+  printf 'trace 1\n' > "${LISTS}/shard-1.trace"
+  mkdir "${LISTS}/shard-2.trace"
+  run_gate_in "${TREE}" --with-traces lists
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"shard-2: "*"not a regular file"* ]]
+  [[ "${output}" != *"missing"* ]]
+}

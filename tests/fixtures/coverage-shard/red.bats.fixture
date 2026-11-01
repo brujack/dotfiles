@@ -1,0 +1,4 @@
+@test "fixture red" {
+  printf 'FIXTURE-RED-MARKER\n'
+  false
+}

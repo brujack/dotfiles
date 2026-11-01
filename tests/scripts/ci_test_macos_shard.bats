@@ -43,10 +43,11 @@ _count() { command grep -c -E -- "$1" || true; }
   [[ "${_gate}" != *"ubuntu-24.04"* ]]
 }
 
-@test "always() occurs once outside comments: the if of job test-macos" {
+@test "always() occurs exactly twice outside comments: the if of test-macos and of the test gate" {
   local _n
   _n="$(sed -e '/^[[:space:]]*#/d' -e 's/[[:space:]]#.*$//' "${WF}" | _count 'always\(\)')"
-  [ "${_n}" -eq 1 ]
+  [ "${_n}" -eq 2 ]
+  _job_text test | command grep -qE '^    if: always\(\)[[:space:]]*$'
   _job_text test-macos | command grep -qE '^    if: always\(\)[[:space:]]*$'
   _code test-macos | command grep -q 'needs.test-macos-shard.result'
   # The printf alone names the result; the comparison is what fails the job.
