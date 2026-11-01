@@ -192,3 +192,22 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - **Ergonomics.** Finding: R3 red names no lib; its marker list does not grow with `lib/`; markers defined in two libs (`_dry_run_active`, `_git_ssh_opts`) give a false green; the relative path must be built portably (`realpath --relative-to` is GNU-only); R1 should print the calls file on failure. Probe in an archive copy: R2 red then green, R3 green, red with `lib/git_sync.sh`'s line deleted. Assumption: the child `bash` on the macOS shards is bash 4 or later. Disposition: Addressed (operator, 2026-11-01): `lib:marker` table with per-marker messages, row count tied to `git ls-files 'lib/*.sh'`, single-definition markers, `cd "${REPO_ROOT}/lib" && source ../setup_env.sh`, R1 prints the file; the bash assumption is confirmed by the PR's first macOS shard run.
 - **Risk.** Finding: R2 could pass vacuously, because `setup_env.sh` line 4 is a second `BASH_SOURCE[0]`-versus-`${0}` comparison and a parser stopping there inspects zero lines. Checked clean: bats exports no lib function, nothing sets `BASH_ENV` but the coverage tracer, `GO_VER` is not exported, the relative path resolves from `tests/`. Assumption (`load_mocks` needs no mock override before the moved prepend) settled by the orchestrator: exported environment and every generated file identical, master vs moved, apart from the fixture's `.git` internals; mock log 6 lines vs 0. Disposition: Addressed (operator, 2026-11-01): guard located by `&& return 0`, inspected count asserted equal to the tracked lib count.
 
+## Spec alignment (2026-11-01)
+
+- spec: docs/superpowers/specs/2026-11-01-setup-floor-quick-wins-design.md
+- anchor: 235a972f56455541b5ab03c1a39ec073af1f9a82
+- in scope: R1, R2, R3
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
