@@ -91,24 +91,41 @@ TDD, bats:
 
 - **R1, red on master.** In the file that already tests `tests/helpers/common.bash` (the plan
   names it), with `MOCK_CALLS_FILE` set to an existing empty file before `load_mocks`: the file
-  is still empty afterwards, and the first `PATH` entry afterwards is
-  `${REPO_ROOT}/tests/mocks`. Measured on `88cf9aca` in an archive copy: master writes 6 lines
-  (5 `chmod`, 1 `cp`).
-- **R2, red on master.** `tests/setup_env/unit.bats`, structural, not a text count: every
-  top-level `source` line in `setup_env.sh` above the sourcing guard references
-  `${_SETUP_ENV_DIR}` and none contains `$(dirname`; and `_SETUP_ENV_DIR` is unset after
-  sourcing it. Master has 13 lines of the old form, so the structural half is red there. A count
-  of the text `dirname` was rejected: a harmless comment or an unrelated later use would turn it
-  red with no hint of the cause.
-- **R3, a characterization guard, green on master by design.** `tests/setup_env/unit.bats`,
-  in a separate process: `run env -u GO_VER bash -c 'cd <dir other than the repo root> &&
-  source <relative path>/setup_env.sh && declare -F <12 functions> && [[ -n ${GO_VER+x} ]]'`.
-  A marker from each of the 13 lib files: a function for the 12 that define one, and `GO_VER`
-  for `lib/constants.sh`, which defines no function. The separate process is load-bearing:
-  `unit.bats`' `setup()` already runs `load_setup_env`, so in the test's own shell every marker
-  exists before the test starts, and a same-shell check stays green with a lib's `source` line
-  deleted (measured in round 2: same shell green, fresh `bash -c` red). It pins the refactor
-  rather than proving it.
+  is still empty afterwards (on failure the test prints its contents, so a later stub placed
+  after the prepend names the mocked command that logged), and the first `PATH` entry afterwards
+  is `${REPO_ROOT}/tests/mocks`. Measured on `88cf9aca` in an archive copy: master writes 6 lines
+  (5 `chmod`, 1 `cp`). Measured in round 3: with the prepend moved, the exported environment and
+  every generated file under `BATS_TEST_TMPDIR` (excluding the fixture's `.git` internals) are
+  identical to master's.
+- **R2, red on master.** `tests/setup_env/unit.bats`, structural, not a text count. The guard is
+  located by its form, the line matching `&& return 0` (line 57 today), never by the first
+  `BASH_SOURCE[0]`-versus-`${0}` comparison: line 4 is a second such comparison, and a parser
+  stopping there inspects zero lines and passes vacuously. Above the guard, the test inspects the
+  top-level `source` lines, asserts their count equals `git ls-files 'lib/*.sh' | wc -l` (13
+  today), and asserts each references `${_SETUP_ENV_DIR}` and none contains `$(dirname`; it also
+  asserts `_SETUP_ENV_DIR` is unset after sourcing. Master has 13 lines of the old form, so it is
+  red there. A count of the text `dirname` was rejected: a harmless comment or an unrelated later
+  use would turn it red with no hint of the cause.
+- **R3, a characterization guard, green on master by design.** `tests/setup_env/unit.bats`, in a
+  separate process: `run env -u GO_VER bash -c 'cd "${REPO_ROOT}/lib" && source
+  ../setup_env.sh && <check>'`, with the relative path built by that `cd`, never by
+  `realpath --relative-to` (GNU-only; absent on the macOS shards). The check loops over a
+  `lib:marker` table and prints `missing <marker> (lib/<file>)` for each marker not defined:
+  - one marker per file in `git ls-files 'lib/*.sh'`, and the test asserts the table has that
+    many rows, so a new lib fails until it gets a marker;
+  - a function defined in exactly one lib file, public where the file has one (e.g.
+    `log_info`, `detect_env`, `install_ubuntu_packages`); a function defined in two libs (e.g.
+    `_dry_run_active`, `_git_ssh_opts`) stays defined after its own lib's `source` line is
+    deleted, so it can never be a marker;
+  - `GO_VER` for `lib/constants.sh`, which defines no function.
+
+  The separate process is load-bearing: `unit.bats`' `setup()` already runs `load_setup_env`,
+  so in the test's own shell every marker exists before the test starts, and a same-shell check
+  stays green with a lib's `source` line deleted (measured in round 2: same shell green, fresh
+  `bash -c` red). Measured in round 3 in an archive copy: master green, refactor green, refactor
+  with `lib/git_sync.sh`'s line deleted red. It pins the refactor rather than proving it. The
+  child `bash` must be bash 4 or later on the macOS shards; `CLAUDE.md` puts Homebrew bash first
+  on the runner's `PATH`, and the PR's first macOS shard run confirms it.
 - The full suite stays green.
 
 ## Measurement (informational)
@@ -128,8 +145,8 @@ no writes outside the test tmpdir).
 ## Requirements
 
 - **R1.** `[PR1]` `load_mocks` prepends `${REPO_ROOT}/tests/mocks` to `PATH` as its last statement, so with `MOCK_CALLS_FILE` set to an empty file before the call the file is still empty afterwards, and the first `PATH` entry afterwards is `${REPO_ROOT}/tests/mocks`.
-- **R2.** `[PR1]` `setup_env.sh` sets `_SETUP_ENV_DIR` with one `dirname` call, uses it in all 13 lib `source` lines and unsets it before the sourcing guard, while `_LOCAL_CFG` keeps its own `dirname`; a test asserts that every top-level `source` line above the guard references `${_SETUP_ENV_DIR}` and none contains `$(dirname`, and that `_SETUP_ENV_DIR` is unset after sourcing.
-- **R3.** `[PR1]` Sourcing `setup_env.sh` by a relative path from a directory other than the repo root, in a separate process started with `GO_VER` unset, leaves a marker defined from each of the 13 lib files (a function for each of the 12 that define one, `GO_VER` for `lib/constants.sh`), under a test that fails if any lib is not sourced.
+- **R2.** `[PR1]` `setup_env.sh` sets `_SETUP_ENV_DIR` with one `dirname` call, uses it in all 13 lib `source` lines and unsets it before the sourcing guard, while `_LOCAL_CFG` keeps its own `dirname`; a test locates the guard by its `&& return 0` form, asserts the number of top-level `source` lines above it equals the number of tracked `lib/*.sh` files, that each references `${_SETUP_ENV_DIR}` and none contains `$(dirname`, and that `_SETUP_ENV_DIR` is unset after sourcing.
+- **R3.** `[PR1]` In a separate process started with `GO_VER` unset, `cd "${REPO_ROOT}/lib" && source ../setup_env.sh` leaves defined one marker per tracked `lib/*.sh` file (a function defined in exactly one lib, or `GO_VER` for `lib/constants.sh`), from a table whose row count the test asserts equals the number of tracked lib files, and a missing marker is reported as `missing <marker> (lib/<file>)`.
 - **V1.** The PR body records the `claude` three-file A/B figures from this spec and this PR's `test-macos-shard` leg timings beside master's most recent run, as information only.
 - **N1.** No change to any file under `tests/mocks/`.
 - **N2.** No change to what any existing test asserts.
@@ -166,4 +183,10 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - **Goal-Fit.** Lens skipped: the dispatch was denied by the auto-mode classifier. Disposition: Accepted (operator, 2026-11-01); round 1 found no issues and the revision did not change goal or scope.
 - **Ergonomics.** Finding: R2's exact text count of `dirname` is brittle (a harmless comment or an unrelated later use turns it red with no cause shown). Premise re-verified on a fresh copy: 6 log lines, 14 `dirname`. Disposition: Addressed (operator, 2026-11-01): R2 is now structural.
 - **Risk.** Finding: R3 cannot fail in `unit.bats`' own shell, because `setup()` already ran `load_setup_env` (same shell green with a lib line deleted, fresh `bash -c` red); "fourteen forks become two" holds only when executed. Checked clean: nothing reads `_SETUP_ENV_DIR`, `GO_VER` is top-level in `lib/constants.sh`, each other lib defines a top-level function; the orchestrator confirmed no lib runs `$(command -v` at top level. Disposition: Addressed (operator, 2026-11-01): R3 runs in a separate process with `GO_VER` unset; wording corrected.
+
+### Round 3 (`7fd64f90`)
+
+- **Goal-Fit.** Lens skipped: the dispatch was denied by the auto-mode classifier twice (brief reworded between attempts). Disposition: Addressed (operator, 2026-11-01).
+- **Ergonomics.** Finding: R3 red names no lib; its marker list does not grow with `lib/`; markers defined in two libs (`_dry_run_active`, `_git_ssh_opts`) give a false green; the relative path must be built portably (`realpath --relative-to` is GNU-only); R1 should print the calls file on failure. Probe in an archive copy: R2 red then green, R3 green, red with `lib/git_sync.sh`'s line deleted. Assumption: the child `bash` on the macOS shards is bash 4 or later. Disposition: Addressed (operator, 2026-11-01): `lib:marker` table with per-marker messages, row count tied to `git ls-files 'lib/*.sh'`, single-definition markers, `cd "${REPO_ROOT}/lib" && source ../setup_env.sh`, R1 prints the file; the bash assumption is confirmed by the PR's first macOS shard run.
+- **Risk.** Finding: R2 could pass vacuously, because `setup_env.sh` line 4 is a second `BASH_SOURCE[0]`-versus-`${0}` comparison and a parser stopping there inspects zero lines. Checked clean: bats exports no lib function, nothing sets `BASH_ENV` but the coverage tracer, `GO_VER` is not exported, the relative path resolves from `tests/`. Assumption (`load_mocks` needs no mock override before the moved prepend) settled by the orchestrator: exported environment and every generated file identical, master vs moved, apart from the fixture's `.git` internals; mock log 6 lines vs 0. Disposition: Addressed (operator, 2026-11-01): guard located by `&& return 0`, inspected count asserted equal to the tracked lib count.
 
