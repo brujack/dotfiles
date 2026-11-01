@@ -231,6 +231,7 @@ sources the file with a `uname` stub first on `PATH`:
 
 ## Amendments
 
+- R6 -> `tests/setup_env/workflows.bats` sets `LOAD_MOCKS_AI_CONFIG=1` in `setup()` before `load_mocks`, and no other file sets it file-wide; `tests/helpers_load_mocks.bats` sets it only inside its opt-in-positive test; the `install_guards.bats` fixture-default test moves to `tests/helpers_load_mocks.bats`. — the plan's Task 2 prescribes that opt-in-positive test, which must set the variable itself; found by Task 2's spec-compliance review.
 - R11 -> A static guard test fails, naming the file and `LOAD_MOCKS_AI_CONFIG=1`, for any `tests/**/*.bats` file that calls `run_setup_user` or `setup_dotfile_symlinks` without either a line setting `LOAD_MOCKS_AI_CONFIG=1` or one setting `_OVERRIDE_AI_CONFIG_DIR`; it finds at least one calling file. — a redefinition exemption let `workflows.bats` pass with its opt-in deleted, because one of its tests stubs `setup_dotfile_symlinks`; measured in Task 2's mutation control.
 
 ## Multi-Lens Review
