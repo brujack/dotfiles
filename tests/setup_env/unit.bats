@@ -3292,3 +3292,63 @@ _kkd_env() {
     [[ "${_line}" != *MAXBYTES* ]]
   done
 }
+
+# setup_env.sh resolves its own directory once for the lib block. The guard is
+# found by its `&& return 0` form: line 4 is a second BASH_SOURCE[0]-vs-${0}
+# comparison, and a scan stopping there would inspect no lines and pass.
+# load_mocks puts tests/mocks/git first on PATH, and that mock answers ls-files
+# with nothing, so the tracked lib count comes from the real git it resolved.
+_tracked_lib_count() {
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    "${_AI_CONFIG_GIT}" -C "${REPO_ROOT}" ls-files 'lib/*.sh' | wc -l
+}
+
+@test "setup_env.sh sources every lib through _SETUP_ENV_DIR and unsets it" {
+  local _guard _line _n=0 _bad=""
+  _guard="$(grep -n '&& return 0' "${REPO_ROOT}/setup_env.sh" | head -1 | cut -d: -f1)"
+  [ -n "${_guard}" ]
+  while IFS= read -r _line; do
+    _n=$((_n + 1))
+    if [[ ${_line} != *'${_SETUP_ENV_DIR}'* || ${_line} == *'$(dirname'* ]]; then
+      _bad+="${_line}"$'\n'
+    fi
+  done < <(head -n "$((_guard - 1))" "${REPO_ROOT}/setup_env.sh" | grep '^source ')
+  if [[ -n ${_bad} ]]; then
+    printf 'source lines not using ${_SETUP_ENV_DIR}:\n%s' "${_bad}" >&2
+    return 1
+  fi
+  [ "$(_tracked_lib_count)" -gt 0 ]
+  [ "${_n}" -eq "$(_tracked_lib_count)" ]
+  [[ -z ${_SETUP_ENV_DIR+x} ]]
+}
+
+# Characterization guard: green before and after the refactor. It runs in a
+# separate process because setup() already sourced setup_env.sh, so in this
+# shell every marker exists before the test starts. Each function marker is
+# defined in exactly one lib; constants.sh defines no function, so GO_VER.
+@test "setup_env.sh sourced by a relative path defines a marker from every lib" {
+  local -a _markers=(constants.sh:GO_VER detect_env.sh:detect_env
+    developer.sh:clone_or_update_dotfiles git_hooks.sh:install_git_hooks_all_repos
+    git_sync.sh:sync_git_repos helpers.sh:log_info
+    launch_agents.sh:install_renovate_held_agent legacy_rsync.sh:sync_legacy_dirs
+    linux_shared.sh:install_git_linux linux_ubuntu.sh:install_ubuntu_packages
+    macos.sh:install_rosetta update_summary.sh:_update_summary
+    workflows.sh:setup_claude_plugins)
+  [ "${#_markers[@]}" -eq "$(_tracked_lib_count)" ]
+  run env -u GO_VER bash -c '
+    cd "$1/lib" || exit 2
+    source ../setup_env.sh
+    shift
+    _miss=0
+    for _row in "$@"; do
+      _m="${_row#*:}"
+      if [[ ${_m} == GO_VER ]]; then [[ -n ${GO_VER+x} ]] && continue
+      else declare -F "${_m}" > /dev/null && continue
+      fi
+      printf "missing %s (lib/%s)\n" "${_m}" "${_row%%:*}"
+      _miss=1
+    done
+    exit "${_miss}"' _ "${REPO_ROOT}" "${_markers[@]}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *missing* ]]
+}
