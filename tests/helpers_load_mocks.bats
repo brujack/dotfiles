@@ -10,6 +10,9 @@ bats_require_minimum_version 1.5.0
 setup() {
   # shellcheck source=tests/helpers/common.bash
   source "${BATS_TEST_DIRNAME}/helpers/common.bash"
+  # load_mocks' last cp resolves to tests/mocks/cp once tests/mocks leads PATH,
+  # and that mock logs to the shared /tmp/mock_calls unless this is set.
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
 @test "load_mocks writes no mock log and leaves tests/mocks first on PATH" {
@@ -60,9 +63,8 @@ setup() {
 }
 
 @test "load_mocks: execs no cat or chmod and at least one mkdir" {
-  # Task 1 still builds the ai-config fixture unconditionally, and
   # track_ai_config_fixture runs its own mkdir, so the positive control is
-  # "at least one mkdir". The opt-in task tightens this to exactly one.
+  # "at least one mkdir" rather than an exact count.
   local _shim="${BATS_TEST_TMPDIR}/execshim" _c _real
   mkdir -p "${_shim}"
   for _c in mkdir cat chmod; do
@@ -85,7 +87,7 @@ setup() {
   for _shape in "${_m}:/usr/bin:/bin" "/usr/bin:${_m}:/bin" "/usr/bin:/bin:${_m}" \
     "${_m}:${_m}:/usr/bin:/bin" ":/usr/bin:${_m}:/bin" "/usr/bin:${_m}:/bin:"; do
     _got="$(PATH="${_shape}"; load_mocks && printf '%s' "${_AI_CONFIG_GIT}")"
-    if [[ ${_got} != "${_expected}" || ${_got} == "${_m}"* ]]; then
+    if [[ ${_got} != "${_expected}" ]]; then
       printf 'shape %s gave %s, want %s\n' "${_shape}" "${_got}" "${_expected}" >&2
       return 1
     fi

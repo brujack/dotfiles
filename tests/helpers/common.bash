@@ -114,8 +114,8 @@ load_mocks() {
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # _install_ubuntu_hashicorp writes a source file and a keyring through
   # tests/mocks/sudo, which execs real commands; keep both under the test tmpdir
-  # (tdd.md E2). Created here so a test that reads them before the step runs
-  # sees an empty directory, not a missing one.
+  # (tdd.md E2). The single mkdir above creates both, so a test that reads
+  # them before the step runs sees an empty directory, not a missing one.
   export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
   # Every run_update/run_setup_user test runs under a redirected HOME with no

@@ -14,7 +14,7 @@ setup() {
   mkdir -p "${HOME}"
 }
 
-@test "load_mocks: _BREW_BIN is an executable stub under BATS_TEST_TMPDIR" {
+@test "load_mocks: _BREW_BIN is an executable tracked stub under tests/stubs" {
   [[ -x "${_BREW_BIN}" ]]
   [[ "${_BREW_BIN}" == "${REPO_ROOT}/tests/stubs/brew-stub" ]]
 }
