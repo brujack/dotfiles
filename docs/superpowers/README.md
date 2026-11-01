@@ -211,7 +211,8 @@ None open.
 
 | Feature | Notes |
 |---------|-------|
-| Per-test setup floor dominates many bats files | Measured 2026-10-30 on the Studio (serial per-file timing, 86 files, 3613 tests, 2043 s): `load_setup_env` ~95 ms plus `load_mocks` ~95 ms per test, so `tests/setup_env/linux_ubuntu.bats` spends ~61% of its time in setup. The test-macos shard imbalance under `--jobs` (388/458/535 s) is not explained by this floor: CPU seconds under `bats --jobs 3` explain it (spec Measurements). The floor itself stands. Candidate fixes: `setup_file` for state that tests do not mutate, or caching the sourced env. Spec: `docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`. |
+| Per-test setup floor dominates many bats files | Part 1 shipped on the setup floor quick wins PR (spec `docs/superpowers/specs/2026-11-01-setup-floor-quick-wins-design.md`): `load_mocks` prepends `tests/mocks` last and `setup_env.sh` resolves its directory once, ~10% CPU and ~5% wall on the three heaviest files on `claude` (976 tests, `bats --jobs 8`). The Linux re-measure put setup at ~17% of per-test CPU (about 120 ms of ~723 ms), not the Studio serial run's 61% (2026-10-30, spec `docs/superpowers/specs/2026-10-30-test-macos-shard-design.md`); the larger cost is the process-spawn row below. |
+| bats process-spawn cost (part 2 of the setup floor) | In the part-1 A/B, `sys` was 62% of CPU (437 s of 706 s over 976 tests). Every mock is `#!/usr/bin/env bash`, and `strace -e execve` showed `env` making ~9 failed `execve` attempts walking `PATH` before starting bash, on every mock call in every test body. Other mocks still fall back to the shared `${MOCK_CALLS_FILE:-/tmp/mock_calls}` when a test has not set it. Measure on Linux and macOS before choosing a fix (mock shebang, `PATH` order, bats per-test forks). |
 
 ### P2 — bugs and security
 
