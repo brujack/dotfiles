@@ -1,6 +1,7 @@
 # load_mocks setup trim
 
 - **Date:** 2026-11-01
+- **Approved:** 2026-11-01
 - **Backlog row:** "bats process-spawn cost (part 2 of the setup floor)". The operator chose option 3: this setup trim first, as its own PR, and test-body spawn counts as a later spec.
 
 ## Problem
@@ -98,31 +99,41 @@ stub therefore cannot be modified by a test.
 `load_mocks` removes every `${REPO_ROOT}/tests/mocks` entry from `PATH` by parameter expansion on
 `":${PATH}:"`, with the entry quoted inside the pattern so characters in `REPO_ROOT` match literally,
 repeated until no entry remains (`${p//:x:/:}` leaves one of two adjacent copies), then trims the
-outer colons. The result equals the current loop's for every `PATH`: entry absent, first, middle,
-last, repeated adjacent, the only entry, and with empty entries elsewhere kept as they are.
+outer colons. It resolves the same real git as the current loop for every `PATH`: entry absent,
+first, middle, last, repeated adjacent, the only entry, and with a leading or trailing empty entry.
+The two strings differ only there: the loop drops leading and trailing empty entries (`read -a` and
+the `${_clean_path:+:}` join) and the expansion keeps them. An empty entry means the current
+directory, so the git found differs only when the bats working directory holds a `git`, and the
+expansion is then the more faithful filter.
 
 ### One `mkdir -p`
 
-The directories `load_mocks` creates under `BATS_TEST_TMPDIR` are made by one `mkdir -p`.
+Without the opt-in, the directories `load_mocks` creates under `BATS_TEST_TMPDIR` are made by one
+`mkdir -p`. With it, `track_ai_config_fixture` adds its own.
 
 ### ai-config fixture opt-in
 
-`load_mocks` builds the fixture only when `LOAD_MOCKS_AI_CONFIG=1`. `install_guards.bats` and
-`workflows.bats` set it in `setup()` before calling `load_mocks`.
+`load_mocks` builds the fixture only when `LOAD_MOCKS_AI_CONFIG=1`. `workflows.bats` sets it in
+`setup()` before calling `load_mocks`. `install_guards.bats` needs the fixture for one test only
+(`load_mocks defaults _OVERRIDE_AI_CONFIG_DIR to a tracked fixture under BATS_TEST_TMPDIR`), whose
+title becomes false under this design; that test moves to `tests/helpers_load_mocks.bats` as the
+opt-in-positive case below.
 
 Otherwise `_OVERRIDE_AI_CONFIG_DIR` is
 `${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1`, which does not exist. The name
 carries the remedy, so any output that shows the path also shows the fix. No test can reach the real
 `~/git-repos/personal/ai-config`:
 
-- `_ai_config_tracked_items` (real git via `_AI_CONFIG_GIT`) fails on a missing directory and
-  returns 1. `setup_dotfile_symlinks` then logs `Cannot list tracked items` with the path and links
-  nothing, and `run_setup_user` returns 1.
 - `setup_ai_config` resolves `git` through `PATH`, so it runs `tests/mocks/git`. A "clone" is a
-  recorded mock call that creates the directory under `BATS_TEST_TMPDIR`.
+  recorded mock call that creates the directory, empty, under `BATS_TEST_TMPDIR`.
+- `_ai_config_tracked_items` (real git via `_AI_CONFIG_GIT`) then fails, whether the directory is
+  missing (`cannot change to`) or empty after that mock clone (`not a git repository`, or no tracked
+  names inside an enclosing repo). Either way `setup_dotfile_symlinks` logs `Cannot list tracked
+  items` with the path and links nothing, and `run_setup_user` returns 1.
 
-A test that needs the fixture and lacks the opt-in goes red, and a pinned test (below) keeps that
-failure loud.
+A test that needs the fixture and lacks the opt-in goes red. Measured in round 2, 21 of 29 such
+failures in `workflows.bats` printed only a bare assertion, because `run` captures the output that
+names the path. So a static guard test (below) puts the remedy in the one line bats always prints.
 
 ### `lib/constants.sh`
 
@@ -151,15 +162,25 @@ them.
   An empty or unset value fails this test.
 - With `LOAD_MOCKS_AI_CONFIG=1`, `_ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude`
   prints `settings.json`.
-- An exec count: one `load_mocks` call under a counting shim records exactly one `mkdir` (covering
-  R3 and proving the shim records), and no `cat` and no `chmod`.
-- The `PATH` filter: for each `PATH` shape listed in the Design, the resolved `_AI_CONFIG_GIT` is the
-  same real git the current loop finds, or, when `tests/mocks` is the only entry, `load_mocks` fails
+- An exec count: one `load_mocks` call without the opt-in, under a counting shim, records exactly
+  one `mkdir` (covering R3 and proving the shim records), and no `cat` and no `chmod`.
+- The opt-in-positive case, moved from `install_guards.bats`: with `LOAD_MOCKS_AI_CONFIG=1`,
+  `_OVERRIDE_AI_CONFIG_DIR` is under `BATS_TEST_TMPDIR` and `_ai_config_tracked_items` lists
+  `settings.json` under `.claude`.
+- A static guard: every `tests/**/*.bats` file whose text calls `run_setup_user` or
+  `setup_dotfile_symlinks` also sets `LOAD_MOCKS_AI_CONFIG=1`, sets `_OVERRIDE_AI_CONFIG_DIR` itself,
+  or redefines the function it calls. A file that does none fails, naming the file and
+  `LOAD_MOCKS_AI_CONFIG=1`. The guard has a positive control: it finds at least one calling file.
+  Any file it flags at the PR head is fixed in the same PR.
+- The `PATH` filter: for each `PATH` shape listed in the Design, leading and trailing empty
+  entries included, the resolved `_AI_CONFIG_GIT` is the same real git the current loop finds, or, when `tests/mocks` is the only entry, `load_mocks` fails
   with its existing message.
 
-`tests/setup_env/install_guards.bats` or `workflows.bats` gains one loud-failure test:
-`run_setup_user` with the opt-in removed returns 1, and its output contains `Cannot list tracked
-items` and `LOAD_MOCKS_AI_CONFIG=1`.
+`tests/setup_env/workflows.bats` gains one loud-failure test. Its body unsets
+`LOAD_MOCKS_AI_CONFIG`, calls `load_mocks` again (safe: the filter strips the existing mocks entry
+and prepends it once), runs `run_setup_user`, and asserts rc 1 with output containing `Cannot list
+tracked items` and `LOAD_MOCKS_AI_CONFIG=1`. It fails if `load_mocks` regresses to always building
+the fixture.
 
 `tests/setup_env/doctor_brew_links.bats:17` currently pins `_BREW_BIN` under `BATS_TEST_TMPDIR`.
 It changes to pin the behaviour instead: the stub exits 0, prints nothing and logs its argv under
@@ -179,10 +200,11 @@ sources the file with a `uname` stub first on `PATH`:
 ## Docs
 
 - `CLAUDE.md`, Test Seams: the line "`load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a tracked
-  fixture" becomes "builds the fixture only under `LOAD_MOCKS_AI_CONFIG=1` (`install_guards`,
-  `workflows`); otherwise it points at a missing path named after that remedy".
-- `CLAUDE.md`, Mock Pattern, one new line: "`tests/mocks/` holds `PATH` shims; `tests/stubs/` holds
-  absolute-path stubs that `load_mocks` exports as `_*_BIN`, never on `PATH`."
+  fixture" becomes "builds the fixture only under `LOAD_MOCKS_AI_CONFIG=1` (`workflows.bats`);
+  otherwise it points at a missing path named after that remedy".
+- `CLAUDE.md`, Mock Pattern, one new line: "`tests/mocks/` is prepended to `PATH`, so a file there
+  shadows the same-named command; put a stub reached only through a `_*_BIN` seam in `tests/stubs/`
+  when its name would shadow a real command, as the `sysctl-stub`/`systemctl-stub` names once did."
 - The ai-config `dotfiles-test-seams.md` sections those lines point to get the same corrections.
 - The Backlog part-2 row records this trim as shipped and keeps test-body spawn counts as the open
   remainder.
@@ -191,17 +213,18 @@ sources the file with a `uname` stub first on `PATH`:
 
 - **R1.** `[PR1]` `tests/stubs/` holds tracked, executable `brew-az`, `brew-stub`, `sysctl-stub`, `systemctl-stub` and `findmnt-stub`, each starting `#!/usr/bin/env bash`; `load_mocks` exports the five `_*_BIN` paths into it and writes no stub file.
 - **R2.** `[PR1]` `tests/stubs/brew-stub` logs its argv to `${BATS_TEST_TMPDIR:?}/brew-calls` expanded at run time, exits 0 and prints nothing.
-- **R3.** `[PR1]` `load_mocks` creates its directories under `BATS_TEST_TMPDIR` with one `mkdir -p` call.
-- **R4.** `[PR1]` `load_mocks` removes `tests/mocks` from `PATH` by parameter expansion, with no loop over `PATH` entries, and resolves the same real git as the current loop for every `PATH` shape in the Design.
+- **R3.** `[PR1]` Without `LOAD_MOCKS_AI_CONFIG`, `load_mocks` creates its directories under `BATS_TEST_TMPDIR` with one `mkdir -p` call.
+- **R4.** `[PR1]` `load_mocks` removes `tests/mocks` from `PATH` by parameter expansion, with no loop over `PATH` entries, and resolves the same real git as the current loop for every `PATH` shape in the Design, leading and trailing empty entries included.
 - **R5.** `[PR1]` `load_mocks` builds the ai-config fixture only when `LOAD_MOCKS_AI_CONFIG=1`, and otherwise sets `_OVERRIDE_AI_CONFIG_DIR` to `${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1`, which it does not create.
-- **R6.** `[PR1]` `tests/setup_env/install_guards.bats` and `tests/setup_env/workflows.bats` set `LOAD_MOCKS_AI_CONFIG=1` before `load_mocks`, and no other file does.
-- **R7.** `[PR1]` A test pins that `run_setup_user` without the opt-in returns 1 with output containing `Cannot list tracked items` and `LOAD_MOCKS_AI_CONFIG=1`.
+- **R6.** `[PR1]` `tests/setup_env/workflows.bats` sets `LOAD_MOCKS_AI_CONFIG=1` before `load_mocks`, and no other file does; the `install_guards.bats` fixture-default test moves to `tests/helpers_load_mocks.bats`.
+- **R7.** `[PR1]` A `workflows.bats` test unsets `LOAD_MOCKS_AI_CONFIG`, calls `load_mocks` again, and pins that `run_setup_user` returns 1 with output containing `Cannot list tracked items` and `LOAD_MOCKS_AI_CONFIG=1`.
 - **R8.** `[PR1]` `lib/constants.sh` runs `uname -m` once, into `_UNAME_M`, derives `_LINUX_ARCH` by first-occurrence substring replacement and `_RUSTUP_TRIPLE` from it without `sed`, and computes `DOTFILES_REPO_ROOT` without `dirname`.
 - **R9.** `[PR1]` `_LINUX_ARCH`, `_RUSTUP_TRIPLE` and `DOTFILES_REPO_ROOT` hold the same values as before for `uname -m` outputs `x86_64`, `aarch64`, `arm64` and `x86_64_v2`, and for sourcing as `lib/constants.sh`, `../lib/constants.sh` and `constants.sh`; sourcing under `bash -e` succeeds.
-- **R10.** `[PR1]` One `load_mocks` call execs exactly one `mkdir` and no `cat` and no `chmod`.
-- **V1.** On `claude`, two runs per arm of `tests/setup_env/linux_ubuntu.bats`, `workflows.bats` and `install_guards.bats` at `bats --jobs 8`, before and after, with every test ok: the after arm's mean user+sys is at least 20 s below the before arm's (half the predicted ~40 ms per test over 976 tests); the PR body records wall, user and sys for each run.
+- **R10.** `[PR1]` One `load_mocks` call without the opt-in execs exactly one `mkdir` and no `cat` and no `chmod`.
+- **R11.** `[PR1]` A static guard test fails, naming the file and `LOAD_MOCKS_AI_CONFIG=1`, for any `tests/**/*.bats` file that calls `run_setup_user` or `setup_dotfile_symlinks` without setting the opt-in, setting `_OVERRIDE_AI_CONFIG_DIR` itself, or redefining the called function; it finds at least one calling file.
+- **V1.** On `claude`, three interleaved before/after pairs (ABABAB) of `tests/setup_env/linux_ubuntu.bats`, `workflows.bats` and `install_guards.bats` at `bats --jobs 8`, with `uptime` recorded per run: every run's ok count equals its tree's `@test` count for those files and no test is not ok; each pair's after user+sys is below its before; and the after mean is at least 20 s below the before mean (the per-file prediction is about 39.5 s, and seven before-runs spanned 634-652 s). The PR body records wall, user, sys and load for each run.
 - **V2.** `make test` passes in full at the PR head, and every CI leg passes on both platforms.
-- **N1.** No existing `@test` body changes, except the `doctor_brew_links.bats:17` assertion named above.
+- **N1.** No existing `@test` body changes, except the `doctor_brew_links.bats:17` assertion and the `install_guards.bats` fixture-default test's move to `tests/helpers_load_mocks.bats`, both named above.
 - **N2.** No file under `tests/mocks/` changes.
 - **N3.** `tests/stubs/` is not added to `PATH` anywhere.
 - **N4.** No `setup_file` caching of a sourced environment or fixture.
@@ -256,3 +279,27 @@ controls added.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (`0d6cf67a`, all three lenses)
+
+- **Goal-Fit.** Worth building; payoff modest (about 118 s suite-wide, about 6% of the V1 files).
+  V1 passed on zero tests and cited a weighted figure; the per-file sum for the V1 files is about
+  39.5 s. Three before-runs spanned 8.6 s as load rose; arms should interleave. R7 must re-call
+  `load_mocks`. Assumption: run-to-run noise stays well below 20 s; four more before-runs by the
+  orchestrator spanned 13.4 s (634.3-647.7 s), seven in all 634-652 s.
+- **Ergonomics.** With the opt-in forgotten, 21 of 29 `workflows.bats` failures hid the remedy
+  (`run` captures it); a static guard is needed. `install_guards` needs the fixture for one
+  mislabelled test only. The CLAUDE.md stubs line was already false (`cargo` and `gpg-dearmor` are
+  `_BIN` stubs in `tests/mocks/`). Assumption: forgotten opt-ins mostly happen in `workflows.bats`;
+  the static guard removes the dependence on it.
+- **Risk.** No isolation hole. R3/R10 contradicted the opt-in path (the fixture has its own
+  `mkdir`); V1 passed on zero tests; the `PATH` equivalence was false as worded (leading/trailing
+  empty entries), though the resolved git is the same; the isolation sentence misdescribed the
+  mechanism (the mock clone creates the directory first); R7 was underspecified;
+  `${BATS_TEST_TMPDIR:?}` changes no caller today (exit 127 if ever unset). Assumption: V1's margin
+  exceeds run-to-run spread; settled by the interleaved pairs.
+- **Disposition:** Addressed (operator, 2026-11-01): all eight fixes applied (R3/R10 scoped, V1
+  interleaved with pinned counts, R4 restated, isolation sentence corrected, R7 re-calls
+  `load_mocks`, R11 static guard, opt-in narrowed to `workflows.bats` with the one test moved, CLAUDE.md
+  line restated). Review stopped at round 2: every finding was in the test apparatus or wording, and
+  the design shrank (opt-in from five files to one).
