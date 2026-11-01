@@ -108,7 +108,8 @@ _step() {
   local _s
   _s="$(_step test-shard 'suite|report|executed')"
   [ -n "${_s}" ]
-  [[ "${_s}" == *'bash scripts/ci-suite-report.sh shard-out/bats_run.log --files "shard-${{ matrix.shard }}.files"'* ]]
+  # Whole line, so a trailing `|| true` cannot neutralise the check.
+  printf '%s\n' "${_s}" | command grep -qxF '        run: bash scripts/ci-suite-report.sh shard-out/bats_run.log --files "shard-${{ matrix.shard }}.files"'
   if printf '%s' "${_s}" | command grep -qE '^ *(- )?if:'; then return 1; fi
   # The log path is the COVERAGE_TRACE_DIR value the coverage step writes to.
   [ "$(_code test-shard | _count '^          COVERAGE_TRACE_DIR: shard-out$')" -eq 1 ]
@@ -144,7 +145,12 @@ _step() {
 
 @test "the gate is if always(), fails unless the shard result is success, 10 minutes" {
   _job_text test | command grep -qE '^    if: always\(\)[[:space:]]*$'
-  _code test | command grep -qF '[ "${{ needs.test-shard.result }}" = "success" ] || exit 1'
+  local _req
+  _req="$(_step test 'Require every shard')"
+  [ -n "${_req}" ]
+  printf '%s\n' "${_req}" | command grep -qxF '          [ "${{ needs.test-shard.result }}" = "success" ] || exit 1'
+  # No early success path before or after the comparison.
+  if printf '%s\n' "${_req}" | command grep -qE 'exit 0|\|\| true|&& exit'; then return 1; fi
   _code test | command grep -qE '^    timeout-minutes: 10$'
   _code test | command grep -qE '^    runs-on: ubuntu-latest$'
 }
@@ -164,6 +170,25 @@ _step() {
   printf '%s\n' "${_t}" | command grep -qE '^          path: cov-shards$'
   printf '%s\n' "${_t}" | command grep -qF 'bash scripts/ci-shard-gate.sh --with-traces cov-shards'
   printf '%s\n' "${_t}" | command grep -qF 'bash scripts/run-bash-coverage.sh --score cov-shards/shard-*.trace'
+}
+
+@test "no job under test sets continue-on-error" {
+  [ -n "$(_code test-shard)" ]
+  [ -n "$(_code test)" ]
+  if _code test-shard | command grep -q 'continue-on-error'; then return 1; fi
+  if _code test | command grep -q 'continue-on-error'; then return 1; fi
+}
+
+@test "the score step fails on a scoring error and on a missing percentage" {
+  local _s
+  _s="$(_step test 'Score the union')"
+  [ -n "${_s}" ]
+  printf '%s\n' "${_s}" | command grep -qxF '          bash scripts/run-bash-coverage.sh --score cov-shards/shard-*.trace > /tmp/bash-cov-out.txt 2>&1 || { cat /tmp/bash-cov-out.txt; exit 1; }'
+  printf '%s\n' "${_s}" | command grep -qxF '          if [ -z "${PCT}" ]; then'
+  printf '%s\n' "${_s}" | command grep -qxF '            printf "FAIL: coverage output not found\n" >&2'
+  printf '%s\n' "${_s}" | command grep -qxF '            exit 1'
+  printf '%s\n' "${_s}" | command grep -qxF '          if [ "${PCT}" -lt 91 ]; then'
+  if printf '%s\n' "${_s}" | command grep -qE '\|\| true'; then return 1; fi
 }
 
 @test "the gate enforces the 91 floor and publishes the badge" {
