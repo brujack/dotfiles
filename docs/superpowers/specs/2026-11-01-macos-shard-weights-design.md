@@ -1,0 +1,171 @@
+# macOS shard weights measured on the runner
+
+- **Date:** 2026-11-01
+- **Backlog row:** "bats process-spawn cost (part 2 of the setup floor)" (operator chose the CI wall-clock win first, as option 3 of the part-2 brainstorm)
+
+## Problem
+
+The macOS gate is the long pole of every PR. Its three `test-macos-shard` legs are packed by
+`scripts/bats-shard.sh` from `tests/bats-weights.tsv`, and the packing is badly unbalanced on the
+runner even though it is balanced on paper.
+
+Measured on run 41323131527 (dotfiles#415, `macos-26-arm64` image `20261021.618` on all three legs):
+
+| Leg | Predicted CPU s (table) | `Run tests` step | Heaviest file in the leg                    |
+| --- | ----------------------- | ---------------- | ------------------------------------------- |
+| 1   | 879                     | 359 s            | `tests/setup_env/unit.bats` (176.6)         |
+| 2   | 902                     | 141 s            | `tests/setup_env/linux_ubuntu.bats` (529.1) |
+| 3   | 900                     | 418 s            | `tests/setup_env/workflows.bats` (380.3)    |
+
+The previous merged run (41262365883, dotfiles#414) shows the same shape: one leg about 2m47s while
+the others took 6m32s and 7m47s. The slowest leg sets the gate's wall time, so the gate waits about
+4.6 minutes longer than a balanced split of the same work would.
+
+Population: the table was measured on the Mac Studio (2026-10-31, `ab92a62d`, `bats --jobs 3 <file>`
+per file under `env -i`); the claim it is used for is CPU cost on a `macos-latest` runner. The two
+differ. Leg 2 holds the table's single heaviest file and finished first, so that file's Studio
+weight greatly overstates its cost on the runner. Why is not derivable from the repo:
+`linux_ubuntu.bats` has one `skip`, gated on Darwin without GNU `ar`, and both hosts are Darwin.
+
+The same table balances the Linux legs (dotfiles#415: 4m13s / 5m08s / 5m14s), so the defect is a
+macOS-runner one.
+
+The existing reseed procedure (ai-config
+`docs/knowledge/dotfiles-bats-test-infrastructure.md` § `Shard weights: reseed procedure`) already
+says to reseed when a leg drifts more than 10% from its packed weight. Leg 2's step time over its
+weight is 0.16 s/CPU s against 0.40 and 0.46 for the others. A Studio reseed would measure the wrong
+host again.
+
+## Design
+
+Measure the macOS table on the runner, with a reusable dispatch-only workflow, and point the macOS
+legs at it. The table's definition is unchanged: user plus system CPU seconds, children included, of
+`bats --jobs 3 <file>` run alone. Only the host changes.
+
+### `scripts/measure-bats-weights.sh <list-file>`
+
+For each path in `<list-file>`, run that file alone as `"${_MEASURE_TIME_BIN}" -p
+"${_MEASURE_BATS_BIN}" --jobs 3 <file> < /dev/null`, and print one row:
+`<path>\t<user+sys>\t<ok count>\t<rc>`.
+
+- Seams: `_MEASURE_TIME_BIN` (default `/usr/bin/time`) and `_MEASURE_BATS_BIN` (default `bats`).
+- Files run one after another, never concurrently, so a 3-vCPU runner is not contended.
+- A red file's row carries its real rc and the next file still runs. After the last file the script
+  exits 1 if any row's rc is non-zero.
+- A timer output with no `user` line or no `sys` line gives that row rc 2 and the message
+  `no CPU figure: <path>` on stderr.
+- The Studio form of the reseed procedure calls this script instead of its inline `one()` function,
+  so one implementation serves both hosts.
+
+### `scripts/build-bats-weights.sh <host-label> <tsv>...`
+
+Merge measured rows into a weights table on stdout.
+
+It exits 1, naming the path on stderr, on any of:
+
+- a row whose rc is not 0;
+- a row whose CPU figure is 0.0 or not a number;
+- a path that appears in more than one row;
+- a `find tests -name '*.bats'` file with no row;
+- a row for a path that is not a `find` result.
+
+It runs from the repo root and reads the short SHA from `git rev-parse --short HEAD`. Otherwise it prints one header comment
+(`# CPU s (user+sys, children) of bats --jobs 3 <file>; <host-label> @ <short sha>; reseed: ai-config docs/knowledge/dotfiles-bats-test-infrastructure.md`)
+then `<path>\t<cpu>` rows with one decimal, sorted with `LC_ALL=C sort`. That is the format
+`bats-shard.sh` already reads, so the packer is unchanged.
+
+### `.github/workflows/bats-weights-macos.yml`
+
+Triggered by `workflow_dispatch` only.
+
+- `measure`: a 3-leg matrix on `macos-latest`, with the same tool installs as `test-macos-shard`
+  (unpinned Homebrew bash, bats-core, parallel, coreutils; pinned, checksum-verified shellcheck and
+  uv), copied rather than shared, as `ci.yml` already repeats them. Each leg runs
+  `bash scripts/bats-shard.sh <i> 3` to choose its files (any table will do; balance only changes
+  wall time), runs the measure script on them and uploads its rows as `weights-rows-<i>`.
+- `build`: on `ubuntu-latest`, `needs: measure`, `if: always()`. Downloads every `weights-rows-*`
+  artifact, runs `build-bats-weights.sh "macos-latest runner"` over them and uploads
+  `bats-weights-macos.tsv`. A missing upload or a red row makes the build refuse, so no partial
+  table exists.
+- Every job: `permissions: contents: read`, `timeout-minutes`, and
+  `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`. Actions are SHA-pinned as in `ci.yml`.
+
+### CI switch
+
+`test-macos-shard`'s "Compute shard list" step gains `env: BATS_WEIGHTS: tests/bats-weights-macos.tsv`.
+`test-shard` keeps `tests/bats-weights.tsv`.
+
+### Rollout
+
+GitHub dispatches only a workflow whose file is on the default branch, so this ships as two PRs:
+
+1. **PR1:** both scripts, their tests and the workflow.
+2. After PR1 merges: `gh workflow run bats-weights-macos.yml --ref master`, wait for it, download
+   the `bats-weights-macos.tsv` artifact.
+3. **PR2:** commit `tests/bats-weights-macos.tsv` and the CI `env:` line; the PR body names the
+   dispatch run ID.
+
+### Error handling
+
+- One red file does not hide the others' cost, but no table is built from a run with any red file.
+- A cancelled or failed leg leaves files without rows, and the build refuses naming them.
+- A timer that prints no CPU figure fails that row, so a broken instrument cannot write zeros.
+- A file added after the reseed has no row; `bats-shard.sh`'s existing fallback weighs it by
+  `@test` count. Balance degrades, the file set does not.
+- Without the `env:` line the macOS legs fall back to the Studio table, which is today's behaviour;
+  a shape test pins the line.
+
+### Testing
+
+`tests/scripts/measure_bats_weights.bats` (new), with the time and bats seams pointed at stubs:
+
+- The time stub prints `user 1.25` and `sys 0.50`; the row's CPU figure is exactly `1.75`.
+- A bats stub emitting 3 `ok` lines gives ok count 3.
+- A red file's row carries its rc, the next file still runs and the script exits 1.
+- A timer with no `user`/`sys` line gives rc 2 and `no CPU figure: <path>`.
+- A bats stub that reads stdin sees EOF.
+
+`tests/scripts/build_bats_weights.bats` (new), on a fixture tree under `tests/fixtures/`, never the
+real `find`:
+
+- A complete fixture produces a golden table: header, one decimal, `LC_ALL=C` order.
+- Each refusal fails naming the path: rc not 0, zero CPU, non-numeric CPU, duplicate, missing file,
+  dead row.
+
+CI shape, parsed per job:
+
+- `tests/scripts/ci_bats_weights_macos.bats` (new): the workflow's only trigger is
+  `workflow_dispatch`; every job has `timeout-minutes` and `contents: read`; `build` has
+  `if: always()`.
+- `tests/scripts/ci_test_macos_shard.bats` (PR2): the "Compute shard list" step of
+  `test-macos-shard` sets `BATS_WEIGHTS: tests/bats-weights-macos.tsv`; `test-shard`'s does not.
+- `tests/scripts/bats_shard.bats` (PR2): its table-format test also covers
+  `tests/bats-weights-macos.tsv`.
+
+### Docs
+
+- The reseed section in ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md` is rewritten
+  around the two scripts: the dispatch command for the macOS table, the Studio command for the
+  default table.
+- `CLAUDE.md`'s `tests/bats-weights.tsv` line names both tables and which legs read each.
+
+## Requirements
+
+- **R1.** `[PR1]` `scripts/measure-bats-weights.sh <list>` runs each listed file alone as `<time> -p <bats> --jobs 3 <file> < /dev/null` and prints `<path>\t<user+sys>\t<ok count>\t<rc>` per file.
+- **R2.** `[PR1]` The measure script records a red file's real rc, still runs the remaining files, and exits 1 when any row's rc is non-zero.
+- **R3.** `[PR1]` The measure script gives a row rc 2 and prints `no CPU figure: <path>` on stderr when the timer output lacks a `user` or `sys` line.
+- **R4.** `[PR1]` `_MEASURE_TIME_BIN` (default `/usr/bin/time`) and `_MEASURE_BATS_BIN` (default `bats`) select the timer and bats binaries.
+- **R5.** `[PR1]` `scripts/build-bats-weights.sh <host-label> <tsv>...` exits 1 naming the path on a non-zero rc, a zero or non-numeric CPU figure, a duplicate path, a `find tests -name '*.bats'` file with no row, or a row for a path `find` does not return.
+- **R6.** `[PR1]` On valid input the build script prints one header comment naming the host label, the short SHA and the reseed section, then `<path>\t<cpu>` rows with one decimal in `LC_ALL=C sort` order.
+- **R7.** `[PR1]` `.github/workflows/bats-weights-macos.yml` triggers only on `workflow_dispatch`, runs a 3-leg `macos-latest` `measure` matrix and an `ubuntu-latest` `build` job with `needs: measure` and `if: always()`, and uploads `bats-weights-macos.tsv`.
+- **R8.** `[PR1]` Every job in that workflow declares `timeout-minutes`, `permissions: contents: read` and `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`, and every action is SHA-pinned.
+- **R9.** `[PR2]` `tests/bats-weights-macos.tsv` is the build script's output from a dispatch run at master.
+- **R10.** `[PR2]` `test-macos-shard`'s "Compute shard list" step sets `BATS_WEIGHTS: tests/bats-weights-macos.tsv`; `test-shard`'s does not set `BATS_WEIGHTS`.
+- **V1.** The first dispatch at master produces a table with one row per `find tests -name '*.bats'` file (92 at writing), every one measured rc 0; the PR2 body names the run ID.
+- **V2.** Over the first 3 PR runs after PR2 merges, each run's slowest `test-macos-shard` `Run tests` step is at most 1.15 times that run's three-leg mean (run 41323131527: 418 s against 306 s, 1.37).
+- **V3.** The slowest macOS `Run tests` step is below 418 s on at least 2 of those 3 runs.
+- **V4.** The ai-config reseed section (another repo, so outside this diff) runs the Studio table through `scripts/measure-bats-weights.sh` and `scripts/build-bats-weights.sh` and documents the dispatch command for the macOS table, landing with PR1.
+- **N1.** `tests/bats-weights.tsv` and the `test-shard` legs are unchanged.
+- **N2.** `scripts/bats-shard.sh` and `lib/bats_shard_pack.awk` are unchanged.
+- **N3.** The shard count of either platform is unchanged.
+- **N4.** The new workflow has no `schedule`, `push` or `pull_request` trigger.
