@@ -1,6 +1,7 @@
 # macOS shard weights measured on the runner
 
 - **Date:** 2026-11-01
+- **Status:** Retired 2026-11-01 without shipping: Step 8 refuted the premise (see Multi-Lens Review).
 - **Backlog row:** "bats process-spawn cost (part 2 of the setup floor)" (operator chose the CI wall-clock win first, as option 3 of the part-2 brainstorm)
 
 ## Problem
@@ -198,7 +199,7 @@ so it would pass or fail by chance. Simpler path: keep per-file `bats --timing` 
 legs on success for three runs and find where the variance lives.
 Assumption: runner speed is equal across a run's three legs and stable between runs. Refuted or
 confirmed by comparing one file's per-file time across legs and runs.
-Disposition:
+Disposition: Accepted, reason: premise refuted by the five-run table; spec retired without shipping (operator, 2026-11-01).
 
 ### Ergonomics
 
@@ -207,7 +208,7 @@ reseeded on the Studio, which hosts no sessions; no signal says either table is 
 table already lacks rows for 6 of 92 files); the header should record the runner image version.
 Assumption: a leg's `Run tests` time is a stable function of its file list on a fixed SHA.
 Settled by re-running all jobs of one CI run two or three times on the same SHA.
-Disposition:
+Disposition: Accepted, reason: premise refuted by the five-run table; spec retired without shipping (operator, 2026-11-01).
 
 ### Risk
 
@@ -217,7 +218,7 @@ seconds on a slow instance. Minor gaps if it survived: the build job needs `acti
 measure script must keep timer stderr apart from bats stderr; it drops the Studio procedure's `env -i`.
 Assumption: one file's CPU seconds on one `macos-latest` instance predict its cost on another.
 Settled by a dispatch where all three legs measure the same list and rows are compared.
-Disposition:
+Disposition: Accepted, reason: premise refuted by the five-run table; spec retired without shipping (operator, 2026-11-01).
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
