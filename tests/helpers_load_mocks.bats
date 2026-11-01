@@ -132,19 +132,21 @@ _git_clean() {
 # with a call, and "FLAGGED <file>" when that file neither sets LOAD_MOCKS_AI_CONFIG=1
 # nor assigns _OVERRIDE_AI_CONFIG_DIR at the start of a statement.
 # A call is in command position: after line start, `;` `&&` `||` `|` `(` `$(` `!`
-# `if` or `then`, optionally behind VAR=value assignments and `run` with flags.
-# Out of scope: `run bash setup_env.sh -t setup_user`, which has no direct call.
+# `{` or the keywords if/elif/then/else/do/while/until, optionally behind VAR=value
+# assignments and `run` with flags.
+# Out of scope: `run bash setup_env.sh -t setup_user` (no direct call), and the
+# command-position wrappers backtick, `command X` and `time X`.
 _guard_scan() {
   local _root="$1" _file _sep _assign _run _name _call _optin
-  _sep='(^|[;&|(!]|(^|[[:space:]])(if|then))'
+  _sep='(^|[;&|(!{]|(^|[[:space:]])(if|elif|then|else|do|while|until))'
   _assign='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
   _run='(run([[:space:]]+-[^[:space:]]+)*[[:space:]]+)?'
   _name='(run_setup_user|setup_dotfile_symlinks)([[:space:];&|)]|$)'
   _call="${_sep}[[:space:]]*${_assign}${_run}${_name}"
   _optin='^[[:space:]]*(export[[:space:]]+|local[[:space:]]+)?(LOAD_MOCKS_AI_CONFIG=1|_OVERRIDE_AI_CONFIG_DIR=)'
   while IFS= read -r _file; do
-    # drop comments, @test titles and declare -f before matching
-    if command grep -vE '^[[:space:]]*(#|@test|declare[[:space:]]+-f)' "${_root}/${_file}" | command grep -qE "${_call}"; then
+    # drop comments and @test titles before matching
+    if command grep -vE '^[[:space:]]*(#|@test)' "${_root}/${_file}" | command grep -qE "${_call}"; then
       printf 'CALLER %s\n' "${_file}"
       command grep -qE "${_optin}" "${_root}/${_file}" || printf 'FLAGGED %s\n' "${_file}"
     fi
@@ -154,17 +156,23 @@ _guard_scan() {
 @test "every bats file calling run_setup_user or setup_dotfile_symlinks opts in or overrides the ai-config dir" {
   # A per-test stub redefinition is deliberately not an exemption: workflows.bats
   # stubs setup_dotfile_symlinks in one test but its other tests need the fixture.
-  local _out
-  _out="$(cd "${REPO_ROOT}" && _guard_scan "${REPO_ROOT}")"
-  # positive control: the scan finds the known caller
-  printf '%s\n' "${_out}" | command grep -qx 'CALLER tests/setup_env/workflows.bats'
-  if printf '%s\n' "${_out}" | command grep -q '^FLAGGED '; then
-    printf '%s\n' "${_out}" | command grep '^FLAGGED ' >&2
+  local _out _flagged _callers _file
+  # Skip this file: its probe strings are call forms by design, and it would
+  # otherwise pass only because the opt-in test below exports the variable.
+  _out="$(cd "${REPO_ROOT}" && _guard_scan "${REPO_ROOT}" | command grep -vx -e 'CALLER tests/helpers_load_mocks.bats' -e 'FLAGGED tests/helpers_load_mocks.bats')"
+  _flagged="$(printf '%s\n' "${_out}" | command grep '^FLAGGED ' || true)"
+  if [[ -n ${_flagged} ]]; then
+    while IFS= read -r _file; do
+      printf '%s: calls run_setup_user/setup_dotfile_symlinks without LOAD_MOCKS_AI_CONFIG=1 or _OVERRIDE_AI_CONFIG_DIR\n' "${_file#FLAGGED }" >&2
+    done <<< "${_flagged}"
     return 1
   fi
+  # positive control: the caller set is exactly the three known files
+  _callers="$(printf '%s\n' "${_out}" | command grep '^CALLER ' | LC_ALL=C sort)"
+  [ "${_callers}" = "$(printf 'CALLER tests/setup_env/extracted_functions.bats\nCALLER tests/setup_env/install_guards.bats\nCALLER tests/setup_env/workflows.bats')" ]
 }
 
-@test "static guard scan flags every call form and ignores comments, titles and declare -f" {
+@test "static guard scan flags every call form and ignores comments and titles" {
   local _repo="${BATS_TEST_TMPDIR}/guard-probe" _f _out _i=0
   local -a _forms=(
     '  run run_setup_user'
@@ -177,12 +185,19 @@ _guard_scan() {
     '  _o="$(setup_dotfile_symlinks 2>&1)"'
     '  run_setup_user;'
     '  if run_setup_user; then :; fi'
+    '  elif run_setup_user; then :'
+    '  else run_setup_user'
+    '  while run_setup_user; do :; done'
+    '  for i in 1; do run_setup_user'
+    '  { run_setup_user; }'
     '  setup_dotfile_symlinks'
   )
   local -a _inert=(
     '  declare -f run_setup_user'
     '  # run_setup_user'
+    '  # if run_setup_user; then'
     '@test "run_setup_user does a thing" {'
+    '@test "a; run_setup_user; b" {'
     '  setup_dotfile_symlinks() { return 1; }'
   )
   mkdir -p "${_repo}"
