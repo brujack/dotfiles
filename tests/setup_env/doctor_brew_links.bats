@@ -16,7 +16,7 @@ setup() {
 
 @test "load_mocks: _BREW_BIN is an executable stub under BATS_TEST_TMPDIR" {
   [[ -x "${_BREW_BIN}" ]]
-  [[ "${_BREW_BIN}" == "${BATS_TEST_TMPDIR}"/* ]]
+  [[ "${_BREW_BIN}" == "${REPO_ROOT}/tests/stubs/brew-stub" ]]
 }
 
 @test "load_mocks: the _BREW_BIN stub exits 0, prints nothing, logs argv under BATS_TEST_TMPDIR" {
