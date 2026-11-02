@@ -410,9 +410,9 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 
 ### Verifications
 
-- V1: bats --count: cargo_tools_update.bats unchanged, workflows.bats +2 (the two R5 pins). make test 3774/3774 at 3c4211eb (local); CI legs pending at push.
+- V1: bats --count: cargo_tools_update.bats unchanged, workflows.bats +2 (the two R5 pins). First CI run at 3bc8d9d3 failed test-shard(3) and test-macos-shard(3): the pins inherited HAS_DEVTOOLS (pip-check records only in the HAS_DEVTOOLS-gated pip block); fixed in 6143f411. make test 3774/3774 locally with every HAS_* unset at 6143f411; CI re-run pending at push.
 - V2: Scan before 91 flagless, after 84 = 81 keep-full (unchanged list) + 2 new pins + 1 heuristic artifact (ledger_write_entry test now ends at the pin helper). Recorded in PR body.
 - V3: UPDATE_BREW: workflows.bats:1350 red under 'brew update'->'brew upgrade-x' (lib/helpers.sh:300); :2181 red under MACOS guard->true (lib/workflows.sh:876). UPDATE_PKGS: :1418 red under UPDATE_PKGS gate rename (lib/workflows.sh:1082; apt-call mutations stay green, pre-existing loose grep, Backlog row); :2248 red under apt reason 'nope'. UPDATE_BREW+UPDATE_PIP: cargo_tools_update.bats 'marks cargo-tools OK' red under _update_record_end forced 1 (lib/workflows.sh:1437).
 - V4: gems block (lib/workflows.sh:1449-1456) deleted in archive copy: both pins not ok, 'no summary row for gems'.
-- V5: gems gate _run_all arm removed: both pins not ok, '[SKIP] gems flag not set'. pyenv-shims gate (line 1230) arm removed: both pins not ok, '[SKIP] pyenv-shims flag not set'. Empty array control also red.
+- V5: gems gate _run_all arm removed: both pins not ok, '[SKIP] gems flag not set'. pyenv-shims gate (line 1230) arm removed: both pins not ok, '[SKIP] pyenv-shims flag not set'. Empty array control also red. Gems control re-run with every HAS_* unset after 6143f411: both pins red.
 - V6: claude, load ~6: before (merge-base) wall 63.34 user 121.63 sys 172.32; after wall 63.70 user 117.65 sys 166.08. CPU saving 10.2 s vs predicted ~11 s (includes the two new full-run pins).
