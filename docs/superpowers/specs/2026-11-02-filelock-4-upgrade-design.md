@@ -52,3 +52,55 @@ reading the lock diff, which the PR body states in its first line.
 - **N1.** `pyproject.toml` does not change.
 - **N2.** No package other than `filelock` changes version in `uv.lock`.
 - **N3.** No change to `checkov`, `packaging` or `virtualenv`.
+
+## Multi-Lens Review
+
+Reviewed at commit: `51607952` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth doing as scoped; pinning 4.2.7 (or 4.2.1, the highest first-patched version) clears all 48
+`filelock` alerts. Premise wording is wrong: the 48 are 12 each across four manifests (`uv.lock`,
+`requirements-ci.txt`, `requirements-ci-audit.txt`, `requirements-runtime-ci.txt`), all of which the design
+regenerates. The `virtualenv` block really is only `checkov`: its newest release (3.4.3) still requires
+`packaging<24.0,>=23.0`, and with `checkov` removed `virtualenv` resolves to 21.15.2. Reads-it: V1 is a
+regression guard, not upgrade evidence (CI never imports the venv's tools); V2's `ansible-lint --version` may
+never reach `FileLock(` in `initialize_options()`; V3 passes on an empty `gh api` result, so pin
+`filelock` = 0 and `virtualenv` = 30 in the same query.
+Assumption: that filelock 4 keeps the API ansible-lint uses at lint time; settled by linting a one-task
+playbook in the upgraded venv.
+Disposition:
+
+### Ergonomics
+
+Finding: The target version moves. Design step 1 runs an unpinned `--upgrade-package filelock`, and 4.2.7 was
+uploaded 2026-11-02T16:09Z, so a later run can produce 4.2.8 and fail R1. 4.2.7 also skips the repo's own
+`minimumReleaseAge: 14 days` (`renovate.json:51`); 4.2.1, the release carrying the fix, is 16 days old. Pin
+the version (`--upgrade-package filelock==<ver>`) and either take 4.2.1 or record why the age policy is
+waived. Verified: the change touches exactly `uv.lock` and the three renderings (6 lines each),
+`check-requirements-ci` passes, `requirements_ci.bats` 31/31, and the auto-merge gate prints `uv.lock changed
+without pyproject.toml -- leaving open for a human`. V3 should read each alert's `state` as `fixed`.
+Assumption: that the unpinned upgrade resolves to the same version at implementation time; removed by pinning.
+Disposition:
+
+### Risk
+
+Finding: V2 cannot catch a real filelock break in three of its five checks. A `sitecustomize` probe wrapping
+`BaseFileLock.acquire` counted 0 acquires for `ansible-lint --version` (`initialize_options` skips the cache
+lock when `options.version` is set), `pre-commit --version` and `checkov --version`; 2 for `virtualenv <dir>`
+(`_CountedFileLock`); 1 for `ansible-lint` on a one-task playbook (two parallel runs on a shared cache: no
+Timeout). Replace the `--version` probe with a lint of a fixture playbook asserting a specific result; keep
+the `virtualenv` create. API checked: virtualenv 21.14.1 subclasses `FileLock` and calls `acquire(timeout,
+poll_interval)`/`release(force)` positionally, which 4.2.7's signatures keep; virtualenv declares
+`filelock<5,>=3.24.2`. Fact errors: `cachecontrol` is a fourth consumer (0 acquires under `pip-audit -r`);
+the real build path (`lib/helpers.sh:284`) syncs `--group runtime --group test-lint`, not `--all-groups`.
+Apparatus: set `ANSIBLE_COLLECTIONS_PATH` to a scratch path, since ansible-lint otherwise discovers the real
+venv's collections.
+Assumption: that python-discovery's `_cache.locked()` (`with FileLock(...)`) works under 4.x; no V2 check
+reached it. Settled by `virtualenv -p python3.14 <dir>` with `VIRTUALENV_OVERRIDE_APP_DATA=<tmp>` and
+watching for a `UnixFileLock` acquire from `python_discovery`.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
