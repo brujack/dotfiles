@@ -202,6 +202,43 @@ reads `cat`'s stderr text. Test 5 needs `run --separate-stderr` and an exact row
 Assumption: no uncertain assumption found.
 Disposition: Addressed (operator, 2026-11-02) — V1 as in Goal-Fit; test 5 as in Ergonomics.
 
+### Round 2
+
+Reviewed at commit: `b0763bed` (round-1 dispositions applied). All three lenses re-ran.
+
+#### Goal-Fit (round 2, `b0763bed`)
+
+Finding: Still worth building; the 13 sites and line numbers are unchanged since `a2539a4e`. V2's "one of
+598–604" admits 598, whose mutant cannot go red: the function returns early without `started_at`, which test 3
+must seed. V3 fails the reads-it test: the P1 row closes whatever it shows, and V3(a) is noise (the same
+`test-macos-shard` leg ranged 150–439 s across the last four green master runs), so drop (a) and let (b), the
+Studio pair, decide whether the P1 row closes. V1's `COMPARED > 0` passes with n = 1: enumerate the
+function × state cells and pin `COMPARED == N`. Apparatus: lines 336 and 439 steer early return and files
+written, not stdout, so V1 should also diff `_DOTFILES_RUN_TMPDIR` after each call.
+Assumption: that `$(<f)` saves real CPU on the macOS legs (Homebrew bash 5 under bats); settled by V3(b).
+Disposition:
+
+#### Ergonomics (round 2, `b0763bed`)
+
+Finding: No design issue. Tests 3 and 5 written and run as specified: with the `python3` stub the entry carries
+`"run_id": "unknown"`, without it a real uuid (so the stub is needed); line 602 is the only `python3` in the
+function. Test 5's regex matches the real padded row (`[OK]   brew                 $`) and a no-`status_brew`
+control fails it. Apparatus: put the stub dir under `BATS_TEST_TMPDIR` (not `_mk_ledger_capture`'s leaking
+`mktemp -d` pattern); add `unset LEDGER_BIN` to the new tests, since an exported one overrides the capture mock.
+Assumption: no uncertain assumption found on this lens.
+Disposition:
+
+#### Risk (round 2, `b0763bed`)
+
+Finding: V1's emptiness rule can hide a real regression. With `status_brew` and `result_brew` both mode 000,
+old, new and a 750 brace-drop mutant all write stderr (3, 3 and 4 lines), so emptiness matches and V1 reports
+`DIVERGING: 0`; with only `result_brew` unreadable, old and new write 0 lines and the mutant 1, so V1 catches
+it. Fix: one unreadable file per case, or strip the `cat: ` and `<file>: line N: ` prefixes and compare the
+remaining lines exactly. V2 probed: 148 → test 1 red; 599, 602, 604 → test 3 red (602 on the stderr
+assertion alone, values intact); 750 → test 5 red; 598 → none red. Name the sites 599, 602 or 604.
+Assumption: no uncertain assumption found.
+Disposition:
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
