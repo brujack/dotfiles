@@ -130,3 +130,54 @@ The mutation control and the old/new differential are V2 and V1.
 - **N3.** No new shell function in `lib/`.
 - **N4.** No lint, ratchet or guard on `$(cat` usage.
 - **N5.** `tests/bats-weights.tsv` does not change.
+
+## Multi-Lens Review
+
+Reviewed at commit: `f3b0b15d` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building as scoped. `strace` confirmed `x=$(<f)` makes 0 forks against 1 for `$(cat f)` on bash
+5.3.9, and the Studio's Homebrew bash (what CI's macOS legs install) is 5.3.20. The blind `sed` substitution
+the premise A/B measured is not shippable: it leaks `No such file` at 148, 598–604 and 750, so R2's rework is
+necessary. Reads-it test: V1 has no named consumer and passes on zero comparisons (`DIVERGING: 0` with nothing
+compared); pin a comparison count and record it in the PR body. V2 passes the test. V3 fails it: no
+threshold, so no result changes a decision; either name the decision it feeds or cut it to the Studio run as
+data. The honest consumer is the PR's `test-macos-shard` leg durations against master's last run.
+Assumption: that the saving reaches the macOS CI shards. Settled by comparing `test-macos-shard` leg
+durations on the PR with the last master run.
+Disposition:
+
+### Ergonomics
+
+Finding: No design issue. All five tests were written in an archive copy with existing helpers
+(`_seed_machine_id`, `_mk_ledger_capture`, `run --separate-stderr`; the file already requires bats 1.5.0) and
+pass before and after the new forms. Probed on bash 5.3.9, 3.2.57 and 5.3.20: identical rc and value for
+missing, empty, trailing-newline and mode-000 files; `x=$(< f 2>/dev/null)` still prints `No such file` on
+both 3.2 and 5. Maintainability trap: a maintainer "simplifying" `{ x=$(<f); } 2>/dev/null || …` to
+`x=$(<f) 2>/dev/null || …` keeps every value and leaks only stderr; add a one-line comment that the braces
+are load-bearing, and make that the V2 mutation. Apparatus: test 3's `"<uuid or unknown>"` is a disjunction
+(the real `python3` runs; `tests/mocks/` has none), so pin one branch with a failing `python3` stub and
+assert `"unknown"`; "duration from epoch 0" needs a concrete bound (`>= $(date +%s) - 60`); spell the paths
+quoted, `$(<"${_DOTFILES_RUN_TMPDIR}/…")`, as `lib/helpers.sh:1042` does; test 5 should pin `[OK]` and the
+section name in the row.
+Assumption: none on correctness (probed on all three bashes); the only uncertain one is whether the CPU saving
+exists on the macOS shards, which V3 measures.
+Disposition:
+
+### Risk
+
+Finding: Design sound; V1 cannot pass as written. `cat` and `$(<)` word the unreadable-file error differently
+(`cat: u: Permission denied` against `bash: line 1: u: Permission denied`), and the seven unguarded sites sit
+behind `[[ -f ]]`, which a mode-000 file passes, so a byte comparison of stderr always diverges. Compare rc
+and stderr-emptiness for that case, and require a non-zero comparison count. Probes on all three bashes:
+values and fallback firing match for missing, unreadable, empty and `FAIL\n\n`; the only divergence is a
+directory in place of a file (bash 5 `$(<dir)` gives rc 0 and empty), unreachable because only
+`_dotfiles_run_tmpdir_setup` writes those files. `set -e` and ERR traps behave the same, and no caller or test
+reads `cat`'s stderr text. Test 5 needs `run --separate-stderr` and an exact row.
+Assumption: no uncertain assumption found.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
