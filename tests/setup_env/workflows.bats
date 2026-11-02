@@ -4443,3 +4443,43 @@ _stub_cv_callees() {
   grep -q "ledger write" "${MOCK_CALLS_FILE}"
   grep -qF '{"test":"payload"}' "${MOCK_CALLS_FILE}"
 }
+
+# ── flagless run_update coverage pin ─────────────────────────────────────────
+# A run with no UPDATE_* flag must reach every section in _UPDATE_SECTION_ORDER.
+# Every flag-gated block in run_update has an `else _update_skip ... "flag not set"`
+# branch, so a gate that loses its `${_run_all} -eq 1 ||` arm still writes a row;
+# only the "flag not set" check below catches that. The count check stops an
+# empty or unsourced array from passing with nothing checked.
+_assert_flagless_run_reaches_every_section() {
+  local _name _rx _row _checked=0
+  [ "${#_UPDATE_SECTION_ORDER[@]}" -gt 0 ]
+  for _name in "${_UPDATE_SECTION_ORDER[@]}"; do
+    _rx="\\[(OK|FAIL|SKIP|WARN)\\][[:space:]]+${_name//./\\.}([[:space:]]|\$)"
+    _row="$(printf '%s\n' "${output}" | grep -E "${_rx}")" || {
+      printf 'no summary row for %s\n' "${_name}" >&2
+      return 1
+    }
+    [[ "${_row}" != *"flag not set"* ]] || {
+      printf 'flagless run skipped %s: %s\n' "${_name}" "${_row}" >&2
+      return 1
+    }
+    _checked=$((_checked + 1))
+  done
+  [ "${_checked}" -eq "${#_UPDATE_SECTION_ORDER[@]}" ]
+}
+
+@test "run_update with no flags reaches every section on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run run_update
+  _assert_flagless_run_reaches_every_section
+}
+
+@test "run_update with no flags reaches every section on Ubuntu" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  run run_update
+  _assert_flagless_run_reaches_every_section
+}
