@@ -380,3 +380,14 @@ stay single-flag. The round-1 history is left as written; this finding records i
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+> Plan-time re-count, 2026-11-02 (operator chose to build the small version). Of 91 flagless
+> tests, about 45 in `workflows.bats` assert sections inside the `_run_all`-only block
+> (`lib/workflows.sh:1301`: aws, rust, cheat.sh, tfenv, oh-my-zsh, tpm, zsh-autosuggestions,
+> git-repos, legacy-rsync, git-hooks) and stay flagless under R4. The skill-scan tests are
+> already scoped by `_claude_only_env`. About 20 more are class 2 or only name `run_update`.
+> Ten are scoped: four in `workflows.bats` and six in `cargo_tools_update.bats`.
+
+- V6 -> On `claude`, run one before/after pair of the touched files at `bats --jobs 8`, timed with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body reports wall, user and sys for each run, and the CPU saving against the predicted ~11 s (10 scoped tests at ~1.1 s). There is no pass threshold. — the plan-time re-count found 10 scopable tests, not ~80.
