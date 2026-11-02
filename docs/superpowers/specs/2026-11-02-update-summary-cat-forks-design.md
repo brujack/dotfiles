@@ -89,7 +89,8 @@ Each builds a real `_DOTFILES_RUN_TMPDIR` fixture and calls the real function:
 
 Every stderr assertion uses `run --separate-stderr` (the file already sets `bats_require_minimum_version
 1.5.0`), since plain `run` merges stderr into `$output`. The ledger tests reuse `_seed_machine_id` and
-`_mk_ledger_capture`.
+`_mk_ledger_capture`. Each new test unsets `LEDGER_BIN` (an exported one overrides the capture mock) and puts any
+stub directory under `BATS_TEST_TMPDIR`.
 
 1. `_update_status_is_fail` with no `status_<s>` file: rc 1 and empty stderr.
 2. `_update_status_is_fail` with `status_<s>` holding `FAIL` followed by two newlines: rc 0.
@@ -130,19 +131,25 @@ The mutation control and the old/new differential are V2 and V1.
   braces are load-bearing because `x=$(<f) 2>/dev/null` does not silence the open error.
 - **V1.** In a `git archive` copy, run the old and new `lib/update_summary.sh` functions
   (`_update_status_is_fail`, `_update_record_end`, `_ledger_write_run_entry`, `_update_summary`) over the
-  same fixture matrix: missing, empty, trailing-newline, unreadable (mode 000), and `FAIL`/`OK`/`SKIP`
-  content. Compare stdout and rc exactly. Compare stderr exactly, except for the unreadable case, where
-  only its emptiness is compared (`cat: f: Permission denied` and `bash: line N: f: Permission denied` are
-  the same event in different words). It prints `COMPARED: <n>, DIVERGING: <m>`. Pass: n is greater than 0
-  and m is 0. The PR body records the line.
+  same cells. A cell is one function, one input file it reads, and one state of that file: missing, empty,
+  `FAIL` followed by two newlines, `OK`, `SKIP`, or unreadable (mode 000). Exactly one file departs from
+  valid content per cell; every other input the function reads is present and readable. Compare stdout, rc
+  and the file listing and contents of `_DOTFILES_RUN_TMPDIR` after the call exactly. Compare stderr exactly,
+  except in the unreadable cell, where only whether it is empty is compared (`cat: f: Permission denied` and
+  `bash: line N: f: Permission denied` are the same event in different words, and only one file is
+  unreadable). The plan lists every cell; the harness prints `COMPARED: <n>, DIVERGING: <m>`. Pass: n equals
+  the plan's cell count and m is 0. The PR body records the line.
 - **V2.** In a `git archive` copy of the PR head, apply the realistic regression to one site in each group:
   move `2>/dev/null` off the enclosing `[[ ]]` at 148, and replace `{ x=$(<"…"); } 2>/dev/null` with
-  `x=$(<"…") 2>/dev/null` at one of 598–604 and at 750. The matching characterisation test goes red. The PR
+  `x=$(<"…") 2>/dev/null` at one of 599, 602 or 604 (598's mutant cannot go red: the function returns early
+  without `started_at`, which test 3 must create) and at 750. The matching characterisation test goes red. The PR
   body records each mutation and its red test.
-- **V3.** Recorded as data, with no pass threshold: (a) the PR's three `test-macos-shard` leg durations
-  against the same legs on master's most recent CI run; (b) one before/after pair of the 11 files in the
-  Problem table at `bats --jobs 16` on the Studio (`ssh studio`, bare environment as in `CLAUDE.md`), with
-  `/usr/bin/time` and `uptime`. The `claude` figure is the premise A/B above and is not re-run.
+- **V3.** On the Studio (`ssh studio`, bare environment as in `CLAUDE.md`), one before/after pair of the 11
+  files in the Problem table at `bats --jobs 16`, with `/usr/bin/time` and `uptime`. The PR body reports
+  user, sys and wall for each run. The P1 "bats process-spawn cost" row closes only if the after run's
+  user+sys is below the before run's; otherwise it stays open carrying both figures. The `claude` figure is
+  the premise A/B above and is not re-run; the CI `test-macos-shard` legs are not used (the same leg ranged
+  150–439 s across the last four green master runs).
 - **V4.** `make test` passes at the PR head, every `test-shard` and `test-macos-shard` leg passes, and bash
   coverage stays at or above 91%.
 - **N1.** No file changes outside `lib/update_summary.sh`, `tests/` and `docs/`.
@@ -216,7 +223,9 @@ Studio pair, decide whether the P1 row closes. V1's `COMPARED > 0` passes with n
 function × state cells and pin `COMPARED == N`. Apparatus: lines 336 and 439 steer early return and files
 written, not stdout, so V1 should also diff `_DOTFILES_RUN_TMPDIR` after each call.
 Assumption: that `$(<f)` saves real CPU on the macOS legs (Homebrew bash 5 under bats); settled by V3(b).
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — V2 names 599, 602 or 604; V3 is the Studio pair alone and
+decides whether the P1 row closes; V1 enumerates cells, pins `COMPARED` to the plan's count and diffs
+`_DOTFILES_RUN_TMPDIR` after each call. No round 3 (operator): the remaining findings are apparatus.
 
 #### Ergonomics (round 2, `b0763bed`)
 
@@ -226,7 +235,8 @@ function. Test 5's regex matches the real padded row (`[OK]   brew              
 control fails it. Apparatus: put the stub dir under `BATS_TEST_TMPDIR` (not `_mk_ledger_capture`'s leaking
 `mktemp -d` pattern); add `unset LEDGER_BIN` to the new tests, since an exported one overrides the capture mock.
 Assumption: no uncertain assumption found on this lens.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — new tests unset `LEDGER_BIN` and keep stub dirs under
+`BATS_TEST_TMPDIR`.
 
 #### Risk (round 2, `b0763bed`)
 
@@ -237,7 +247,8 @@ it. Fix: one unreadable file per case, or strip the `cat: ` and `<file>: line N:
 remaining lines exactly. V2 probed: 148 → test 1 red; 599, 602, 604 → test 3 red (602 on the stderr
 assertion alone, values intact); 750 → test 5 red; 598 → none red. Name the sites 599, 602 or 604.
 Assumption: no uncertain assumption found.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — V1 makes exactly one file unreadable per cell; V2 sites as
+in Goal-Fit.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
