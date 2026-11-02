@@ -4472,10 +4472,19 @@ _assert_flagless_run_reaches_every_section() {
   [ "${_checked}" -eq "${#_UPDATE_SECTION_ORDER[@]}" ]
 }
 
+# pip-check is recorded only inside the pip block, which runs only with HAS_DEVTOOLS,
+# so the pins set the capability set themselves rather than inherit the developer
+# shell's (CI exports none of them; a developer box exports most).
+_flagless_pin_capabilities() {
+  unset HAS_DOCKER HAS_FLATPAK HAS_GUI HAS_K8S HAS_SNAP HAS_PRINTING
+  export HAS_DEVTOOLS=1
+}
+
 @test "run_update with no flags reaches every section on macOS" {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  _flagless_pin_capabilities
   run run_update
   _assert_flagless_run_reaches_every_section
 }
@@ -4484,6 +4493,7 @@ _assert_flagless_run_reaches_every_section() {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  _flagless_pin_capabilities
   run run_update
   _assert_flagless_run_reaches_every_section
 }
