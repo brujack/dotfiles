@@ -1,6 +1,7 @@
 # run_update flag scoping in bats tests
 
 - **Date:** 2026-11-02
+- **Approved:** 2026-11-02
 - **Backlog row:** "bats process-spawn cost (part 2 of the setup floor)". Part 2a
   (`docs/superpowers/specs/2026-11-01-load-mocks-setup-trim-design.md`, dotfiles#416) trimmed
   per-test setup. This is part 2b: spawn counts in test bodies. The operator chose option A of
