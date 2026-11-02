@@ -1,6 +1,7 @@
 # update_summary.sh: read status files without forking cat
 
 - **Date:** 2026-11-02
+- **Approved:** 2026-11-02
 - **Backlog row:** "`_update_record_*` forks `cat` and `python3` per section" (P3 tech-debt), option B of part
   2b (`docs/superpowers/specs/2026-11-02-run-update-flag-scoping-design.md`). The P1 row "bats process-spawn
   cost" closes when this ships. The operator chose scope 1 of three: `lib/update_summary.sh` only.

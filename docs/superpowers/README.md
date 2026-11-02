@@ -17,7 +17,7 @@ Master status index for all specs and implementation plans in this directory.
 
 | Date       | Plan                                                                                       | Spec                                                                                                                                      | Status                                                                                  |
 | ---------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| 2026-11-02 | — | [update_summary.sh: read status files without forking cat](specs/2026-11-02-update-summary-cat-forks-design.md) | Spec in review |
+| 2026-11-02 | — | [update_summary.sh: read status files without forking cat](specs/2026-11-02-update-summary-cat-forks-design.md) | Spec approved |
 | 2026-11-02 | [run_update flag scoping](plans/2026-11-02-run-update-flag-scoping.md) | [setup floor, part 2b: scope flagless run_update tests](specs/2026-11-02-run-update-flag-scoping-design.md) | Done (dotfiles#418) |
 | 2026-11-01 | [setup floor quick wins](plans/2026-11-01-setup-floor-quick-wins.md) | [setup floor, part 1: two quick wins in the bats setup helpers](specs/2026-11-01-setup-floor-quick-wins-design.md) | Done (dotfiles#415) |
 | 2026-11-01 | [load_mocks setup trim](plans/2026-11-01-load-mocks-setup-trim.md) | [setup floor, part 2a: load_mocks stubs, PATH filter, fixture opt-in, constants.sh](specs/2026-11-01-load-mocks-setup-trim-design.md) | Done (dotfiles#416) |
