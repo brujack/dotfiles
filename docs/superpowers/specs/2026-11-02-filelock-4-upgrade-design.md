@@ -33,7 +33,8 @@ the venv is built from the same `uv.lock`; filelock 4 is pure Python. CI runs `m
 1. `uv lock --upgrade-package filelock==4.2.1` (no other package may change). Measured in an archive copy of
    `0d870360`: `Updated filelock v3.32.3 -> v4.2.1`, nothing else. 4.2.1 is the highest first-patched version
    of the 48 alerts and was uploaded 2026-10-17, so it satisfies `renovate.json`'s `minimumReleaseAge: 14 days`;
-   4.2.7 (uploaded 2026-11-02) would not. The version is pinned so a later run cannot drift.
+   4.2.7 (uploaded 2026-11-02) would not. The version is named so this PR's command is reproducible. Nothing in `pyproject.toml` holds
+   4.2.1, and nothing should: a later `uv lock --upgrade` may move it forward (`--dry-run` already shows 4.2.7).
 2. `make sync-requirements-ci` regenerates the five renderings; the three that carry `filelock` change.
 3. `pyproject.toml` is untouched: no floor, no `checkov` or `packaging` change.
 
@@ -47,19 +48,25 @@ reading the lock diff, which the PR body states in its first line.
 - **R2.** `[PR1]` Every rendering that pins `filelock` pins `4.2.1`, and `make check-requirements-ci` passes.
 - **V1.** At the PR head, `make test` passes and every CI leg passes. This is a regression guard only: no CI
   job installs the venv or a rendering, so it says nothing about filelock's consumers.
-- **V2.** At the PR head, in a `mktemp -d` archive copy, build the venv as the real path does
-  (`uv sync --frozen --group runtime --group test-lint` with `UV_PROJECT_ENVIRONMENT` inside the copy,
-  `ANSIBLE_COLLECTIONS_PATH` and `HOME` pointed at scratch paths) and run, with a `sitecustomize` probe that
-  counts `filelock.BaseFileLock.acquire` calls: (a) `ansible-lint` on a fixture one-task playbook with a fresh
-  cache dir, asserting its exit status and finding count are the same under filelock 3.32.3 and 4.2.1 and
-  that at least one acquire happened; (b) `virtualenv <dir>`, asserting it creates the venv and acquires at
-  least once; (c) `virtualenv -p python3.14 <dir>` with `VIRTUALENV_OVERRIDE_APP_DATA` set to an empty scratch
-  dir, recording whether python-discovery's `FileLock` is reached. The PR body records each command, rc and
-  acquire count.
-- **V3.** After merge, one `gh api repos/brujack/dotfiles/dependabot/alerts --paginate` query reports all 48
-  `filelock` alerts as `state` `fixed` (0 open) and the 30 `virtualenv` alerts still open; an empty or failed
-  query fails V3. The `virtualenv` alerts move to a new P2 Backlog row naming `checkov`'s `packaging<24` pin
-  (checkov 3.4.3, the newest, still declares it).
+- **V2.** At the PR head, in a `mktemp -d` archive copy, build two venvs the way the real path does
+  (`uv sync --frozen --group runtime --group test-lint`, `UV_PROJECT_ENVIRONMENT` inside the copy): one from
+  the PR head's lock (filelock 4.2.1) and one from the base commit's lock (3.32.3). For each, with
+  `$UV_PROJECT_ENVIRONMENT/bin` first on `PATH`, `HOME` and `ANSIBLE_COLLECTIONS_PATH` on scratch paths, and a
+  `sitecustomize.py` on `PYTHONPATH` that appends `<pid> filelock=<version> <lock class>` to a log for every
+  `filelock.BaseFileLock.acquire` in every process:
+  (a) `ansible-lint` on a fixture playbook holding one task, `ansible.builtin.shell: echo hi` written as
+  `shell: echo hi` with no `name`, with a fresh cache dir: rc 2, exactly the four rules
+  `command-instead-of-shell`, `fqcn[action-core]`, `name[missing]` and `no-changed-when`, and exactly 1
+  acquire; (b) `virtualenv <dir>`: rc 0 and at least 1 acquire; (c) contention: one process holds a
+  `filelock.FileLock` on a scratch path while a second process's `acquire(timeout=0.1)` on the same path raises
+  `filelock.Timeout`. In every run the output contains no `/.pyenv/` and every log line reports the venv's own
+  filelock version. The PR body records each command, rc, findings and acquire counts for both venvs.
+- **V3.** After merge, this query:
+  `gh api --paginate 'repos/brujack/dotfiles/dependabot/alerts?per_page=100' --jq '.[] | select(.dependency.package.name == "filelock" or .dependency.package.name == "virtualenv") | [.dependency.package.name, .state] | @tsv' | sort | uniq -c`
+  reports `48 filelock fixed`, no `filelock open`, and `30 virtualenv open` (before this change it reports
+  `48 filelock open`, `30 virtualenv open` and `4 virtualenv fixed`). Empty or failed output fails V3; an
+  advisory published in between is named in the PR body rather than absorbed. The `virtualenv` alerts move to a
+  new P2 Backlog row naming `checkov`'s `packaging<24` pin (checkov 3.4.3, the newest, still declares it).
 - **V4.** CI's `auto-merge` job reports the lock-only hold (`uv.lock changed without pyproject.toml`); the
   PR merges only by the operator's hand.
 - **N1.** `pyproject.toml` does not change.
@@ -129,7 +136,8 @@ Finding: Run inline by the orchestrator: the classifier refused the lens dispatc
 4.2.1 clears all 48. V2's output reaches the PR body the operator reads before merging by hand, and V3 decides
 the Backlog rows, so both pass the reads-it test.
 Assumption: no uncertain assumption found.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — no change needed beyond the round-2 V2 and V3 rewrites. No
+round 3 (operator): the remaining findings are apparatus.
 
 #### Ergonomics (round 2, `4188e263`)
 
@@ -145,7 +153,9 @@ returns `48 filelock open`, `30 virtualenv open`, `4 virtualenv fixed`, so a que
 `virtualenv` alert would expect 34.
 Assumption: that GitHub marks all 48 `filelock` alerts `fixed` once the lock and renderings read 4.2.1; settled
 by the V3 query about an hour after merge.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — V2(c) python-discovery check dropped; probe placement, the
+3.32.3 baseline venv and the fixture's pinned result are spelled out; V3 carries the exact query and expected
+pairs; the "cannot drift" wording is replaced.
 
 #### Risk (round 2, `4188e263`)
 
@@ -161,7 +171,8 @@ holds a `FileLock`, a second's `acquire(timeout=0.1)` must raise `Timeout`). API
 conditions these consumers do not hit. 4.2.1 uploaded 2026-10-17T16:48Z, clearing the 14-day age policy.
 Assumption: that `$VENV/bin` first on `PATH` keeps every ansible-lint subprocess in the venv; measured 0
 `.pyenv` matches on `claude`, macOS unmeasured.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — `$UV_PROJECT_ENVIRONMENT/bin` first on `PATH` with a no-`.pyenv`
+and single-version assertion; (a) pins rc 2, four rules and 1 acquire; a contention case asserts `Timeout`.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
