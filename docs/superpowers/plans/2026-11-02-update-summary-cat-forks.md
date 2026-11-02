@@ -1,5 +1,7 @@
 # update_summary.sh cat-forks Implementation Plan
 
+> **Status: DONE** (dotfiles#420, merged 2026-11-02)
+
 spec: docs/superpowers/specs/2026-11-02-update-summary-cat-forks-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
