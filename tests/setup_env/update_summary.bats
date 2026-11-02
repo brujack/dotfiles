@@ -1727,3 +1727,80 @@ _unavailable='updated; change list unavailable (snapshot failed)'
   [ ! -e "${_DOTFILES_RUN_TMPDIR}/pre_mas" ]
   run ! command grep -q 'mas list' "${MOCK_CALLS_FILE}"
 }
+
+# --- cat-forks characterisation ------------------------------------------
+# Pin today's behaviour on missing, empty and trailing-newline state files so
+# the $(cat ...) -> $(<...) rewrite is provably behaviour-preserving.
+
+# Stub dir whose python3 always fails, forcing the run_id uuid fallback.
+_mk_failing_python3_stub() {
+  mkdir -p "${BATS_TEST_TMPDIR}/py3stub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/py3stub/python3"
+  chmod +x "${BATS_TEST_TMPDIR}/py3stub/python3"
+}
+
+@test "cat-forks characterisation: _update_status_is_fail with no status file returns 1 and is silent" {
+  run --separate-stderr _update_status_is_fail brew
+  [ "$status" -eq 1 ]
+  [ -z "$stderr" ]
+}
+
+@test "cat-forks characterisation: _update_status_is_fail reads FAIL through trailing newlines" {
+  printf 'FAIL\n\n' > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  run _update_status_is_fail brew
+  [ "$status" -eq 0 ]
+}
+
+@test "cat-forks characterisation: _ledger_write_run_entry falls back to unknown and a recent duration" {
+  unset LEDGER_BIN
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  printf '2026-08-12T00:00:00Z\n' > "${_DOTFILES_RUN_TMPDIR}/started_at"
+  _seed_machine_id
+  _mk_failing_python3_stub
+
+  local _cap="${BATS_TEST_TMPDIR}/captured_cf3.json"
+  local _ledger_dir
+  _ledger_dir="$(_mk_ledger_capture "${_cap}")"
+
+  PATH="${_ledger_dir}:${BATS_TEST_TMPDIR}/py3stub:${PATH}" run --separate-stderr _ledger_write_run_entry update 0
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  grep -q '"run_id": "unknown"' "${_cap}"
+  grep -q '"git_sha": "unknown"' "${_cap}"
+  local _dur
+  _dur="$(sed -n 's/.*"duration_seconds": \([0-9-]*\).*/\1/p' "${_cap}")"
+  [ -n "${_dur}" ]
+  [ "${_dur}" -ge $(( $(date +%s) - 60 )) ]
+}
+
+@test "cat-forks characterisation: _ledger_write_run_entry keeps empty run_id and git_sha as empty" {
+  unset LEDGER_BIN
+  export HOME="${BATS_TEST_TMPDIR}"
+  unset MACOS
+  export LINUX=1 UBUNTU=1
+  printf '2026-08-12T00:00:00Z\n' > "${_DOTFILES_RUN_TMPDIR}/started_at"
+  : > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
+  : > "${_DOTFILES_RUN_TMPDIR}/run_id"
+  : > "${_DOTFILES_RUN_TMPDIR}/git_sha"
+  _seed_machine_id
+  _mk_failing_python3_stub
+
+  local _cap="${BATS_TEST_TMPDIR}/captured_cf4.json"
+  local _ledger_dir
+  _ledger_dir="$(_mk_ledger_capture "${_cap}")"
+
+  PATH="${_ledger_dir}:${BATS_TEST_TMPDIR}/py3stub:${PATH}" run --separate-stderr _ledger_write_run_entry update 0
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  grep -q '"run_id": ""' "${_cap}"
+  grep -q '"git_sha": ""' "${_cap}"
+}
+
+@test "cat-forks characterisation: _update_summary renders an OK row with no result file, silently" {
+  printf 'OK\n' > "${_DOTFILES_RUN_TMPDIR}/status_brew"
+  run --separate-stderr _update_summary
+  [[ "$output" =~ \[OK\][[:space:]]+brew([[:space:]]|$) ]]
+  [ -z "$stderr" ]
+}
