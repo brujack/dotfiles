@@ -391,3 +391,28 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 > Ten are scoped: four in `workflows.bats` and six in `cargo_tools_update.bats`.
 
 - V6 -> On `claude`, run one before/after pair of the touched files at `bats --jobs 8`, timed with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body reports wall, user and sys for each run, and the CPU saving against the predicted ~11 s (10 scoped tests at ~1.1 s). There is no pass threshold. — the plan-time re-count found 10 scopable tests, not ~80.
+
+## Spec alignment (2026-11-02)
+
+- spec: docs/superpowers/specs/2026-11-02-run-update-flag-scoping-design.md
+- anchor: 53b28df9654103e1c63765dc845345ae66681563
+- in scope: R1, R2, R3, R4, R5, R6
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: bats --count: cargo_tools_update.bats unchanged, workflows.bats +2 (the two R5 pins). make test 3774/3774 at 3c4211eb (local); CI legs pending at push.
+- V2: Scan before 91 flagless, after 84 = 81 keep-full (unchanged list) + 2 new pins + 1 heuristic artifact (ledger_write_entry test now ends at the pin helper). Recorded in PR body.
+- V3: UPDATE_BREW: workflows.bats:1350 red under 'brew update'->'brew upgrade-x' (lib/helpers.sh:300); :2181 red under MACOS guard->true (lib/workflows.sh:876). UPDATE_PKGS: :1418 red under UPDATE_PKGS gate rename (lib/workflows.sh:1082; apt-call mutations stay green, pre-existing loose grep, Backlog row); :2248 red under apt reason 'nope'. UPDATE_BREW+UPDATE_PIP: cargo_tools_update.bats 'marks cargo-tools OK' red under _update_record_end forced 1 (lib/workflows.sh:1437).
+- V4: gems block (lib/workflows.sh:1449-1456) deleted in archive copy: both pins not ok, 'no summary row for gems'.
+- V5: gems gate _run_all arm removed: both pins not ok, '[SKIP] gems flag not set'. pyenv-shims gate (line 1230) arm removed: both pins not ok, '[SKIP] pyenv-shims flag not set'. Empty array control also red.
+- V6: claude, load ~6: before (merge-base) wall 63.34 user 121.63 sys 172.32; after wall 63.70 user 117.65 sys 166.08. CPU saving 10.2 s vs predicted ~11 s (includes the two new full-run pins).
