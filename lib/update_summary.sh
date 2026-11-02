@@ -145,7 +145,7 @@ _update_skip() {
 # _update_status_is_fail SECTION -- true when SECTION already recorded FAIL. The
 # _update_ok and _update_warn writers check it so a later call never softens a FAIL.
 _update_status_is_fail() {
-  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_$1" 2>/dev/null)" == "FAIL" ]]
+  [[ "$(<"${_DOTFILES_RUN_TMPDIR}/status_$1")" == "FAIL" ]] 2>/dev/null
 }
 
 # _update_ok SECTION MESSAGE
@@ -333,7 +333,7 @@ _update_record_end() {
   # If _update_record_start already wrote a SKIP (e.g. wrong distro), leave it untouched
   if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_section}" ]]; then
     local _existing_status
-    _existing_status=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_section}")
+    _existing_status=$(<"${_DOTFILES_RUN_TMPDIR}/status_${_section}")
     if [[ "${_existing_status}" == "SKIP" ]]; then
       return 0
     fi
@@ -436,7 +436,7 @@ _update_record_end() {
     oh-my-zsh|tpm|tfenv|zsh-autosuggestions)
       if [[ -f "${_DOTFILES_RUN_TMPDIR}/pre_${_section}" ]]; then
         local _old_sha _git_dir
-        _old_sha=$(cat "${_DOTFILES_RUN_TMPDIR}/pre_${_section}")
+        _old_sha=$(<"${_DOTFILES_RUN_TMPDIR}/pre_${_section}")
         case "${_section}" in
           oh-my-zsh) _git_dir="${HOME}/.oh-my-zsh" ;;
           tpm) _git_dir="${HOME}/.tmux/plugins/tpm" ;;
@@ -595,13 +595,14 @@ _ledger_write_run_entry() {
 
   local _machine_id _started_at _start_epoch _now_epoch _duration _run_id _git_sha
   _machine_id=$(tr -d '[:space:]' < "${_machine_id_path}" 2>/dev/null)
-  _started_at=$(cat "${_DOTFILES_RUN_TMPDIR}/started_at" 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
-  _start_epoch=$(cat "${_DOTFILES_RUN_TMPDIR}/start_epoch" 2>/dev/null || printf '0')
+  # Braces are load-bearing: x=$(<f) 2>/dev/null still prints the open error; only { …; } 2>/dev/null silences it.
+  { _started_at=$(<"${_DOTFILES_RUN_TMPDIR}/started_at"); } 2>/dev/null || _started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  { _start_epoch=$(<"${_DOTFILES_RUN_TMPDIR}/start_epoch"); } 2>/dev/null || _start_epoch=0
   _now_epoch=$(date +%s)
   _duration=$(( _now_epoch - _start_epoch ))
-  _run_id=$(cat "${_DOTFILES_RUN_TMPDIR}/run_id" 2>/dev/null || \
-    python3 -c "import uuid; print(str(uuid.uuid4()))" 2>/dev/null || printf 'unknown')
-  _git_sha=$(cat "${_DOTFILES_RUN_TMPDIR}/git_sha" 2>/dev/null || printf 'unknown')
+  { _run_id=$(<"${_DOTFILES_RUN_TMPDIR}/run_id"); } 2>/dev/null || \
+    _run_id=$(python3 -c "import uuid; print(str(uuid.uuid4()))" 2>/dev/null || printf 'unknown')
+  { _git_sha=$(<"${_DOTFILES_RUN_TMPDIR}/git_sha"); } 2>/dev/null || _git_sha=unknown
 
   local _success="true"
   [[ "${_exit_code}" -ne 0 ]] && _success="false"
@@ -677,7 +678,7 @@ _ledger_write_run_entry() {
       local _s
       for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
         if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_s}" ]] && \
-           [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_s}")" == "FAIL" ]]; then
+           [[ "$(<"${_DOTFILES_RUN_TMPDIR}/status_${_s}")" == "FAIL" ]]; then
           _failure_stage="\"${_s}\""
           break
         fi
@@ -688,7 +689,7 @@ _ledger_write_run_entry() {
     local _s _result_str _count
     for _s in brew pip gems mas apt snap npm; do
       if [[ -f "${_DOTFILES_RUN_TMPDIR}/result_${_s}" ]]; then
-        _result_str=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_s}")
+        _result_str=$(<"${_DOTFILES_RUN_TMPDIR}/result_${_s}")
         if [[ "${_result_str}" != "no changes" && "${_result_str}" != "updated" && \
               "${_result_str}" != *"skipped"* ]]; then
           # brew's result is two lines when formulae and casks both changed; sum each line's count.
@@ -702,7 +703,7 @@ _ledger_write_run_entry() {
     local _first=1 _s _st
     for _s in "${_UPDATE_SECTION_ORDER[@]}"; do
       if [[ -f "${_DOTFILES_RUN_TMPDIR}/status_${_s}" ]]; then
-        _st=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_s}")
+        _st=$(<"${_DOTFILES_RUN_TMPDIR}/status_${_s}")
         if [[ "${_st}" != "SKIP" ]]; then
           [[ ${_first} -eq 0 ]] && _workflows_json+=","
           _workflows_json+="\"${_s}\""
@@ -746,8 +747,8 @@ _update_summary() {
     if [[ ! -f "${_DOTFILES_RUN_TMPDIR}/status_${_section}" ]]; then
       continue
     fi
-    _status=$(cat "${_DOTFILES_RUN_TMPDIR}/status_${_section}")
-    _result=$(cat "${_DOTFILES_RUN_TMPDIR}/result_${_section}" 2>/dev/null)
+    _status=$(<"${_DOTFILES_RUN_TMPDIR}/status_${_section}")
+    { _result=$(<"${_DOTFILES_RUN_TMPDIR}/result_${_section}"); } 2>/dev/null
 
     # Anything but the four final statuses is a FAIL, rewritten on disk so the
     # ledger entry's failure_stage (which reads these files) names it too.
@@ -792,7 +793,7 @@ _update_summary() {
   local _detail_output=""
   for _section in "${_UPDATE_SECTION_ORDER[@]}"; do
     if [[ -f "${_DOTFILES_RUN_TMPDIR}/detail_${_section}" ]]; then
-      _detail_output+=$'\n'"$(cat "${_DOTFILES_RUN_TMPDIR}/detail_${_section}")"$'\n'
+      _detail_output+=$'\n'"$(<"${_DOTFILES_RUN_TMPDIR}/detail_${_section}")"$'\n'
     fi
   done
 
