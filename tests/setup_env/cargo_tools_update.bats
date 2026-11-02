@@ -62,7 +62,9 @@ teardown() {
 }
 
 @test "run_update skips cargo-tools with its reason when HAS_RUST is unset" {
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   unset HAS_RUST
   install_cargo_tools() { return 0; }
   run_update
@@ -74,7 +76,9 @@ teardown() {
 }
 
 @test "run_update marks cargo-tools WARN with detail when install_cargo_tools returns 2" {
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   install_cargo_tools() {
     printf 'cargo tools: cargo-tarpaulin install failed\n' >&2
@@ -100,7 +104,9 @@ teardown() {
 # (or the fix that produces it) turns this test red even though today's
 # 8-pin CARGO_TOOLS array is too short to trigger the truncation itself.
 @test "run_update's cargo-tools detail file names both failed crates when several others succeed" {
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   export MOCK_CARGO_LIST
   MOCK_CARGO_LIST="$(cat <<'LIST'
@@ -137,7 +143,9 @@ LIST
   # skipping Rust update"; return 0) -- this test now pins the same
   # behaviour, replacing the prior version that pinned FAIL and therefore
   # encoded the behaviour under question.
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   install_cargo_tools() {
     printf 'cargo not found\n' >&2
@@ -150,7 +158,9 @@ LIST
 }
 
 @test "run_update marks cargo-tools WARN, not SKIP or FAIL, when install_cargo_tools returns 2 -- distinct from the rc-1 absence case" {
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   install_cargo_tools() {
     printf 'cargo tools: cargo-tarpaulin install failed\n' >&2
@@ -163,7 +173,9 @@ LIST
 }
 
 @test "run_update marks cargo-tools OK when install_cargo_tools returns 0" {
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_BREW=1
+  export UPDATE_PIP=1
+  unset UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export HAS_RUST=1
   install_cargo_tools() { return 0; }
   run_update

@@ -1350,7 +1350,8 @@ nvidia" ]
 @test "run_update calls brew update on macOS" {
   export MACOS=1
   unset LINUX UBUNTU
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_BREW=1
   run run_update
   [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
@@ -1421,6 +1422,7 @@ EOF
   export UBUNTU=1
   export NOBLE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_PKGS=1
   run run_update
   [ "$status" -eq 0 ]
   grep -q "apt" "${MOCK_CALLS_FILE}"
@@ -2184,6 +2186,7 @@ _stub_refresher_fail() {
   unset MACOS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_BREW=1
   run run_update
   [ "$status" -eq 0 ]
   # softwareupdate must not have been called
@@ -2250,7 +2253,8 @@ _stub_refresher_fail() {
   unset LINUX UBUNTU
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_PKGS=1
   run_update
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_apt"
@@ -4442,4 +4446,54 @@ _stub_cv_callees() {
   [ "$status" -eq 0 ]
   grep -q "ledger write" "${MOCK_CALLS_FILE}"
   grep -qF '{"test":"payload"}' "${MOCK_CALLS_FILE}"
+}
+
+# ── flagless run_update coverage pin ─────────────────────────────────────────
+# A run with no UPDATE_* flag must reach every section in _UPDATE_SECTION_ORDER.
+# Every flag-gated block in run_update has an `else _update_skip ... "flag not set"`
+# branch, so a gate that loses its `${_run_all} -eq 1 ||` arm still writes a row;
+# only the "flag not set" check below catches that. The count check stops an
+# empty or unsourced array from passing with nothing checked.
+_assert_flagless_run_reaches_every_section() {
+  local _name _rx _row _checked=0
+  [ "${#_UPDATE_SECTION_ORDER[@]}" -gt 0 ]
+  for _name in "${_UPDATE_SECTION_ORDER[@]}"; do
+    _rx="\\[(OK|FAIL|SKIP|WARN)\\][[:space:]]+${_name//./\\.}([[:space:]]|\$)"
+    _row="$(printf '%s\n' "${output}" | grep -E "${_rx}")" || {
+      printf 'no summary row for %s\n' "${_name}" >&2
+      return 1
+    }
+    [[ "${_row}" != *"flag not set"* ]] || {
+      printf 'flagless run skipped %s: %s\n' "${_name}" "${_row}" >&2
+      return 1
+    }
+    _checked=$((_checked + 1))
+  done
+  [ "${_checked}" -eq "${#_UPDATE_SECTION_ORDER[@]}" ]
+}
+
+# pip-check is recorded only inside the pip block, which runs only with HAS_DEVTOOLS,
+# so the pins set the capability set themselves rather than inherit the developer
+# shell's (CI exports none of them; a developer box exports most).
+_flagless_pin_capabilities() {
+  unset HAS_DOCKER HAS_FLATPAK HAS_GUI HAS_K8S HAS_SNAP HAS_PRINTING
+  export HAS_DEVTOOLS=1
+}
+
+@test "run_update with no flags reaches every section on macOS" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  _flagless_pin_capabilities
+  run run_update
+  _assert_flagless_run_reaches_every_section
+}
+
+@test "run_update with no flags reaches every section on Ubuntu" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  _flagless_pin_capabilities
+  run run_update
+  _assert_flagless_run_reaches_every_section
 }
