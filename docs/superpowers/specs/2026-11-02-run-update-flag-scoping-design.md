@@ -195,3 +195,61 @@ is a prediction. V5 measures it, and the PR reports it against this figure.
 - **N3.** No lint, ratchet or guard on the count of flagless `run_update` tests.
 - **N4.** No assertion line in an existing `@test` body is removed or changed.
 - **N5.** `tests/bats-weights.tsv` does not change.
+
+## Multi-Lens Review
+
+Reviewed at commit: `90e66bff` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The coverage pin does not replace what scoping removes. Every flag-gated block in
+`run_update` has an `else _update_skip "<section>" "flag not set"` branch (19 sites in
+`lib/workflows.sh`), and the pin accepts SKIP. So dropping `${_run_all} -eq 1 ||` from one
+gate leaves `[SKIP] <name> flag not set` in a flagless run and the pin green, while the scoped
+test sets the flag and stays green too. V4 deletes the whole block, `else` included, so it
+tests a control the pin catches and never the realistic regression. Fix: in the flagless pin,
+reject a result of `flag not set`; add a V4b control that removes only the `_run_all` arm.
+The row pattern `[OK|FAIL|SKIP|WARN]` is a character class as a regex; use
+`(OK|FAIL|SKIP|WARN)`. Otherwise goal-fit holds: no simpler path gets most of the value.
+Assumption: that keep-full survivors cover each of the six flag-gated families by accident.
+Settled by removing the `_run_all` arm from each gate in turn in an archive copy at the PR
+head; each must turn at least one test red. Predicted: at least one family goes all-green.
+Disposition:
+
+### Ergonomics
+
+Finding: Same pin defect, reproduced: with the gems gate mutated, a flagless macOS run showed
+`gems=SKIP`, all 28 rows present, pin green. Given the fix, friction is low: flagless runs on
+macOS and Ubuntu each record all 28 sections (OK or an environment SKIP), so the exemption
+list starts empty on both platforms and a new section is pinned by default. Summary rows are
+padded (`[OK]   %-20s`), so the match needs `\]\s+<name>\b`. Existing `unset` lines name 5
+flags, not 6 (`UPDATE_PKGS` is absent). Asked: should the pass condition be "row exists and
+result is not `flag not set`", or "no SKIP unless the name is in a measured exemption list"
+(about 13 exemptions per platform)?
+Assumption: that each absence assert's string has an enumerable producer set. Shared helpers
+and mocks (`brew`, `sudo`, apt) write `MOCK_CALLS_FILE` from several sections, so a producer
+may span flags. Settled by grepping each of the 25 absent strings across `lib/` and
+`tests/mocks/` and mapping every hit to its sections.
+Disposition:
+
+### Risk
+
+Finding: Same pin defect, reproduced with a spec-conformant pin (`[SKIP] gems flag not set`,
+nothing missing, `ok`). Under that mutation only "run_update calls gem update with no flags"
+went red today, and the same mutation on the pyenv-shims gate was caught by nothing in
+`workflows.bats` or `update_pyenv_shims.bats`, so the implicit coverage is already thinner
+than the spec says. The 6 run-all-only sections have no `else` skip and the pin as written
+does catch them. `_run_all` is read only inside `run_update`; no summary or ledger code
+branches on flag state.
+Assumption: that setting a flag changes only which sections run. The pip block exports
+`PYENV_ROOT`, prepends `$PYENV_ROOT/bin:$PYENV_ROOT/shims` to `PATH`, runs
+`eval "$(pyenv init -)"` and `pyenv shell ansible`, in-process; in a full run that state
+persists into pyenv-shims, cargo-tools and gems. A scoped run without `UPDATE_PIP` skips it,
+so those sections may resolve commands differently. Settled per scoped test asserting on a
+section after pip: run full and scoped in an archive copy, filter `MOCK_CALLS_FILE` to the
+section's commands, and diff.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
