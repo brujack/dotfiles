@@ -1,0 +1,197 @@
+# run_update flag scoping in bats tests
+
+- **Date:** 2026-11-02
+- **Backlog row:** "bats process-spawn cost (part 2 of the setup floor)". Part 2a
+  (`docs/superpowers/specs/2026-11-01-load-mocks-setup-trim-design.md`, dotfiles#416) trimmed
+  per-test setup. This is part 2b: spawn counts in test bodies. The operator chose option A of
+  three: scope the tests, no production change. B (production fork trims) and C (pin `python3`
+  off the pyenv shim) are Backlog rows.
+
+## Problem
+
+Most `run_update` tests assert on one section but run all of them. With no `UPDATE_*` flag set,
+`_any_update_flag` (`lib/helpers.sh`) fails, `run_update` sets `_run_all=1`, and every section
+in `lib/workflows.sh` runs against the mocks.
+
+Measured on `claude`, 2026-11-01, in a `git archive` copy with a timing file built from
+`tests/setup_env/workflows.bats`'s `setup()` (bats 1.13, `/usr/bin/time`, CPU above an empty
+test with the same `setup()`):
+
+| Test body                              | CPU above empty |
+| -------------------------------------- | --------------- |
+| flagless `run_update`, macOS vars      | ~1.45 s         |
+| `UPDATE_BREW=1 run_update`, macOS vars | ~0.35 s         |
+
+In the full run, the `claude` section took ~820 ms and `gems` ~435 ms, over 55% between them
+(xtrace attribution by command). `python3` was called 8 times per full run, 564 ms.
+
+**Population.** These numbers come from one machine, `claude`, and one harness: `workflows.bats`'
+`setup()` with macOS variables. The claim covers every flagless `run_update` test on every
+runner. Two differences matter:
+
+- `python3` on `claude` resolves through the pyenv shim, 66 ms per call against 15 ms for
+  `/usr/bin/python3`. CI runners have no shim. So the CI saving per scoped test is smaller
+  than ~1.1 s, by up to the 564 ms `python3` share.
+- A Linux-variable full run skips mac sections and runs apt, snap and flatpak. Its cost
+  differs from the macOS row. It was profiled (`t_full_linux`) but not tabled here.
+
+**Candidates.** An awk scan of every tracked `.bats` file counts test bodies that call
+`run_update` and set no `UPDATE_*` flag. A body ends at the next `@test` line. The scan found
+127 flagless tests in 10 files, 25 of them with an absence assertion (`! grep`, `!=`):
+
+| File                                      | `run_update` tests | flagless | with absence |
+| ----------------------------------------- | ------------------ | -------- | ------------ |
+| `tests/setup_env/workflows.bats`          | 109                | 67       | 9            |
+| `tests/setup_env/update_apt.bats`         | 29                 | 29       | 10           |
+| `tests/setup_env/update_noop_skip.bats`   | 10                 | 7        | 0            |
+| `tests/setup_env/flatpak.bats`            | 8                  | 7        | 2            |
+| `tests/setup_env/cargo_tools_update.bats` | 8                  | 6        | 3            |
+| `tests/setup_env/unit.bats`               | 10                 | 4        | 0            |
+| `tests/setup_env/update_claude.bats`      | 13                 | 3        | 1            |
+| `tests/setup_env/linux_shared.bats`       | 2                  | 2        | 0            |
+| `tests/setup_env/update_pyenv_shims.bats` | 11                 | 1        | 0            |
+| `tests/setup_env/ledger_integration.bats` | 1                  | 1        | 0            |
+
+The scan is a heuristic, and it misses in both directions:
+
+- It undercounts scoped tests when a flag is exported in `setup()` or in a helper.
+- It overcounts when a body names `run_update` without running it.
+
+The plan re-derives the list per file before any edit.
+
+**Implicit coverage.** No test asserts that a flagless run reaches every section. That fact is
+pinned today only as a side effect of these ~127 tests, so scoping them removes it unless a test
+replaces it. `update_summary.bats`'s "returns 0 when every section is OK" is a unit test of
+`_update_summary` on seeded status files. It does not run `run_update`.
+
+## Flag to section map
+
+From `run_update` in `lib/workflows.sh`:
+
+| Flag            | Sections it runs                                                          |
+| --------------- | ------------------------------------------------------------------------- |
+| `UPDATE_BREW`   | brew (and softwareupdate on macOS), plugin-node, pyenv-shims, cargo-tools |
+| `UPDATE_CLAUDE` | claude, plugin-node, terraform-skill, npm                                 |
+| `UPDATE_PKGS`   | apt, snap, flatpak                                                        |
+| `UPDATE_MAS`    | mas                                                                       |
+| `UPDATE_PIP`    | pip, pyenv-shims                                                          |
+| `UPDATE_GEMS`   | gems                                                                      |
+| none (run-all)  | ai-config, git-repos, legacy-rsync, git-hooks, aws, rust, cheat.sh        |
+
+`_UPDATE_SECTION_ORDER` (`lib/update_summary.sh`) also names pip-check, oh-my-zsh,
+zsh-autosuggestions, tpm, tfenv and brew-drift. `run_update` itself does not open these with
+`_update_record_start`. They are recorded elsewhere, through `_update_ok`, `_update_skip` and
+similar. The plan maps each one to its gate before classifying a test that asserts on it. Until
+it is mapped, such a test is class 2.
+
+## Design
+
+Scope: `tests/**/*.bats` only. No production file changes.
+
+### Classification
+
+Each flagless `run_update` test is in exactly one class.
+
+1. **Scope it.** Every assertion concerns sections reachable through one flag, or through two
+   flags whose union covers them. The test sets those flags before `run run_update` and drops
+   them from any `unset` list. No other line of the body changes.
+2. **Keep it full.** The test asserts any of:
+   - a run-all-only section, or an unmapped one (see above);
+   - the overall exit status, where a full run's status covers sections outside the scoped set
+     and the test name or comment says that is the point;
+   - section order, or the summary as a whole;
+   - anything its name calls "full", "default" or "no flags".
+
+   A `[ "$status" -eq 0 ]` beside a section-specific grep is not class 2 on its own. Most
+   tests carry one as a guard, and a scoped run still checks it for the sections it runs.
+
+3. **Absence asserts.** A test with `! grep X`, `!=` or a similar absence check is scoped only
+   when every producer of `X` lies in a section the chosen flags run. Otherwise the scoped run
+   cannot produce `X`, so the absence passes vacuously, and the test stays full. The plan names
+   the producer for each scoped absence assert.
+
+Example (class 1): a test that sets macOS variables, unsets all six flags, runs `run_update`,
+and asserts `grep -q "brew update" "${MOCK_CALLS_FILE}"`. It becomes
+`export UPDATE_BREW=1` with `UPDATE_BREW` removed from its `unset` line.
+
+### Coverage pin
+
+Add one test per platform to `tests/setup_env/workflows.bats`. Each sets the platform
+variables, unsets all six flags and runs `run_update`. Then, for every name in
+`_UPDATE_SECTION_ORDER` read at run time, it asserts a summary row matching
+`[OK|FAIL|SKIP|WARN] <name>`. `_update_summary` prints one row per section that has a status
+file.
+
+A section that does not record on a platform is listed in that test as an exemption, with a
+reason comment, after measuring that it really does not record. The expected set is never a
+hand-typed list of included names. A new section added to the array is then covered by default.
+
+### Rollout
+
+One PR, from one plan:
+
+- `workflows.bats` is its own task, the largest.
+- The remaining nine files are one task, or two if the plan's re-count makes that cheaper to
+  review.
+- The coverage pin is its own TDD task. Its red-first check is V4's control, a deleted section block.
+
+Every task needs a judgement call on classification, so no task is Haiku-eligible. All tasks
+run on Sonnet. `tests/bats-weights.tsv` is not reseeded. Shard balance drifts a little, and a
+reseed needs the macOS measurement its own procedure prescribes.
+
+### Predicted saving
+
+At ~1.1 s CPU per scoped test on `claude`, scoping ~100 of the 127 saves on the order of
+110 s CPU per local suite run. On CI, without the shim, it saves less (see Population). This
+is a prediction. V5 measures it, and the PR reports it against this figure.
+
+## Not chosen
+
+- **B, production fork trims.** Replace `$(cat status)` with `$(<status)` in
+  `_update_record_*` (about 6.2k `cat` forks per suite run) and drop the `python3`
+  realpath/uuid calls. This is a production change with its own review surface. Backlog row.
+- **C, pin `python3` in `load_mocks`.** The saving is local only, and the change also closes a
+  leak: the tests execute the real ansible venv's `python3`. Backlog row.
+- **Mock shebang (`#!/usr/bin/env bash` to a fixed path).** The `env` `PATH` walk makes 76% of
+  `execve` calls, but they fail with ENOENT and cost little: ~0.5 ms of ~6.8 ms per mock call,
+  ~3%. macOS cannot hardcode the bash path. Closed, with this measurement, in the Backlog's
+  closed table.
+
+## Requirements
+
+- **R1.** `[PR1]` Every flagless `run run_update` test in the files the plan re-counts ends in
+  one of two states. It is scoped, setting the `UPDATE_*` flags that cover every section it
+  asserts on. Or it is listed in the plan's keep-full table with its class 2 or class 3 reason.
+- **R2.** `[PR1]` A scoped test's diff only adds `export UPDATE_<X>=1` lines, or
+  `UPDATE_<X>=1` prefixes, before `run run_update`, and removes `UPDATE_<X>` from its `unset`
+  list.
+- **R3.** `[PR1]` A test with an absence assertion is scoped only when the plan names every
+  producer of the absent string, and each producer lies in a section the set flags run.
+- **R4.** `[PR1]` A test asserting on ai-config, git-repos, legacy-rsync, git-hooks, aws, rust or
+  cheat.sh stays flagless.
+- **R5.** `[PR1]` `tests/setup_env/workflows.bats` gains one macOS and one Ubuntu test. Each
+  runs a flagless `run_update`. For every name in `_UPDATE_SECTION_ORDER` read at run time, it
+  asserts a summary row with status OK, FAIL, SKIP or WARN. Any exempt name is listed in the test
+  with a reason comment.
+- **V1.** `bats --count` gives the same total for each touched file before and after. `make test`
+  passes at the PR head, and every `test-shard` and `test-macos-shard` leg passes.
+- **V2.** The candidate-count scan runs before and after. The PR body records the per-file
+  flagless count both times, and the plan's keep-full table accounts for every flagless test
+  left after.
+- **V3.** Pick one scoped test per flag used: `UPDATE_BREW`, `UPDATE_CLAUDE`, `UPDATE_PKGS`,
+  `UPDATE_PIP`, `UPDATE_GEMS`, and `UPDATE_MAS` where a scoped test uses it. In a
+  `git archive` copy, break that section's recording or its asserted command. The test goes red.
+  The copy is then deleted.
+- **V4.** In a `git archive` copy, delete one section's whole gated block from `run_update`
+  (for example the `gems` block). Each coverage pin that expects that section goes red. Removing
+  only `_update_record_start` is not a valid control: `_update_record_end` writes a status file
+  on its own, so the pin would stay green.
+- **V5.** On `claude`, run 5 interleaved before/after pairs (ABABABABAB) of the touched files at
+  `bats --jobs 8`, timed with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body
+  reports wall, user and sys for each run, and the mean CPU saving against the predicted
+  ~110 s. There is no pass threshold.
+- **N1.** No file changes outside `tests/**/*.bats` and `docs/`.
+- **N2.** No new `run_update` flag or selector.
+- **N3.** No lint, ratchet or guard on the count of flagless `run_update` tests.
+- **N4.** No assertion line in an existing `@test` body is removed or changed.
+- **N5.** `tests/bats-weights.tsv` does not change.
