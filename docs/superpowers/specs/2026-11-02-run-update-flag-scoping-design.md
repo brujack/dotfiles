@@ -105,22 +105,48 @@ Each flagless `run_update` test is in exactly one class.
    A `[ "$status" -eq 0 ]` beside a section-specific grep is not class 2 on its own. Most
    tests carry one as a guard, and a scoped run still checks it for the sections it runs.
 
+   **Pip state.** The pip block changes shell state in-process: it exports `PYENV_ROOT`,
+   prepends `$PYENV_ROOT/bin:$PYENV_ROOT/shims` to `PATH`, and runs `eval "$(pyenv init -)"`
+   and `pyenv shell ansible`. In a full run, that state carries into pyenv-shims, cargo-tools
+   and gems. A scoped run without `UPDATE_PIP` skips it, so those sections may resolve
+   commands differently. A scoped test asserting on any of these three sections therefore
+   either sets `UPDATE_PIP` as well, or is listed in the plan's pip-comparison table. That
+   table records, per test, that the section's `MOCK_CALLS_FILE` lines are identical between a
+   full and a scoped run (V7).
+
 3. **Absence asserts.** A test with `! grep X`, `!=` or a similar absence check is scoped only
    when every producer of `X` lies in a section the chosen flags run. Otherwise the scoped run
    cannot produce `X`, so the absence passes vacuously, and the test stays full. The plan names
    the producer for each scoped absence assert.
 
-Example (class 1): a test that sets macOS variables, unsets all six flags, runs `run_update`,
-and asserts `grep -q "brew update" "${MOCK_CALLS_FILE}"`. It becomes
-`export UPDATE_BREW=1` with `UPDATE_BREW` removed from its `unset` line.
+   A producer is every section that can write `X`, not only the section the test is about.
+   Shared helpers and mocks (`brew`, `sudo`, the apt family) write `MOCK_CALLS_FILE` from
+   several sections. The plan finds producers by grepping `X` across `lib/` and `tests/mocks/`,
+   then maps each hit, and each caller of a hit helper or mock, to the sections that reach it.
+
+Example (class 1): a test that sets macOS variables, unsets the five flags its `unset` line
+names (existing lines omit `UPDATE_PKGS`), runs `run_update`, and asserts
+`grep -q "brew update" "${MOCK_CALLS_FILE}"`. It becomes `export UPDATE_BREW=1` with
+`UPDATE_BREW` removed from its `unset` line.
 
 ### Coverage pin
 
 Add one test per platform to `tests/setup_env/workflows.bats`. Each sets the platform
-variables, unsets all six flags and runs `run_update`. Then, for every name in
-`_UPDATE_SECTION_ORDER` read at run time, it asserts a summary row matching
-`[OK|FAIL|SKIP|WARN] <name>`. `_update_summary` prints one row per section that has a status
-file.
+variables, unsets all six `UPDATE_*` flags and runs `run_update`. Then, for every name in
+`_UPDATE_SECTION_ORDER` read at run time, it asserts two things:
+
+- a summary row exists for the name. Rows are padded (`[OK]   %-20s`), so the match is the
+  extended regex `\[(OK|FAIL|SKIP|WARN)\][[:space:]]+<name>([[:space:]]|$)`, not a bracket
+  character class;
+- that row's result is not `flag not set`.
+
+The second check is the load-bearing one. Every flag-gated block in `run_update` has an
+`else _update_skip "<section>" "flag not set"` branch (19 sites in `lib/workflows.sh`). If a
+gate loses its `${_run_all} -eq 1 ||` arm, a flagless run still writes a row, as
+`[SKIP] <name> flag not set`. Only the second check sees that. In a flagless run no section
+can legitimately report `flag not set`, so the check needs no exemption list. Measured by the
+review lenses: today a flagless run on either platform records all 28 sections, each OK or an
+environment SKIP.
 
 A section that does not record on a platform is listed in that test as an exemption, with a
 reason comment, after measuring that it really does not record. The expected set is never a
@@ -133,7 +159,8 @@ One PR, from one plan:
 - `workflows.bats` is its own task, the largest.
 - The remaining nine files are one task, or two if the plan's re-count makes that cheaper to
   review.
-- The coverage pin is its own TDD task. Its red-first check is V4's control, a deleted section block.
+- The coverage pin is its own TDD task. Its red-first checks are V4's and V5's controls: a deleted
+  section block, and a gate with its `_run_all` arm removed.
 
 Every task needs a judgement call on classification, so no task is Haiku-eligible. All tasks
 run on Sonnet. `tests/bats-weights.tsv` is not reseeded. Shard balance drifts a little, and a
@@ -143,7 +170,7 @@ reseed needs the macOS measurement its own procedure prescribes.
 
 At ~1.1 s CPU per scoped test on `claude`, scoping ~100 of the 127 saves on the order of
 110 s CPU per local suite run. On CI, without the shim, it saves less (see Population). This
-is a prediction. V5 measures it, and the PR reports it against this figure.
+is a prediction. V6 measures it, and the PR reports it against this figure.
 
 ## Not chosen
 
@@ -166,13 +193,18 @@ is a prediction. V5 measures it, and the PR reports it against this figure.
   `UPDATE_<X>=1` prefixes, before `run run_update`, and removes `UPDATE_<X>` from its `unset`
   list.
 - **R3.** `[PR1]` A test with an absence assertion is scoped only when the plan names every
-  producer of the absent string, and each producer lies in a section the set flags run.
+  producer of the absent string, and each producer lies in a section the set flags run. A
+  producer is every section that reaches a hit for the string in `lib/` or `tests/mocks/`,
+  directly or through a shared helper or mock.
 - **R4.** `[PR1]` A test asserting on ai-config, git-repos, legacy-rsync, git-hooks, aws, rust or
   cheat.sh stays flagless.
 - **R5.** `[PR1]` `tests/setup_env/workflows.bats` gains one macOS and one Ubuntu test. Each
   runs a flagless `run_update`. For every name in `_UPDATE_SECTION_ORDER` read at run time, it
-  asserts a summary row with status OK, FAIL, SKIP or WARN. Any exempt name is listed in the test
-  with a reason comment.
+  asserts a summary row with status OK, FAIL, SKIP or WARN, matched as
+  `\[(OK|FAIL|SKIP|WARN)\][[:space:]]+<name>([[:space:]]|$)`, and asserts that row's result
+  is not `flag not set`. Any exempt name is listed in the test with a reason comment.
+- **R6.** `[PR1]` A scoped test asserting on pyenv-shims, cargo-tools or gems either sets
+  `UPDATE_PIP` as well, or is listed in the plan's pip-comparison table.
 - **V1.** `bats --count` gives the same total for each touched file before and after. `make test`
   passes at the PR head, and every `test-shard` and `test-macos-shard` leg passes.
 - **V2.** The candidate-count scan runs before and after. The PR body records the per-file
@@ -186,10 +218,17 @@ is a prediction. V5 measures it, and the PR reports it against this figure.
   (for example the `gems` block). Each coverage pin that expects that section goes red. Removing
   only `_update_record_start` is not a valid control: `_update_record_end` writes a status file
   on its own, so the pin would stay green.
-- **V5.** On `claude`, run 5 interleaved before/after pairs (ABABABABAB) of the touched files at
+- **V5.** In a `git archive` copy, remove only `${_run_all} -eq 1 ||` from one gate (for
+  example the gems gate), leaving its `else _update_skip` branch. Each coverage pin that
+  expects that section goes red. Repeat for the pyenv-shims gate, which no test catches today.
+- **V6.** On `claude`, run 5 interleaved before/after pairs (ABABABABAB) of the touched files at
   `bats --jobs 8`, timed with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body
   reports wall, user and sys for each run, and the mean CPU saving against the predicted
   ~110 s. There is no pass threshold.
+- **V7.** For each test in the plan's pip-comparison table, run it full and scoped in a
+  `git archive` copy, filter `MOCK_CALLS_FILE` to the section's commands, and diff. An empty
+  diff is recorded in the plan. A non-empty diff moves the test to `UPDATE_PIP` or to
+  keep-full.
 - **N1.** No file changes outside `tests/**/*.bats` and `docs/`.
 - **N2.** No new `run_update` flag or selector.
 - **N3.** No lint, ratchet or guard on the count of flagless `run_update` tests.
@@ -208,13 +247,15 @@ Finding: The coverage pin does not replace what scoping removes. Every flag-gate
 gate leaves `[SKIP] <name> flag not set` in a flagless run and the pin green, while the scoped
 test sets the flag and stays green too. V4 deletes the whole block, `else` included, so it
 tests a control the pin catches and never the realistic regression. Fix: in the flagless pin,
-reject a result of `flag not set`; add a V4b control that removes only the `_run_all` arm.
+reject a result of `flag not set`; add a V5 control that removes only the `_run_all` arm.
 The row pattern `[OK|FAIL|SKIP|WARN]` is a character class as a regex; use
 `(OK|FAIL|SKIP|WARN)`. Otherwise goal-fit holds: no simpler path gets most of the value.
 Assumption: that keep-full survivors cover each of the six flag-gated families by accident.
 Settled by removing the `_run_all` arm from each gate in turn in an archive copy at the PR
 head; each must turn at least one test red. Predicted: at least one family goes all-green.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — the flagless pin now rejects a `flag not set`
+result, rows match `\[(OK|FAIL|SKIP|WARN)\][[:space:]]+<name>`, and V5 adds the
+`_run_all`-arm control. The per-family survivor sweep is subsumed: V5 runs it on the pin.
 
 ### Ergonomics
 
@@ -230,7 +271,9 @@ Assumption: that each absence assert's string has an enumerable producer set. Sh
 and mocks (`brew`, `sudo`, apt) write `MOCK_CALLS_FILE` from several sections, so a producer
 may span flags. Settled by grepping each of the 25 absent strings across `lib/` and
 `tests/mocks/` and mapping every hit to its sections.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — pass condition is "row exists and result is
+not `flag not set`", with no exemption list; the example names five flags; class 3 and R3
+define a producer to include shared helpers and mocks.
 
 ### Risk
 
@@ -248,7 +291,8 @@ persists into pyenv-shims, cargo-tools and gems. A scoped run without `UPDATE_PI
 so those sections may resolve commands differently. Settled per scoped test asserting on a
 section after pip: run full and scoped in an archive copy, filter `MOCK_CALLS_FILE` to the
 section's commands, and diff.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — the pin fix covers the finding, and V5
+names the pyenv-shims gate. The pip-state assumption became a class 2 rule, R6 and V7.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
