@@ -59,8 +59,16 @@ The scan is a heuristic, and it misses in both directions:
 
 The plan re-derives the list per file before any edit.
 
+**Correction (round 2).** The undercount is large. `update_apt.bats` (29) and `flatpak.bats`
+(7) call `setup_run_update_linux` (`tests/helpers/common.bash`), which exports
+`UPDATE_PKGS=1` and unsets the other five flags. Those 36 tests are already scoped: adding
+`export UPDATE_PKGS=1` to `update_apt.bats`' `setup()` left its CPU unchanged. A re-scan that
+counts helper and `setup()` exports leaves about 80 flagless tests, about 62 of them in
+`workflows.bats`. The 10 absence asserts in `update_apt.bats` drop out with them. The table
+above is kept as the original scan, and the plan's re-count is the authority.
+
 **Implicit coverage.** No test asserts that a flagless run reaches every section. That fact is
-pinned today only as a side effect of these ~127 tests, so scoping them removes it unless a test
+pinned today only as a side effect of these ~80 tests, so scoping them removes it unless a test
 replaces it. `update_summary.bats`'s "returns 0 when every section is OK" is a unit test of
 `_update_summary` on seeded status files. It does not run `run_update`.
 
@@ -110,9 +118,14 @@ Each flagless `run_update` test is in exactly one class.
    and `pyenv shell ansible`. In a full run, that state carries into pyenv-shims, cargo-tools
    and gems. A scoped run without `UPDATE_PIP` skips it, so those sections may resolve
    commands differently. A scoped test asserting on any of these three sections therefore
-   either sets `UPDATE_PIP` as well, or is listed in the plan's pip-comparison table. That
-   table records, per test, that the section's `MOCK_CALLS_FILE` lines are identical between a
-   full and a scoped run (V7).
+   always sets `UPDATE_PIP` as well. It costs about 80 ms per run (`UPDATE_GEMS=1` 1.48 s
+   CPU, with `UPDATE_PIP=1` added 1.87 s, full run 7.26 s).
+
+   A test with both flags cannot tell a correct gate from one keyed to `UPDATE_PIP` or nested
+   inside the pip block. Single-flag tests catch those regressions today:
+   `unit.bats` "run_update --gems-only ...", `cargo_tools_update.bats` at lines 44 and 54, and
+   `update_pyenv_shims.bats` at line 308. They are not candidates (they already set one flag),
+   and they stay single-flag.
 
 3. **Absence asserts.** A test with `! grep X`, `!=` or a similar absence check is scoped only
    when every producer of `X` lies in a section the chosen flags run. Otherwise the scoped run
@@ -148,6 +161,10 @@ can legitimately report `flag not set`, so the check needs no exemption list. Me
 review lenses: today a flagless run on either platform records all 28 sections, each OK or an
 environment SKIP.
 
+Both checks loop over `_UPDATE_SECTION_ORDER`, so an empty or unsourced array would pass with
+nothing checked. The pin therefore also asserts that the array is non-empty and that the
+number of names it checked equals `${#_UPDATE_SECTION_ORDER[@]}`, less any exemptions.
+
 A section that does not record on a platform is listed in that test as an exemption, with a
 reason comment, after measuring that it really does not record. The expected set is never a
 hand-typed list of included names. A new section added to the array is then covered by default.
@@ -157,8 +174,7 @@ hand-typed list of included names. A new section added to the array is then cove
 One PR, from one plan:
 
 - `workflows.bats` is its own task, the largest.
-- The remaining nine files are one task, or two if the plan's re-count makes that cheaper to
-  review.
+- The remaining files are one task, about 18 tests after the round-2 correction.
 - The coverage pin is its own TDD task. Its red-first checks are V4's and V5's controls: a deleted
   section block, and a gate with its `_run_all` arm removed.
 
@@ -168,8 +184,8 @@ reseed needs the macOS measurement its own procedure prescribes.
 
 ### Predicted saving
 
-At ~1.1 s CPU per scoped test on `claude`, scoping ~100 of the 127 saves on the order of
-110 s CPU per local suite run. On CI, without the shim, it saves less (see Population). This
+At ~1.1 s CPU per scoped test on `claude`, scoping most of the ~80 saves on the order of
+85 s CPU per local suite run, about 3% of the 2680 s total in `tests/bats-weights.tsv`. On CI, without the shim, it saves less (see Population). This
 is a prediction. V6 measures it, and the PR reports it against this figure.
 
 ## Not chosen
@@ -202,9 +218,13 @@ is a prediction. V6 measures it, and the PR reports it against this figure.
   runs a flagless `run_update`. For every name in `_UPDATE_SECTION_ORDER` read at run time, it
   asserts a summary row with status OK, FAIL, SKIP or WARN, matched as
   `\[(OK|FAIL|SKIP|WARN)\][[:space:]]+<name>([[:space:]]|$)`, and asserts that row's result
-  is not `flag not set`. Any exempt name is listed in the test with a reason comment.
-- **R6.** `[PR1]` A scoped test asserting on pyenv-shims, cargo-tools or gems either sets
-  `UPDATE_PIP` as well, or is listed in the plan's pip-comparison table.
+  is not `flag not set`. It also asserts that `_UPDATE_SECTION_ORDER` is non-empty and that the
+  number of names checked equals its length less exemptions. Any exempt name is listed in the
+  test with a reason comment.
+- **R6.** `[PR1]` A scoped test asserting on pyenv-shims, cargo-tools or gems also sets
+  `UPDATE_PIP`. The single-flag tests `unit.bats` "run_update --gems-only ...",
+  `cargo_tools_update.bats` lines 44 and 54, and `update_pyenv_shims.bats` line 308 keep exactly
+  one `UPDATE_*` flag.
 - **V1.** `bats --count` gives the same total for each touched file before and after. `make test`
   passes at the PR head, and every `test-shard` and `test-macos-shard` leg passes.
 - **V2.** The candidate-count scan runs before and after. The PR body records the per-file
@@ -213,7 +233,8 @@ is a prediction. V6 measures it, and the PR reports it against this figure.
 - **V3.** Pick one scoped test per flag used: `UPDATE_BREW`, `UPDATE_CLAUDE`, `UPDATE_PKGS`,
   `UPDATE_PIP`, `UPDATE_GEMS`, and `UPDATE_MAS` where a scoped test uses it. In a
   `git archive` copy, break that section's recording or its asserted command. The test goes red.
-  The copy is then deleted.
+  The PR body records each mutation and the test it turned red. A test that stays green moves
+  to keep-full. The copy is then deleted.
 - **V4.** In a `git archive` copy, delete one section's whole gated block from `run_update`
   (for example the `gems` block). Each coverage pin that expects that section goes red. Removing
   only `_update_record_start` is not a valid control: `_update_record_end` writes a status file
@@ -221,14 +242,9 @@ is a prediction. V6 measures it, and the PR reports it against this figure.
 - **V5.** In a `git archive` copy, remove only `${_run_all} -eq 1 ||` from one gate (for
   example the gems gate), leaving its `else _update_skip` branch. Each coverage pin that
   expects that section goes red. Repeat for the pyenv-shims gate, which no test catches today.
-- **V6.** On `claude`, run 5 interleaved before/after pairs (ABABABABAB) of the touched files at
-  `bats --jobs 8`, timed with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body
-  reports wall, user and sys for each run, and the mean CPU saving against the predicted
-  ~110 s. There is no pass threshold.
-- **V7.** For each test in the plan's pip-comparison table, run it full and scoped in a
-  `git archive` copy, filter `MOCK_CALLS_FILE` to the section's commands, and diff. An empty
-  diff is recorded in the plan. A non-empty diff moves the test to `UPDATE_PIP` or to
-  keep-full.
+- **V6.** On `claude`, run one before/after pair of the touched files at `bats --jobs 8`, timed
+  with `/usr/bin/time -a -o` and `uptime` recorded per run. The PR body reports wall, user and
+  sys for each run, and the CPU saving against the predicted ~85 s. There is no pass threshold.
 - **N1.** No file changes outside `tests/**/*.bats` and `docs/`.
 - **N2.** No new `run_update` flag or selector.
 - **N3.** No lint, ratchet or guard on the count of flagless `run_update` tests.
@@ -315,7 +331,10 @@ Apparatus: the pin could read `status_<name>`/`result_<name>` directly instead o
 Assumption: that the ~62 `workflows.bats` tests are truly flagless, with no setup-level scoping.
 Settled by timing `workflows.bats` as-is against a copy with `export UPDATE_BREW=1` in `setup()`;
 CPU should fall by about 60 s.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — Problem carries a round-2 correction (~80
+flagless, ~62 in `workflows.bats`), the prediction is ~85 s, the second task is ~18 tests, V7
+is deleted, V3 records to the PR body, V6 is one pair, and the pin asserts its count. The
+assumption is left to the plan's re-count, which runs before any edit.
 
 #### Ergonomics (round 2, `1ba9c268`)
 
@@ -333,7 +352,9 @@ on an empty array; assert the `N sections:` count equals `${#_UPDATE_SECTION_ORD
 is above 0.
 Assumption: none genuinely uncertain; the macOS row count is the closest, settled by the first
 `test-macos-shard` run.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — R6 always sets `UPDATE_PIP`; V7 and the
+table are deleted; the pin asserts a non-empty array and a checked count. Regex escaping, the
+missing-status-file trap and reading status files directly go to the plan's pin task.
 
 #### Risk (round 2, `1ba9c268`)
 
@@ -352,7 +373,8 @@ costliest new part; always setting `UPDATE_PIP` is cheaper (judgement, not defec
 Assumption: that two-flag scoped tests will not be the only coverage of the cargo-tools and
 gems gates after the PR. Settled at the PR head by keying the cargo-tools gate to `UPDATE_PIP`
 and nesting gems inside the pip gate; each must turn a single-flag test red.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — R6 names the four single-flag tests that
+stay single-flag. The round-1 history is left as written; this finding records its error.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
