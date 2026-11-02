@@ -118,6 +118,51 @@ Disposition: Addressed (operator, 2026-11-02) — V2 rebuilt: real build groups,
 acquire-counting probe, ansible-lint fixture compared across 3.32.3 and 4.2.1, `virtualenv` create, and a
 python-discovery reach check; `cachecontrol` named as a consumer.
 
+### Round 2
+
+Reviewed at commit: `4188e263` (round-1 dispositions applied).
+
+#### Goal-Fit (round 2, `4188e263`)
+
+Finding: Run inline by the orchestrator: the classifier refused the lens dispatch. Every one of the 48
+`filelock` alerts has a vulnerable range ending at or below 4.2.0 (`<= 4.0.8` for 4, `<= 4.2.0` for 44), so
+4.2.1 clears all 48. V2's output reaches the PR body the operator reads before merging by hand, and V3 decides
+the Backlog rows, so both pass the reads-it test.
+Assumption: no uncertain assumption found.
+Disposition:
+
+#### Ergonomics (round 2, `4188e263`)
+
+Finding: V2(c) cannot fail: with `VIRTUALENV_OVERRIDE_APP_DATA` empty, `virtualenv -p python3.14` made 2
+acquires, both `_CountedFileLock`; python-discovery's own `FileLock` (`_cache.py:111`) runs only on its default
+disk cache, which virtualenv never uses. The "cannot drift" wording oversells R1: nothing in `pyproject.toml`
+holds 4.2.1, and `uv lock --upgrade --dry-run` already moves it to 4.2.7; no one should add a `filelock==`
+constraint. Apparatus: say where the `sitecustomize` probe goes (`PYTHONPATH`, appending to a log from every
+process) and how the 3.32.3 baseline is built (a second venv from the base lock); fix the fixture content
+(`shell: echo hi` gives rc 2 and four rules: `command-instead-of-shell`, `fqcn[action-core]`, `name[missing]`,
+`no-changed-when`) and pin that result, since equality passes on 0 = 0. V3: write the query down; today it
+returns `48 filelock open`, `30 virtualenv open`, `4 virtualenv fixed`, so a query counting every
+`virtualenv` alert would expect 34.
+Assumption: that GitHub marks all 48 `filelock` alerts `fixed` once the lock and renderings read 4.2.1; settled
+by the V3 query about an hour after merge.
+Disposition:
+
+#### Risk (round 2, `4188e263`)
+
+Finding: V2(a) leaks into the real ansible venv: ansible-lint shells out to `ansible-config`, which resolves to
+`~/.pyenv/shims/ansible-config`; the first run printed a probe line `filelock=3.32.3` from that subprocess and
+about 40 `Another version of …` lines from `~/.pyenv/versions/ansible`. Prepending `$UV_PROJECT_ENVIRONMENT/bin`
+to `PATH` gave 0 `.pyenv` matches and one filelock version across every process. ansible-lint returns rc 2
+for both a usage error and real violations, so pin `rc 2`, 4 findings and 1 acquire as literals. Injected
+breaks: `acquire` raising turns (a) and (b) red; a positional-signature change turns (b) red (ansible-lint
+calls `acquire(timeout=180)` by keyword); a no-op lock leaves all green, so add a contention case (one process
+holds a `FileLock`, a second's `acquire(timeout=0.1)` must raise `Timeout`). API confirmed with
+`inspect.signature`; 4.2.2–4.2.7's fixes (soft locks, leases, RW locks, Windows, 3.15, #856, #878, #889) need
+conditions these consumers do not hit. 4.2.1 uploaded 2026-10-17T16:48Z, clearing the 14-day age policy.
+Assumption: that `$VENV/bin` first on `PATH` keeps every ansible-lint subprocess in the venv; measured 0
+`.pyenv` matches on `claude`, macOS unmeasured.
+Disposition:
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
