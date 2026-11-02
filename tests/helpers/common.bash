@@ -17,13 +17,9 @@ load_mocks() {
   # tests/mocks/git answers it with rc 0 and empty output. Resolve the real git
   # with tests/mocks removed from PATH, before the prepend at the end of this
   # function.
-  local _clean_path _entry _real_git
-  local -a _entries
-  IFS=: read -r -a _entries <<< "${PATH}"
-  for _entry in "${_entries[@]}"; do
-    [[ ${_entry} == "${REPO_ROOT}/tests/mocks" ]] && continue
-    _clean_path+="${_clean_path:+:}${_entry}"
-  done
+  local _clean_path _real_git _m="${REPO_ROOT}/tests/mocks" _p=":${PATH}:"
+  while [[ ${_p} == *":${_m}:"* ]]; do _p="${_p//:"${_m}":/:}"; done
+  _p="${_p#:}"; _clean_path="${_p%:}"
   _real_git="$(PATH="${_clean_path}" command -v git)"
   if [[ -z ${_real_git} ]]; then
     printf 'load_mocks: no real git outside tests/mocks on PATH\n' >&2
@@ -31,12 +27,21 @@ load_mocks() {
   fi
   export _AI_CONFIG_GIT="${_real_git}"
   # run_setup_user tests reach setup_dotfile_symlinks, which would otherwise read
-  # the real-HOME AI_CONFIG_DIR: missing on CI, the real checkout locally. Default
-  # to a tracked fixture; a test needing another layout overrides it and calls
-  # track_ai_config_fixture.
+  # the real-HOME AI_CONFIG_DIR: missing on CI, the real checkout locally. The
+  # tracked fixture costs several git spawns, so build it only for a file that
+  # sets LOAD_MOCKS_AI_CONFIG=1 (workflows.bats). Otherwise point at a missing
+  # path whose name carries the remedy. It stays missing until setup_ai_config's
+  # mock clone mkdirs it as an empty non-repo; listing it still fails, so a
+  # forgotten opt-in fails loudly via "Cannot list tracked items in <path>".
+  # A test needing another layout
+  # overrides it and calls track_ai_config_fixture.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-default"
-    track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}" || return 1
+    if [[ ${LOAD_MOCKS_AI_CONFIG:-} == 1 ]]; then
+      export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-default"
+      track_ai_config_fixture "${_OVERRIDE_AI_CONFIG_DIR}" || return 1
+    else
+      export _OVERRIDE_AI_CONFIG_DIR="${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1"
+    fi
   fi
   # Default pyenv-which to the mock python so run_update's pip section never
   # shells out to real python3/pip on dev machines (real pip is slow, hits the
@@ -58,51 +63,35 @@ load_mocks() {
   # The azure-cli migration probes the brew az before removing the apt one.
   # tests/mocks/brew prints no prefix by default, so without this default a
   # probe could resolve to the REAL az on a machine with the apt package
-  # (tdd.md E2). Stub lives under BATS_TEST_TMPDIR; tests of the prefix
-  # branches unset it.
-  export _BREW_AZ_BIN="${BATS_TEST_TMPDIR:-/nonexistent}/brew-az"
-  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    cat > "${_BREW_AZ_BIN}" << 'STUB'
-#!/usr/bin/env bash
-printf "brew-az %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_BREW_AZ_EXIT:-0}"
-STUB
-    chmod +x "${_BREW_AZ_BIN}"
-  fi
+  # (tdd.md E2). The stub is a tracked file; tests of the prefix branches
+  # unset the variable.
+  export _BREW_AZ_BIN="${REPO_ROOT}/tests/stubs/brew-az"
   # Every CI and fleet machine has a real brew at a default fallback path
   # (claude and GitHub's ubuntu image have /home/linuxbrew/.linuxbrew/bin/brew,
   # often on PATH too; the macOS runner has /opt/homebrew/bin/brew), so without these
   # defaults a run_doctor test would run real brew from a fake HOME (37 MB API
   # cache, possible portable-Ruby pour). Both are exported because
   # tests/setup_env/unit.bats reaches the check through a subprocess
-  # (`bash setup_env.sh -t doctor`). The stub logs to a path fixed at write
-  # time, never a ${MOCK_CALLS_FILE:-/tmp/...} fallback.
-  export _BREW_BIN="${BATS_TEST_TMPDIR:-/nonexistent}/brew-stub"
-  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    cat > "${_BREW_BIN}" << STUB
-#!/usr/bin/env bash
-printf '%s\n' "\$*" >> "${BATS_TEST_TMPDIR}/brew-calls"
-exit 0
-STUB
-    chmod +x "${_BREW_BIN}"
-  fi
+  # (`bash setup_env.sh -t doctor`). The stub logs to
+  # ${BATS_TEST_TMPDIR:?}/brew-calls, never a ${MOCK_CALLS_FILE:-/tmp/...}
+  # fallback.
+  export _BREW_BIN="${REPO_ROOT}/tests/stubs/brew-stub"
   export _BREW_FALLBACK_PATHS="${BATS_TEST_TMPDIR:-/nonexistent}/no-brew"
   # inotify step/doctor seams: the real conf, /proc file and sysctl binary must
   # never be reached (tdd.md E2). Live value starts at 1024 so no apply happens
   # unless a test lowers it.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    mkdir -p "${BATS_TEST_TMPDIR}/sysctl.d" "${BATS_TEST_TMPDIR}/run-systemd"
+    # One mkdir for every directory this function needs (a fork per call
+    # adds up across the suite); hashicorp-source and apt-keyrings are the
+    # directories _HASHICORP_SOURCE_DIR and _APT_KEYRINGS_DIR name below.
+    mkdir -p "${BATS_TEST_TMPDIR}/sysctl.d" "${BATS_TEST_TMPDIR}/run-systemd" \
+      "${BATS_TEST_TMPDIR}/tmp-mount.d" "${BATS_TEST_TMPDIR}/hashicorp-source" \
+      "${BATS_TEST_TMPDIR}/apt-keyrings"
     export _SYSCTL_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-inotify.conf"
     export _INOTIFY_PROC="${BATS_TEST_TMPDIR}/inotify_max_user_instances"
     printf '1024\n' > "${_INOTIFY_PROC}"
     export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
-    export _SYSCTL_BIN="${BATS_TEST_TMPDIR}/sysctl-stub"
-    cat > "${_SYSCTL_BIN}" << 'STUB'
-#!/usr/bin/env bash
-printf "sysctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-exit "${MOCK_SYSCTL_STUB_EXIT:-0}"
-STUB
-    chmod +x "${_SYSCTL_BIN}"
+    export _SYSCTL_BIN="${REPO_ROOT}/tests/stubs/sysctl-stub"
   fi
   # kernel keys step/doctor seams: procs are seeded at the floors (2000 / 500000), so
   # nothing is applied unless a test lowers one; confs start absent, so an absent
@@ -122,30 +111,11 @@ STUB
   # (MOCK_TMP_LIVE_INODES overrides); MOCK_SYSTEMCTL_RELOAD_EXIT sets daemon-reload's exit. The tracked tests/mocks/mount (first on PATH) records MOUNT CALLED and exits 1: the step
   # must never run it, and a test asserts that.
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    mkdir -p "${BATS_TEST_TMPDIR}/tmp-mount.d"
     export _TMP_DROPIN="${BATS_TEST_TMPDIR}/tmp-mount.d/override.conf"
     export _TMP_STOCK_UNIT="${BATS_TEST_TMPDIR}/tmp.mount"
     printf '[Mount]\nWhat=tmpfs\nWhere=/tmp\nType=tmpfs\nOptions=mode=1777,strictatime,nosuid,nodev,size=50%%%%,nr_inodes=1m,x-systemd.graceful-option=usrquota\n' > "${_TMP_STOCK_UNIT}"
-    export _SYSTEMCTL_BIN="${BATS_TEST_TMPDIR}/systemctl-stub"
-    cat > "${_SYSTEMCTL_BIN}" << 'STUB'
-#!/usr/bin/env bash
-printf "systemctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-if [[ $1 == daemon-reload ]]; then
-  exit "${MOCK_SYSTEMCTL_RELOAD_EXIT:-0}"
-fi
-if [[ $1 == show ]]; then
-  printf '%s\n' "${MOCK_TMP_FRAGMENT-${_TMP_STOCK_UNIT}}"
-fi
-exit 0
-STUB
-    chmod +x "${_SYSTEMCTL_BIN}"
-    export _FINDMNT_BIN="${BATS_TEST_TMPDIR}/findmnt-stub"
-    cat > "${_FINDMNT_BIN}" << 'STUB'
-#!/usr/bin/env bash
-printf "findmnt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
-printf 'rw,nosuid,nodev,strictatime,mode=1777,nr_inodes=%s,usrquota\n' "${MOCK_TMP_LIVE_INODES:-16777216}"
-STUB
-    chmod +x "${_FINDMNT_BIN}"
+    export _SYSTEMCTL_BIN="${REPO_ROOT}/tests/stubs/systemctl-stub"
+    export _FINDMNT_BIN="${REPO_ROOT}/tests/stubs/findmnt-stub"
   fi
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.
@@ -153,13 +123,10 @@ STUB
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # _install_ubuntu_hashicorp writes a source file and a keyring through
   # tests/mocks/sudo, which execs real commands; keep both under the test tmpdir
-  # (tdd.md E2). Created here so a test that reads them before the step runs
-  # sees an empty directory, not a missing one.
+  # (tdd.md E2). The single mkdir above creates both, so a test that reads
+  # them before the step runs sees an empty directory, not a missing one.
   export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
-  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
-    mkdir -p "${_HASHICORP_SOURCE_DIR}" "${_APT_KEYRINGS_DIR}"
-  fi
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
   # of the fixture under BATS_TEST_TMPDIR, never the tracked file itself.

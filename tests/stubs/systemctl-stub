@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+printf "systemctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ $1 == daemon-reload ]]; then
+  exit "${MOCK_SYSTEMCTL_RELOAD_EXIT:-0}"
+fi
+if [[ $1 == show ]]; then
+  printf '%s\n' "${MOCK_TMP_FRAGMENT-${_TMP_STOCK_UNIT}}"
+fi
+exit 0

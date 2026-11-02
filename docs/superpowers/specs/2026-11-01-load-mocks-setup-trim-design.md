@@ -229,6 +229,11 @@ sources the file with a `uname` stub first on `PATH`:
 - **N3.** `tests/stubs/` is not added to `PATH` anywhere.
 - **N4.** No `setup_file` caching of a sourced environment or fixture.
 
+## Amendments
+
+- R6 -> `tests/setup_env/workflows.bats` sets `LOAD_MOCKS_AI_CONFIG=1` in `setup()` before `load_mocks`, and no other file sets it file-wide; `tests/helpers_load_mocks.bats` sets it only inside its opt-in-positive test; the `install_guards.bats` fixture-default test moves to `tests/helpers_load_mocks.bats`. — the plan's Task 2 prescribes that opt-in-positive test, which must set the variable itself; found by Task 2's spec-compliance review.
+- R11 -> A static guard test fails, naming the file and `LOAD_MOCKS_AI_CONFIG=1`, for any `tests/**/*.bats` file that calls `run_setup_user` or `setup_dotfile_symlinks` without either a line setting `LOAD_MOCKS_AI_CONFIG=1` or one setting `_OVERRIDE_AI_CONFIG_DIR`; it finds at least one calling file. — a redefinition exemption let `workflows.bats` pass with its opt-in deleted, because one of its tests stubs `setup_dotfile_symlinks`; measured in Task 2's mutation control.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `78c1a781` (Step 7 self-review commit, before Step 8 dispatch)
@@ -303,3 +308,24 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
   `load_mocks`, R11 static guard, opt-in narrowed to `workflows.bats` with the one test moved, CLAUDE.md
   line restated). Review stopped at round 2: every finding was in the test apparatus or wording, and
   the design shrank (opt-in from five files to one).
+
+## Spec alignment (2026-11-02)
+
+- spec: docs/superpowers/specs/2026-11-01-load-mocks-setup-trim-design.md
+- anchor: 5c5e1c60f85d00a7a7b10c489291e5dc25bb1c8b
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: claude, 3 ABAB pairs, bats --jobs 8 on linux_ubuntu/workflows/install_guards: before user+sys 639.97/637.15/637.34 s, after 580.52/581.28/581.35 s; every pair lower (drops 59.45/55.87/55.99 s); mean drop 57.10 s >= 20 s; every run 976 ok 0 not ok; wall ~159 s both arms; load 8.79/5.26/4.78/3.59/4.55/3.01.
+- V2: make test 3771/3771 rc 0 at 7fb07946 (orchestrator); bug-scan full bats -r 3771/3771 on archive of 7fb07946; CI pending until PR.

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+printf "findmnt %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+printf 'rw,nosuid,nodev,strictatime,mode=1777,nr_inodes=%s,usrquota\n' "${MOCK_TMP_LIVE_INODES:-16777216}"

@@ -1884,10 +1884,3 @@ _allowlist_env() {
   [ ! -L "${HOME}/.claude/gone.md" ]
 }
 
-@test "load_mocks defaults _OVERRIDE_AI_CONFIG_DIR to a tracked fixture under BATS_TEST_TMPDIR" {
-  [[ "${_OVERRIDE_AI_CONFIG_DIR}" == "${BATS_TEST_TMPDIR}/"* ]]
-  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .claude
-  [ "${status}" -eq 0 ]
-  run _ai_config_tracked_items "${_OVERRIDE_AI_CONFIG_DIR}" .cursor
-  [ "${status}" -eq 0 ]
-}

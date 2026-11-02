@@ -6,6 +6,8 @@ bats_require_minimum_version 1.5.0
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  # run_setup_user tests below reach setup_dotfile_symlinks and need the fixture.
+  export LOAD_MOCKS_AI_CONFIG=1
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
@@ -245,6 +247,17 @@ _cheat_seed() {
   rm -rf "${PERSONAL_GITREPOS:?}/${DOTFILES:?}"
   run_setup_user
   grep -q "git clone" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_user fails loudly naming LOAD_MOCKS_AI_CONFIG=1 when the ai-config fixture is not opted in" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset LOAD_MOCKS_AI_CONFIG
+  load_mocks
+  run run_setup_user
+  [ "${status}" -eq 1 ]
+  [[ ${output} == *"Cannot list tracked items"* ]]
+  [[ ${output} == *"LOAD_MOCKS_AI_CONFIG=1"* ]]
 }
 
 @test "run_setup_user continues past install_bats returning 2 with a warning" {

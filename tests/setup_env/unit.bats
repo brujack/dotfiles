@@ -3352,3 +3352,56 @@ _tracked_lib_count() {
   [ "${status}" -eq 0 ]
   [[ "${output}" != *missing* ]]
 }
+
+# Prints "<_LINUX_ARCH> <_RUSTUP_TRIPLE> <_UNAME_M>" for a stubbed `uname -m`.
+_constants_arch_for() {
+  local d="${BATS_TEST_TMPDIR}/uname-$1"
+  mkdir -p "${d}"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "%s"\n' "$1" > "${d}/uname"
+  chmod +x "${d}/uname"
+  PATH="${d}:/usr/bin:/bin" bash -c 'source "$1/lib/constants.sh"; printf "%s %s %s\n" "${_LINUX_ARCH}" "${_RUSTUP_TRIPLE}" "${_UNAME_M}"' _ "${REPO_ROOT}"
+}
+
+@test "constants: x86_64 maps to amd64 and keeps the kernel name in the rustup triple" {
+  run _constants_arch_for x86_64
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "amd64 x86_64-unknown-linux-gnu x86_64" ]
+}
+
+@test "constants: aarch64 maps to arm64 and keeps the kernel name in the rustup triple" {
+  run _constants_arch_for aarch64
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "arm64 aarch64-unknown-linux-gnu aarch64" ]
+}
+
+@test "constants: arm64 passes through unchanged" {
+  run _constants_arch_for arm64
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "arm64 arm64-unknown-linux-gnu arm64" ]
+}
+
+@test "constants: x86_64_v2 is substring-replaced like the old sed" {
+  run _constants_arch_for x86_64_v2
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "amd64_v2 x86_64_v2-unknown-linux-gnu x86_64_v2" ]
+}
+
+@test "constants: DOTFILES_REPO_ROOT is the repo root for all three sourcing forms" {
+  local _want
+  _want="$(cd "${REPO_ROOT}" && pwd -P)"
+  run bash -c 'cd "$1" && source lib/constants.sh && cd -P "${DOTFILES_REPO_ROOT}" && pwd -P' _ "${REPO_ROOT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${_want}" ]
+  run bash -c 'cd "$1/tests" && source ../lib/constants.sh && cd -P "${DOTFILES_REPO_ROOT}" && pwd -P' _ "${REPO_ROOT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${_want}" ]
+  run bash -c 'cd "$1/lib" && source constants.sh && cd -P "${DOTFILES_REPO_ROOT}" && pwd -P' _ "${REPO_ROOT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "${_want}" ]
+}
+
+@test "constants: sourcing succeeds under bash -e" {
+  run bash -e -c 'cd "$1" && source lib/constants.sh && echo ok' _ "${REPO_ROOT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "ok" ]
+}
