@@ -1,5 +1,7 @@
 # load_mocks Setup Trim Implementation Plan
 
+> **Status: DONE** (dotfiles#416, merged 2026-11-02 as 5a5d698c)
+
 spec: docs/superpowers/specs/2026-11-01-load-mocks-setup-trim-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
