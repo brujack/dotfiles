@@ -71,6 +71,14 @@ No spec or ADR proposed or rejected this change before. `$(<file)` is already us
 Line numbers are at `a2539a4e`. Line 598's fallback is unreachable today, because the function returns at
 its top when `started_at` is absent. The rewrite keeps it, so the edit does not also change that.
 
+In the table `f` abbreviates the full quoted path, written as the file's other `$(<` sites write it:
+`$(<"${_DOTFILES_RUN_TMPDIR}/status_${_section}")` (compare `lib/helpers.sh:1042`).
+
+The braces in `{ x=$(<"…"); } 2>/dev/null` are load-bearing and look redundant: `x=$(<"…") 2>/dev/null`
+keeps every value (rc 1 still reaches the `||`) and leaks only the error to stderr, because a redirect on
+the assignment does not reach the substitution's open. The first braced site carries a one-line comment
+saying so, and V2 mutates exactly that simplification.
+
 `cat "${_fail_result_file}" > "…/result_${_section}"` (line 346) stays. It is a copy, not a substitution,
 and runs only on the FAIL path.
 
@@ -79,15 +87,21 @@ and runs only on the FAIL path.
 New `@test`s in `tests/setup_env/update_summary.bats`, written before the edit and green on today's code.
 Each builds a real `_DOTFILES_RUN_TMPDIR` fixture and calls the real function:
 
+Every stderr assertion uses `run --separate-stderr` (the file already sets `bats_require_minimum_version
+1.5.0`), since plain `run` merges stderr into `$output`. The ledger tests reuse `_seed_machine_id` and
+`_mk_ledger_capture`.
+
 1. `_update_status_is_fail` with no `status_<s>` file: rc 1 and empty stderr.
 2. `_update_status_is_fail` with `status_<s>` holding `FAIL` followed by two newlines: rc 0.
 3. `_ledger_write_run_entry update 0` with `started_at` and the machine-id present and `start_epoch`, `run_id`
-   and `git_sha` absent: the entry (captured from the ledger mock) carries `"run_id": "<uuid or unknown>"`,
-   `"git_sha": "unknown"` and a duration computed from epoch 0, and stderr has no `No such file` line.
+   and `git_sha` absent, and a test-local `python3` stub that exits 1 first on `PATH` (`tests/mocks/` has no
+   `python3`, so without it the real one prints a uuid): the entry (captured from the ledger mock) carries
+   `"run_id": "unknown"` and `"git_sha": "unknown"`, its `duration_seconds` is at least `$(date +%s) - 60`
+   (the epoch-0 fallback), and stderr is empty.
 4. The same with those three files present but empty: the entry carries `"run_id": ""` and
    `"git_sha": ""`, not the fallbacks.
-5. `_update_summary` with `status_<s>` present and `result_<s>` absent: the row prints and stderr has no
-   `No such file` line.
+5. `_update_summary` with `status_brew` holding `OK` and no `result_brew`: `$output` contains the row
+   matching `\[OK\][[:space:]]+brew([[:space:]]|$)`, and stderr is empty.
 
 The mutation control and the old/new differential are V2 and V1.
 
@@ -112,17 +126,23 @@ The mutation control and the old/new differential are V2 and V1.
   `date -u +%Y-%m-%dT%H:%M:%SZ`, `0`, the `python3` uuid then `unknown` chain, and `unknown`.
 - **R4.** `[PR1]` `tests/setup_env/update_summary.bats` gains the five characterisation tests in the Design,
   and they pass on the pre-change `lib/update_summary.sh`.
+- **R5.** `[PR1]` The first `{ x=$(<"…"); } 2>/dev/null` site carries a one-line comment stating that the
+  braces are load-bearing because `x=$(<f) 2>/dev/null` does not silence the open error.
 - **V1.** In a `git archive` copy, run the old and new `lib/update_summary.sh` functions
   (`_update_status_is_fail`, `_update_record_end`, `_ledger_write_run_entry`, `_update_summary`) over the
   same fixture matrix: missing, empty, trailing-newline, unreadable (mode 000), and `FAIL`/`OK`/`SKIP`
-  content. Compare stdout, stderr and rc. Pass: `DIVERGING: 0`.
-- **V2.** In a `git archive` copy of the PR head, remove the stderr guard from one site in each group (148;
-  one of 598–604; 750). The matching characterisation test goes red. The PR body records each mutation and
-  its red test.
-- **V3.** One before/after pair of the 11 files in the Problem table at `bats --jobs 16` with
-  `/usr/bin/time` and `uptime`, on `claude` and on the Studio (`ssh studio`, bare environment as in
-  `CLAUDE.md`). The PR body reports user, sys and wall for each run against the predicted ~36 s CPU on
-  `claude`. No pass threshold; a macOS result with no saving is recorded as such.
+  content. Compare stdout and rc exactly. Compare stderr exactly, except for the unreadable case, where
+  only its emptiness is compared (`cat: f: Permission denied` and `bash: line N: f: Permission denied` are
+  the same event in different words). It prints `COMPARED: <n>, DIVERGING: <m>`. Pass: n is greater than 0
+  and m is 0. The PR body records the line.
+- **V2.** In a `git archive` copy of the PR head, apply the realistic regression to one site in each group:
+  move `2>/dev/null` off the enclosing `[[ ]]` at 148, and replace `{ x=$(<"…"); } 2>/dev/null` with
+  `x=$(<"…") 2>/dev/null` at one of 598–604 and at 750. The matching characterisation test goes red. The PR
+  body records each mutation and its red test.
+- **V3.** Recorded as data, with no pass threshold: (a) the PR's three `test-macos-shard` leg durations
+  against the same legs on master's most recent CI run; (b) one before/after pair of the 11 files in the
+  Problem table at `bats --jobs 16` on the Studio (`ssh studio`, bare environment as in `CLAUDE.md`), with
+  `/usr/bin/time` and `uptime`. The `claude` figure is the premise A/B above and is not re-run.
 - **V4.** `make test` passes at the PR head, every `test-shard` and `test-macos-shard` leg passes, and bash
   coverage stays at or above 91%.
 - **N1.** No file changes outside `lib/update_summary.sh`, `tests/` and `docs/`.
@@ -146,7 +166,9 @@ threshold, so no result changes a decision; either name the decision it feeds or
 data. The honest consumer is the PR's `test-macos-shard` leg durations against master's last run.
 Assumption: that the saving reaches the macOS CI shards. Settled by comparing `test-macos-shard` leg
 durations on the PR with the last master run.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — V1 compares unreadable-case stderr by emptiness and
+prints `COMPARED: <n>, DIVERGING: <m>` with n > 0; V3 is now the PR's macOS shard legs plus one Studio pair,
+as data.
 
 ### Ergonomics
 
@@ -163,7 +185,9 @@ quoted, `$(<"${_DOTFILES_RUN_TMPDIR}/…")`, as `lib/helpers.sh:1042` does; test
 section name in the row.
 Assumption: none on correctness (probed on all three bashes); the only uncertain one is whether the CPU saving
 exists on the macOS shards, which V3 measures.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — R5 adds the load-bearing-braces comment and V2 mutates that
+simplification; test 3 pins `unknown` with a failing `python3` stub and bounds the duration; test 5 pins the
+`[OK]` brew row under `run --separate-stderr`; paths are spelled quoted.
 
 ### Risk
 
@@ -176,7 +200,7 @@ directory in place of a file (bash 5 `$(<dir)` gives rc 0 and empty), unreachabl
 `_dotfiles_run_tmpdir_setup` writes those files. `set -e` and ERR traps behave the same, and no caller or test
 reads `cat`'s stderr text. Test 5 needs `run --separate-stderr` and an exact row.
 Assumption: no uncertain assumption found.
-Disposition:
+Disposition: Addressed (operator, 2026-11-02) — V1 as in Goal-Fit; test 5 as in Ergonomics.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
