@@ -109,6 +109,20 @@ setup() {
   [ ! -e "${_OVERRIDE_AI_CONFIG_DIR}" ]
 }
 
+@test "load_mocks: only LOAD_MOCKS_AI_CONFIG=1 opts in; 0, empty and yes do not" {
+  # The static guard accepts only `=1`, so any other value must leave the
+  # fixture unbuilt or the guard and load_mocks disagree.
+  local _v
+  for _v in 0 "" yes; do
+    export LOAD_MOCKS_AI_CONFIG="${_v}"
+    load_mocks
+    if [[ ${_OVERRIDE_AI_CONFIG_DIR} != "${BATS_TEST_TMPDIR}/ai-config-absent--set-LOAD_MOCKS_AI_CONFIG=1" || -e ${_OVERRIDE_AI_CONFIG_DIR} ]]; then
+      printf 'LOAD_MOCKS_AI_CONFIG=%q opted in: %s\n' "${_v}" "${_OVERRIDE_AI_CONFIG_DIR}" >&2
+      return 1
+    fi
+  done
+}
+
 @test "load_mocks: with LOAD_MOCKS_AI_CONFIG=1 the ai-config dir is a tracked fixture under BATS_TEST_TMPDIR" {
   export LOAD_MOCKS_AI_CONFIG=1
   load_setup_env
