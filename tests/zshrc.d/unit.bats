@@ -539,6 +539,49 @@ EOF
   [ "$(printf '%s\n' "$output" | tail -1)" = "HAS_LOCAL_BIN" ]
 }
 
+# ~/.local/bin is where `ledger init` links the state-ledger CLI on every
+# machine, macOS included. The entry used to sit inside the LINUX arm, so a
+# mac shell could not resolve `ledger`. LINUX is unset here on purpose: this
+# pins that the entry no longer depends on the platform arm.
+@test "6_path.zsh adds ~/.local/bin on macOS when the dir exists" {
+  local _fake_home
+  _fake_home="$(mktemp -d)"
+  mkdir -p "${_fake_home}/.local/bin"
+
+  run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset LINUX
+    export MACOS=1
+    export HOME='${_fake_home}'
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)${_fake_home}/.local/bin]}\"
+  "
+  rm -rf "${_fake_home}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_fake_home}/.local/bin" ]
+}
+
+@test "6_path.zsh adds no ~/.local/bin entry when the dir is absent" {
+  local _fake_home
+  _fake_home="$(mktemp -d)"
+
+  run zsh -c "
+    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    unset LINUX
+    export MACOS=1
+    export HOME='${_fake_home}'
+    export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[(r)${_fake_home}/.local/bin]}\"
+  "
+  rm -rf "${_fake_home}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 @test "6_path.zsh unsets _gnubin after sourcing, does not leak" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"
