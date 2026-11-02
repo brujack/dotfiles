@@ -318,7 +318,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - In tests, set the seam variable to a writable temp copy; leave it unset in production code. → `dotfiles-test-seams.md` § `Test seam idiom and override pattern`
 
 - Never point `_AI_CONFIG_GIT` (`lib/helpers.sh:_ai_config_tracked_items`) at `tests/mocks/git`; `load_mocks` sets it to the real git. → `dotfiles-test-seams.md` § `_AI_CONFIG_GIT seam`
-- `load_mocks` defaults `_OVERRIDE_AI_CONFIG_DIR` to a tracked fixture; a test needing other ai-config contents overrides it and calls `track_ai_config_fixture`. → `dotfiles-test-seams.md` § `load_mocks _OVERRIDE_AI_CONFIG_DIR default`
+- `load_mocks` builds the ai-config fixture only under `LOAD_MOCKS_AI_CONFIG=1` (`workflows.bats`); otherwise `_OVERRIDE_AI_CONFIG_DIR` points at a missing path named after that remedy. A test needing other contents overrides it and calls `track_ai_config_fixture`. → `dotfiles-test-seams.md` § `load_mocks _OVERRIDE_AI_CONFIG_DIR default`
 
 - `tests/mocks/pyenv install` creates its version dir only when `HOME` matches `*/bats-run-*` (keyed on `HOME`, never `PYENV_ROOT`); inject failure with `${HOME}/.mock-pyenv-install-exit`, not an env var; assert effects on disk or in `${HOME}/.mock_calls`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pyenv mock install under env -i`
 
@@ -462,6 +462,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - The full `MOCK_*` env var reference table and the general mock usage pattern live in `dotfiles-bats-test-infrastructure.md` — this group's own suffix target, not a `CLAUDE.md` section. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern full reference pointer (superseded by this section)`
 
+- `tests/mocks/` is prepended to `PATH`, so a file there shadows the same-named command; put a stub reached only through a `_*_BIN` seam in `tests/stubs/` when its name would shadow a real command.
 - `tests/mocks/ln`, `chmod`, `mv`, `cp` and `tee` pass through to the real binary (`|| true`), so drive a failure with the mock's exit variable (`MOCK_CP_EXIT` / `MOCK_MV_FAIL_ARGS` / `MOCK_TEE_EXIT`) or a `SHIM_DIR` shim, never by expecting the real binary to fail.
 - `tests/mocks/sudo` execs with the caller's environment except `DEBIAN_FRONTEND`, which it unsets unless given on the sudo command line (as real sudo does); `tests/setup_env/mocks_sudo.bats` pins that. → `dotfiles-bats-test-infrastructure.md` § `Testing: mock pattern detail`
 
