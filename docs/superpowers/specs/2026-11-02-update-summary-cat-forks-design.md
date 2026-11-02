@@ -254,3 +254,26 @@ in Goal-Fit.
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-11-02)
+
+- spec: docs/superpowers/specs/2026-11-02-update-summary-cat-forks-design.md
+- anchor: fca9316bcfb2e8b3249713be0fa7fe0917f1208d
+- in scope: R1, R2, R3, R4, R5
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: COMPARED: 72, DIVERGING: 0 (harness as uid 1000; 6+6+6+36+18 cells; sanity: git_sha brace-drop mutant gave DIVERGING: 2).
+- V2: 148 trailing 2>/dev/null dropped -> not ok 1; 603 run_id brace-drop -> not ok 3; 751 result brace-drop -> not ok 5. Archive copy, grep-proved, restored between runs.
+- V3: Pending: Studio before/after pair after CI; recorded in the PR body.
+- V4: make test 3781/3781 at 4b093e6f locally; CI and coverage pending at push.
