@@ -308,3 +308,24 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
   `load_mocks`, R11 static guard, opt-in narrowed to `workflows.bats` with the one test moved, CLAUDE.md
   line restated). Review stopped at round 2: every finding was in the test apparatus or wording, and
   the design shrank (opt-in from five files to one).
+
+## Spec alignment (2026-11-02)
+
+- spec: docs/superpowers/specs/2026-11-01-load-mocks-setup-trim-design.md
+- anchor: 5c5e1c60f85d00a7a7b10c489291e5dc25bb1c8b
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: claude, 3 ABAB pairs, bats --jobs 8 on linux_ubuntu/workflows/install_guards: before user+sys 639.97/637.15/637.34 s, after 580.52/581.28/581.35 s; every pair lower (drops 59.45/55.87/55.99 s); mean drop 57.10 s >= 20 s; every run 976 ok 0 not ok; wall ~159 s both arms; load 8.79/5.26/4.78/3.59/4.55/3.01.
+- V2: make test 3771/3771 rc 0 at 7fb07946 (orchestrator); bug-scan full bats -r 3771/3771 on archive of 7fb07946; CI pending until PR.
