@@ -1,5 +1,7 @@
 # run_update Flag Scoping Implementation Plan
 
+> **Status: DONE** (dotfiles#418, merged 2026-11-02)
+
 spec: docs/superpowers/specs/2026-11-02-run-update-flag-scoping-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
