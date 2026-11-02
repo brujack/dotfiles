@@ -1350,7 +1350,8 @@ nvidia" ]
 @test "run_update calls brew update on macOS" {
   export MACOS=1
   unset LINUX UBUNTU
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  unset UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_BREW=1
   run run_update
   [ "$status" -eq 0 ]
   grep -q "brew update" "${MOCK_CALLS_FILE}"
@@ -1421,6 +1422,7 @@ EOF
   export UBUNTU=1
   export NOBLE=1
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_PKGS=1
   run run_update
   [ "$status" -eq 0 ]
   grep -q "apt" "${MOCK_CALLS_FILE}"
@@ -2184,6 +2186,7 @@ _stub_refresher_fail() {
   unset MACOS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  export UPDATE_BREW=1
   run run_update
   [ "$status" -eq 0 ]
   # softwareupdate must not have been called
@@ -2250,7 +2253,8 @@ _stub_refresher_fail() {
   unset LINUX UBUNTU
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE
+  export UPDATE_PKGS=1
   run_update
   grep -q "SKIP" "${_DOTFILES_RUN_TMPDIR}/status_apt"
   grep -q "not applicable" "${_DOTFILES_RUN_TMPDIR}/result_apt"
