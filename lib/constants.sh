@@ -30,11 +30,12 @@ JSCPD_VER="5.4.1"
 JSON2YAML_VER="1.1.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 GO_VER="1.27"
-# Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
-# One uname call; the two arch constants are derived from it by substring
-# replacement (first occurrence, as the old sed did) so no sed process is spawned.
+# One uname call, so no sed process is spawned: _LINUX_ARCH is derived from it by
+# first-occurrence substring replacement (as the old sed did) and _RUSTUP_TRIPLE
+# by concatenation.
 # read by _LINUX_ARCH and _RUSTUP_TRIPLE
 _UNAME_M="$(uname -m)"
+# Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
 _LINUX_ARCH="${_UNAME_M/x86_64/amd64}"
 _LINUX_ARCH="${_LINUX_ARCH/aarch64/arm64}"
 # Carries the full patch while GO_VER carries only major.minor, so the two move
