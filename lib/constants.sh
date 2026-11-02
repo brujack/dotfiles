@@ -31,7 +31,12 @@ JSON2YAML_VER="1.1.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_go, lib/helpers.sh:_doctor_check_versions, lib/workflows.sh:run_check_versions
 GO_VER="1.27"
 # Linux architecture: kernel names (x86_64/aarch64) → Debian/GitHub names (amd64/arm64)
-_LINUX_ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+# One uname call; the two arch constants are derived from it by substring
+# replacement (first occurrence, as the old sed did) so no sed process is spawned.
+# read by _LINUX_ARCH and _RUSTUP_TRIPLE
+_UNAME_M="$(uname -m)"
+_LINUX_ARCH="${_UNAME_M/x86_64/amd64}"
+_LINUX_ARCH="${_LINUX_ARCH/aarch64/arm64}"
 # Carries the full patch while GO_VER carries only major.minor, so the two move
 # together or the Linux installer fetches one version while doctor demands
 # another. Both the .linux-amd64 and .linux-arm64 tarballs must be published
@@ -49,7 +54,7 @@ RUSTUP_VER="1.29.1"
 # rustup publishes under KERNEL arch names (x86_64/aarch64), not the Debian/GitHub
 # names _LINUX_ARCH produces (amd64/arm64). Reusing _LINUX_ARCH here builds a URL
 # that 404s on both architectures, so this derivation is deliberately separate.
-_RUSTUP_TRIPLE="$(uname -m)-unknown-linux-gnu"
+_RUSTUP_TRIPLE="${_UNAME_M}-unknown-linux-gnu"
 # read by lib/linux_ubuntu.sh:_install_rustup_rs
 RUSTUP_INIT_URL="https://static.rust-lang.org/rustup/archive/${RUSTUP_VER}/${_RUSTUP_TRIPLE}/rustup-init"
 # sha256 of rustup-init per Linux triple. Both verified published before pinning
@@ -242,7 +247,12 @@ readonly AI_CONFIG_DIR="${PERSONAL_GITREPOS}/${AI_CONFIG}"
 # Declared and assigned on separate lines: `readonly VAR="$(cmd)"` masks the
 # command substitution's exit status (SC2155), and an empty value here is
 # precisely the failure this constant exists to prevent.
-DOTFILES_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The directory is cut with parameter expansion, not dirname (no process); a bare
+# `constants.sh` has no slash to cut at, so it falls back to the current directory.
+_CONSTANTS_DIR="${BASH_SOURCE[0]%/*}"
+[[ ${_CONSTANTS_DIR} == "${BASH_SOURCE[0]}" ]] && _CONSTANTS_DIR=.
+DOTFILES_REPO_ROOT="$(cd "${_CONSTANTS_DIR}/.." && pwd)"
+unset _CONSTANTS_DIR
 readonly DOTFILES_REPO_ROOT
 
 # Vendored HashiCorp apt signing key. A plain assignment resolved at source time, for
