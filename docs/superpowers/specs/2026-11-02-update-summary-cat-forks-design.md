@@ -108,8 +108,8 @@ The mutation control and the old/new differential are V2 and V1.
 - **R2.** `[PR1]` Every site that passes `2>/dev/null` to `cat` today (lines 148, 598, 599, 602, 604 and 750
   at `a2539a4e`) stays silent on a missing file, through `{ …; } 2>/dev/null` or a `2>/dev/null` on the
   enclosing `[[ ]]`.
-- **R3.** `[PR1]` Each `||` fallback at lines 598–604 is kept with its current value: `date -u
-+%Y-%m-%dT%H:%M:%SZ`, `0`, the `python3` uuid then `unknown` chain, and `unknown`.
+- **R3.** `[PR1]` Each `||` fallback at lines 598–604 is kept with its current value:
+  `date -u +%Y-%m-%dT%H:%M:%SZ`, `0`, the `python3` uuid then `unknown` chain, and `unknown`.
 - **R4.** `[PR1]` `tests/setup_env/update_summary.bats` gains the five characterisation tests in the Design,
   and they pass on the pre-change `lib/update_summary.sh`.
 - **V1.** In a `git archive` copy, run the old and new `lib/update_summary.sh` functions
