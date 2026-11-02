@@ -77,9 +77,6 @@ if [[ ${LINUX} ]]; then
   [[ -d ${_gnubin_linux} ]] && path=("${_gnubin_linux}" "${path[@]}")
   unset _gnubin_linux
 
-  if [[ -d ${HOME}/.local/bin ]]; then
-    path+=("${HOME}/.local/bin")
-  fi
   if [[ ${UBUNTU} ]]; then
     if [[ -d /usr/local/go/bin ]]; then
       path+=("/usr/local/go/bin")
@@ -88,6 +85,16 @@ if [[ ${LINUX} ]]; then
       path+=('/snap/bin')
     fi
   fi
+fi
+
+# Both platforms: `ledger init` links the state-ledger CLI here on every
+# machine. It sat in the LINUX arm until 2026-11-02, so macs could not resolve
+# `ledger`. Moving it after /usr/local/go/bin and /snap/bin changed no Linux
+# resolution: no name exists in both on claude or the 7950X (checked
+# 2026-11-02). Must stay after the Linux gnubin block -- the gnubin seam test
+# uses this entry as its positive control.
+if [[ -d ${HOME}/.local/bin ]]; then
+  path+=("${HOME}/.local/bin")
 fi
 # Docker Desktop's CLI shims. `docker`, `kubectl` and the three credential
 # helpers are also symlinked into /usr/local/bin by the installer. Four entries
