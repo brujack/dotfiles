@@ -294,6 +294,66 @@ section's commands, and diff.
 Disposition: Addressed (operator, 2026-11-02) — the pin fix covers the finding, and V5
 names the pyenv-shims gate. The pip-state assumption became a class 2 rule, R6 and V7.
 
+### Round 2
+
+Reviewed at commit: `1ba9c268` (round-1 dispositions applied). All three lenses re-ran.
+
+#### Goal-Fit (round 2, `1ba9c268`)
+
+Finding: The candidate population is wrong. `update_apt.bats` (29) and `flatpak.bats` (7) call
+`setup_run_update_linux` (`tests/helpers/common.bash`), which exports `UPDATE_PKGS=1` and unsets
+the other five flags, so those 36 tests are already scoped. Timing in an archive copy with
+`export UPDATE_PKGS=1` added to `update_apt.bats`' `setup()` showed no change (13.27/13.44 s user
+before, 13.47/13.46 s after). A re-scan that counts helper and `setup()` exports leaves about 80
+flagless tests, 62 of them in `workflows.bats`. The saving is about 85 s CPU on `claude`, about
+3% of the suite's 2680 s weight total, and less on CI. Still worth doing if kept small. Simpler
+path: drop V7 and the pip-comparison table and always set `UPDATE_PIP` (see Ergonomics). Reads-it
+test: V3 discards its result, so record each mutation and its red test in the PR body, and move
+a test that stays green to keep-full. V6's five pairs are heavy for a number that gates nothing;
+one pair would do. The pin passes when `_UPDATE_SECTION_ORDER` is empty; assert its length.
+Apparatus: the pin could read `status_<name>`/`result_<name>` directly instead of a regex.
+Assumption: that the ~62 `workflows.bats` tests are truly flagless, with no setup-level scoping.
+Settled by timing `workflows.bats` as-is against a copy with `export UPDATE_BREW=1` in `setup()`;
+CPU should fall by about 60 s.
+Disposition:
+
+#### Ergonomics (round 2, `1ba9c268`)
+
+Finding: V7 costs more than the rule it replaces and mostly measures nothing. Of 8 candidate
+tests (6 `cargo_tools_update.bats`, 1 `unit.bats`, 1 `workflows.bats`), the 6 cargo tests stub
+`install_cargo_tools` as a shell function that writes nothing to `MOCK_CALLS_FILE`, so V7's diff
+is empty both ways. Adding `UPDATE_PIP` costs about 80 ms per run (`UPDATE_GEMS=1` 1.48 s,
+plus `UPDATE_PIP` 1.87 s, full 7.26 s). Fix: make R6 unconditional and delete V7. R3 is
+tractable (17 absence lines, mostly single-producer). Trap: `[ "$(cat status_x)" != "OK" ]`
+passes when the file is missing. The pin regex matched every name exactly once, 28 rows on each
+platform, 0 `flag not set`. A detail line `[WARN]  git-repos: ...` nearly collides and only the
+boundary saves it. Apparatus: escape `$` in a double-quoted pattern, escape the `.` in
+`cheat.sh`, and a whole-output `! grep -q 'flag not set'` is simpler than per-row. Pin passes
+on an empty array; assert the `N sections:` count equals `${#_UPDATE_SECTION_ORDER[@]}` and
+is above 0.
+Assumption: none genuinely uncertain; the macOS row count is the closest, settled by the first
+`test-macos-shard` run.
+Disposition:
+
+#### Risk (round 2, `1ba9c268`)
+
+Finding: No blocking design issue. Verified that the 19 `flag not set` sites are all `else`
+arms of `_run_all ||` gates, and no section body reads a flag, so no flagless run writes
+`flag not set` on either platform. Round-1 history is wrong in one place: the `git-repos` block
+does have an `else` that skips tfenv, oh-my-zsh, tpm, cheat.sh and zsh-autosuggestions with
+`flag not set`; the pin catches it either way. A wrong-flag gate (`UPDATE_GEMS` changed to
+`UPDATE_PIP`) leaves the pin green but turns `unit.bats` "run_update --gems-only" and 2
+`workflows.bats` gem tests red. A section moved inside another's gate is caught by
+`cargo_tools_update.bats:44`/`:54` and `update_pyenv_shims.bats:308`. Minor design finding: a
+test scoped under R6 with two flags cannot tell a correct gate from one keyed to `UPDATE_PIP`,
+so the spec relies, unstated, on those single-flag tests staying single-flag; say so in R6.
+Apparatus: the pin passes on an empty array; the `.` in `cheat.sh` is unescaped. V7 is the
+costliest new part; always setting `UPDATE_PIP` is cheaper (judgement, not defect).
+Assumption: that two-flag scoped tests will not be the only coverage of the cargo-tools and
+gems gates after the PR. Settled at the PR head by keying the cargo-tools gate to `UPDATE_PIP`
+and nesting gems inside the pip gate; each must turn a single-flag test red.
+Disposition:
+
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
