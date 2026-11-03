@@ -64,7 +64,7 @@ Gate proof on the base tree (`fc12e583`): gate 1 exits 1 (version is 3.32.3), ga
       tasks:
         - shell: echo hi
     ```
-    Run `ansible-lint site.yml` from `$D/play`. Pass: rc 2; output names exactly `command-instead-of-shell`, `fqcn[action-core]`, `name[missing]`, `no-changed-when`; exactly 1 acquire line in the log for this run.
+    Run `ansible-lint site.yml` from `$D/play`. Pass: rc 2; output names exactly `command-instead-of-shell`, `fqcn[action-core]`, `name[missing]`, `name[play]`, `no-changed-when` (amended; see the spec's Amendments); exactly 1 acquire line in the log for this run.
   - (b) `virtualenv "$D/<side>/vv"`: rc 0 and at least 1 acquire.
   - (c) contention: a Python process holds `filelock.FileLock("$D/c.lock")` and signals ready; a second process's `FileLock("$D/c.lock").acquire(timeout=0.1)` raises `filelock.Timeout`.
   - Every run: output contains no `/.pyenv/`, and every log line reports that side's version (4.2.1 head, 3.32.3 base).
