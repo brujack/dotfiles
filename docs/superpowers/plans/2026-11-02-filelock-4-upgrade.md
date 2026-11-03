@@ -1,5 +1,7 @@
 # filelock 4.2.1 Upgrade Implementation Plan
 
+> **Status: DONE** (dotfiles#422, merged 2026-11-03)
+
 spec: docs/superpowers/specs/2026-11-02-filelock-4-upgrade-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
