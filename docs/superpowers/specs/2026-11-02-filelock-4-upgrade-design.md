@@ -178,3 +178,30 @@ and single-version assertion; (a) pins rc 2, four rules and 1 acquire; a content
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- V2 -> At the PR head, in a `mktemp -d` archive copy, build two venvs the way the real path does (`uv sync --frozen --group runtime --group test-lint`, `UV_PROJECT_ENVIRONMENT` inside the copy): one from the PR head's lock (filelock 4.2.1) and one from the base commit's lock (3.32.3). For each, with `$UV_PROJECT_ENVIRONMENT/bin` first on `PATH`, `HOME` and `ANSIBLE_COLLECTIONS_PATH` on scratch paths, and a `sitecustomize.py` on `PYTHONPATH` that appends `<pid> filelock=<version> <lock class>` to a log for every `filelock.BaseFileLock.acquire` in every process: (a) `ansible-lint` on a fixture playbook holding one task, `ansible.builtin.shell: echo hi` written as `shell: echo hi` with no `name`, with a fresh cache dir: rc 2, exactly the five rules `command-instead-of-shell`, `fqcn[action-core]`, `name[missing]`, `name[play]` and `no-changed-when`, and exactly 1 acquire; (b) `virtualenv <dir>`: rc 0 and at least 1 acquire; (c) contention: one process holds a `filelock.FileLock` on a scratch path while a second process's `acquire(timeout=0.1)` on the same path raises `filelock.Timeout`. In every run the output contains no `/.pyenv/` and every log line reports the venv's own filelock version. The PR body records each command, rc, findings and acquire counts for both venvs. — the fixture's play has no `name`, so ansible-lint also reports `name[play]`; measured identically under 3.32.3 and 4.2.1 in Task 1.
+
+## Spec alignment (2026-11-02)
+
+- spec: docs/superpowers/specs/2026-11-02-filelock-4-upgrade-design.md
+- anchor: fc12e583a5eedc0726ab512002cc4cff98777251
+- in scope: R1, R2
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test 3782/3782 at 7c49d774 locally; CI pending at push. Regression guard only (CI never imports the venv).
+- V2: Both venvs (4.2.1 head, 3.32.3 base; --group runtime --group test-lint; venv bin first on PATH; 0 /.pyenv/ hits): (a) ansible-lint fixture rc 2, rules command-instead-of-shell, fqcn[action-core], name[missing], name[play], no-changed-when, 1 acquire, each side; (b) virtualenv rc 0, 2 acquires; (c) contention: second acquire(timeout=0.1) raised filelock.Timeout on both.
+- V3: Pending: after merge and Dependabot rescan.
+- V4: Pending: CI auto-merge job at push.
