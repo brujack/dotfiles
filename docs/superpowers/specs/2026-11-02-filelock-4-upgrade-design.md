@@ -1,6 +1,7 @@
 # filelock 3.32.3 → 4.2.1 in uv.lock
 
 - **Date:** 2026-11-02
+- **Approved:** 2026-11-02
 - **Backlog row:** "filelock 3.32.3 has a fix (4.2.1, major) that `uv.lock` has not taken" (P2 bugs and security).
 
 ## Problem
