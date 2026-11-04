@@ -533,10 +533,9 @@ run_setup_user() {
   elif [[ ${_plugins_rc} -ne 0 ]]; then
     log_warn "Claude plugin provisioning was partial — see the warnings above"
   fi
-  # Not `|| return 1`: setup_env.sh's _run_or_exit wrapper would abort the
-  # entire script (run_setup_or_developer, run_developer_or_ansible never
-  # run) on a single broken repo's Makefile, and would also skip
-  # _ledger_write_run_entry on exactly the runs worth recording.
+  # Not `|| return 1`: _run_or_exit (above) would abort the entire script
+  # (run_setup_or_developer, run_developer_or_ansible never run) on a single
+  # broken repo's Makefile, recording the whole run as failed.
   #
   # rc is captured and branched on rather than treated as a bare pass/fail:
   # install_git_hooks_all_repos returns 2 for gaps/unknowns/a pinned
@@ -2269,8 +2268,9 @@ ledger_write_entry() {
   fi
   local _rc
   # ledger's own git pull/push has no BatchMode or timeout, and _run_or_exit
-  # writes exactly when ssh may already be broken: bound it like every other
-  # dotfiles git call, so it fails fast (and spools) instead of prompting.
+  # writes exactly when ssh may already be broken: bound it like the other
+  # dotfiles ssh git calls (_git_ssh_opts), so it cannot prompt and a dead
+  # host fails within ConnectTimeout; ledger spools what it cannot push.
   printf '%s' "${_json}" | GIT_SSH_COMMAND="$(_git_ssh_opts)" "${_ledger_bin}" write
   _rc=$?
   if [[ ${_rc} -eq 2 ]]; then
