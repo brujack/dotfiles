@@ -161,3 +161,36 @@ row is removed in the same change.
 - **N3.** No `failure_stage` field for run types other than `update`.
 - **N4.** `run_brew_install` and `run_mas_install` still write no ledger entry.
 - **N5.** No run function's return code or abort-versus-continue behaviour changes.
+
+## Multi-Lens Review
+
+Reviewed at commit: `be156684` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: `partial_steps` has no reader, and R9's relabel does not reach the operator. `ledger status` shows only the latest entry per machine (`_latest_entry_for` keys on `(tool, entity_id)`), so a setup PARTIAL is replaced by the next `update`. `ledger history` prints `ts STATUS run=<id8>` with no `run_type` or steps. Fix: print `run_type` and `partial_steps` in history and status. Two proposed deletions. R7 guards an unreachable case, because a failed `X=$(mktemp …) || return 1` still assigns `""` (probe: `rc=1 X=[]`). The `ledger_written` marker exists only for `run_update`; leaving `run_update` out of `_run_or_exit`'s map does the same job. Missed reader: `cmd_drift` reads the latest `started_at`, so failed entries now count as fresh (immaterial, since `update` already writes on FAIL). Premise verified: every `|| return 1` precedes the writer at `be156684`.
+Assumption: the operator reads `ledger status`/`history` to judge a setup run rather than the console at the time; if false, `outcome`/`partial_steps` have no consumer. Settled by asking the operator.
+Disposition:
+
+### Ergonomics
+
+Finding: the same display gap, measured on the live ledger: 947 dotfiles entries (`update` 778, `setup` 36, `developer` 30, `setup_user` 21, `recreate_venv` 64, `recreate_ruby` 18); on all 10 entities the latest is `update`. `-t setup` writes `setup_user` then `setup` seconds later (8 of 21 within 2 h), so `setup_user`'s PARTIAL, where 10 of the 15 sites live, is masked at once. The `ledger-status` skill runs only `status` and `drift`. Secondary:
+- nothing catches a future warn-and-continue site that forgets the mark; proposes one `_run_warn_partial STEP MSG` helper plus a lint against bare `log_warn` in `run_*` bodies;
+- silent-ignore sites outside the population rule record `ok`: `clone_personal_repos` (`lib/developer.sh:697`, unchecked `git clone`s), `setup_vim_plugins`, and the cheat.sh `apt` lines;
+- the stale-tmpdir test passes vacuously and needs a positive control.
+Assumption: same as goal-fit. Which command does the operator run after `-t setup`?
+Disposition:
+
+### Risk
+
+Finding: the new failure-path write runs ledger's git (`pull --rebase`, `push`) with no `BatchMode`, `ConnectTimeout` or subprocess timeout (`grep -c BatchMode ledger.py` = 0). Every dotfiles git call goes through `_git_ssh_opts` (`BatchMode=yes`, `ConnectTimeout=10`). The hard-abort sites R8 now covers include BatchMode ssh failures (`clone_or_update_dotfiles`, `setup_ai_config` rc 1), so the write is most likely to hang or prompt exactly when it runs. The flush retries every spooled file and buries the real error under `WARNING: spool flush failed` lines. Fix: `GIT_SSH_COMMAND="$(_git_ssh_opts)"` on `ledger_write_entry`, which also bounds today's `update` FAIL path. Others:
+- **R7.** Keep it: without R7, a stale `run_id` would make `_write_entry`'s `write_text` overwrite the earlier run's entry. Its test needs a stub run function with a prior tmpdir.
+- **Marker.** Set it whenever the write was invoked, whatever the rc, else a spooled rc 2 double-writes one `run_id`.
+- **Writer.** Re-filter `partial_steps` lines through the regex, since `cmd_write`'s `json.loads` sits outside its try and malformed JSON is lost.
+- **Checked and fine.** All 27 `_UPDATE_SECTION_ORDER` names match the pattern.
+Assumption: no prompt is possible on the failure path; refuted if `~/.ssh/github` carries a passphrase. Settled by `ssh-keygen -y -P '' -f ~/.ssh/github >/dev/null 2>&1; echo $?` on each development machine, which the operator runs.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
