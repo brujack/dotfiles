@@ -625,7 +625,7 @@ run_developer_or_ansible() {
   local _gh_rc=0
   _dotfiles_run_tmpdir_setup || return 1
   # gh runs first and non-fatally: an apt-source failure must not cost the npm,
-  # ruby and ansible steps after it. The partial is warned and ledgered below.
+  # ruby and ansible steps after it. The partial is warned below.
   if [[ -n ${LINUX} ]]; then
     install_github_cli_linux || _gh_rc=2
   fi
@@ -648,10 +648,11 @@ run_developer_or_ansible() {
   if [[ ${_gh_rc} -ne 0 ]]; then
     log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings earlier in this run"
   fi
-  # A gh partial records exit code 2 (success: false) while the process exits
-  # 0: the ledger is the durable signal, and a non-zero exit would stop a
-  # combined -t run. run_setup_or_developer's partials still record 0.
-  _ledger_write_run_entry "developer" "${_gh_rc}" || true
+  # The entry records this function's own exit status, 0: a gh partial is
+  # warned above, not recorded as a failure (a non-zero exit would stop a
+  # combined -t run). Partial outcomes are a backlog item; see
+  # docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md.
+  _ledger_write_run_entry "developer" 0 || true
 }
 
 run_recreate_venv() {

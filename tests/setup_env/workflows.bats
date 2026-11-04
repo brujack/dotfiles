@@ -2558,7 +2558,7 @@ _stub_refresher_fail() {
   grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
 }
 
-@test "run_developer_or_ansible continues, warns and ledgers 2 when install_github_cli_linux fails" {
+@test "run_developer_or_ansible continues, warns and ledgers 0 when install_github_cli_linux fails" {
   export LINUX=1
   unset MACOS UBUNTU
   install_ruby()             { return 0; }
@@ -2571,7 +2571,7 @@ _stub_refresher_fail() {
   grep -q "setup_ansible" "${MOCK_CALLS_FILE}"
   grep -q "clone_repos" "${MOCK_CALLS_FILE}"
   [[ "$output" == *"github cli: install incomplete"* ]]
-  grep -q "^ledger developer 2$" "${MOCK_CALLS_FILE}"
+  grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_developer_or_ansible runs the gh step before install_ruby, and a ruby failure still returns 1 with no ledger entry" {
