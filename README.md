@@ -445,6 +445,7 @@ make bash-coverage # measure bash line coverage (PS4 xtrace, parallel under JOBS
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)
 make sync-requirements-ci  # render the five requirements-ci*.txt files from uv.lock's groups
 make check-requirements-ci # fail if any of the five renderings has drifted from uv.lock
+make check-requirements-install # install the three consumed renderings on the required Python (network; CI job renderings-install)
 ```
 
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
