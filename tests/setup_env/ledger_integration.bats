@@ -74,6 +74,20 @@ EOF
     grep -q "ledger write" "${MOCK_CALLS_FILE}"
 }
 
+@test "ledger_write_entry: runs ledger write with GIT_SSH_COMMAND bounded by _git_ssh_opts" {
+    # ledger's own git pull/push has no BatchMode or timeout; the failure-path
+    # write runs exactly when ssh may be broken, so the caller bounds it.
+    local _dir="${BATS_TEST_TMPDIR}/sshbin" _seen="${BATS_TEST_TMPDIR}/ssh_seen"
+    mkdir -p "${_dir}"
+    printf '#!/usr/bin/env bash\nprintf "%%s\\n" "${GIT_SSH_COMMAND-UNSET}" > "%s"\ncat > /dev/null\n' "${_seen}" > "${_dir}/ledger"
+    chmod +x "${_dir}/ledger"
+    unset GIT_SSH_COMMAND
+    LEDGER_BIN="${_dir}/ledger" run ledger_write_entry '{"tool":"dotfiles"}'
+    [ "$status" -eq 0 ]
+    [ "$(cat "${_seen}")" = "$(_git_ssh_opts)" ]
+    [ "$(cat "${_seen}")" = "ssh -o BatchMode=yes -o ConnectTimeout=10" ]
+}
+
 @test "ledger_write_entry: returns 2 with WARNING when ledger exits 2" {
     local _mock_dir
     _mock_dir="$(_make_mock_ledger 2)"

@@ -2268,7 +2268,10 @@ ledger_write_entry() {
     return 0
   fi
   local _rc
-  printf '%s' "${_json}" | "${_ledger_bin}" write
+  # ledger's own git pull/push has no BatchMode or timeout, and _run_or_exit
+  # writes exactly when ssh may already be broken: bound it like every other
+  # dotfiles git call, so it fails fast (and spools) instead of prompting.
+  printf '%s' "${_json}" | GIT_SSH_COMMAND="$(_git_ssh_opts)" "${_ledger_bin}" write
   _rc=$?
   if [[ ${_rc} -eq 2 ]]; then
     printf "WARNING: ledger write spooled (unreachable)\n" >&2
