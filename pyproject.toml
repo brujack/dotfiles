@@ -148,7 +148,8 @@ runtime = [
   "mlx ; sys_platform == 'darwin'",
 ]
 
-# Must match what five repos' CI installs. Exported to requirements-ci.txt.
+# The full local/dev test set, rendered to requirements-ci.txt. Consumers' CI
+# installs the ci-* renderings below, not this one.
 test-lint = [
   "bandit",
   "cosmic-ray",                    # mutation testing (make mutants); a TEST tool --
