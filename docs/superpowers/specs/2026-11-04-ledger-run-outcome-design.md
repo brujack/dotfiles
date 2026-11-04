@@ -136,6 +136,10 @@ absence cases below are controls only beside the positive ones in the same file.
   second entry; a stub failing with a previous run's directory still exported writes
   nothing and that entry is unchanged; a failing `run_update` and a failing unmapped stub
   get no dispatcher write.
+- Existing tests: `tests/setup_env/update_summary.bats` cases 20 and 21 call the writer
+  twice in one run directory (`_DOTFILES_RUN_TMPDIR="${BATS_TEST_TMPDIR}"`, reseeded by
+  `_seed_ledger_run_files`). Under R2 the second call would write nothing, so
+  `_seed_ledger_run_files` also removes `ledger_written`; the cases keep their assertions.
 - `ledger_write_entry`: the mock records `GIT_SSH_COMMAND` equal to `_git_ssh_opts`'s
   output.
 - state-ledger pytest: history and status with `outcome` `ok`, `failed`, absent and
@@ -192,7 +196,11 @@ Disposition: Addressed — descoped. Operator: "descope as recommended." Writer-
 
 ### Round 3 (scoped Risk re-review of the descope)
 
-Pending.
+Reviewed at commit `4dda1ab2`, sections §1-§3, Testing, R1-R5, V3, N1-N6.
+
+Finding: R2 breaks `update_summary.bats` cases 20 and 21, which write twice in one run directory; the Testing section did not name them. Checked clean: multi-function runs each get their own directory; `update` has one write per run and R1's `_fail` rule matches `success`; `--dry-run` loses nothing; marker-on-failed-write loses an entry only on an unreachable path; no R-versus-N contradiction; absence tests are controls only beside the same-file positives.
+Assumption: no uncertain assumption found in the scoped sections; BatchMode on the 7950X and the Studio is V3.
+Disposition: Addressed — apparatus finding; Testing names both cases and the reseed removes the marker. Review stops here: the finding is in the test harness, not the design.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
