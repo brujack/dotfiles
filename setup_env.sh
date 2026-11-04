@@ -87,12 +87,8 @@ unset _LOCAL_CFG
 #      :642, :662, :664) — also nothing recorded.
 # A wrapper or cron job that sees a non-zero exit and finds no log line is in case
 # 2 or 3, not case 1.
-_run_or_exit() {
-  "$@"
-  local _ec=$?
-  [[ ${_ec} -eq 0 ]] || exit "${_ec}"
-}
-
+# _run_or_exit (lib/workflows.sh) records a failed ledger entry for the other
+# run functions; run_update is left to its own summary.
 [[ -n ${SETUP_BREW:-} ]] && _run_or_exit run_brew_install
 [[ -n ${SETUP_MAS:-} ]]  && _run_or_exit run_mas_install
 [[ -n ${SETUP_BREW:-} || -n ${SETUP_MAS:-} ]] && exit 0

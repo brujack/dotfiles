@@ -385,6 +385,31 @@ _dotfiles_run_tmpdir_setup() {
   ensure_state_ledger || true
 }
 
+# _run_or_exit FUNC [ARGS...] -- the single dispatcher for setup_env.sh's run
+# functions. Runs FUNC; on a non-zero return from a mapped run function it
+# records a failed ledger entry, then exits with FUNC's own code. The writer's
+# one-write-per-run marker (_ledger_write_run_entry) means a function that
+# already wrote its entry, or a failure that left a previous run's directory
+# exported, gets no second write. run_update is unmapped: it writes its own
+# entry from _update_summary. Spec:
+# docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md (R4).
+_run_or_exit() {
+  "$@"
+  local _ec=$? _type=""
+  [[ ${_ec} -eq 0 ]] && return 0
+  case "$1" in
+    run_setup_user)           _type=setup_user ;;
+    run_setup_or_developer)   _type=setup ;;
+    run_developer_or_ansible) _type=developer ;;
+    run_recreate_venv)        _type=recreate_venv ;;
+    run_recreate_ruby)        _type=recreate_ruby ;;
+  esac
+  if [[ -n "${_type}" ]]; then
+    _ledger_write_run_entry "${_type}" "${_ec}" || true
+  fi
+  exit "${_ec}"
+}
+
 # Fetch <url> into <dest> through a dot-prefixed temp file in the same
 # directory, so a failed, timed-out or wrong-content transfer never replaces a
 # working copy: curl -o truncates its target as soon as the body starts, and
