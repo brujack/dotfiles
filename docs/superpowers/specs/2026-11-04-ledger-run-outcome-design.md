@@ -1,8 +1,8 @@
-# Ledger run outcome: record partial and failed dotfiles runs
+# Ledger run outcome: record failed dotfiles runs
 
-- **Status:** Draft (revised after Step 8 round 1)
+- **Status:** Draft (descoped after Step 8 round 2)
 - **Date:** 2026-11-04
-- **Repos:** dotfiles (writer, callers, dispatcher), state-ledger (display, README)
+- **Repos:** dotfiles (writer, dispatcher), state-ledger (display, README)
 - **Backlog row:** "setup/developer ledger entries record success over failed steps"
 
 ## Problem
@@ -12,209 +12,187 @@ Each dotfiles run function writes a state-ledger entry through
 `success` field is `exit_code == 0`. Measured 2026-11-04 against `origin/master`
 `30f2f40c`:
 
-1. **Partial runs read as clean.** `run_setup_user` (`lib/workflows.sh:420`) and
-   `run_setup_or_developer` warn and continue past failed steps, then pass a literal `0`.
-   A run that could not install aws-cli, cargo tools or the git hooks is recorded
-   `success: true`, shown as `OK`.
-2. **Some failures are not even warned.** `clone_personal_repos` (`lib/developer.sh:697`)
-   runs seven unchecked `git clone`s, `setup_vim_plugins` (`lib/developer.sh:380`) ignores
-   its `curl`, and the cheat.sh block in `run_setup_user` runs two unchecked `apt` lines.
-   Each is called bare, so its failure reaches neither the console summary nor the ledger.
-3. **Run types disagree.** `run_developer_or_ansible` passes `${_gh_rc}` (2 on a gh
-   partial), so its partial is `success: false`, against state-ledger's README ("`true`
-   if the run function returned exit 0"); `update` maps WARN to `true`.
-4. **Hard failures leave no entry.** Every `|| return 1` in a run function exits before
-   `_ledger_write_run_entry`, so a run that died writes nothing and the machine's last
-   entry still reads `OK`.
+1. **Hard failures leave no entry.** Every `|| return 1` in `run_setup_user`,
+   `run_setup_or_developer`, `run_developer_or_ansible`, `run_recreate_venv` and
+   `run_recreate_ruby` (`lib/workflows.sh` 420-667) exits before
+   `_ledger_write_run_entry`, so a run that died writes nothing. On the live ledger (947
+   dotfiles entries) no non-`update` entry is `success: false`, and the latest
+   non-`update` entry on every machine reads `success: true`.
+2. **`developer` contradicts the schema.** `run_developer_or_ansible` passes `${_gh_rc}`
+   (2 on a gh partial) while returning 0, so that run is `success: false` against
+   state-ledger's README ("`true` if the run function returned exit 0").
+3. **The display cannot answer a hunt.** `ledger history` prints `ts STATUS run=<id8>`
+   with no run type; `ledger status` prints the latest entry per machine with no run
+   type. After a failure the reader cannot tell which run failed.
 
-Population: `lib/workflows.sh` lines 420-667 (the run functions that write entries), the
-two `lib/developer.sh` functions above, and `lib/update_summary.sh`. `run_brew_install`
-and `run_mas_install` write no entry today and stay out of scope (N4).
+**Readers.** The operator works at the console. The ledger is read after a failure, by the
+operator or by an agent asked to hunt one down, through `ledger history`/`status` and the
+entry JSON. `cmd_drift` also reads the latest `started_at`; failed entries now count as
+fresh, which is immaterial because `update` already writes on FAIL.
 
-**Corrected premise.** The backlog row also named the two recreate workflows; they are
-correct as written (their literal `0` is reached only on success) and change only through
-defect 4.
+**Descoped: partial runs.** The backlog row's original complaint (partial
+setup/developer runs recorded as `success: true`) is not addressed here. Two review rounds
+showed a `partial` outcome would be standing noise rather than signal: 28 of 34 recent
+full `update` runs on `claude` with no FAIL had a WARN, the last 6 all from one bug (the
+`git-repos` WARN below), and `install_git_hooks_all_repos` rc 2 is documented as "nothing
+failed". The partial work moves to the backlog with those measurements as its blocker,
+beside two defects found on the way (see "Backlog rows added").
 
-**Readers.** The operator works at the console. The ledger is read **after a failure**:
-by the operator, or by an agent asked to hunt one down, who reads `ledger history` and the
-entry JSON. Measured on the live ledger (947 dotfiles entries; `update` 778, `setup` 36,
-`developer` 30, `setup_user` 21, `recreate_venv` 64, `recreate_ruby` 18): `ledger status`
-shows only the latest entry per machine (`_latest_entry_for` keys on `(tool, entity_id)`),
-which on all 10 machines is an `update`; `ledger history` prints `ts STATUS run=<id8>`
-with no run type or steps. So for a hunt to find a partial setup, `history` has to name
-the run type and the degraded steps. `cmd_drift` also reads the latest entry's
-`started_at`; failed entries now count as fresh, which is immaterial because `update`
-already writes on FAIL.
+**Corrected premise.** The backlog row named the two recreate workflows as passing a wrong
+literal `0`; they reach it only on success and change here only through defect 1.
 
 ## Design
 
 ### 1. Schema
 
-Every dotfiles run entry gains two fields:
+Every dotfiles run entry gains `outcome`: `"failed"` when the exit code is non-zero, else
+`"ok"`. `success` keeps its documented meaning, `exit_code == 0`, so for now `outcome`
+restates it in the form the display and a future `partial` value share. Entries written
+before this change have no `outcome` and are read by `success` as today.
 
-| Field           | Type                                | Meaning                                                                                     |
-| --------------- | ----------------------------------- | ------------------------------------------------------------------------------------------- |
-| `outcome`       | `"ok"` \| `"partial"` \| `"failed"` | `failed` when the exit code is non-zero; else `partial` when any step was marked; else `ok` |
-| `partial_steps` | array of strings                    | Step names marked during the run, in marking order; `[]` when none                          |
+### 2. One write per run
 
-`success` keeps its documented meaning, `exit_code == 0`. Entries written before this
-change have no `outcome` and are read by `success` as today. `partial_steps` is kept on a
-`failed` entry: steps that degraded before the abort are facts about the run.
+`_ledger_write_run_entry` returns 0 without writing when
+`${_DOTFILES_RUN_TMPDIR}/ledger_written` exists, and creates that file after invoking
+`ledger_write_entry`, whatever its return code. One run directory therefore yields at most
+one entry. That closes two overwrite paths, both of which reuse a `run_id`, so
+`_write_entry`'s `write_text` would replace the earlier entry:
 
-The writer reads the marks file line by line and keeps only lines matching
-`^[a-z0-9.-]+$`, so a malformed line can never break the hand-built JSON
-(`cmd_write`'s `json.loads` sits outside its try, so malformed JSON would be lost).
+- a statement added after a run function's own write later fails, and the dispatcher
+  writes again;
+- the dispatcher writes for a function that failed before creating its own run directory
+  while a previous run's directory is still exported (unreachable today, since a failed
+  `X=$(mktemp …) || return 1` assigns `""`).
 
-### 2. Marking partial steps: one helper, warn and mark together
+### 3. Recording hard failures
 
-`_run_warn_partial STEP MESSAGE` calls `log_warn "${MESSAGE}"` and appends `STEP` to
-`${_DOTFILES_RUN_TMPDIR}/partial_steps`. `STEP` must match `^[a-z0-9.-]+$`: otherwise it
-returns 1 having logged nothing and written nothing, so a bad call is a visible test
-failure. With `_DOTFILES_RUN_TMPDIR` unset or not a directory it still logs, writes
-nothing and returns 0.
+`_run_or_exit` in `setup_env.sh`, the single dispatcher, on a non-zero return from
+`run_setup_user` (`setup_user`), `run_setup_or_developer` (`setup`),
+`run_developer_or_ansible` (`developer`), `run_recreate_venv` or `run_recreate_ruby`,
+calls `_ledger_write_run_entry <run_type> <rc> || true` and then exits with the function's
+own exit code. `run_update` is not mapped: it writes its own entry in `_update_summary`
+(its outcome follows `_fail`, so WARN-only runs stay `ok`).
 
-Every warn-and-continue site in the three run functions uses it in place of its bare
-`log_warn` (or `printf … >&2`). A lint in `make lint` fails on any `log_warn` call inside
-the bodies of `run_setup_user`, `run_setup_or_developer` and `run_developer_or_ansible`,
-so a future degrade-and-continue site cannot skip the mark silently. The sites and names
-are listed in R5.
+`run_developer_or_ansible` passes `0`, matching its return.
 
-`run_developer_or_ansible` then passes `0`, since it returns 0 on a gh partial.
-
-### 3. Silent sites report failure
-
-- `clone_personal_repos` attempts every clone as today and returns 1 if any clone failed
-  (0 otherwise). `run_developer_or_ansible` marks `personal-repos` on 1.
-- `setup_vim_plugins` returns the `curl` status when it downloads `plug.vim`
-  (0 otherwise). `run_setup_or_developer` marks `vim-plugins` on non-zero.
-- The cheat.sh `apt update` / `apt install curl` lines in `run_setup_user` mark
-  `cheat-sh-deps` when either fails and continue to the fetches as today.
-
-None of these becomes an abort: each caller continues exactly as now (N5).
-
-### 4. `update`
-
-`_ledger_write_dotfiles_entry` passes the WARN result as well as `_fail`: `outcome` is
-`partial` when `_fail == 0` and `_warn > 0`, and `partial_steps` holds the WARN section
-names in `_UPDATE_SECTION_ORDER` order (all 27 names match the step pattern).
-
-### 5. Recording hard failures
-
-`_run_or_exit` in `setup_env.sh`, the single dispatcher:
-
-- unsets `_DOTFILES_RUN_TMPDIR` before calling the function. Unreachable today (a failed
-  `X=$(mktemp …) || return 1` already assigns `""`), kept because the failure it guards
-  is destructive: a reused `run_id` makes `_write_entry`'s `write_text` overwrite the
-  earlier run's entry;
-- on a non-zero return calls `_ledger_write_run_entry <run_type> <rc> || true` before
-  `exit "${_ec}"`, for `run_setup_user` (`setup_user`), `run_setup_or_developer`
-  (`setup`), `run_developer_or_ansible` (`developer`), `run_recreate_venv`,
-  `run_recreate_ruby`. `run_update` is not mapped: it writes its own entry in
-  `_update_summary`, and its only earlier return is the tmpdir setup, after which no
-  entry can be written anyway.
+### 4. Bounded ledger write
 
 `ledger_write_entry` (`lib/workflows.sh`) runs `ledger write` under
-`GIT_SSH_COMMAND="$(_git_ssh_opts)"` (`BatchMode=yes`, `ConnectTimeout=10`). The
+`GIT_SSH_COMMAND="$(_git_ssh_opts)"` (`BatchMode=yes`, `ConnectTimeout=10`). The new
 failure-path write is most likely to run when ssh is already broken (the hard-abort sites
 include `clone_or_update_dotfiles` and `setup_ai_config`), and ledger's git
-`pull --rebase`/`push` has no batch mode or timeout of its own; bounding it here also
-bounds today's `update` FAIL path.
+`pull --rebase`/`push` has no batch mode or timeout of its own. `_clean_git_env` keeps
+`GIT_SSH*`, and `ensure_state_ledger` already pulls the same repo under BatchMode every
+run, so this adds no new auth dependency. A BatchMode failure spools the entry. On
+`claude` the key has no passphrase and a BatchMode `ls-remote` with `SSH_AUTH_SOCK`
+unset returns 0; the 7950X and the Studio are V3. `ConnectTimeout` bounds the connect
+only; a stalled transfer is capped by `.ssh/config`'s `ServerAlive*` (about 10 minutes).
 
 Not covered: a signal, and an `exit` inside a run function. No `failure_stage` for
-non-`update` types (N3): the console names the failing step, and the run type plus
-`outcome: failed` tells a hunt where to look.
+non-`update` types (N3).
 
-### 6. state-ledger (separate PR, coordinated with its owning session)
+### 5. state-ledger (separate PR, coordinated with its owning session)
 
-- `cmd_history` prints, per entry, the run type (`run_type` when present), the status
-  (`outcome.upper()` when `outcome` is one of `ok`/`partial`/`failed`, else
-  `OK`/`FAILED` from `success`) and, when non-empty, `partial_steps` joined with `,`.
-- `cmd_status` prints the latest entry's run type beside its status, with the same
-  status rule.
-- README documents `outcome` and `partial_steps` and adds the missing `recreate_ruby`
-  row. `_validate_entry` is unchanged (N1).
+- `cmd_history` prints each entry's run type (`run_type` when present) and status:
+  `outcome.upper()` when `outcome` is `ok` or `failed`, otherwise `OK`/`FAILED` from
+  `success`.
+- `cmd_status` prints the latest entry's run type and status by the same rule.
+- README documents `outcome` and adds the missing `recreate_ruby` row. `_validate_entry`
+  is unchanged (N1).
 
 The dotfiles PR does not depend on it: the current display reads `success`, which stays
 correct.
 
-### 7. Folded in: `pyproject.toml` comment
+### 6. Folded in: `pyproject.toml` comment
 
 `pyproject.toml:150` ("Must match what five repos' CI installs. Exported to
 requirements-ci.txt.") is rewritten: the group is the full local/dev set rendered to
 `requirements-ci.txt`, and consumers install the `ci-*` renderings. Its backlog row is
 removed.
 
+### Backlog rows added (same change as the spec)
+
+- Partial run outcome: blocked on WARN noise (measurements above); revisit once standing
+  WARN sources are fixed or classified.
+- `git-repos` update section WARNs `/home/bruce/git-repos/personal: not a readable git
+repository` on every run on `claude` (`lib/git_sync.sh:76`), treating the parent
+  directory as a repo.
+- `clone_personal_repos` returns only the last `if`'s status, so an earlier failed clone
+  is masked; its caller (`lib/workflows.sh:647`) and `setup_vim_plugins`' caller
+  (`:601`) ignore the status, so neither failure is reported.
+
 ## Testing
 
-- Writer: one case per outcome with exact `outcome`, `partial_steps` and `success`; a
-  failed run keeps its earlier marks; a marks file containing an invalid line yields only
-  the valid names; `update` with WARN and no FAIL gives `partial` with the WARN names.
-- `_run_warn_partial`: valid name logs and appends; invalid name (space, quote, newline,
-  uppercase) returns 1 and leaves the file unchanged; no tmpdir logs and writes nothing.
-- Lint: a fixture run function with a bare `log_warn` fails the lint; the real
-  `lib/workflows.sh` passes it.
-- Each R5 site: driving its failure through the existing mock or seam yields its name in
-  `partial_steps`; one test per run function asserts the full list when every site
-  degrades.
-- Silent sites: `clone_personal_repos` returns 1 when one of several clones fails and
-  still attempts the rest; `setup_vim_plugins` returns the `curl` status; each caller
-  still continues.
-- `_run_or_exit`: a failing mapped stub writes one `failed` entry with the given rc;
-  `run_update` failing writes no dispatcher entry; an unmapped stub writes none. The
-  stale-tmpdir case uses a stub that returns 1 with a prior run's tmpdir (with
-  `started_at`) still exported, and asserts the ledger mock received no second write and
-  the prior run's entry is unchanged — a positive control that fails if the unset is
-  removed.
-- `ledger_write_entry`: the mock `ledger` records `GIT_SSH_COMMAND` equal to
-  `_git_ssh_opts`'s output.
-- state-ledger pytest: history and status with `outcome` present (each value), absent,
-  and malformed (non-string, unknown value); `partial_steps` empty and non-empty.
+All `_run_or_exit` and writer tests share one fixture: a run directory with `started_at`,
+a `machine-id` under the fixture `HOME`, and the recording `ledger` mock on `PATH`. The
+absence cases below are controls only beside the positive ones in the same file.
+
+- Writer: exit 0 writes `outcome` `ok`, `success` true; exit 1 writes `failed`/false;
+  `developer` with a gh failure writes `ok`/true.
+- Once per run: a second `_ledger_write_run_entry` in the same run directory writes
+  nothing; the marker exists after a write whose `ledger` mock returns 2 (spooled).
+- `_run_or_exit`: a failing mapped stub writes exactly one `failed` entry with its rc and
+  exits with that rc; a mapped stub whose own write already ran, then fails, writes no
+  second entry; a stub failing with a previous run's directory still exported writes
+  nothing and that entry is unchanged; a failing `run_update` and a failing unmapped stub
+  get no dispatcher write.
+- `ledger_write_entry`: the mock records `GIT_SSH_COMMAND` equal to `_git_ssh_opts`'s
+  output.
+- state-ledger pytest: history and status with `outcome` `ok`, `failed`, absent and
+  malformed, and with and without `run_type`.
 
 ## Requirements
 
-- **R1.** `[PR1]` `_ledger_write_run_entry` writes `"outcome"`: `"failed"` when its exit code argument is non-zero, else `"partial"` when at least one valid name is in `${_DOTFILES_RUN_TMPDIR}/partial_steps`, else `"ok"`.
-- **R2.** `[PR1]` `_ledger_write_run_entry` writes `"partial_steps"` as a JSON array of the lines of `${_DOTFILES_RUN_TMPDIR}/partial_steps` that match `^[a-z0-9.-]+$`, in file order, `[]` when there are none, for every outcome.
-- **R3.** `[PR1]` `_run_warn_partial STEP MESSAGE` calls `log_warn MESSAGE` and appends `STEP` to `${_DOTFILES_RUN_TMPDIR}/partial_steps` when `STEP` matches `^[a-z0-9.-]+$`; it returns 1 having logged and written nothing for any other `STEP`; with `_DOTFILES_RUN_TMPDIR` unset or not a directory it logs, writes nothing and returns 0.
-- **R4.** `[PR1]` `run_developer_or_ansible` passes `0` to `_ledger_write_run_entry`.
-- **R5.** `[PR1]` These sites call `_run_warn_partial` with these names: `run_setup_user` — `bats-parallel` (install_bats rc 2), `ai-config` (setup_ai_config rc 2), `terraform-skill` (install_terraform_skill rc 2), `cheat-sh-deps` (either cheat.sh `apt` line fails), `cheat-sh-binary`, `cheat-sh-completion`, `claude-plugins` (provision_claude_plugins rc other than 0 and 1), `git-hooks` (install_git_hooks_all_repos rc 1 or 2), `renovate-agent`, `ledger-drift-agent`, `pyenv-rehash-hook`; `run_setup_or_developer` — `ubuntu-packages` (install_ubuntu_packages rc other than 0 and 1), `plugin-node-paths` (repair_plugin_node_paths rc 1), `cargo-tools`, `aws-cli`, `vim-plugins` (setup_vim_plugins non-zero); `run_developer_or_ansible` — `github-cli`, `personal-repos` (clone_personal_repos rc 1).
-- **R6.** `[PR1]` `make lint` fails when any `log_warn` call appears inside the bodies of `run_setup_user`, `run_setup_or_developer` or `run_developer_or_ansible`.
-- **R7.** `[PR1]` `clone_personal_repos` attempts every clone and returns 1 when any `git clone` failed, 0 otherwise; `setup_vim_plugins` returns the `curl` exit status when it downloads `plug.vim`, 0 otherwise.
-- **R8.** `[PR1]` `update` entries have `outcome` `"partial"` when `_fail` is 0 and `_warn` is above 0, with `partial_steps` the WARN section names in `_UPDATE_SECTION_ORDER` order.
-- **R9.** `[PR1]` `_run_or_exit` unsets `_DOTFILES_RUN_TMPDIR` before calling its function.
-- **R10.** `[PR1]` On a non-zero return from `run_setup_user`, `run_setup_or_developer`, `run_developer_or_ansible`, `run_recreate_venv` or `run_recreate_ruby`, `_run_or_exit` calls `_ledger_write_run_entry <run_type> <rc> || true` and then exits with the function's own exit code; it writes nothing for `run_update` or any unmapped function.
-- **R11.** `[PR1]` `ledger_write_entry` runs `ledger write` with `GIT_SSH_COMMAND` set to `_git_ssh_opts`'s output.
-- **R12.** `[PR2]` state-ledger `cmd_history` prints each entry's run type, its status (`outcome.upper()` when `outcome` is one of `ok`/`partial`/`failed`, else `OK`/`FAILED` from `success`) and its non-empty `partial_steps`; `cmd_status` prints the latest entry's run type and status by the same rule.
-- **R13.** `[PR2]` state-ledger README documents `outcome` and `partial_steps` and lists `recreate_ruby` in the `run_type` table.
-- **R14.** `[PR1]` The `pyproject.toml` `test-lint` comment no longer claims any repo's CI installs `requirements-ci.txt`, and its backlog row is removed.
-- **V1.** After PR1 merges, the next real `-t update` on `claude` writes an entry whose `outcome` and `partial_steps` match that run's summary table.
+- **R1.** `[PR1]` `_ledger_write_run_entry` writes `"outcome": "failed"` when its exit code argument is non-zero and `"outcome": "ok"` otherwise, for every run type including `update`.
+- **R2.** `[PR1]` `_ledger_write_run_entry` returns 0 without writing when `${_DOTFILES_RUN_TMPDIR}/ledger_written` exists, and creates that file after invoking `ledger_write_entry` whatever its return code.
+- **R3.** `[PR1]` `run_developer_or_ansible` passes `0` to `_ledger_write_run_entry`.
+- **R4.** `[PR1]` On a non-zero return from `run_setup_user`, `run_setup_or_developer`, `run_developer_or_ansible`, `run_recreate_venv` or `run_recreate_ruby`, `_run_or_exit` calls `_ledger_write_run_entry <run_type> <rc> || true` with run types `setup_user`, `setup`, `developer`, `recreate_venv`, `recreate_ruby`, then exits with the function's own exit code; it calls nothing for `run_update` or any unmapped function.
+- **R5.** `[PR1]` `ledger_write_entry` runs `ledger write` with `GIT_SSH_COMMAND` set to `_git_ssh_opts`'s output.
+- **R6.** `[PR2]` state-ledger `cmd_history` prints each entry's run type and status (`outcome.upper()` when `outcome` is `ok` or `failed`, else `OK`/`FAILED` from `success`); `cmd_status` prints the latest entry's run type and status by the same rule.
+- **R7.** `[PR2]` state-ledger README documents `outcome` and lists `recreate_ruby` in the `run_type` table.
+- **R8.** `[PR1]` The `pyproject.toml` `test-lint` comment no longer claims any repo's CI installs `requirements-ci.txt`; that backlog row is removed and the three rows under "Backlog rows added" are added.
+- **V1.** After PR1 merges, the next real `-t update` on `claude` writes an entry with `"outcome": "ok"` or `"failed"` matching its `success`.
 - **V2.** dotfiles CI bash coverage stays at or above 91%.
+- **V3.** Before PR1 merges, `env -u SSH_AUTH_SOCK GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10' git -C ~/.local/share/state-ledger ls-remote origin HEAD </dev/null` returns 0 on the 7950X and the Studio.
 - **N1.** No change to state-ledger `_validate_entry`, and no field becomes required: entries without `outcome` stay valid.
 - **N2.** `success` keeps the meaning "the run function returned exit 0" for every run type.
 - **N3.** No `failure_stage` field for run types other than `update`.
 - **N4.** `run_brew_install` and `run_mas_install` still write no ledger entry.
 - **N5.** No run function's exit code changes, and no step that continues today aborts.
+- **N6.** No `"partial"` outcome value and no per-step marks.
 
 ## Multi-Lens Review
 
-Reviewed at commit: `be156684` (Step 7 self-review commit, before Step 8 dispatch)
+Round 1 reviewed at commit `be156684`; round 2 at `7da66acc`. The descope below was
+re-reviewed by a scoped Risk lens (see "Round 3").
 
 ### Goal-Fit
 
-Finding: `partial_steps` had no reader and the relabel did not reach the operator: `ledger status` shows only the latest entry per machine, `ledger history` prints no run type or steps. Proposed deleting the stale-tmpdir unset (unreachable: a failed `X=$(mktemp …) || return 1` assigns `""`, probe `rc=1 X=[]`) and the `ledger_written` marker (leave `run_update` unmapped instead). Missed reader: `cmd_drift` reads `started_at`. Premise verified at `be156684`.
-Assumption: the operator reads the ledger to judge a setup run rather than only the console.
-Disposition: Addressed. Operator: "I will check the ledger after a failure or ask you to hunt it down. My main interaction is at the console." Readers rewritten around the post-failure hunt; `history` prints run type, status and steps, `status` gains the run type but stays latest-per-machine (revised R12); marker dropped and `run_update` unmapped (revised R10); `cmd_drift` named. The unset is kept (operator choice, see Risk).
+Round 1 — Finding: `partial_steps` had no reader; `status` shows latest-per-machine, `history` no run type. Proposed deleting the stale-tmpdir unset and the marker file. Assumption: the operator reads the ledger to judge a setup run.
+Disposition: Addressed. Operator: "I will check the ledger after a failure or ask you to hunt it down. My main interaction is at the console." Readers rewritten; history shows run type and status.
+
+Round 2 — Finding: the `log_warn` lint would have missed 7 of the 18 sites, exactly the silent ones; the stale-tmpdir test was a control only with a shared machine-id fixture. Assumption: setup-type runs degrade often enough for marks to record anything.
+Disposition: Addressed — descoped. Operator: "descope as recommended." Lint, helper and marks removed (N6); tests share one fixture.
 
 ### Ergonomics
 
-Finding: the same display gap, measured on the live ledger (all 10 machines' latest entry is `update`; `-t setup` masks `setup_user` within seconds). A future warn-and-continue site can forget the mark; proposed one warn-and-mark helper plus a lint. Silent-ignore sites (`clone_personal_repos`, `setup_vim_plugins`, cheat.sh `apt`) record `ok`. The stale-tmpdir test was vacuous.
-Assumption: which command the operator runs after `-t setup`.
-Disposition: Addressed. Operator answers: display "History + status by type", narrowed after the console answer to `history` showing type, status and steps and `status` showing the type; silent sites "Bring in". Helper `_run_warn_partial` and its lint added; stale-tmpdir test is now a stub with a positive control.
+Round 1 — Finding: display gap measured on the live ledger; helper plus lint proposed; silent sites; vacuous stale-tmpdir test.
+Disposition: Addressed (round 1 revision), then superseded by the descope.
+
+Round 2 — Finding: `partial` would be near-permanent: 28 of 34 clean full `update` runs on `claude` WARN, the last 6 from the `git-repos` parent-directory bug; `git-hooks` rc 2 is "nothing failed". Assumption: a partial is rare on a healthy machine.
+Disposition: Addressed — descoped. Operator: "descope as recommended." Partial outcome to the backlog with these measurements; the `git-repos` bug gets its own row.
 
 ### Risk
 
-Finding: the failure-path write runs ledger's git with no BatchMode or timeout, most likely exactly when ssh is broken; proposed `GIT_SSH_COMMAND="$(_git_ssh_opts)"` on `ledger_write_entry`. Keep the stale-tmpdir unset, because a reused `run_id` would overwrite the previous entry. Marker semantics on a spooled write. Writer should re-filter step names. All 27 `_UPDATE_SECTION_ORDER` names match the pattern.
-Assumption: no prompt is possible on the failure path; refuted if `~/.ssh/github` carries a passphrase (`ssh-keygen -y -P '' -f ~/.ssh/github >/dev/null 2>&1; echo $?` per machine, operator to run).
-Disposition: Addressed. Operator chose "Keep, stub-tested" for the unset. `GIT_SSH_COMMAND` bound, writer re-filter added, marker removed so its semantics no longer apply. Passphrase check not yet run; the bound applies whichever way it answers.
+Round 1 — Finding: unbounded ssh on the failure-path write; keep the stale-tmpdir unset; re-filter step names.
+Disposition: Addressed (R5); the stale-tmpdir case is now covered by the one-write-per-run guard (R2).
+
+Round 2 — Finding: R1/R2 contradicted R8 for `update`; dropping the marker left a same-run double write unguarded; the lint overclaimed; R7's vim half was already true; `git-hooks` rc 2 would make PARTIAL permanent; absence tests vacuous without a shared fixture. `GIT_SSH*` confirmed honoured; BatchMode `ls-remote` rc 0 on `claude`. Assumption: BatchMode push works on the 7950X and the Studio.
+Disposition: Addressed — descoped. Operator: "descope as recommended." Writer-side one-write-per-run guard (R2); partial, lint and silent-site changes removed; shared test fixture; BatchMode on the other two machines is V3.
+
+### Round 3 (scoped Risk re-review of the descope)
+
+Pending.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
