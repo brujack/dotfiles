@@ -1,6 +1,7 @@
 # Ledger run outcome: record failed dotfiles runs
 
-- **Status:** Draft (descoped after Step 8 round 2)
+- **Status:** Approved
+- **Approved:** 2026-11-04
 - **Date:** 2026-11-04
 - **Repos:** dotfiles (writer, dispatcher), state-ledger (display, README)
 - **Backlog row:** "setup/developer ledger entries record success over failed steps"
