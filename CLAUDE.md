@@ -357,6 +357,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - `_OVERRIDE_LIB_TRAP_SCOPE` makes `scripts/check-lib-exit-traps.sh` use a plain glob; keep one no-override test against the real `lib/` asserting a non-empty scanned set, since the production path (`git ls-files` under the four-variable `env -u GIT_*` strip) is otherwise untested. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: lib trap scope seam`
 
+- Drive `scripts/check-requirements-install.sh` through `RENDERINGS_INSTALL_PYTHON` (a stub interpreter; unset runs real `python3` and network pip), `RENDERINGS_INSTALL_ROOT` (fixture `pyproject.toml` and renderings) and `RENDERINGS_INSTALL_TMP_ROOT` (BSD `mktemp -d` ignores `TMPDIR`), all at `setup()` scope. → `dotfiles-test-seams.md` § `requirements install seams`
+
 - `_OVERRIDE_COVERAGE_ROOT` replaces the root `scripts/run-bash-coverage.sh` measures (instrumented set, tests, output) while the tracer stays the script's own; it announces itself on stderr and the Makefile `unexport`s it. → `dotfiles-test-seams.md` § `run-bash-coverage coverage root seam`
 
 - Drive bats absence only via `_OVERRIDE_BATS_BIN`, never by editing `PATH` (removes the toolchain); land seam and test in one commit; reproduce a CI-only failure from `git archive <sha>`, never a dirty tree. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: bats bin override seam`
