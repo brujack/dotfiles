@@ -308,6 +308,14 @@ changelog:
 sync-requirements-ci:
 	./scripts/sync-requirements-ci.sh sync
 
+# Installs requirements-ci-{test,audit,mutation}.txt in each consumer's shape
+# under the interpreter pyproject.toml requires (ai-config and state-ledger CI
+# install them live from master). Not a `test` prerequisite: it needs the
+# network and takes a minute; the renderings-install CI job runs it per PR.
+# Pick the interpreter with RENDERINGS_INSTALL_PYTHON=<path>.
+check-requirements-install:
+	@./scripts/check-requirements-install.sh
+
 # Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
 # the machine out of committing the very change that would install it. CI
 # installs a pinned uv, so the check genuinely runs there rather than skipping.
@@ -317,14 +325,6 @@ ifeq ($(UV),)
 else
 	@./scripts/sync-requirements-ci.sh check
 endif
-
-# Installs requirements-ci-{test,audit,mutation}.txt in each consumer's shape
-# under the interpreter pyproject.toml requires (ai-config and state-ledger CI
-# install them live from master). Not a `test` prerequisite: it needs the
-# network and takes a minute; the renderings-install CI job runs it per PR.
-# Pick the interpreter with RENDERINGS_INSTALL_PYTHON=<path>.
-check-requirements-install:
-	@./scripts/check-requirements-install.sh
 
 # check-requirements-ci compares each RENDERING against uv.lock -- it runs
 # `uv export --frozen`, which reads the lock, so an unchanged lock renders

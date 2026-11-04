@@ -3,9 +3,10 @@
 # that ai-config and state-ledger CI pull live from dotfiles master, in each
 # consumer's install shape, under the interpreter pyproject.toml requires.
 #
-# Every test drives a stub interpreter through RENDERINGS_INSTALL_PYTHON: the
-# real check needs the network and minutes of pip, so the suite proves the
-# script's control flow and the CI job proves the install.
+# Every script test drives a stub interpreter through RENDERINGS_INSTALL_PYTHON:
+# the real check needs the network and minutes of pip, so the suite proves the
+# script's control flow and the CI job proves the install. The last three tests
+# read ci.yml and the Makefile only.
 
 bats_require_minimum_version 1.5.0
 
