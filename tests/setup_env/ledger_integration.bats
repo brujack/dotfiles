@@ -365,6 +365,18 @@ EOF
     [ "$(grep -c 'ledger write' "${MOCK_CALLS_FILE}")" -eq 1 ]
 }
 
+@test "_ledger_write_run_entry update: returns 2 when the ledger write spools" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 2)"
+    PATH="${_mock_dir}:${PATH}" run _ledger_write_run_entry "update" 0
+    [ "$status" -eq 2 ]
+    [ -f "${_DOTFILES_RUN_TMPDIR}/ledger_written" ]
+}
+
 @test "_ledger_write_run_entry: marker exists after a spooled write (ledger exit 2)" {
     _setup_ledger_tmpdir
     mkdir -p "${HOME}/.config/dotfiles"
@@ -372,7 +384,9 @@ EOF
 
     local _mock_dir
     _mock_dir="$(_make_mock_ledger 2)"
-    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0 || true
+    # The writer returns ledger_write_entry's rc, so a spooled write is visible.
+    PATH="${_mock_dir}:${PATH}" run _ledger_write_run_entry "setup_user" 0
+    [ "$status" -eq 2 ]
 
     [ -f "${_DOTFILES_RUN_TMPDIR}/ledger_written" ]
 }
