@@ -126,6 +126,7 @@ help:
 	@printf "  make install-hooks     Install pre-commit and pre-push hooks (run once per checkout)\n"
 	@printf "  make sync-requirements-ci  Render the five CI requirements files from uv.lock\n"
 	@printf "  make check-requirements-ci Fail if any rendering has drifted from uv.lock\n"
+	@printf "  make check-requirements-install Install the consumed renderings on the required Python (network)\n"
 	@printf "  make help              Show this help\n"
 
 # shellcheck is single-threaded, so both passes fan the file list out through
@@ -306,6 +307,14 @@ changelog:
 
 sync-requirements-ci:
 	./scripts/sync-requirements-ci.sh sync
+
+# Installs requirements-ci-{test,audit,mutation}.txt in each consumer's shape
+# under the interpreter pyproject.toml requires (ai-config and state-ledger CI
+# install them live from master). Not a `test` prerequisite: it needs the
+# network and takes a minute; the renderings-install CI job runs it per PR.
+# Pick the interpreter with RENDERINGS_INSTALL_PYTHON=<path>.
+check-requirements-install:
+	@./scripts/check-requirements-install.sh
 
 # Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
 # the machine out of committing the very change that would install it. CI

@@ -423,8 +423,35 @@ jobs:
             --log-opts "HEAD~50..HEAD" \
             --verbose
 
+  # ai-config and state-ledger CI install requirements-ci-{test,audit,mutation}.txt
+  # live from master (ai-config ADR-0092). check-requirements-ci proves only
+  # that a rendering matches uv.lock, so this job installs each consumer's shape
+  # on the interpreter pyproject.toml requires before a change can merge.
+  # tests/scripts/check_requirements_install.bats pins python-version to
+  # requires-python and this job into auto-merge's needs.
+  renderings-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # provisional; re-size to ~3x p90 after five green runs
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # pip runs third-party build backends here; keep the token out of .git/config.
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        id: py
+        with:
+          python-version: "3.14"
+
+      - name: Install consumed renderings
+        env:
+          RENDERINGS_INSTALL_PYTHON: ${{ steps.py.outputs.python-path }}
+        run: make check-requirements-install
+
   auto-merge:
-    needs: [test, lint-macos, test-macos, powershell, secret-scan]
+    needs: [test, lint-macos, test-macos, powershell, secret-scan, renderings-install]
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10 # p90 11s, floor, measured 2026-08-27

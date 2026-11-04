@@ -192,7 +192,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - `UV_BIN` (`resolve_uv`, `lib/helpers.sh`) is the operator override and the only seam that reaches the "not executable" branch; `UV_FALLBACK_PATHS` holds prefix candidates so a test can reach the genuine not-found branch (env-settable as a scalar).
 - `REQUIREMENTS_CI_TARGET` (`scripts/sync-requirements-ci.sh`) points the drift check at a fixture so a crashed test cannot leave a modified tracked `requirements-ci.txt`. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 
-- `make sync-requirements-ci` renders the five CI requirements files from `uv.lock`; `make check-requirements-ci` fails on any stale one and is a `make test` prerequisite. They are five deliberately separate files, never collapse them. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
+- `make sync-requirements-ci` renders the five CI requirements files from `uv.lock`; `make check-requirements-ci` fails on any stale one and is a `make test` prerequisite; `make check-requirements-install` (network, not in `make test`; CI job `renderings-install`) installs the three files ai-config and state-ledger CI pull live from master, in each consumer's shape, on the `requires-python` minor. They are five deliberately separate files, never collapse them. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 
 Renderings: `requirements-ci.txt` (`test-lint`, full local/dev set), `requirements-runtime-ci.txt` (`runtime`, no consumer), `requirements-ci-test.txt` (`ci-test`, per-PR jobs), `requirements-ci-mutation.txt` (`ci-mutation`), `requirements-ci-audit.txt` (`ci-audit`, dependency audit). → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 
@@ -256,12 +256,12 @@ Rules for any new suppression:
     `/opt/homebrew/bin` on a provisioned mac holds more than the runner has, so the CI job remains the authority.
 - Every tool `make test` depends on (e.g. pinned `uv`) must be installed in `test-shard` and `test-macos-shard`; a CI-file assertion for that must parse per job and honour `working-directory:`, never grep the whole workflow.
 - `secret-scan` (gitleaks over recent commits) blocks auto-merge: a deliberate deviation from `ci.md`'s advisory clause, since a leaked credential must not auto-merge.
-- `auto-merge` needs `[test, lint-macos, test-macos, powershell, secret-scan]` and `scripts/auto-merge-gate.sh` (run from the PR's **base** commit); it holds a bot PR (`author.is_bot`, ai-config ADR-0085) without `automerge-ok`, a `uv.lock` change without `pyproject.toml` and a truncated file list, and merges by PR number with `--match-head-commit`. Every job in `needs:` is a gate with no advisory tier (no `continue-on-error`; `always()` is only the `if:` of the `test-macos` and `test` aggregation gates, which fail on any shard result other than success).
-- Every job declares `timeout-minutes` (a hung `powershell` once held auto-merge for GitHub's 360-minute default): `test-shard` 30, `test` 10, `test-macos-shard` 30, `test-macos` 10, `powershell` 5, 10 for `lint-macos`, `secret-scan`, `auto-merge` and `pr-title-lint.yml`; nothing asserts these values. → `dotfiles-bats-test-infrastructure.md` § `Testing: CI workflow jobs`
+- `auto-merge` needs `[test, lint-macos, test-macos, powershell, secret-scan, renderings-install]` and `scripts/auto-merge-gate.sh` (run from the PR's **base** commit); it holds a bot PR (`author.is_bot`, ai-config ADR-0085) without `automerge-ok`, a `uv.lock` change without `pyproject.toml` and a truncated file list, and merges by PR number with `--match-head-commit`. Every job in `needs:` is a gate with no advisory tier (no `continue-on-error`; `always()` is only the `if:` of the `test-macos` and `test` aggregation gates, which fail on any shard result other than success).
+- Every job declares `timeout-minutes` (a hung `powershell` once held auto-merge for GitHub's 360-minute default): `test-shard` 30, `test` 10, `test-macos-shard` 30, `test-macos` 10, `powershell` 5, 10 for `lint-macos`, `secret-scan`, `renderings-install`, `auto-merge` and `pr-title-lint.yml`; nothing asserts these values. → `dotfiles-bats-test-infrastructure.md` § `Testing: CI workflow jobs`
 
 CI requirements:
 
-- `lint-macos` and `test-macos-shard` run on `macos-latest`, `test-macos` on `ubuntu-latest`, `powershell` on `ubuntu-24.04` (Microsoft's 26.04 repo has no `powershell` package; `tests/scripts/ci_runner_pins.bats` pins it), and every other job (`test-shard`, `test`) on `ubuntu-latest`; every job sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+- `lint-macos` and `test-macos-shard` run on `macos-latest`, `test-macos` on `ubuntu-latest`, `powershell` on `ubuntu-24.04` (Microsoft's 26.04 repo has no `powershell` package; `tests/scripts/ci_runner_pins.bats` pins it), and every other job (`test-shard`, `test`, `renderings-install`) on `ubuntu-latest`; every job sets `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
 
 ### Testing Rules
 
@@ -356,6 +356,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - When exercising `LEDGER_BIN`/`ledger_write_entry` always prepend `tests/mocks/ledger` to `PATH`; a `HOME`-only redirect loses to a real `ledger` on `PATH` (`workstation`/`claude`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: ledger bin seam`
 
 - `_OVERRIDE_LIB_TRAP_SCOPE` makes `scripts/check-lib-exit-traps.sh` use a plain glob; keep one no-override test against the real `lib/` asserting a non-empty scanned set, since the production path (`git ls-files` under the four-variable `env -u GIT_*` strip) is otherwise untested. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: lib trap scope seam`
+
+- Drive `scripts/check-requirements-install.sh` through `RENDERINGS_INSTALL_PYTHON` (a stub interpreter; unset runs real `python3` and network pip), `RENDERINGS_INSTALL_ROOT` (fixture `pyproject.toml` and renderings) and `RENDERINGS_INSTALL_TMP_ROOT` (BSD `mktemp -d` ignores `TMPDIR`), all at `setup()` scope. → `dotfiles-test-seams.md` § `requirements install seams`
 
 - `_OVERRIDE_COVERAGE_ROOT` replaces the root `scripts/run-bash-coverage.sh` measures (instrumented set, tests, output) while the tracer stays the script's own; it announces itself on stderr and the Makefile `unexport`s it. → `dotfiles-test-seams.md` § `run-bash-coverage coverage root seam`
 
