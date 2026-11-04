@@ -12,6 +12,10 @@ bats_require_minimum_version 1.5.0
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   SCRIPT="${REPO_ROOT}/scripts/check-requirements-install.sh"
+  # Inert failure mode: if a test ever reaches a real interpreter, pip writes
+  # its cache and config under a fixture HOME, never the operator's.
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}"
   WF="${REPO_ROOT}/.github/workflows/ci.yml"
 
   # Fixture root: a pyproject.toml carrying requires-python and the three
@@ -111,7 +115,10 @@ requirements-ci-mutation.txt" ]
   export RENDERINGS_INSTALL_PYTHON="${BATS_TEST_TMPDIR}/no-such-python"
   run "${SCRIPT}"
   [ "${status}" -eq 2 ]
-  [[ "${output}" == *"no-such-python"* ]]
+  # Only the command -v guard prints this; the version-mismatch branch also
+  # exits 2 and names the path, so a bare path match cannot tell them apart.
+  [[ "${output}" == *"interpreter not found: ${RENDERINGS_INSTALL_PYTHON}"* ]]
+  [[ "${output}" != *"is Python"* ]]
 }
 
 @test "a requires-python not of the form ==X.Y.* exits 2" {
