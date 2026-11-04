@@ -592,6 +592,8 @@ _ledger_write_run_entry() {
   [[ ! -f "${_DOTFILES_RUN_TMPDIR}/started_at" ]] && return 0
   local _machine_id_path="${HOME}/.config/dotfiles/machine-id"
   [[ ! -f "${_machine_id_path}" ]] && return 0
+  # One entry per run: a reused run_id must never overwrite an earlier entry.
+  [[ -f "${_DOTFILES_RUN_TMPDIR}/ledger_written" ]] && return 0
 
   local _machine_id _started_at _start_epoch _now_epoch _duration _run_id _git_sha
   _machine_id=$(tr -d '[:space:]' < "${_machine_id_path}" 2>/dev/null)
@@ -604,8 +606,9 @@ _ledger_write_run_entry() {
     _run_id=$(python3 -c "import uuid; print(str(uuid.uuid4()))" 2>/dev/null || printf 'unknown')
   { _git_sha=$(<"${_DOTFILES_RUN_TMPDIR}/git_sha"); } 2>/dev/null || _git_sha=unknown
 
-  local _success="true"
-  [[ "${_exit_code}" -ne 0 ]] && _success="false"
+  local _ledger_rc=0
+  local _success="true" _outcome="ok"
+  [[ "${_exit_code}" -ne 0 ]] && { _success="false"; _outcome="failed"; }
 
   local _hostname _os _distro_version
   _hostname=$(hostname -s 2>/dev/null || printf 'unknown')
@@ -660,13 +663,14 @@ _ledger_write_run_entry() {
   "started_at": "%s",
   "duration_seconds": %d,
   "success": %s,
+  "outcome": "%s",
   "machine_id": "%s",
   "hostname": "%s",
   "os": "%s",
   "distro_version": "%s",
   "run_type": "%s"' \
     "${_run_id}" "${_machine_id}" "${_git_sha}" "${_started_at}" \
-    "${_duration}" "${_success}" \
+    "${_duration}" "${_success}" "${_outcome}" \
     "${_machine_id}" "${_hostname}" "${_os}" "${_distro_version}" \
     "${_run_type}"
   _base_json+="${_make_version_fragment}"
@@ -720,10 +724,15 @@ _ledger_write_run_entry() {
   "packages_updated_count": %d
 }' "${_failure_stage}" "${_workflows_json}" "${_packages_updated}"
     ledger_write_entry "${_base_json}${_ext_json}"
+    _ledger_rc=$?
   else
     ledger_write_entry "${_base_json}
 }"
+    _ledger_rc=$?
   fi
+  # Marker whatever the write's rc: a spooled or failed write still counts as this run's one attempt.
+  : > "${_DOTFILES_RUN_TMPDIR}/ledger_written"
+  return "${_ledger_rc}"
 }
 
 # _ledger_write_dotfiles_entry — backward-compat shim for update runs.

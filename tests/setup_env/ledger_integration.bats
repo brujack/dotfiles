@@ -293,6 +293,76 @@ EOF
     grep -q '"run_type": "developer"' "${_captured}"
 }
 
+@test "_ledger_write_run_entry: exit 0 records outcome ok beside success true" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0
+
+    grep -q '"outcome": "ok"' "${_captured}"
+    grep -q '"success": true' "${_captured}"
+}
+
+@test "_ledger_write_run_entry: exit 1 records outcome failed beside success false" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 1
+
+    grep -q '"outcome": "failed"' "${_captured}"
+    grep -q '"success": false' "${_captured}"
+}
+
+@test "_ledger_write_run_entry update: outcome is failed on exit 1 and ok on exit 0" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _captured="${BATS_TEST_TMPDIR}/ledger_stdin"
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger_capture "${_captured}")"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "update" 1
+    grep -q '"outcome": "failed"' "${_captured}"
+
+    rm -f "${_DOTFILES_RUN_TMPDIR}/ledger_written" "${_captured}"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "update" 0
+    grep -q '"outcome": "ok"' "${_captured}"
+}
+
+@test "_ledger_write_run_entry: a second call in one run directory never invokes the ledger again" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 0)"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 1
+    [ "$(grep -c 'ledger write' "${MOCK_CALLS_FILE}")" -eq 1 ]
+
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0
+    [ "$(grep -c 'ledger write' "${MOCK_CALLS_FILE}")" -eq 1 ]
+}
+
+@test "_ledger_write_run_entry: marker exists after a spooled write (ledger exit 2)" {
+    _setup_ledger_tmpdir
+    mkdir -p "${HOME}/.config/dotfiles"
+    printf 'test-machine-uuid\n' > "${HOME}/.config/dotfiles/machine-id"
+
+    local _mock_dir
+    _mock_dir="$(_make_mock_ledger 2)"
+    PATH="${_mock_dir}:${PATH}" _ledger_write_run_entry "setup_user" 0 || true
+
+    [ -f "${_DOTFILES_RUN_TMPDIR}/ledger_written" ]
+}
+
 @test "_ledger_write_run_entry update: includes failure_stage and workflows_ran" {
     _setup_ledger_tmpdir
     mkdir -p "${HOME}/.config/dotfiles"
