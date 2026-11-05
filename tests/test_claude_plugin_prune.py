@@ -1,3 +1,4 @@
+import errno
 import importlib.util
 import json
 import os
@@ -289,9 +290,89 @@ class HardeningTest(Base):
     def test_replace_failure_refused(self):
         self.write(fixture())
         orig = self.raw()
+        os.makedirs(self.bdir)
+        for i in range(6):
+            Path(self.bdir, "installed_plugins-2026010%dT000000000000Z.json" % (i + 1)).write_text("b%d" % i)
+        before = self.backups()
         with mock.patch.object(P.os, "replace", side_effect=OSError("boom")):
             rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, before)
+        self.assertEqual(Path(self.bdir, before[0]).read_text(), "b0")
+
+    def test_partial_backup_write_removed(self):
+        self.write(fixture())
+        orig = self.raw()
+        real_open = open
+        bdir = self.bdir
+
+        class Partial:
+            def __init__(self, f):
+                self.f = f
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                self.f.close()
+                return False
+
+            def write(self, data):
+                self.f.write(data[:5])
+                self.f.flush()
+                raise OSError(errno.ENOSPC, "No space left on device")
+
+        def fake_open(f, mode="r", *a, **k):
+            if isinstance(f, str) and f.startswith(bdir) and "w" in mode:
+                return Partial(real_open(f, mode, *a, **k))
+            return real_open(f, mode, *a, **k)
+
+        with mock.patch("builtins.open", side_effect=fake_open):
+            rc, line = self.run_prune()
         self.assert_refused_clean(rc, line, orig, [])
+
+    def test_listdir_failure_after_replace_still_ok(self):
+        self.write(fixture())
+        with mock.patch.object(P.os, "listdir", side_effect=OSError("boom")):
+            rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r"^pruned at .*: removed 2, kept 5$")
+        self.assertEqual(len(json.loads(self.raw())["plugins"]["a@m"]), 2)
+
+    def test_tmp_removal_failure_does_not_skip_backup_removal(self):
+        self.write(fixture())
+        orig = self.raw()
+        real_remove = os.remove
+
+        def remove(p):
+            if str(p).endswith(".tmp"):
+                raise PermissionError(errno.EACCES, "denied")
+            return real_remove(p)
+
+        with mock.patch.object(P.os, "replace", side_effect=OSError("boom")), \
+             mock.patch.object(P.os, "remove", side_effect=remove):
+            rc, line = self.run_prune()
+        self.assertEqual(rc, 3)
+        self.assertEqual(self.raw(), orig)
+        self.assertEqual(self.backups(), [])
+
+    def test_symlink_replaced_between_read_and_restat_exit4(self):
+        real_dir = os.path.join(self.tmp, "real")
+        os.makedirs(real_dir)
+        target = os.path.join(real_dir, "installed_plugins.json")
+        with open(target, "w") as f:
+            json.dump(fixture(), f)
+        os.symlink(target, self.file)
+        orig = Path(target).read_text()
+
+        def swap_link():
+            fresh = self.file + ".new"
+            os.symlink(target, fresh)
+            os.replace(fresh, self.file)
+
+        rc, line = self.run_prune(before_restat=swap_link)
+        self.assertEqual(rc, 4)
+        self.assertEqual(Path(target).read_text(), orig)
+        self.assertEqual(self.backups(), [])
 
     def test_json_dump_failure_refused(self):
         self.write(fixture())

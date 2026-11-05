@@ -84,17 +84,24 @@ def _write_backup(raw, backup_dir, stamp):
     """Write the bytes already read from the plugins file; return the backup path."""
     os.makedirs(backup_dir, exist_ok=True)
     dest = os.path.join(backup_dir, _BACKUP_PREFIX + stamp + _BACKUP_SUFFIX)
-    with open(dest, "wb") as dst:
-        dst.write(raw)
+    try:
+        with open(dest, "wb") as dst:
+            dst.write(raw)
+    except OSError:
+        # Cleanup only: a truncated backup must not look like a real one.
+        _remove_quietly(dest)
+        raise
     return dest
 
 
 def _trim_backups(backup_dir, keep):
     """Best-effort retention after a successful replace: a failure here is cleanup only."""
+    try:
+        listing = os.listdir(backup_dir)
+    except OSError:
+        return
     names = sorted(
-        n
-        for n in os.listdir(backup_dir)
-        if n.startswith(_BACKUP_PREFIX) and n.endswith(_BACKUP_SUFFIX)
+        n for n in listing if n.startswith(_BACKUP_PREFIX) and n.endswith(_BACKUP_SUFFIX)
     )
     for n in names[: max(0, len(names) - keep)]:
         try:
@@ -108,17 +115,17 @@ def _signature(st):
 
 
 def _remove_quietly(path):
-    """Cleanup of this run's own artefact; a missing file is fine."""
+    """Cleanup of this run's own artefact; a failure must not skip later cleanup."""
     try:
         os.remove(path)
-    except FileNotFoundError:
+    except OSError:
         pass
 
 
 def prune(path, backup_dir, keep, dry_run, before_restat=None):
     """Prune `path`. Returns (exit_code, stdout_line).
 
-    Race guard: mtime, inode and size are compared before reading and again just
+    Race guard: mtime, inode and size of the resolved file and of the link path itself are compared before reading and again just
     before os.replace. A write landing between that re-stat and os.replace is
     still lost; this cannot be closed without a lock Claude Code does not take.
     Any OSError becomes a refusal (exit 3) and leaves the plugins file as it was;
@@ -138,6 +145,7 @@ def _prune(path, backup_dir, keep, dry_run, before_restat):
     real = os.path.realpath(path)
     try:
         before = os.stat(real)
+        link_before = os.lstat(path)
     except FileNotFoundError:
         return 0, "no plugins file"
     now = datetime.now(timezone.utc)
@@ -174,7 +182,10 @@ def _prune(path, backup_dir, keep, dry_run, before_restat):
         if before_restat is not None:
             before_restat()
         try:
-            changed = _signature(os.stat(real)) != _signature(before)
+            changed = (
+                _signature(os.stat(real)) != _signature(before)
+                or _signature(os.lstat(path)) != _signature(link_before)
+            )
         except FileNotFoundError:
             changed = True
         if changed:
