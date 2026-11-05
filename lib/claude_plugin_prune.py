@@ -12,6 +12,7 @@ Prints exactly one stdout line.
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import sys
@@ -139,6 +140,76 @@ def prune(path, backup_dir, keep, dry_run, before_restat=None):
         return _refuse("%s" % exc)
 
 
+# The plugins file as first seen: the given path, its resolved target, and the
+# stat of each, which the race guard compares again just before the replace.
+_Source = collections.namedtuple("_Source", "path real before link_before")
+
+
+def _validate(data):
+    """Return a refusal (code, line) for an unusable plugins file, else None."""
+    if not isinstance(data, dict):
+        return _refuse("plugins file is not a JSON object")
+    if data.get("version") != 2:
+        return _refuse("unsupported plugins file version %r" % (data.get("version"),))
+    if not isinstance(data.get("plugins"), dict):
+        return _refuse("no plugins object")
+    return None
+
+
+def _write_temp(real, new_data, mode):
+    """Write new_data to a fsynced temp file beside `real`; return its path.
+
+    On failure the temp file is removed here and the error propagates.
+    """
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(real), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(new_data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode & 0o7777)
+    except (OSError, ValueError, TypeError):
+        _remove_quietly(tmp)
+        raise
+    return tmp
+
+
+def _changed_since(src):
+    """True when the resolved file or the link path differs from what was read."""
+    try:
+        return (
+            _signature(os.stat(src.real)) != _signature(src.before)
+            or _signature(os.lstat(src.path)) != _signature(src.link_before)
+        )
+    except FileNotFoundError:
+        return True
+
+
+def _commit(src, new_data, backup, before_restat):
+    """Write the temp file, re-check the race guard and replace.
+
+    Returns None on success, else the (code, line) to report; this run's temp
+    file and backup are removed on every failure path.
+    """
+    tmp = None
+    try:
+        tmp = _write_temp(src.real, new_data, src.before.st_mode)
+        if before_restat is not None:
+            before_restat()
+        if _changed_since(src):
+            _remove_quietly(tmp)
+            _remove_quietly(backup)
+            return 4, _CHANGED_LINE
+        os.replace(tmp, src.real)
+    except (OSError, ValueError, TypeError) as exc:
+        # Cleanup, then report: the plugins file was not replaced.
+        if tmp is not None:
+            _remove_quietly(tmp)
+        _remove_quietly(backup)
+        return _refuse("cannot write plugins file: %s" % exc)
+    return None
+
+
 def _prune(path, backup_dir, keep, dry_run, before_restat):
     # Resolve a symlinked plugins file so the temp file and the replace target
     # live beside the real file and the link survives.
@@ -155,50 +226,22 @@ def _prune(path, backup_dir, keep, dry_run, before_restat):
         data = json.loads(raw)
     except ValueError as exc:
         return _refuse("cannot parse plugins file: %s" % exc)
-    if not isinstance(data, dict):
-        return _refuse("plugins file is not a JSON object")
-    if data.get("version") != 2:
-        return _refuse("unsupported plugins file version %r" % (data.get("version"),))
-    plugins = data.get("plugins")
-    if not isinstance(plugins, dict):
-        return _refuse("no plugins object")
+    refusal = _validate(data)
+    if refusal is not None:
+        return refusal
 
-    new_plugins, removed, kept = _prune_records(plugins)
+    new_plugins, removed, kept = _prune_records(data["plugins"])
     line = "pruned at %s: removed %d, kept %d" % (now.strftime("%Y-%m-%dT%H:%M:%SZ"), removed, kept)
     if removed == 0 or dry_run:
         return 0, line
 
     backup = _write_backup(raw, backup_dir, now.strftime("%Y%m%dT%H%M%S%fZ"))
-    tmp = None
-    try:
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(real), suffix=".tmp")
-        new_data = dict(data)
-        new_data["plugins"] = new_plugins
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(new_data, f, indent=2, ensure_ascii=False)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(tmp, before.st_mode & 0o7777)
-        if before_restat is not None:
-            before_restat()
-        try:
-            changed = (
-                _signature(os.stat(real)) != _signature(before)
-                or _signature(os.lstat(path)) != _signature(link_before)
-            )
-        except FileNotFoundError:
-            changed = True
-        if changed:
-            _remove_quietly(tmp)
-            _remove_quietly(backup)
-            return 4, _CHANGED_LINE
-        os.replace(tmp, real)
-    except (OSError, ValueError, TypeError) as exc:
-        # Cleanup, then report: the plugins file was not replaced.
-        if tmp is not None:
-            _remove_quietly(tmp)
-        _remove_quietly(backup)
-        return _refuse("cannot write plugins file: %s" % exc)
+    new_data = dict(data)
+    new_data["plugins"] = new_plugins
+    src = _Source(path, real, before, link_before)
+    failure = _commit(src, new_data, backup, before_restat)
+    if failure is not None:
+        return failure
     _trim_backups(backup_dir, keep)
     return 0, line
 
