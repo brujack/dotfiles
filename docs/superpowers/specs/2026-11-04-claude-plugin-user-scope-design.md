@@ -1,6 +1,7 @@
 # Claude plugins at user scope only
 
 - **Date:** 2026-11-04
+- **Approved:** 2026-11-05
 - **Repos:** dotfiles only (update loop, record prune, ADR). No other repo's settings change; ai-config ADR-0046 stands.
 
 ## Problem
