@@ -1,5 +1,7 @@
 # Claude Plugins at User Scope Implementation Plan
 
+> **Status: DONE** (dotfiles#427, merged 2026-11-05)
+
 spec: docs/superpowers/specs/2026-11-04-claude-plugin-user-scope-design.md
 scope: PR1
 
