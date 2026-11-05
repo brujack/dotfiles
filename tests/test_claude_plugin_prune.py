@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent
@@ -245,6 +246,220 @@ class PruneTest(Base):
     def test_missing_file(self):
         rc, line = self.run_prune()
         self.assertEqual((rc, line), (0, "no plugins file"))
+
+
+class HardeningTest(Base):
+    def assert_refused_clean(self, rc, line, orig, bdir_before=None):
+        self.assertEqual(rc, 3)
+        self.assertEqual(len(line.splitlines()), 1)
+        self.assertTrue(line.startswith("refused: "), line)
+        self.assertEqual(self.raw(), orig)
+        self.assertEqual([n for n in os.listdir(self.tmp) if n.endswith(".tmp")], [])
+        if bdir_before is not None:
+            self.assertEqual(self.backups(), bdir_before)
+
+    def test_keep_below_one_rejected(self):
+        self.write(fixture())
+        orig = self.raw()
+        for bad in (0, -1):
+            with self.assertRaises(ValueError):
+                self.run_prune(keep=bad)
+        with self.assertRaises(SystemExit) as cm:
+            with mock.patch("sys.stderr"):
+                P.main(["--file", self.file, "--backup-dir", self.bdir, "--keep", "0"])
+        self.assertNotEqual(cm.exception.code, 0)
+        self.assertEqual(self.raw(), orig)
+        self.assertFalse(os.path.exists(self.bdir))
+
+    def test_backup_dir_is_file_refused(self):
+        self.write(fixture())
+        orig = self.raw()
+        Path(self.bdir).write_text("i am a file")
+        rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig)
+        self.assertEqual(Path(self.bdir).read_text(), "i am a file")
+
+    def test_mkstemp_failure_refused_and_backup_removed(self):
+        self.write(fixture())
+        orig = self.raw()
+        with mock.patch.object(P.tempfile, "mkstemp", side_effect=OSError("boom")):
+            rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, [])
+
+    def test_replace_failure_refused(self):
+        self.write(fixture())
+        orig = self.raw()
+        with mock.patch.object(P.os, "replace", side_effect=OSError("boom")):
+            rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, [])
+
+    def test_json_dump_failure_refused(self):
+        self.write(fixture())
+        orig = self.raw()
+        with mock.patch.object(P.json, "dump", side_effect=ValueError("bad")):
+            rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, [])
+
+    def test_fsync_failure_refused(self):
+        self.write(fixture())
+        orig = self.raw()
+        with mock.patch.object(P.os, "fsync", side_effect=OSError("boom")):
+            rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, [])
+
+    def test_fsync_called_before_replace(self):
+        self.write(fixture())
+        calls = []
+        real_fsync, real_replace = os.fsync, os.replace
+        with mock.patch.object(P.os, "fsync", side_effect=lambda fd: (calls.append("fsync"), real_fsync(fd))[1]), \
+             mock.patch.object(P.os, "replace", side_effect=lambda a, b: (calls.append("replace"), real_replace(a, b))[1]):
+            self.run_prune()
+        self.assertEqual(calls, ["fsync", "replace"])
+
+    def test_unreadable_file_refused(self):
+        self.write(fixture())
+        orig = self.raw()
+        real_open = open
+
+        def fake_open(f, *a, **k):
+            if f == self.file:
+                raise PermissionError("denied")
+            return real_open(f, *a, **k)
+
+        with mock.patch("builtins.open", side_effect=fake_open):
+            rc, line = self.run_prune()
+        self.assert_refused_clean(rc, line, orig, [])
+
+    def test_stat_error_refused(self):
+        with mock.patch.object(P.os, "stat", side_effect=PermissionError("denied")):
+            rc, line = self.run_prune()
+        self.assertEqual(rc, 3)
+        self.assertTrue(line.startswith("refused: "))
+
+    def test_missing_version_both_kept(self):
+        a = rec("user", "x", None)
+        b = rec("project", "x", None)
+        del a["version"]
+        del b["version"]
+        self.assertFalse(P.should_remove(b, a))
+        a["version"] = ""
+        b["version"] = ""
+        self.assertFalse(P.should_remove(b, a))
+        a["version"] = 1
+        b["version"] = 1
+        self.assertFalse(P.should_remove(b, a))
+
+    def test_backup_is_bytes_read_once(self):
+        self.write(fixture())
+        orig_bytes = Path(self.file).read_bytes()
+        real_open = open
+        opens = []
+
+        def counting(f, *a, **k):
+            if f == self.file:
+                opens.append(a)
+            return real_open(f, *a, **k)
+
+        with mock.patch("builtins.open", side_effect=counting):
+            self.run_prune()
+        self.assertEqual(len(opens), 1)
+        self.assertEqual(Path(self.bdir, self.backups()[0]).read_bytes(), orig_bytes)
+
+    def test_exit4_leaves_backup_dir_untouched(self):
+        self.write(fixture())
+        os.makedirs(self.bdir)
+        for i in range(6):
+            Path(self.bdir, "installed_plugins-2026010%dT000000000000Z.json" % (i + 1)).write_text("b%d" % i)
+        before = {n: Path(self.bdir, n).read_text() for n in self.backups()}
+
+        def touch():
+            st = os.stat(self.file)
+            os.utime(self.file, ns=(st.st_atime_ns, st.st_mtime_ns + 5_000_000_000))
+
+        rc, _ = self.run_prune(before_restat=touch)
+        self.assertEqual(rc, 4)
+        after = {n: Path(self.bdir, n).read_text() for n in self.backups()}
+        self.assertEqual(after, before)
+
+    def test_size_change_exit4(self):
+        self.write(fixture())
+
+        def grow():
+            st = os.stat(self.file)
+            with open(self.file, "a") as f:
+                f.write(" ")
+            os.utime(self.file, ns=(st.st_atime_ns, st.st_mtime_ns))
+
+        rc, line = self.run_prune(before_restat=grow)
+        self.assertEqual(rc, 4)
+        self.assertEqual(self.backups(), [])
+
+    def test_symlink_preserved(self):
+        real_dir = os.path.join(self.tmp, "real")
+        os.makedirs(real_dir)
+        target = os.path.join(real_dir, "installed_plugins.json")
+        with open(target, "w") as f:
+            json.dump(fixture(), f)
+        os.symlink(target, self.file)
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertTrue(os.path.islink(self.file))
+        self.assertEqual(os.path.realpath(self.file), os.path.realpath(target))
+        self.assertIn("removed 2", line)
+        self.assertEqual(len(json.loads(Path(target).read_text())["plugins"]["a@m"]), 2)
+        self.assertEqual([n for n in os.listdir(real_dir) if n.endswith(".tmp")], [])
+
+    def test_format_indent2_no_trailing_newline_non_ascii(self):
+        data = fixture()
+        data["plugins"]["b@m"][0]["note"] = "caf\u00e9"
+        self.write(data)
+        self.run_prune()
+        text = self.raw()
+        self.assertFalse(text.endswith("\n"))
+        self.assertIn('\n  "version": 2', text)
+        self.assertIn("caf\u00e9", text)
+
+    def test_mode_preserved(self):
+        self.write(fixture())
+        os.chmod(self.file, 0o644)
+        self.run_prune()
+        self.assertEqual(os.stat(self.file).st_mode & 0o777, 0o644)
+        os.chmod(self.file, 0o600)
+        self.write(fixture())
+        os.chmod(self.file, 0o640)
+        self.run_prune()
+        self.assertEqual(os.stat(self.file).st_mode & 0o777, 0o640)
+
+    def test_odd_shapes_untouched(self):
+        data = {"version": 2, "plugins": {
+            "x@m": "a string",
+            "y@m": ["notdict", rec("user", "1"), rec("project", "1", projectPath="/p")],
+        }}
+        self.write(data)
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertIn("removed 1, kept 2", line)
+        after = json.loads(self.raw())["plugins"]
+        self.assertEqual(after["x@m"], "a string")
+        self.assertEqual(after["y@m"][0], "notdict")
+        self.assertEqual(len(after["y@m"]), 2)
+
+    def test_retention_newest_is_this_run(self):
+        self.write(fixture())
+        orig = Path(self.file).read_bytes()
+        os.makedirs(self.bdir)
+        for i in range(6):
+            Path(self.bdir, "installed_plugins-2026010%dT000000000000Z.json" % (i + 1)).write_text("{}")
+        before = set(self.backups())
+        self.run_prune()
+        new = set(self.backups()) - before
+        self.assertEqual(len(new), 1)
+        newest = new.pop()
+        self.assertEqual(max(self.backups()), newest)
+        self.assertEqual(Path(self.bdir, newest).read_bytes(), orig)
+        self.assertEqual(len(self.backups()), 5)
+        self.assertNotIn("installed_plugins-20260101T000000000000Z.json", self.backups())
+        self.assertNotIn("installed_plugins-20260102T000000000000Z.json", self.backups())
 
 
 class MainTest(Base):

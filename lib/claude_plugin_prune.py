@@ -40,7 +40,8 @@ def should_remove(record, user_record):
     if user_record is None or record.get("scope") not in _PRUNABLE_SCOPES:
         return False
     # Equal versions decide first: no timestamp is read.
-    if record.get("version") == user_record.get("version"):
+    mine_v, user_v = record.get("version"), user_record.get("version")
+    if _nonempty_str(mine_v) and _nonempty_str(user_v) and mine_v == user_v:
         return True
     mine = parse_ts(record.get("lastUpdated"))
     theirs = parse_ts(user_record.get("lastUpdated"))
@@ -75,37 +76,77 @@ def _prune_records(plugins):
     return new_plugins, removed, kept
 
 
-def _write_backup(path, backup_dir, stamp):
+def _nonempty_str(v):
+    return isinstance(v, str) and v != ""
+
+
+def _write_backup(raw, backup_dir, stamp):
+    """Write the bytes already read from the plugins file; return the backup path."""
     os.makedirs(backup_dir, exist_ok=True)
-    name = _BACKUP_PREFIX + stamp + _BACKUP_SUFFIX
-    dest = os.path.join(backup_dir, name)
-    with open(path, "rb") as src, open(dest, "wb") as dst:
-        dst.write(src.read())
+    dest = os.path.join(backup_dir, _BACKUP_PREFIX + stamp + _BACKUP_SUFFIX)
+    with open(dest, "wb") as dst:
+        dst.write(raw)
+    return dest
 
 
 def _trim_backups(backup_dir, keep):
+    """Best-effort retention after a successful replace: a failure here is cleanup only."""
     names = sorted(
         n
         for n in os.listdir(backup_dir)
         if n.startswith(_BACKUP_PREFIX) and n.endswith(_BACKUP_SUFFIX)
     )
-    excess = names[: max(0, len(names) - max(keep, 0))]
-    for n in excess:
-        os.remove(os.path.join(backup_dir, n))
+    for n in names[: max(0, len(names) - keep)]:
+        try:
+            os.remove(os.path.join(backup_dir, n))
+        except OSError:
+            pass
+
+
+def _signature(st):
+    return (st.st_mtime_ns, st.st_ino, st.st_size)
+
+
+def _remove_quietly(path):
+    """Cleanup of this run's own artefact; a missing file is fine."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
 
 
 def prune(path, backup_dir, keep, dry_run, before_restat=None):
-    """Prune `path`. Returns (exit_code, stdout_line)."""
+    """Prune `path`. Returns (exit_code, stdout_line).
+
+    Race guard: mtime, inode and size are compared before reading and again just
+    before os.replace. A write landing between that re-stat and os.replace is
+    still lost; this cannot be closed without a lock Claude Code does not take.
+    Any OSError becomes a refusal (exit 3) and leaves the plugins file as it was;
+    pruning never proceeds without a backup.
+    """
+    if keep < 1:
+        raise ValueError("keep must be at least 1")
     try:
-        before = os.stat(path)
+        return _prune(path, backup_dir, keep, dry_run, before_restat)
+    except OSError as exc:
+        return _refuse("%s" % exc)
+
+
+def _prune(path, backup_dir, keep, dry_run, before_restat):
+    # Resolve a symlinked plugins file so the temp file and the replace target
+    # live beside the real file and the link survives.
+    real = os.path.realpath(path)
+    try:
+        before = os.stat(real)
     except FileNotFoundError:
         return 0, "no plugins file"
     now = datetime.now(timezone.utc)
+    with open(real, "rb") as f:
+        raw = f.read()
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError) as exc:
-        return _refuse("cannot read plugins file: %s" % exc)
+        data = json.loads(raw)
+    except ValueError as exc:
+        return _refuse("cannot parse plugins file: %s" % exc)
     if not isinstance(data, dict):
         return _refuse("plugins file is not a JSON object")
     if data.get("version") != 2:
@@ -119,41 +160,50 @@ def prune(path, backup_dir, keep, dry_run, before_restat=None):
     if removed == 0 or dry_run:
         return 0, line
 
-    _write_backup(path, backup_dir, now.strftime("%Y%m%dT%H%M%S%fZ"))
-    _trim_backups(backup_dir, keep)
-
-    new_data = dict(data)
-    new_data["plugins"] = new_plugins
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)), suffix=".tmp")
+    backup = _write_backup(raw, backup_dir, now.strftime("%Y%m%dT%H%M%S%fZ"))
+    tmp = None
     try:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(real), suffix=".tmp")
+        new_data = dict(data)
+        new_data["plugins"] = new_plugins
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(new_data, f, indent=2)
-            f.write("\n")
+            json.dump(new_data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
         os.chmod(tmp, before.st_mode & 0o7777)
         if before_restat is not None:
             before_restat()
         try:
-            after = os.stat(path)
+            changed = _signature(os.stat(real)) != _signature(before)
         except FileNotFoundError:
-            os.remove(tmp)
+            changed = True
+        if changed:
+            _remove_quietly(tmp)
+            _remove_quietly(backup)
             return 4, _CHANGED_LINE
-        if (after.st_mtime_ns, after.st_ino) != (before.st_mtime_ns, before.st_ino):
-            os.remove(tmp)
-            return 4, _CHANGED_LINE
-        os.replace(tmp, path)
-    except BaseException:
-        # Cleanup only: never leave a temp file behind, then re-raise.
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        raise
+        os.replace(tmp, real)
+    except (OSError, ValueError, TypeError) as exc:
+        # Cleanup, then report: the plugins file was not replaced.
+        if tmp is not None:
+            _remove_quietly(tmp)
+        _remove_quietly(backup)
+        return _refuse("cannot write plugins file: %s" % exc)
+    _trim_backups(backup_dir, keep)
     return 0, line
+
+
+def _keep_arg(value):
+    n = int(value)
+    if n < 1:
+        raise argparse.ArgumentTypeError("--keep must be at least 1")
+    return n
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--file", required=True)
     parser.add_argument("--backup-dir", required=True)
-    parser.add_argument("--keep", type=int, default=5)
+    parser.add_argument("--keep", type=_keep_arg, default=5)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     code, line = prune(args.file, args.backup_dir, args.keep, args.dry_run)
