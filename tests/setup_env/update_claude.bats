@@ -113,7 +113,7 @@ _claude_guard_repo_setup() {
   run run_update
   [ "$status" -eq 0 ]
   [ "$(grep -c '^claude plugins update ' "${MOCK_CALLS_FILE}")" -eq 2 ]
-  grep -q '^claude plugins update frontend-design@claude-plugins-official$' "${MOCK_CALLS_FILE}"
+  grep -q '^claude plugins update -s user frontend-design@claude-plugins-official$' "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update: a partial reconcile WARNs the claude section and names it partial" {
@@ -130,7 +130,7 @@ _claude_guard_repo_setup() {
 @test "run_update: a failed plugin update FAILs the claude section" {
   export UPDATE_CLAUDE=1
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
-  export MOCK_CLAUDE_FAIL_ARGS="plugins update superpowers"
+  export MOCK_CLAUDE_FAIL_ARGS="plugins update -s user superpowers"
   local _rc=0
   run_update || _rc=$?
   [ "${_rc}" -ne 0 ]
@@ -240,7 +240,7 @@ PY
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"good@m","scope":"user"},{"id":"a","scope":"user"}]'
   run run_update
   [ "$status" -eq 0 ]
-  grep -q '^claude plugins update good@m$' "${MOCK_CALLS_FILE}"
+  grep -q '^claude plugins update -s user good@m$' "${MOCK_CALLS_FILE}"
   refute_grep '^claude plugins update a$' "${MOCK_CALLS_FILE}"
 }
 
@@ -290,7 +290,7 @@ PY
   export MOCK_CLAUDE_MARKETPLACE_LIST_JSON='[{"name":"claude-plugins-official"},{"name":"caveman"}]'
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"},{"id":"caveman@caveman","scope":"user"}]'
   export MOCK_CLAUDE_EDIT_SETTINGS=update
-  export MOCK_CLAUDE_FAIL_ARGS="plugins update caveman"
+  export MOCK_CLAUDE_FAIL_ARGS="plugins update -s user caveman"
   local _rc=0
   run_update || _rc=$?
   [ "${_rc}" -ne 0 ]
@@ -304,4 +304,103 @@ PY
   # dropping the space; assert on the real two-character separator so that
   # regression is caught rather than only the substrings either side of it.
   [[ "${_result}" == *"(caveman); "*"changed during plugin provisioning"* ]]
+}
+
+# Writes a version-2 installed_plugins.json with one plugin, a user record and
+# a project record, at ${_OVERRIDE_CLAUDE_PLUGINS_FILE}. Args: user version,
+# user lastUpdated, project version, project lastUpdated.
+_write_plugins_fixture() {
+  export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR}/installed_plugins.json"
+  printf '{"version":2,"plugins":{"superpowers@claude-plugins-official":[{"scope":"user","version":"%s","lastUpdated":"%s"},{"scope":"project","projectPath":"/x","version":"%s","lastUpdated":"%s"}]}}\n' \
+    "$1" "$2" "$3" "$4" > "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+}
+
+@test "run_update: claude plugin update is recorded with -s user" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  run run_update
+  [ "$status" -eq 0 ]
+  grep -q '^claude plugins update -s user superpowers@claude-plugins-official$' "${MOCK_CALLS_FILE}"
+}
+
+@test "run_update: prune removes a redundant project record after the updates ran" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  _write_plugins_fixture 5.0.0 2026-11-05T10:00:00.000Z 5.0.0 2026-11-01T10:00:00.000Z
+  run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"removed 1"* ]]
+  local _upd_line _prune_line
+  _upd_line="$(printf '%s\n' "$output" | grep -n 'removed 1' | head -1 | cut -d: -f1)"
+  [ -n "${_upd_line}" ]
+  # Records left: user only.
+  [ "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print([r["scope"] for r in d["plugins"]["superpowers@claude-plugins-official"]])' "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")" = "['user']" ]
+}
+
+@test "run_update: prune line is printed after the update calls" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  _write_plugins_fixture 5.0.0 2026-11-05T10:00:00.000Z 5.0.0 2026-11-01T10:00:00.000Z
+  # Record the point at which the prune ran relative to the last update call.
+  eval "$(declare -f _claude_prune_plugin_records | sed '1s/_claude_prune_plugin_records/_real_prune_for_test/')"
+  _claude_prune_plugin_records() {
+    printf 'PRUNE\n' >> "${MOCK_CALLS_FILE}"
+    _real_prune_for_test "$@"
+  }
+  run_update > /dev/null
+  local _last_update _prune
+  _last_update="$(grep -n '^claude plugins update ' "${MOCK_CALLS_FILE}" | tail -1 | cut -d: -f1)"
+  _prune="$(grep -n '^PRUNE$' "${MOCK_CALLS_FILE}" | head -1 | cut -d: -f1)"
+  [ -n "${_last_update}" ]
+  [ -n "${_prune}" ]
+  [ "${_last_update}" -lt "${_prune}" ]
+}
+
+@test "run_update: a failed update keeps a newer-dated project record" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  export MOCK_CLAUDE_FAIL_ARGS="plugins update"
+  _write_plugins_fixture 4.0.0 2026-10-01T10:00:00.000Z 5.0.0 2026-11-05T10:00:00.000Z
+  run_update || true
+  grep -q '"scope": *"project"' "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+}
+
+@test "run_update: an already-at-latest update exit 0 keeps a newer-dated project record" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  _write_plugins_fixture 4.0.0 2026-10-01T10:00:00.000Z 5.0.0 2026-11-05T10:00:00.000Z
+  # Shim: update exits 0 with the CLI's no-op message, everything else is the mock.
+  local _shim="${BATS_TEST_TMPDIR}/claude-shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nif [[ "$1 $2" == "plugins update" ]]; then\n  printf "claude %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n  printf "already at the latest version\\n"\n  exit 0\nfi\nexec "%s/tests/mocks/claude" "$@"\n' "${REPO_ROOT}" > "${_shim}/claude"
+  chmod +x "${_shim}/claude"
+  PATH="${_shim}:${PATH}" run run_update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"already at the latest version"* ]]
+  grep -q '"scope": *"project"' "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+}
+
+@test "run_update: an unsupported plugins file version WARNs with refused and leaves the file unchanged" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR}/installed_plugins.json"
+  printf '{"version":3,"plugins":{}}\n' > "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+  local _before
+  _before="$(cat "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")"
+  run_update
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" == *"refused"* ]]
+  [ "$(cat "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")" = "${_before}" ]
+}
+
+@test "run_update --dry-run leaves the plugins file unchanged" {
+  export UPDATE_CLAUDE=1
+  export DRY_RUN=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  _write_plugins_fixture 5.0.0 2026-11-05T10:00:00.000Z 5.0.0 2026-11-01T10:00:00.000Z
+  local _before
+  _before="$(cat "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")"
+  run run_update
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")" = "${_before}" ]
 }

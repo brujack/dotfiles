@@ -3708,7 +3708,7 @@ _cheat_mode() {
   export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
   run run_update
   [ "$status" -eq 0 ]
-  grep -q "claude plugins update superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
+  grep -q "claude plugins update -s user superpowers@claude-plugins-official" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update skips claude when claude not installed" {

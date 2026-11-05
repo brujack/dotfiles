@@ -87,6 +87,28 @@ if ids:
     || { printf 'claude plugins list: unparsable JSON\n' >&2; return 1; }
 }
 
+# Prunes project/local records in Claude's installed_plugins.json that a
+# user-scope record already covers (lib/claude_plugin_prune.py decides). Prints
+# the program's one line. Returns 0 when it finished or had nothing to do, 2
+# when it refused or could not run (the caller WARNs). Seams:
+# _OVERRIDE_CLAUDE_PLUGINS_FILE, _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR.
+_claude_prune_plugin_records() {
+  local _file="${_OVERRIDE_CLAUDE_PLUGINS_FILE:-${HOME}/.claude/plugins/installed_plugins.json}"
+  local _backup="${_OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR:-${HOME}/.local/share/dotfiles/claude-plugin-backups}"
+  local -a _args=(--file "${_file}" --backup-dir "${_backup}")
+  if ! command -v python3 &>/dev/null; then
+    printf 'skipped: python3 not found\n'
+    return 2
+  fi
+  _dry_run_active && _args+=(--dry-run)
+  local _out _rc=0
+  _out="$(python3 "${DOTFILES_REPO_ROOT}/lib/claude_plugin_prune.py" "${_args[@]}" < /dev/null)" || _rc=$?
+  [[ -n ${_out} ]] && printf '%s\n' "${_out}"
+  [[ ${_rc} -eq 0 ]] && return 0
+  [[ -z ${_out} ]] && printf 'skipped: plugin prune failed (exit %d)\n' "${_rc}"
+  return 2
+}
+
 # Prints one tab-separated line describing the settings file's git status:
 #   <state>\t<repo-or-dash>\t<path>
 # state is clean|dirty|untracked|unknown. path is relative to repo for
@@ -983,7 +1005,7 @@ run_update() {
             # nothing further is added here -- just don't act on garbage.
             [[ -z "${_extra}" ]] || continue
             grep -qxF -- "${_name}" <<<"${_installed}" || continue
-            claude plugins update "${_name}" < /dev/null 2>&1 \
+            claude plugins update -s user "${_name}" < /dev/null 2>&1 \
               | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
             [[ "${PIPESTATUS[0]}" -ne 0 ]] && _claude_failed+=("${_name%%@*}")
           done <<<"${_manifest}"
@@ -991,6 +1013,10 @@ run_update() {
             _fatal=1
             _messages+=("$(printf '%d plugin(s) failed (%s)' "${#_claude_failed[@]}" "${_claude_failed[*]}")")
           fi
+          local _prune_line="" _prune_rc=0
+          _prune_line="$(_claude_prune_plugin_records)" || _prune_rc=$?
+          printf '%s\n' "${_prune_line}" | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+          [[ ${_prune_rc} -eq 2 ]] && _messages+=("plugin record prune: ${_prune_line}")
         fi
       fi
       # The guard runs unconditionally, even after a fatal early-exit --

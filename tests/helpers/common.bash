@@ -135,6 +135,12 @@ load_mocks() {
   # dirty the working tree (`git status` showing `M tests/fixtures/...`).
   cp "${REPO_ROOT}/tests/fixtures/claude-settings.json" "${BATS_TEST_TMPDIR}/claude-settings.json"
   export _OVERRIDE_CLAUDE_SETTINGS="${BATS_TEST_TMPDIR}/claude-settings.json"
+  # run_update's claude section prunes the real ~/.claude/plugins/installed_plugins.json
+  # unless these point elsewhere; the default file does not exist, so a test
+  # that does not care sees "no plugins file". Tests needing records write a
+  # fixture and repoint _OVERRIDE_CLAUDE_PLUGINS_FILE.
+  export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-such-installed_plugins.json"
+  export _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/plugin-backups"
   # Keep this the last statement: once tests/mocks leads PATH, chmod/cp/ln/mv/
   # tee/rm resolve to logging mocks, which append to MOCK_CALLS_FILE (default
   # /tmp/mock_calls, outside the test tmpdir) when a test has not set it yet.
