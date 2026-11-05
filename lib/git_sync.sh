@@ -140,12 +140,15 @@ sync_git_repos() {
     log_warn "git-repos: repos base '${_base}' is not a directory, nothing synced"
     _had_warning=1
   else
+    # -mindepth 2: repos are children of the base, never the base itself. A
+    # stray `${_base}/.git` (GitKraken leaves one) otherwise reads as a repo
+    # git cannot open, and every run WARNs on it.
     while IFS= read -r _repo; do
       [[ -z "${_repo}" ]] && continue
       _found=1
       log_info "git-repos: syncing ${_repo}"
       _git_sync_one_repo "${_repo}" || _had_warning=1
-    done < <(find "${_base}" -maxdepth 2 -name .git -type d 2>/dev/null | sed 's#/\.git$##' | sort)
+    done < <(find "${_base}" -mindepth 2 -maxdepth 2 -name .git -type d 2>/dev/null | sed 's#/\.git$##' | sort)
     if [[ ${_found} -eq 0 ]]; then
       log_warn "git-repos: no repos found under '${_base}'"
       _had_warning=1

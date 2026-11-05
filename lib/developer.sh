@@ -694,29 +694,22 @@ recreate_python_venv() {
   fi
 }
 
+# Attempts every absent repo even after a failure, then returns 1 if any clone
+# failed. Each `if` used to stand alone, so the function returned only the last
+# one's status and an earlier failed clone was silent.
 clone_personal_repos() {
   printf "personal git repos cloning\\n"
-  if ! [[ -d ${PERSONAL_GITREPOS}/dotfiles ]]; then
-    git clone git@github.com:brujack/dotfiles.git "${PERSONAL_GITREPOS}"/dotfiles
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform ]]; then
-    git clone git@github.com:brujack/docker_container_terraform.git "${PERSONAL_GITREPOS}"/docker_container_terraform
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/docker_container_terraform_packer_ansible ]]; then
-    git clone git@github.com:brujack/docker_container_terraform_packer_ansible.git "${PERSONAL_GITREPOS}"/docker_container_terraform_packer_ansible
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/kubernetes ]]; then
-    git clone git@github.com:brujack/kubernetes.git "${PERSONAL_GITREPOS}"/kubernetes
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/pfsense_config ]]; then
-    git clone git@github.com:brujack/pfsense_config.git "${PERSONAL_GITREPOS}"/pfsense_config
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/python-learning ]]; then
-    git clone git@github.com:brujack/python-learning.git "${PERSONAL_GITREPOS}"/python-learning
-  fi
-  if ! [[ -d ${PERSONAL_GITREPOS}/terraform_ansible ]]; then
-    git clone git@github.com:brujack/terraform_ansible.git "${PERSONAL_GITREPOS}"/terraform_ansible
-  fi
+  local _repo _rc=0
+  for _repo in dotfiles docker_container_terraform \
+    docker_container_terraform_packer_ansible kubernetes pfsense_config \
+    python-learning terraform_ansible; do
+    [[ -d "${PERSONAL_GITREPOS}/${_repo}" ]] && continue
+    if ! git clone "git@github.com:brujack/${_repo}.git" "${PERSONAL_GITREPOS}/${_repo}"; then
+      log_warn "${_repo}: clone failed"
+      _rc=1
+    fi
+  done
+  return "${_rc}"
 }
 
 # _semver_cmp a b -- prints -1, 0 or 1 comparing dot-separated NUMERIC

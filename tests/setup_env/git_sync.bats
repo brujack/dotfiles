@@ -206,6 +206,24 @@ setup() {
   [[ "$output" == *"repo-a"* ]]
 }
 
+@test "sync_git_repos ignores a .git directory in the repos base itself" {
+  # The base is a folder of repos, never a repo. A tool (GitKraken) left a
+  # bare `.git/gk/` in the real base on claude; find at depth 1 matched it and
+  # every -t update WARNed "not a readable git repository" for the base.
+  local base="${TESTDIR}/fake-personal-stray"
+  mkdir -p "${base}/.git/gk"
+  git init -q --bare "${TESTDIR}/stray-origin.git"
+  git clone -q "${TESTDIR}/stray-origin.git" "${base}/repo-a"
+  git -C "${base}/repo-a" commit -q --allow-empty -m init
+  git -C "${base}/repo-a" push -q -u origin HEAD:master
+  export _OVERRIDE_PERSONAL_GITREPOS="${base}"
+  export _OVERRIDE_STATE_LEDGER_DIR="${TESTDIR}/no-ledger"
+  run sync_git_repos
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"git-repos: syncing ${base}/repo-a"* ]]
+  [[ "$output" != *"not a readable git repository"* ]]
+}
+
 @test "sync_git_repos excludes git worktrees (gitdir-file .git, not a directory)" {
   local base="${TESTDIR}/fake-personal-wt"
   mkdir -p "${base}"

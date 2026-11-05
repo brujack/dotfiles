@@ -2541,6 +2541,20 @@ _stub_refresher_fail() {
   grep -q "^ledger developer 0$" "${MOCK_CALLS_FILE}"
 }
 
+@test "run_developer_or_ansible returns 1 with no ledger entry when clone_personal_repos fails" {
+  export LINUX=1
+  unset MACOS UBUNTU
+  install_ruby()             { return 0; }
+  install_github_cli_linux() { return 0; }
+  setup_ansible()            { return 0; }
+  clone_personal_repos()     { printf "clone_repos\n" >> "${MOCK_CALLS_FILE}"; return 1; }
+  _ledger_write_run_entry()  { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_developer_or_ansible
+  [ "$status" -eq 1 ]
+  grep -q "^clone_repos$" "${MOCK_CALLS_FILE}"
+  refute_grep "^ledger " "${MOCK_CALLS_FILE}"
+}
+
 @test "run_developer_or_ansible skips the gh step when LINUX is unset" {
   unset LINUX UBUNTU
   export MACOS=1
