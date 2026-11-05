@@ -320,3 +320,28 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - R4 -> The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, or has a `version` other than 2; when the `st_mtime_ns`, `st_ino` or `st_size` of the resolved file or of its link path (`os.lstat`) changed between the first stat and the re-stat immediately before the replace, it removes the backup and temp file it had written, leaves the plugins file untouched and reports a WARN. — review hardening added the size and link-path checks; a changed-file run cleans up its own files rather than writing nothing at all.
 - finding R6 (2026-11-05, reviewer A): DIFFERS — The ADR records all listed topics, but its refusal conditions state "Size is not compared: Claude rewrites the file at byte-identical size", while the code's race signature is `(st.st_mtime_ns, st.st_ino, st.st_size)` (lib/claude_plugin_prune.py:262, docstring line 276 'mtime, inode and size') and test_size_change_exit4 exists, so the ADR misstates the refusal conditions it is required to record (it also omits the link-path lstat comparison).
 - R6 reviewed: fixed in 2eec1e2d
+- finding R2 (2026-11-05, reviewer B): DIFFERS — The prune runs after the loop (workflows.sh:1019-1025) and the user-record, timestamp >= and missing/unparsable-keeps rules match, but the equal-version branch fires only when both versions are non-empty strings (`_nonempty_str(mine_v) and _nonempty_str(user_v)`, line 45), so two equal empty-string versions are not removed on equality and fall through to the timestamp rule, a narrower condition than 'the two version strings are equal' (conservative edge case).
+- R2 -> After the update loop, `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin id has a `user` record and either both `version` values are non-empty strings and equal (decided before any timestamp is read) or the user record's `lastUpdated` is at or after the record's own; otherwise, including a missing or unparsable timestamp, the record is kept. — review found that two missing or empty versions compared equal and removed a record on no evidence; the narrower rule fails closed.
+
+## Spec alignment (2026-11-05)
+
+- spec: docs/superpowers/specs/2026-11-04-claude-plugin-user-scope-design.md
+- anchor: 9a90aa04e03e46f9f5b1a046b9601f12354a62ff
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R2 | B | DIFFERS | The prune runs after the loop (workflows.sh:1019-1025) and the user-record, timestamp >= and missing/unparsable-keeps rules match, but the equal-version branch fires only when both versions are non-empty strings (`_nonempty_str(mine_v) and _nonempty_str(user_v)`, line 45), so two equal empty-string versions are not removed on equality and fall through to the timestamp rule, a narrower condition than 'the two version strings are equal' (conservative edge case). | - R2 -> After the update loop, `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin id has a `user` record and either both `version` values are non-empty strings and equal (decided before any timestamp is read) or the user record's `lastUpdated` is at or after the record's own; otherwise, including a missing or unparsable timestamp, the record is kept. — review found that two missing or empty versions compared equal and removed a record on no evidence; the narrower rule fails closed. |
+
+### Reviewed
+
+- R6 reviewed: fixed in 2eec1e2d
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
