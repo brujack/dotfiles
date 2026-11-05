@@ -206,3 +206,25 @@ Disposition: Addressed — apparatus finding; Testing names both cases and the r
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-11-04)
+
+- spec: docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md
+- anchor: 09ffff5a347027c4634082f44db56d5193d5e055
+- in scope: R1, R2, R3, R4, R5, R8
+- out of scope: R6, R7
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded

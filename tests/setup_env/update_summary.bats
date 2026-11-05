@@ -1165,6 +1165,7 @@ _seed_ledger_run_files() {
   printf '1755000000\n'            > "${_DOTFILES_RUN_TMPDIR}/start_epoch"
   printf 'make-version-run-uuid\n' > "${_DOTFILES_RUN_TMPDIR}/run_id"
   printf 'deadbeef1234\n'          > "${_DOTFILES_RUN_TMPDIR}/git_sha"
+  rm -f "${_DOTFILES_RUN_TMPDIR}/ledger_written"
 }
 
 _seed_machine_id() {

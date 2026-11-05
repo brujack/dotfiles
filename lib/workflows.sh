@@ -385,6 +385,31 @@ _dotfiles_run_tmpdir_setup() {
   ensure_state_ledger || true
 }
 
+# _run_or_exit FUNC [ARGS...] -- the single dispatcher for setup_env.sh's run
+# functions. Runs FUNC; on a non-zero return from a mapped run function it
+# records a failed ledger entry, then exits with FUNC's own code. The writer's
+# one-write-per-run marker (_ledger_write_run_entry) means a function that
+# already wrote its entry, or a failure that left a previous run's directory
+# exported, gets no second write. run_update is unmapped: it writes its own
+# entry from _update_summary. Spec:
+# docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md (R4).
+_run_or_exit() {
+  "$@"
+  local _ec=$? _type=""
+  [[ ${_ec} -eq 0 ]] && return 0
+  case "$1" in
+    run_setup_user)           _type=setup_user ;;
+    run_setup_or_developer)   _type=setup ;;
+    run_developer_or_ansible) _type=developer ;;
+    run_recreate_venv)        _type=recreate_venv ;;
+    run_recreate_ruby)        _type=recreate_ruby ;;
+  esac
+  if [[ -n "${_type}" ]]; then
+    _ledger_write_run_entry "${_type}" "${_ec}" || true
+  fi
+  exit "${_ec}"
+}
+
 # Fetch <url> into <dest> through a dot-prefixed temp file in the same
 # directory, so a failed, timed-out or wrong-content transfer never replaces a
 # working copy: curl -o truncates its target as soon as the body starts, and
@@ -508,10 +533,9 @@ run_setup_user() {
   elif [[ ${_plugins_rc} -ne 0 ]]; then
     log_warn "Claude plugin provisioning was partial — see the warnings above"
   fi
-  # Not `|| return 1`: setup_env.sh's _run_or_exit wrapper would abort the
-  # entire script (run_setup_or_developer, run_developer_or_ansible never
-  # run) on a single broken repo's Makefile, and would also skip
-  # _ledger_write_run_entry on exactly the runs worth recording.
+  # Not `|| return 1`: _run_or_exit (above) would abort the entire script
+  # (run_setup_or_developer, run_developer_or_ansible never run) on a single
+  # broken repo's Makefile, recording the whole run as failed.
   #
   # rc is captured and branched on rather than treated as a bare pass/fail:
   # install_git_hooks_all_repos returns 2 for gaps/unknowns/a pinned
@@ -625,7 +649,7 @@ run_developer_or_ansible() {
   local _gh_rc=0
   _dotfiles_run_tmpdir_setup || return 1
   # gh runs first and non-fatally: an apt-source failure must not cost the npm,
-  # ruby and ansible steps after it. The partial is warned and ledgered below.
+  # ruby and ansible steps after it. The partial is warned below.
   if [[ -n ${LINUX} ]]; then
     install_github_cli_linux || _gh_rc=2
   fi
@@ -648,10 +672,11 @@ run_developer_or_ansible() {
   if [[ ${_gh_rc} -ne 0 ]]; then
     log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings earlier in this run"
   fi
-  # A gh partial records exit code 2 (success: false) while the process exits
-  # 0: the ledger is the durable signal, and a non-zero exit would stop a
-  # combined -t run. run_setup_or_developer's partials still record 0.
-  _ledger_write_run_entry "developer" "${_gh_rc}" || true
+  # The entry records this function's own exit status, 0: a gh partial is
+  # warned above, not recorded as a failure (a non-zero exit would stop a
+  # combined -t run). Partial outcomes are a backlog item; see
+  # docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md.
+  _ledger_write_run_entry "developer" 0 || true
 }
 
 run_recreate_venv() {
@@ -2242,7 +2267,11 @@ ledger_write_entry() {
     return 0
   fi
   local _rc
-  printf '%s' "${_json}" | "${_ledger_bin}" write
+  # ledger's own git pull/push has no BatchMode or timeout, and _run_or_exit
+  # writes exactly when ssh may already be broken: bound it like the other
+  # dotfiles ssh git calls (_git_ssh_opts), so it cannot prompt and a dead
+  # host fails within ConnectTimeout; ledger spools what it cannot push.
+  printf '%s' "${_json}" | GIT_SSH_COMMAND="$(_git_ssh_opts)" "${_ledger_bin}" write
   _rc=$?
   if [[ ${_rc} -eq 2 ]]; then
     printf "WARNING: ledger write spooled (unreachable)\n" >&2

@@ -77,22 +77,16 @@ unset _LOCAL_CFG
 [[ -n ${CHECK_VERSIONS:-} ]] && { run_check_versions; exit $?; }
 
 # Fail-fast strict runner: exit immediately on the first failed selected step.
-# NOTE: run_update returns non-zero for THREE different situations, and only the
+# NOTE: run_update returns non-zero for TWO different situations, and only the
 # first leaves any evidence behind:
 #   1. It ran every section and some recorded FAIL — summary, log line and ledger
 #      entry are all written.
-#   2. It could not create its run directory (lib/workflows.sh:331) and aborted
-#      before any section ran — nothing recorded anywhere.
-#   3. It aborted mid-run on one of five `cd` guards (lib/workflows.sh:622, :632,
-#      :642, :662, :664) — also nothing recorded.
+#   2. Its `_dotfiles_run_tmpdir_setup || return 1` failed and it aborted before
+#      any section ran — nothing recorded anywhere.
 # A wrapper or cron job that sees a non-zero exit and finds no log line is in case
-# 2 or 3, not case 1.
-_run_or_exit() {
-  "$@"
-  local _ec=$?
-  [[ ${_ec} -eq 0 ]] || exit "${_ec}"
-}
-
+# 2, not case 1.
+# _run_or_exit (lib/workflows.sh) records a failed ledger entry for the other
+# run functions; run_update is left to its own summary.
 [[ -n ${SETUP_BREW:-} ]] && _run_or_exit run_brew_install
 [[ -n ${SETUP_MAS:-} ]]  && _run_or_exit run_mas_install
 [[ -n ${SETUP_BREW:-} || -n ${SETUP_MAS:-} ]] && exit 0
