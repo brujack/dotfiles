@@ -1,7 +1,7 @@
 # Claude plugins at user scope only
 
 - **Date:** 2026-11-04
-- **Repos:** dotfiles (update, prune, doctor, ADR, its own settings), ai-devops, brucejacksonconsulting-site, etch-cli, etch-config, math, state-ledger, terraform_ansible (settings only), ai-config (ADR-0046 amendment)
+- **Repos:** dotfiles only (update loop, record prune, ADR). No other repo's settings change; ai-config ADR-0046 stands.
 
 ## Problem
 
@@ -9,9 +9,10 @@ Operator rule, 2026-11-04: external Claude plugins are installed at user scope o
 
 Measured 2026-11-04 on `claude` from `~/.claude/plugins/installed_plugins.json` (1,045,039
 bytes, `version: 2`): 2,501 project-scope install records against 15 user-scope ones, for 11
-plugin ids across 279 project paths. 2,407 records name a path that no longer exists (removed
-worktrees and `/tmp` copies); 94 name a live path. The population is this one machine; the
-other dev machines were not counted.
+plugin ids across 279 project paths (280 by a later count; new records are minted
+continuously). 2,407 records name a path that no longer exists (removed worktrees and `/tmp`
+copies); 94 name a live path. The population is this one machine; the other dev machines were
+not counted.
 
 Two harms follow:
 
@@ -20,12 +21,15 @@ Two harms follow:
    The CLI default is "auto-detect": it updates the most specific scope it finds from the cwd.
    On 2026-11-04 it moved the dotfiles project record of context-mode from 2.0.0 to 2.1.0 and
    left the user record at 2.0.0.
-2. **Version skew and clutter.** A project record pins the version current when it was
-   minted. Measured: 808 of the 2,501 project records carry a version other than the
-   plugin's user record (`context7` 270, `code-review` 195, `security-guidance` 187,
-   `skill-creator` 72, `superpowers` 64, `warp` 17, three others 1 each). Whether a session
-   in that project loads the project record's older `installPath` was not measured.
-   `claude plugins list` prints thousands of entries.
+2. **Sessions run stale plugin versions.** A session loads the project record's `installPath`,
+   not the user record's. Measured: a `claude -p --output-format stream-json --verbose` session
+   started in the dotfiles main checkout reported `context-mode` at
+   `.../context-mode/2.1.0`, the version only the dotfiles project record names (the user
+   record is 2.0.0). A project record pins the version current when it was minted and is never
+   updated by a user-scope update, and 808 of the 2,501 project records carry a version other
+   than their plugin's user record (`context7` 270, `code-review` 195, `security-guidance` 187,
+   `skill-creator` 72, `superpowers` 64, `warp` 17, three others 1 each). `claude plugins
+list` also prints thousands of entries.
 
 ### Where the project records come from (measured)
 
@@ -46,135 +50,133 @@ directory, one `claude -p --model haiku "Reply with exactly: ok"` run inside it,
 | E     | `superpowers: true`             | true                      | 1 (`superpowers`) |
 | F     | `skill-creator: true`           | false (installed at user) | 0                 |
 
-So a project `true` that repeats a user `true` mints one project record per plugin per
-directory a session starts in. A `false`, or a `true` for a plugin that is off at user scope,
-mints none. The test records were removed with `claude plugin uninstall -s project <id>` run
-inside each directory, which left the user-scope records intact.
+A project `true` that repeats a user `true` mints one project record per plugin per directory a
+session starts in. Every repo carries the core set as such entries, because ai-config ADR-0046
+scopes `enabledPlugins` per repo by listing the whole map; ai-config's own settings file is the
+user settings file through dotfiles' symlink. The test records were removed with
+`claude plugin uninstall -s project <id>` run inside each directory, which left the user-scope
+records intact.
 
-Every repo except ai-config carries the full core set as redundant `true` entries, because
-ai-config ADR-0046 scoped `enabledPlugins` per repo by copying the whole map into each repo.
-Measured per repo (redundant `true` / redundant `false` / entries that differ from the user
-map):
-
-| Repo                        | Redundant `true` | Redundant `false` | Differs from user                                                             |
-| --------------------------- | ---------------- | ----------------- | ----------------------------------------------------------------------------- |
-| ai-devops                   | 10               | 4                 | `frontend-design: true`                                                       |
-| brucejacksonconsulting-site | 8                | 4                 | `frontend-design: true`, `pyright-lsp: false`                                 |
-| dotfiles                    | 8                | 5                 | `pyright-lsp: false`                                                          |
-| etch-cli                    | 8                | 4                 | `rust-analyzer-lsp: true`, `pyright-lsp: false`                               |
-| etch-config                 | 8                | 5                 | `pyright-lsp: false`                                                          |
-| math                        | 9                | 4                 | `rust-analyzer-lsp: true`                                                     |
-| state-ledger                | 9                | 5                 | none                                                                          |
-| terraform_ansible           | 8                | 3                 | `ansible-good-practices: true`, `terraform-skill: true`, `pyright-lsp: false` |
-
-ai-config is different: its tracked `.claude/settings.json` is `~/.claude/settings.json`
-through dotfiles' symlink, so in an ai-config checkout every user `true` is also a project
-`true`. Its checkouts and worktrees will keep minting records whatever the other repos do.
+A minted record copies the current user version: the eight records minted at
+2026-11-05T03:21Z all carry their plugin's user version (for example `context-mode` 2.0.0,
+`superpowers` 7.0.0, `context7` fa4eb54397ee).
 
 ## Design
 
-### 1. Repo settings: list only differences from the user map
+Remove project records after every user-scope update and let sessions re-mint them. A session
+started after the prune mints records at the fresh user version, so the version a project
+session loads tracks the user record. No repo's settings change, so ADR-0046's per-repo
+enablement is untouched.
 
-In each of the 8 repos above, delete every `enabledPlugins` entry whose value is `true` and
-whose user value is also `true`. Precedence is local > project > user, so the user `true`
-still applies and effective enablement in that repo is unchanged.
+### 1. User-scope updates
 
-Kept: every entry that differs from the user map (the repo-specific additions and exclusions in
-the last column), and every redundant `false`. A `false` mints no record, and it keeps the
-repo excluded if that plugin is later enabled globally, which is the protection ADR-0046 exists
-for.
+The claude section calls `claude plugins update -s user "${_name}"`.
 
-Each repo gets its own PR, announced to its owning session first. dotfiles' own settings change
-rides in the dotfiles PR. ai-config is not edited (its settings are the user settings).
+### 2. Record prune, after the update loop
 
-### 2. dotfiles `-t update`: user-scope updates and a record prune
+A new step in the same section, after the update loop (`_claude_prune_plugin_records`, with the
+JSON work in `lib/claude_plugin_prune.py`, run as a file), reads `installed_plugins.json` and
+removes every record whose `scope` is `project` or `local` and whose plugin id also has a
+`user`-scope record in the file. It does not read any project's settings: whatever a project
+enables, its next session re-mints what it needs at the user version.
 
-**Update.** The claude section calls `claude plugins update -s user "${_name}"`.
+Kept untouched: `user` and `managed` records, a project or local record whose plugin has no
+user record, and every top-level key other than `plugins`.
 
-**Prune.** A new step in the same section (`_claude_prune_plugin_records`, with the JSON work
-in `lib/claude_plugin_prune.py`, run as a file) reads `installed_plugins.json` and removes a
-record when all of these hold:
+Effect on live checkouts: a session started after the prune loads the user version of each
+plugin. A session already running keeps the version it loaded; Claude Code's own updates
+already leave running sessions on a superseded cache directory.
 
-- its `scope` is `project` or `local`; and
-- either its `projectPath` does not exist as a directory, or the project at that path no
-  longer sets the plugin `true` in its `.claude/settings.json` or `.claude/settings.local.json`;
-  and
-- the same plugin id has a `user`-scope record in the file.
-
-The third condition means the prune never removes the last install of a plugin. `user`- and
-`managed`-scope records are never touched, and neither is any top-level key other than
-`plugins`.
-
-Safety, because seven or more Claude sessions read and write this file:
+Safety, because many Claude sessions read and write this file:
 
 - Refuse (WARN, no write) when the file does not parse, has no `plugins` object, or has a
   `version` other than 2.
 - Write a timestamped backup to `~/.local/share/dotfiles/claude-plugin-backups/` before any
   change; keep the newest 5.
-- Read the file's mtime and size before parsing; after building the new content, re-stat and
-  skip the write (WARN) if either changed. Write to a temporary file in the same directory and
-  `os.replace` it.
+- Record `st_mtime_ns` and `st_ino` before reading. Re-stat immediately before the replace and
+  skip the write (WARN) if either changed. Size is not compared: Claude rewrites the file with
+  byte-identical size (measured: a 22:58 snapshot and the 23:00:37 file were both 1,045,039
+  bytes and differed only in key order). Write to a temporary file in the same directory and
+  `os.replace` it. A Claude write that lands between the re-stat and the replace is lost; the
+  worst case is losing another session's `plugins update`, whose previous version directory
+  still exists, and the next run of either repairs it.
 - Under `--dry-run`, report the counts and write nothing.
 
-The section reports one summary line: records removed, records kept because a live project
-still enables them, or the refusal reason. A refusal or a skipped write is a WARN, never a
-FAIL: the update itself has succeeded.
+The section reports one summary line: records removed and kept, or the refusal reason. A
+refusal or a skipped write is a WARN, never a FAIL: the update itself has succeeded.
 
-### 3. dotfiles `-t doctor`: redundant-`true` check
+### 3. ADR
 
-`_doctor_check_plugin_scope` reads the user `enabledPlugins` map, then each
-`<repo>/.claude/settings.json` for every main checkout directly under the personal repos root
-(a directory whose `.git` is a directory; linked worktrees, whose `.git` is a file, carry a
-branch's settings and are skipped), skipping any file whose real path equals the user settings
-file. Any entry `true` in the repo
-and `true` at user scope is a FAIL line naming the repo, the plugin id, and the remedy (delete
-that entry). A repo with no settings file or no `enabledPlugins` passes.
+A dotfiles ADR records why the prune edits a Claude-owned file, its refusal conditions, the
+measured mint rule, the measured load rule, and that live checkouts move to the user version.
 
-### 4. Records
+### Not done (backlog)
 
-- dotfiles ADR: the prune edits a Claude-owned file; why that is acceptable, what it refuses,
-  and the measured mint rule above.
-- ai-config ADR-0046 amendment (ai-config session): per-repo maps list only differences from
-  the user map; a redundant `true` mints a project install record per checkout.
+Stripping the redundant `true` entries from the 8 repos' settings would mint fewer records
+between updates. With the prune it changes no plugin version, so it is optional hygiene, filed
+as a backlog row. The proposed `-t doctor` check is dropped with it.
 
 ### Expected end state
 
-About 15 user-scope records, plus project records only for live ai-config checkouts (11 per
-checkout). Worktrees of the other repos mint none; ai-config worktree records are pruned on the
-first `-t update` after the worktree is removed.
+After each `-t update`: the 15 user-scope records only. Between updates, records re-minted by
+new sessions, all at the current user version.
 
 ## Testing
 
 - bats, `tests/setup_env/`:
   - the update loop passes `-s user` (recording `tests/mocks/claude`);
-  - the prune on fixture JSON files: a gone path removed; a live path whose project settings
-    still set `true` kept; a live path whose settings no longer set it removed; a record whose
-    plugin has no user record kept; `user` and `managed` records untouched; malformed JSON,
-    missing `plugins`, `version` 3 each refused with no write; a file changed between read and
-    write left untouched; `--dry-run` writes nothing; backup written and capped at 5;
-  - doctor: a redundant `true` FAILs naming repo and plugin; a `false`, an addition, a missing
-    file and the user-settings symlink each pass.
-- All file paths through seams set at `setup()` scope: the plugins file, the user settings
-  file, the personal repos root, the backup directory. No test reads or writes the real
-  `~/.claude`.
+  - the update loop runs before the prune;
+  - the prune on a fixture with 3 project records (one gone path, one live path, one plugin
+    without a user record), 2 user records and 1 managed record: exactly 2 project records
+    removed, the record without a user record kept, the user and managed records and the
+    `version` key byte-for-byte unchanged in meaning (compared after parsing);
+  - a fixture with no project records: no write, no backup, "0 removed";
+  - malformed JSON, missing `plugins`, `version` 3: each refused with no write and no backup;
+  - an mtime change with the same size between read and replace: write skipped (driven by a
+    seam that touches the file before the re-stat);
+  - `--dry-run` on the 3-record fixture reports "2 removed" and leaves the file unchanged;
+  - the backup is written and capped at 5.
+- All file paths through seams set at `setup()` scope: the plugins file and the backup
+  directory. No test reads or writes the real `~/.claude`.
 
 ## Requirements
 
 - **R1.** `[PR1]` The claude update loop in `run_update` runs `claude plugins update -s user` for each manifest plugin.
-- **R2.** `[PR1]` `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin has a `user` record and its `projectPath` is missing or no longer sets that plugin `true` in the project's settings or local settings.
+- **R2.** `[PR1]` After the update loop, `_claude_prune_plugin_records` removes every `project` or `local` record whose plugin id has a `user` record, and no other record.
 - **R3.** `[PR1]` The prune never modifies `user` or `managed` records or any top-level key other than `plugins`.
-- **R4.** `[PR1]` The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, has a `version` other than 2, or changed (mtime or size) between read and write.
-- **R5.** `[PR1]` The prune writes a timestamped backup before any change, keeps the newest 5, replaces the file atomically, and writes nothing under `--dry-run`.
-- **R6.** `[PR1]` `-t doctor` FAILs on each `enabledPlugins` entry that is `true` in a personal repo's `.claude/settings.json` and `true` in the user settings, naming repo, plugin and remedy, and skips a settings file that resolves to the user settings file.
-- **R7.** `[PR1]` dotfiles' `.claude/settings.json` keeps only `enabledPlugins` entries that differ from the user map, plus its redundant `false` entries.
-- **R8.** `[PR2]` In each of ai-devops, brucejacksonconsulting-site, etch-cli, etch-config, math, state-ledger and terraform_ansible, `.claude/settings.json` drops every `enabledPlugins` entry that is `true` there and `true` in the user map, and changes no other entry.
-- **R9.** `[PR1]` A dotfiles ADR records the prune's edit of `installed_plugins.json`, its refusal conditions and the measured mint rule.
-- **V1.** After PR1 merges, one `-t update` on `claude` leaves no project or local record whose `projectPath` is missing, and `installed_plugins.json` parses.
-- **V2.** After the PR2 set merges and a second `-t update`, project records exist only for live ai-config checkouts.
-- **V3.** `-t doctor` on `claude` reports no redundant `true` after the PR2 set merges.
-- **V4.** The ai-config session records the ADR-0046 amendment.
-- **N1.** No repo's effective plugin enablement changes.
-- **N2.** No redundant `false` entry is removed.
-- **N3.** ai-config's `.claude/settings.json` is not edited.
-- **N4.** The prune never removes a plugin's only install record.
-- **N5.** No `claude plugin uninstall`, `disable` or `enable` call is added.
+- **R4.** `[PR1]` The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, has a `version` other than 2, or its mtime or inode changed between the first stat and the re-stat immediately before the replace.
+- **R5.** `[PR1]` The prune writes a timestamped backup before any change, keeps the newest 5, replaces the file atomically, writes nothing when no record qualifies, and writes nothing under `--dry-run`.
+- **R6.** `[PR1]` A dotfiles ADR records the prune's edit of `installed_plugins.json`, its refusal conditions, the measured mint and load rules, and the version effect on live checkouts.
+- **R7.** `[PR1]` A dotfiles Backlog row records stripping redundant `true` entries from repo settings as optional hygiene.
+- **V1.** After PR1 merges, one `-t update` on `claude` leaves only `user`-scope records in `installed_plugins.json`, the user record count unchanged (15) and each user record's version unchanged by the prune, and the file parses.
+- **V2.** A `claude -p --output-format stream-json --verbose` session started in the dotfiles main checkout after that update reports `context-mode` at the user record's version.
+- **N1.** No repo's `.claude/settings.json` or `.claude/settings.local.json` is edited.
+- **N2.** The prune never removes a plugin's only install record.
+- **N3.** No `claude plugin uninstall`, `disable` or `enable` call is added.
+- **N4.** The prune reads no project's settings file.
+
+## Multi-Lens Review
+
+Reviewed at commit: `45248bed` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth doing but about twice the needed size. Shipping `-s user` before the repo strips stops project records from updating while live checkouts keep them; the recurring prune's value rests on whether sessions load the project record (then unmeasured); the doctor check is close to decoration (no copier of `enabledPlugins` exists, output ephemeral). V1 and V2 passed on an empty `plugins` map. Premise reproduced (2,501 / 15, 94 live / 2,407 gone, `version` 2).
+Assumption: a session in a project loads that project's record rather than the user record. Measured afterwards: true (dotfiles session loaded `context-mode` 2.1.0, the project record's version).
+Disposition: Addressed — design reduced to `-s user` plus a prune of every project record with a user counterpart, after the update; repo strips and doctor check dropped to backlog; V1 now pins the user record count and versions.
+
+### Ergonomics
+
+Finding: The doctor FAIL fires when the operator enables a plugin globally rather than when a repo changes, its remedy is a PR in another session's repo, and lagging machines would FAIL after the fix landed; doctor tests passed on an empty repos root.
+Assumption: a pruned file stays pruned (long-running sessions might write back a stale full copy). Unresolved: no write by another session had occurred by review time. The prune repeats every update, so a write-back costs a repeat, not a failure.
+Disposition: Addressed — doctor check dropped.
+
+### Risk
+
+Finding: The size half of the race guard never fires (Claude rewrites the file at byte-identical size); a write between re-stat and replace is lost but bounded. N1 covered enablement, not version: the prune moves live checkouts to the user version. A project settings file that fails to parse was unspecified. Fixture tests passed when nothing was written. `/etc/claude-code` absent and no `settings.local.json` sets `enabledPlugins`, so precedence cannot mask a change.
+Assumption: same as Goal-Fit; measured true.
+Disposition: Addressed — guard uses `st_mtime_ns` and `st_ino` re-stated before the replace; update runs before the prune and the ADR records the version effect; the prune no longer reads project settings (N4), so the parse case is gone; tests pin exact removed and kept counts.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
