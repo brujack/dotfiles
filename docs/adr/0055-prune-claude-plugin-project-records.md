@@ -43,9 +43,12 @@ record copies the current user version.
    `plugin uninstall -s project` per record, run inside each project directory, cannot reach
    the 2,407 records whose directory is gone.
 3. **Refusal conditions (WARN, no write):** the file does not parse, has no `plugins` object, has a
-   `version` other than 2, or its `st_mtime_ns` or `st_ino` changed between the first stat and a
-   re-stat immediately before the replace. Size is not compared: Claude rewrites the file at
-   byte-identical size (measured). Any `OSError` is a refusal. A timestamped backup in
+   `version` other than 2, or the `st_mtime_ns`, `st_ino` or `st_size` of the resolved file, or of
+   the link path itself (`os.lstat`), changed between the first stat and a re-stat immediately
+   before the replace; such a run removes its own backup and temp file and exits 4. Size alone
+   cannot detect a Claude rewrite (measured: it rewrites at byte-identical size), so mtime and
+   inode carry the guard and size only adds a case. The window between the re-stat and
+   `os.replace` cannot be closed without a lock. Any `OSError` is a refusal. A timestamped backup in
    `~/.local/share/dotfiles/claude-plugin-backups/` is written first (newest 5 kept); the prune never
    writes without one. The write is a temp file in the same directory plus `os.replace`.
 4. **Freshness rule.** A project or local record is removed only when its plugin has a user record
