@@ -42,6 +42,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 - `setup` and `developer` on Ubuntu docker hosts persist inotify and kernel-keys sysctl values in `/etc/sysctl.d/90-dotfiles-*.conf`, never lowering a higher conf or live value; a drop-in sorting before `90-` is overridden. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - An interrupted `recreate-venv`/`recreate-ruby` leaves the toolchain deleted; re-run the same command, repeating `--venv-name` (a bare re-run rebuilds `ansible`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - `-t update` exits 1 on any FAIL section; WARN exits 0 (deliberate rc 2 to 0 mapping); list sections with `git grep -n '_update_warn ' lib/`, never a hand list. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
+- `-t update` updates Claude plugins with `-s user`, then prunes project/local install records the user record is at least as new as (backup first, refuses on any doubt; ADR-0055).
 - The `ai-config` update section runs just before `claude`, full runs only (never `--claude-only`), so plugin reconcile reads fresh settings. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - Run `nala full-upgrade` with `--no-update` after the verb (apt was just refreshed). → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - On a provisioned host run `./setup_env.sh -t doctor`, paste each remedy line one at a time (a sudo prompt can swallow the next), then re-run it. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
@@ -459,6 +460,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - Split manifest lines with `_claude_manifest_split_line`; never emit an empty tab-separated field (use `-`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: claude loop stdin and IFS tab rules`
 
 - Set `_OVERRIDE_CLAUDE_PLUGIN_CACHE` in `setup()` of both test files, not per test (the repair rewrites files; unset edits the operator's real `~/.claude/plugins/cache`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: claude plugin cache override seam`
+
+- Set `_OVERRIDE_CLAUDE_PLUGINS_FILE`/`_OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR` to fixtures (`load_mocks` points the file at a missing path, so no test reaches the real `~/.claude`); `_CLAUDE_PRUNE_PYTHON` stubs the interpreter. → `dotfiles-test-seams.md` § `claude plugin prune seams`
 
 ### Mock Pattern
 

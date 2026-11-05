@@ -58,3 +58,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0052](0052-pre-commit-triages-the-ggshield-exit-code.md) | pre-commit triages the ggshield scan exit code | 2026-10-30 | Accepted |
 | [0053](0053-shard-test-macos-by-cpu-seconds.md) | Shard test-macos across three runners, weighted by CPU seconds | 2026-10-31 | Accepted |
 | [0054](0054-single-linux-gate-sharded-coverage.md) | One sharded, traced Linux gate replaces the untraced test job and bash-coverage | 2026-10-31 | Accepted |
+| [0055](0055-prune-claude-plugin-project-records.md) | Prune Claude plugin project records after user-scope updates | 2026-11-05 | Accepted |
