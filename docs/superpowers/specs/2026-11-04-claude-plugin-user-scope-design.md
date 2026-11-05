@@ -313,3 +313,10 @@ Reviewed at commit: `a586371d`
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Amendments
+
+- finding R4 (2026-11-05, reviewer B): DIFFERS — Parse failure, non-dict, version != 2 and missing plugins object refuse before any write (lines 156-164) and the wrapper returns 2 so run_update adds a message (workflows.sh:1025), but the change guard compares a signature of (st_mtime_ns, st_ino, st_size) for both the resolved file and the lstat of the link path, so it also refuses on a size or link-path change the requirement does not name (and the ADR in the same diff states 'Size is not compared'); in the changed branch it has already written a backup and temp file and deletes them rather than writing nothing.
+- R4 -> The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, or has a `version` other than 2; when the `st_mtime_ns`, `st_ino` or `st_size` of the resolved file or of its link path (`os.lstat`) changed between the first stat and the re-stat immediately before the replace, it removes the backup and temp file it had written, leaves the plugins file untouched and reports a WARN. — review hardening added the size and link-path checks; a changed-file run cleans up its own files rather than writing nothing at all.
+- finding R6 (2026-11-05, reviewer A): DIFFERS — The ADR records all listed topics, but its refusal conditions state "Size is not compared: Claude rewrites the file at byte-identical size", while the code's race signature is `(st.st_mtime_ns, st.st_ino, st.st_size)` (lib/claude_plugin_prune.py:262, docstring line 276 'mtime, inode and size') and test_size_change_exit4 exists, so the ADR misstates the refusal conditions it is required to record (it also omits the link-path lstat comparison).
+- R6 reviewed: fixed in 2eec1e2d
