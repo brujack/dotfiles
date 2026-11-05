@@ -322,7 +322,7 @@ class HardeningTest(Base):
         real_open = open
 
         def fake_open(f, *a, **k):
-            if f == self.file:
+            if isinstance(f, str) and os.path.realpath(f) == os.path.realpath(self.file):
                 raise PermissionError("denied")
             return real_open(f, *a, **k)
 
@@ -356,7 +356,7 @@ class HardeningTest(Base):
         opens = []
 
         def counting(f, *a, **k):
-            if f == self.file:
+            if isinstance(f, str) and os.path.realpath(f) == os.path.realpath(self.file):
                 opens.append(a)
             return real_open(f, *a, **k)
 
