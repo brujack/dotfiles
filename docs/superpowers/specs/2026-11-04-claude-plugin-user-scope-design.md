@@ -28,8 +28,10 @@ Two harms follow:
    record is 2.0.0). A project record pins the version current when it was minted and is never
    updated by a user-scope update, and 808 of the 2,501 project records carry a version other
    than their plugin's user record (`context7` 270, `code-review` 195, `security-guidance` 187,
-   `skill-creator` 72, `superpowers` 64, `warp` 17, three others 1 each). `claude plugins
-list` also prints thousands of entries.
+   `skill-creator` 72, `superpowers` 64, `warp` 17, three others 1 each). For 260 of those
+   (`code-review` 131, `security-guidance` 123 and others) the project and user records share
+   a `gitCommitSha` and differ only in the version string, so the content skew is closer to 548.
+   `claude plugins list` also prints thousands of entries.
 
 ### Where the project records come from (measured)
 
@@ -76,29 +78,39 @@ The claude section calls `claude plugins update -s user "${_name}"`.
 
 A new step in the same section, after the update loop (`_claude_prune_plugin_records`, with the
 JSON work in `lib/claude_plugin_prune.py`, run as a file), reads `installed_plugins.json` and
-removes every record whose `scope` is `project` or `local`, whose plugin id also has a
-`user`-scope record in the file, and whose plugin id is in this run's **updated set**: the ids
-for which `claude plugins update -s user` exited 0 in the same run. The update loop passes that
-set to the prune; nothing else populates it.
+removes a record when all of these hold:
 
-The updated-set condition exists because some project records are newer than their user
-record: the old unscoped update moved the project record and left the user record behind.
-Measured on `claude`, dotfiles main checkout: `caveman` project 4.0.1 against user 2.7.0,
-`firecrawl` 2.3.0 against 1.0.9, `context-mode` 2.1.0 against 2.0.0. Pruning such a record
-without a successful user update would let the next session re-mint the older user version, a
-silent downgrade. Only after a successful user update is the user record the newest version.
+- its `scope` is `project` or `local`;
+- its plugin id has a `user`-scope record in the file; and
+- the user record is at least as new as it: the two `version` strings are equal, or the user
+  record's `lastUpdated` is at or after the record's own `lastUpdated` (ISO 8601 UTC strings,
+  compared after parsing). A record missing either timestamp, or with one that does not parse,
+  is kept.
 
-The prune is skipped entirely, with a WARN, when the update loop did not run: a fatal manifest
-or installed-list read, or `setup_claude_plugins` returning 1. A plugin outside the manifest is
-never updated, so it is never in the updated set and its records are kept.
+The freshness condition decides from the file, not from the update's exit code. Some project
+records are newer than their user record: the old unscoped update moved the project record and
+left the user record behind. Measured on `claude`, dotfiles main checkout: `caveman` project
+4.0.1 against user 2.7.0, `firecrawl` 2.3.0 against 1.0.9, `context-mode` 2.1.0 against 2.0.0.
+Pruning such a record would let the next session re-mint the older user version, a silent
+downgrade. An exit code cannot rule that out: in Claude Code 2.1.318 the update's non-failure
+outcomes include "up to date", "was not checked for updates" and "skipped", none of which
+proves the user record moved. A failed, skipped or unchecked update leaves the user
+`lastUpdated` behind, so the newer record is kept until a user update overtakes it.
+
+Dry run on the live file (2026-11-05, read-only simulation of this rule): 2,498 records would
+be removed and exactly 3 kept, the three dotfiles records above; no record lacks `lastUpdated`.
+
+The prune still runs after the update loop so that a user update in the same run can make a
+newer project record prunable. It runs even when the update loop failed: the freshness
+condition makes that safe.
 
 It does not read any project's settings: whatever a project enables, its next session re-mints
 what it needs at the user version. (A project `true` for a plugin whose user value is `false`
 mints nothing, probes D and F; such a project loads it from the user record as before.)
 
-Kept untouched: `user` and `managed` records, every record whose plugin id is not in the
-updated set, a project or local record whose plugin has no user record, and every top-level key
-other than `plugins`.
+Kept untouched: `user` and `managed` records, every record the user record is not at least as
+new as, a project or local record whose plugin has no user record, and every top-level key other
+than `plugins`.
 
 Effect on live checkouts: a session started after the prune loads the user version of each
 plugin. A session already running keeps the version it loaded. The prune leaves cache
@@ -125,13 +137,14 @@ Safety, because many Claude sessions read and write this file:
   still exists, and the next run of either repairs it.
 - Under `--dry-run`, report the counts and write nothing.
 
-The section reports one summary line: records removed and kept, or the refusal reason. A
+The section reports one summary line: the UTC time the prune read the file, records removed
+and kept, or the refusal reason. The newest backup is the before-state for V1. A
 refusal or a skipped write is a WARN, never a FAIL: the update itself has succeeded.
 
 ### 3. ADR
 
 A dotfiles ADR records why the prune edits a Claude-owned file, its refusal conditions, the
-updated-set condition and the downgrade it prevents, the measured mint and load rules, that live
+freshness condition and the downgrade it prevents (and why exit codes cannot decide it), the measured mint and load rules, that live
 checkouts move to the user version, its reliance on `.in_use` protection for running sessions,
 and that records minted between updates go stale again when the official marketplace
 auto-updates, so the remaining skew is bounded by how often `-t update` runs.
@@ -153,15 +166,16 @@ next `-t update`.
 
 - bats, `tests/setup_env/`:
   - the update loop passes `-s user` (recording `tests/mocks/claude`);
-  - the update loop runs before the prune and passes only the ids whose update exited 0;
-  - an update that fails for one plugin (`MOCK_CLAUDE_FAIL_ARGS`): that plugin's project
-    records all survive, another plugin's are removed;
-  - a fatal manifest read: the prune does not run and the section WARNs;
-  - the prune on a fixture with 4 project records (one gone path, one live path, one plugin
-    without a user record, one record newer than its user record for a plugin not in the
-    updated set), 2 user records and 1 managed record, updated set = the two user-record
-    plugins: exactly 2 project records removed, the other 2 kept, the user and managed records
-    and the `version` key unchanged (compared after parsing);
+  - the update loop runs before the prune;
+  - the prune on a fixture with 4 project records, 2 user records (`lastUpdated`
+    2026-10-01T00:00:00Z) and 1 managed record: one record at the user version (removed), one
+    older record with a different version and `lastUpdated` 2026-09-01 (removed), one newer
+    record with a different version and `lastUpdated` 2026-10-15 (kept), one record whose plugin
+    has no user record (kept): exactly 2 removed, 2 kept, the user and managed records and the
+    `version` key unchanged (compared after parsing);
+  - the update mock exits 0 reporting "already at the latest version" while a newer-dated
+    project record exists for that plugin: that record survives (0 removed for that id);
+  - a record with no `lastUpdated`, and one with an unparsable value: both kept;
   - a fixture with no project records: no write, no backup, "0 removed";
   - malformed JSON, missing `plugins`, `version` 3: each refused with no write and no backup;
   - an mtime change with the same size between read and replace: write skipped (driven by a
@@ -169,6 +183,7 @@ next `-t update`.
   - an inode change (the file replaced by a same-content copy) between read and replace: write
     skipped;
   - `--dry-run` on the 4-record fixture reports "2 removed" and leaves the file unchanged;
+  - the summary line carries a UTC timestamp;
   - the backup is written and capped at 5.
 - All file paths through seams set at `setup()` scope: the plugins file and the backup
   directory. No test reads or writes the real `~/.claude`.
@@ -176,16 +191,16 @@ next `-t update`.
 ## Requirements
 
 - **R1.** `[PR1]` The claude update loop in `run_update` runs `claude plugins update -s user` for each manifest plugin.
-- **R2.** `[PR1]` After the update loop, `_claude_prune_plugin_records` removes every `project` or `local` record whose plugin id has a `user` record and is in the set of ids whose `claude plugins update -s user` exited 0 in the same run, and no other record.
+- **R2.** `[PR1]` After the update loop, `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin id has a `user` record and that user record has the same `version` or a `lastUpdated` at or after the record's own; a record missing either timestamp or with one that does not parse is kept.
 - **R3.** `[PR1]` The prune never modifies `user` or `managed` records or any top-level key other than `plugins`.
 - **R4.** `[PR1]` The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, has a `version` other than 2, or its mtime or inode changed between the first stat and the re-stat immediately before the replace.
 - **R5.** `[PR1]` The prune writes a timestamped backup before any change, keeps the newest 5, replaces the file atomically, writes nothing when no record qualifies, and writes nothing under `--dry-run`.
-- **R6.** `[PR1]` A dotfiles ADR records the prune's edit of `installed_plugins.json`, its refusal conditions, the updated-set condition, the measured mint and load rules, the version effect on live checkouts, its reliance on `.in_use` protection, and that skew between updates is bounded by update cadence.
+- **R6.** `[PR1]` A dotfiles ADR records the prune's edit of `installed_plugins.json`, its refusal conditions, the freshness condition and why an exit code cannot decide it, the measured mint and load rules, the version effect on live checkouts, its reliance on `.in_use` protection, and that skew between updates is bounded by update cadence.
 - **R7.** `[PR1]` A dotfiles Backlog row records stripping redundant `true` entries from repo settings, to be done only if the prune is removed.
-- **R8.** `[PR1]` The prune does not run, and the claude section WARNs, when the update loop did not run.
-- **V1.** After PR1 merges, one `-t update` on `claude` whose plugin updates all succeed leaves no `project` or `local` record with `installedAt` earlier than the prune, every later one at its user record's version, 15 user records with versions unchanged by the prune, and a file that parses.
-- **V2.** A `claude -p --output-format stream-json --verbose` session started in the etch-config main checkout after that update reports `superpowers` 7.0.0 (its pre-prune project record is 6.3.0 and its user record 7.0.0).
-- **V3.** One hour after that update, with the long-running sessions still up, no record names a `projectPath` that no longer exists (a count above 0 means a session wrote back a stale copy).
+- **R8.** `[PR1]` The prune's summary line reports the UTC time it read the file.
+- **V1.** After PR1 merges, one `-t update` on `claude` leaves no `project` or `local` record with `installedAt` earlier than the summary line's prune time except those whose user record is older (the kept newer records), 15 user records whose versions match the newest backup's, and a file that parses.
+- **V2.** A `claude -p --output-format stream-json --verbose` session started in the etch-config main checkout after that update reports `superpowers` at the post-update user record's version, not 6.3.0 (its pre-prune project record).
+- **V3.** One hour after that update, with the long-running sessions still up, V1's `installedAt` check still holds and the user record count is still 15 (a pre-prune `installedAt` reappearing means a session wrote back a stale copy).
 - **N1.** No repo's `.claude/settings.json` or `.claude/settings.local.json` is edited.
 - **N2.** The prune never removes a plugin's only install record.
 - **N3.** No `claude plugin uninstall`, `disable` or `enable` call is added.
@@ -239,6 +254,28 @@ Reviewed at commit: `d0d24aaa` (all three lenses re-run; the revision changed de
   Addressed — V3 counts dead-path records an hour after the prune.
 - Risk assumption: `update -s user` can move the lagging user records. Settled by V1 (the
   first post-merge run either moves them or the updated-set rule keeps their project records).
+
+### Round 3
+
+Reviewed at commit: `e42c102a` (all three lenses)
+
+- Goal-Fit and Risk, independently: exit 0 does not prove the user record moved (Claude Code
+  2.1.318's non-failure outcomes include "up to date", "not checked for updates" and
+  "skipped"), so the updated-set rule could still downgrade. Disposition: Addressed — the prune
+  decides from the file (`version` equal or user `lastUpdated` at or after the record's); the
+  updated set and the skip-when-no-loop requirement are removed; dry-run on the live file keeps
+  exactly the 3 newer records.
+- Ergonomics and Goal-Fit: V3 counted dead-path records, which ordinary short-lived worktrees
+  mint every day (62 in 24 h). Disposition: Addressed — V3 re-checks V1's `installedAt`
+  condition and the user count.
+- Ergonomics: V2 pinned 7.0.0, which an update in the same run could move; V1 and V3 had no
+  recorded prune time or before-state. Disposition: Addressed — V2 compares with the post-update
+  user version; the summary line carries the prune time (R8) and the newest backup is the
+  before-state.
+- Risk: no test for an "already latest" exit 0 while a newer project record exists.
+  Disposition: Addressed — test added.
+- Goal-Fit: 260 of the 808 skewed records differ only in the version string. Disposition:
+  Addressed — noted in the Problem section; the harm stands without them.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
