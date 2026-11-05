@@ -1,5 +1,7 @@
 # Ledger Run Outcome Implementation Plan
 
+> **Status: DONE** (dotfiles#426, merged 2026-11-04)
+
 spec: docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md
 scope: PR1
 
