@@ -91,18 +91,21 @@ if ids:
 # user-scope record already covers (lib/claude_plugin_prune.py decides). Prints
 # the program's one line. Returns 0 when it finished or had nothing to do, 2
 # when it refused or could not run (the caller WARNs). Seams:
-# _OVERRIDE_CLAUDE_PLUGINS_FILE, _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR.
+# _OVERRIDE_CLAUDE_PLUGINS_FILE, _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR,
+# _CLAUDE_PRUNE_PYTHON (interpreter, default python3; lets a test reach the
+# missing-interpreter and silent-failure branches without editing PATH).
 _claude_prune_plugin_records() {
   local _file="${_OVERRIDE_CLAUDE_PLUGINS_FILE:-${HOME}/.claude/plugins/installed_plugins.json}"
   local _backup="${_OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR:-${HOME}/.local/share/dotfiles/claude-plugin-backups}"
+  local _py="${_CLAUDE_PRUNE_PYTHON:-python3}"
   local -a _args=(--file "${_file}" --backup-dir "${_backup}")
-  if ! command -v python3 &>/dev/null; then
+  if ! command -v "${_py}" &>/dev/null; then
     printf 'skipped: python3 not found\n'
     return 2
   fi
   _dry_run_active && _args+=(--dry-run)
   local _out _rc=0
-  _out="$(python3 "${DOTFILES_REPO_ROOT}/lib/claude_plugin_prune.py" "${_args[@]}" < /dev/null)" || _rc=$?
+  _out="$("${_py}" "${DOTFILES_REPO_ROOT}/lib/claude_plugin_prune.py" "${_args[@]}" < /dev/null)" || _rc=$?
   [[ -n ${_out} ]] && printf '%s\n' "${_out}"
   [[ ${_rc} -eq 0 ]] && return 0
   [[ -z ${_out} ]] && printf 'skipped: plugin prune failed (exit %d)\n' "${_rc}"
@@ -1014,8 +1017,11 @@ run_update() {
             _messages+=("$(printf '%d plugin(s) failed (%s)' "${#_claude_failed[@]}" "${_claude_failed[*]}")")
           fi
           local _prune_line="" _prune_rc=0
-          _prune_line="$(_claude_prune_plugin_records)" || _prune_rc=$?
-          printf '%s\n' "${_prune_line}" | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+          # stderr goes to err_claude so a WARN has its cause in the detail.
+          _prune_line="$(_claude_prune_plugin_records 2>>"${_DOTFILES_RUN_TMPDIR}/err_claude")" || _prune_rc=$?
+          if [[ -n ${_prune_line} ]]; then
+            printf '%s\n' "${_prune_line}" | tee -a "${_DOTFILES_RUN_TMPDIR}/err_claude"
+          fi
           [[ ${_prune_rc} -eq 2 ]] && _messages+=("plugin record prune: ${_prune_line}")
         fi
       fi

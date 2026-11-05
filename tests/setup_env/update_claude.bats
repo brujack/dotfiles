@@ -241,7 +241,7 @@ PY
   run run_update
   [ "$status" -eq 0 ]
   grep -q '^claude plugins update -s user good@m$' "${MOCK_CALLS_FILE}"
-  refute_grep '^claude plugins update a$' "${MOCK_CALLS_FILE}"
+  refute_grep '^claude plugins update .*\ba$' "${MOCK_CALLS_FILE}"
 }
 
 @test "run_update: an unreadable manifest on the second read FAILs claude instead of silently updating nothing" {
@@ -330,9 +330,6 @@ _write_plugins_fixture() {
   run run_update
   [ "$status" -eq 0 ]
   [[ "$output" == *"removed 1"* ]]
-  local _upd_line _prune_line
-  _upd_line="$(printf '%s\n' "$output" | grep -n 'removed 1' | head -1 | cut -d: -f1)"
-  [ -n "${_upd_line}" ]
   # Records left: user only.
   [ "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print([r["scope"] for r in d["plugins"]["superpowers@claude-plugins-official"]])' "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")" = "['user']" ]
 }
@@ -345,7 +342,7 @@ _write_plugins_fixture() {
   eval "$(declare -f _claude_prune_plugin_records | sed '1s/_claude_prune_plugin_records/_real_prune_for_test/')"
   _claude_prune_plugin_records() {
     printf 'PRUNE\n' >> "${MOCK_CALLS_FILE}"
-    _real_prune_for_test "$@"
+    _real_prune_for_test
   }
   run_update > /dev/null
   local _last_update _prune
@@ -403,4 +400,50 @@ _write_plugins_fixture() {
   run run_update
   [ "$status" -eq 0 ]
   [ "$(cat "${_OVERRIDE_CLAUDE_PLUGINS_FILE}")" = "${_before}" ]
+}
+
+@test "run_update: prune still runs when every plugin update failed" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  export MOCK_CLAUDE_FAIL_ARGS="plugins update"
+  _write_plugins_fixture 5.0.0 2026-10-01T10:00:00.000Z 5.0.0 2026-11-01T10:00:00.000Z
+  local _rc=0
+  run_update > "${BATS_TEST_TMPDIR}/out" 2>&1 || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "FAIL" ]
+  grep -q 'removed 1' "${BATS_TEST_TMPDIR}/out"
+  ! command grep -q '"scope": *"project"' "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+}
+
+@test "run_update: a missing python3 skips the prune and WARNs" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  export _CLAUDE_PRUNE_PYTHON="no-such-python-for-prune"
+  run_update > "${BATS_TEST_TMPDIR}/out" 2>&1
+  grep -q 'skipped: python3 not found' "${BATS_TEST_TMPDIR}/out"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "WARN" ]
+  [[ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_claude")" == *"skipped: python3 not found"* ]]
+}
+
+@test "_claude_prune_plugin_records: silent non-zero exit prints a failure line and returns 2" {
+  local _stub="${BATS_TEST_TMPDIR}/prune-stub"
+  printf '#!/usr/bin/env bash\nexit 5\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _CLAUDE_PRUNE_PYTHON="${_stub}"
+  local _rc=0 _out
+  _out="$(_claude_prune_plugin_records)" || _rc=$?
+  [ "${_rc}" -eq 2 ]
+  [ "${_out}" = "skipped: plugin prune failed (exit 5)" ]
+}
+
+@test "run_update: prune stderr lands in err_claude" {
+  export UPDATE_CLAUDE=1
+  export MOCK_CLAUDE_PLUGINS_LIST_JSON='[{"id":"superpowers@claude-plugins-official","scope":"user"}]'
+  local _stub="${BATS_TEST_TMPDIR}/prune-stub"
+  printf '#!/usr/bin/env bash\nprintf "boom-from-prune\\n" >&2\nprintf "refused: stub\\n"\nexit 3\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export _CLAUDE_PRUNE_PYTHON="${_stub}"
+  run_update > /dev/null 2>&1
+  grep -q 'boom-from-prune' "${_DOTFILES_RUN_TMPDIR}/err_claude"
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_claude")" = "WARN" ]
 }
