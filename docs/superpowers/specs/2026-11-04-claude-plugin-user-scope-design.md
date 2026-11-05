@@ -342,6 +342,18 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 
 ### Verifications
 
-- V1: no evidence recorded
-- V2: no evidence recorded
-- V3: no evidence recorded
+- V1: PASS. Measured 2026-11-05T16:50:00Z on `claude`, after the 15:48:56Z prune (before-state:
+  backup `installed_plugins-20261105T154856157765Z.json`, 2,527 project and 15 user records).
+  The prune removed all 2,527 project records and kept 0. The file parses (`version` 2) and
+  holds 15 user records, whose ids and versions match the backup. 0 `project` or `local`
+  records have an `installedAt` before the prune time. The 45 project records present were all
+  minted after the prune. Measured 61 minutes after the update, not immediately after it.
+- V2: PASS. Measured 2026-11-05T16:51:55Z: `claude -p --output-format stream-json --verbose` in
+  the etch-config main checkout. The init message reports `superpowers` `version` `7.0.0`
+  (path `.../superpowers/7.0.0`), which is the user record's version. The pre-prune etch-config
+  project record had 6.3.0.
+- V3: PASS. Measured 2026-11-05T16:50:00Z, 61 minutes after the prune. Two sessions started
+  before the prune (2026-11-04 12:37 local) were still running. The file was last written at
+  16:24:12Z, by a session started after the prune. V1's `installedAt` check still holds, with
+  0 pre-prune `project` or `local` records. The user record count is still 15, with the same
+  ids and versions as the backup.
