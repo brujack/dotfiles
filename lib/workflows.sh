@@ -693,7 +693,7 @@ run_developer_or_ansible() {
 
   install_ruby || return 1
   setup_ansible || return 1
-  clone_personal_repos
+  clone_personal_repos || return 1
   if [[ ${_gh_rc} -ne 0 ]]; then
     log_warn "github cli: install incomplete (keyring, source list or gh) -- see the 'github cli:' warnings earlier in this run"
   fi

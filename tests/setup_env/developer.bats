@@ -719,6 +719,45 @@ component add rust-analyzer" ]
   grep -q "git clone.*dotfiles" "${MOCK_CALLS_FILE}"
 }
 
+# A shell function outranks tests/mocks/git on PATH, so one test can fail a
+# single named clone and let the others succeed.
+_clone_fails_for() {
+  _CLONE_FAIL_REPO="$1"
+  git() {
+    printf 'git %s\n' "$*" >> "${MOCK_CALLS_FILE}"
+    [[ "$1" == "clone" && "$2" == *"/${_CLONE_FAIL_REPO}.git" ]] && return 128
+    return 0
+  }
+}
+
+@test "clone_personal_repos: a failed first clone returns 1 and still attempts every other repo" {
+  mkdir -p "${PERSONAL_GITREPOS}"
+  _clone_fails_for dotfiles
+  run clone_personal_repos
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 7 ]
+  grep -q "git clone.*/terraform_ansible.git" "${MOCK_CALLS_FILE}"
+  [[ "$output" == *"dotfiles"*"clone failed"* ]]
+}
+
+@test "clone_personal_repos: a failed middle clone returns 1 and names only that repo" {
+  mkdir -p "${PERSONAL_GITREPOS}"
+  _clone_fails_for kubernetes
+  run clone_personal_repos
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kubernetes"*"clone failed"* ]]
+  [[ "$output" != *"dotfiles"*"clone failed"* ]]
+}
+
+@test "clone_personal_repos: returns 0 when every clone succeeds" {
+  mkdir -p "${PERSONAL_GITREPOS}"
+  _clone_fails_for no-such-repo
+  run clone_personal_repos
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 7 ]
+  [[ "$output" != *"clone failed"* ]]
+}
+
 # ── setup_ansible — Linux branch ─────────────────────────────────────────────
 
 @test "setup_ansible: calls pyenv update on Linux when Python version absent" {
