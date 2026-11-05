@@ -82,10 +82,13 @@ removes a record when all of these hold:
 
 - its `scope` is `project` or `local`;
 - its plugin id has a `user`-scope record in the file; and
-- the user record is at least as new as it: the two `version` strings are equal, or the user
-  record's `lastUpdated` is at or after the record's own `lastUpdated` (ISO 8601 UTC strings,
-  compared after parsing). A record missing either timestamp, or with one that does not parse,
-  is kept.
+- the user record is at least as new as it, decided in this order: if the two `version`
+  strings are equal, the record is removed without reading any timestamp; otherwise it is
+  removed only when the user record's `lastUpdated` is at or after the record's own. Timestamps
+  are parsed with the explicit format `%Y-%m-%dT%H:%M:%S.%fZ` (every value in the file has that
+  form, measured: 2,516 of 2,516), because `datetime.fromisoformat` rejects the trailing `Z`
+  before Python 3.11 and the Studio's `/usr/bin/python3` is 3.9. When versions differ and either
+  timestamp is missing or does not parse, the record is kept.
 
 The freshness condition decides from the file, not from the update's exit code. Some project
 records are newer than their user record: the old unscoped update moved the project record and
@@ -99,6 +102,14 @@ proves the user record moved. A failed, skipped or unchecked update leaves the u
 
 Dry run on the live file (2026-11-05, read-only simulation of this rule): 2,498 records would
 be removed and exactly 3 kept, the three dotfiles records above; no record lacks `lastUpdated`.
+
+The rule assumes a no-op user update leaves the user record's `lastUpdated` alone. Measured
+2026-11-05 on `claude`: `claude plugins update -s user caveman@caveman` moved the user record
+from 2.7.0 (`lastUpdated` 2026-09-15T16:27:41.612Z) to 4.0.1 (2026-11-05T14:37:03.717Z); a
+second run reported "already at the latest version (4.0.1)" and left `lastUpdated` unchanged.
+One exception exists in the 2.1.318 code: for a plugin whose marketplace source is a command,
+an "up to date" outcome rewrites `lastUpdated` when the source command changed, without moving
+the version. No record on `claude` has such a source (no `sourceCommand` key); the ADR names it.
 
 The prune still runs after the update loop so that a user update in the same run can make a
 newer project record prunable. It runs even when the update loop failed: the freshness
@@ -144,7 +155,7 @@ refusal or a skipped write is a WARN, never a FAIL: the update itself has succee
 ### 3. ADR
 
 A dotfiles ADR records why the prune edits a Claude-owned file, its refusal conditions, the
-freshness condition and the downgrade it prevents (and why exit codes cannot decide it), the measured mint and load rules, that live
+freshness condition and the downgrade it prevents (and why exit codes cannot decide it), its dependency on a no-op update leaving `lastUpdated` alone and the command-source exception, the measured mint and load rules, that live
 checkouts move to the user version, its reliance on `.in_use` protection for running sessions,
 and that records minted between updates go stale again when the official marketplace
 auto-updates, so the remaining skew is bounded by how often `-t update` runs.
@@ -175,7 +186,12 @@ next `-t update`.
     `version` key unchanged (compared after parsing);
   - the update mock exits 0 reporting "already at the latest version" while a newer-dated
     project record exists for that plugin: that record survives (0 removed for that id);
-  - a record with no `lastUpdated`, and one with an unparsable value: both kept;
+  - a record with no `lastUpdated`, and one with an unparsable value, at a version other than
+    the user's: both kept;
+  - a record at the user's version with an unparsable `lastUpdated`: removed (the version check
+    decides first);
+  - the timestamp parser accepts the file's `...123Z` form under the interpreter `run_update`
+    uses (a unit test of the parse helper with a real value);
   - a fixture with no project records: no write, no backup, "0 removed";
   - malformed JSON, missing `plugins`, `version` 3: each refused with no write and no backup;
   - an mtime change with the same size between read and replace: write skipped (driven by a
@@ -191,13 +207,14 @@ next `-t update`.
 ## Requirements
 
 - **R1.** `[PR1]` The claude update loop in `run_update` runs `claude plugins update -s user` for each manifest plugin.
-- **R2.** `[PR1]` After the update loop, `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin id has a `user` record and that user record has the same `version` or a `lastUpdated` at or after the record's own; a record missing either timestamp or with one that does not parse is kept.
+- **R2.** `[PR1]` After the update loop, `_claude_prune_plugin_records` removes a `project` or `local` record only when its plugin id has a `user` record and either the two `version` strings are equal (decided before any timestamp is read) or the user record's `lastUpdated` is at or after the record's own; with differing versions, a missing or unparsable timestamp keeps the record.
 - **R3.** `[PR1]` The prune never modifies `user` or `managed` records or any top-level key other than `plugins`.
 - **R4.** `[PR1]` The prune writes nothing and reports a WARN when the file does not parse, lacks a `plugins` object, has a `version` other than 2, or its mtime or inode changed between the first stat and the re-stat immediately before the replace.
 - **R5.** `[PR1]` The prune writes a timestamped backup before any change, keeps the newest 5, replaces the file atomically, writes nothing when no record qualifies, and writes nothing under `--dry-run`.
 - **R6.** `[PR1]` A dotfiles ADR records the prune's edit of `installed_plugins.json`, its refusal conditions, the freshness condition and why an exit code cannot decide it, the measured mint and load rules, the version effect on live checkouts, its reliance on `.in_use` protection, and that skew between updates is bounded by update cadence.
 - **R7.** `[PR1]` A dotfiles Backlog row records stripping redundant `true` entries from repo settings, to be done only if the prune is removed.
 - **R8.** `[PR1]` The prune's summary line reports the UTC time it read the file.
+- **R9.** `[PR1]` The prune parses timestamps with the explicit format `%Y-%m-%dT%H:%M:%S.%fZ` and runs on Python 3.9.
 - **V1.** After PR1 merges, one `-t update` on `claude` leaves no `project` or `local` record with `installedAt` earlier than the summary line's prune time except those whose user record is older (the kept newer records), 15 user records whose versions match the newest backup's, and a file that parses.
 - **V2.** A `claude -p --output-format stream-json --verbose` session started in the etch-config main checkout after that update reports `superpowers` at the post-update user record's version, not 6.3.0 (its pre-prune project record).
 - **V3.** One hour after that update, with the long-running sessions still up, V1's `installedAt` check still holds and the user record count is still 15 (a pre-prune `installedAt` reappearing means a session wrote back a stale copy).
@@ -276,6 +293,21 @@ Reviewed at commit: `e42c102a` (all three lenses)
   Disposition: Addressed — test added.
 - Goal-Fit: 260 of the 808 skewed records differ only in the version string. Disposition:
   Addressed — noted in the Problem section; the harm stands without them.
+
+### Round 4 (scoped: Risk lens on the round-3 changes)
+
+Reviewed at commit: `a586371d`
+
+- F1: the rule did not say whether an unparsable timestamp blocks an equal-version removal; on
+  the Studio (`/usr/bin/python3` 3.9) `fromisoformat` rejects every `...Z` value, so the prune
+  would silently remove nothing. Disposition: Addressed — version equality decides first;
+  explicit `%Y-%m-%dT%H:%M:%S.%fZ` parsing on 3.9 (R2, R9); fixtures added.
+- F2: a command-source plugin's "up to date" outcome can advance `lastUpdated` without the
+  version. Disposition: Addressed — not live on `claude`; recorded in the Design section and
+  the ADR (R6).
+- Assumption (no-op update leaves `lastUpdated` alone): settled by measurement, operator
+  approved — two `update -s user caveman@caveman` runs; the second, a no-op, left
+  `lastUpdated` unchanged.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
