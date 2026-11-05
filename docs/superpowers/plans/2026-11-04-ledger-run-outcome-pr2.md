@@ -1,5 +1,7 @@
 # Ledger Run Outcome PR2 Implementation Plan (state-ledger display)
 
+> **Status: DONE** (state-ledger#37, merged 2026-11-04)
+
 spec: docs/superpowers/specs/2026-11-04-ledger-run-outcome-design.md
 scope: PR2
 
