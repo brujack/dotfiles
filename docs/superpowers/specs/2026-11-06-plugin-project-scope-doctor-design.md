@@ -26,11 +26,16 @@ Workstation's five: `ansible-good-practices@claude-ansible-skills`,
 `terraform_ansible`), `terraform-skill@antonbabenko`. All other records are under
 `terraform_ansible`.
 
-On `claude`, `studio` and `laptop-1` all five ids have a `user` record. All five are
-`false` in the user manifest (`~/.claude/settings.json`, tracked in ai-config).
-`terraform_ansible/.claude/settings.json` on workstation enables
-`ansible-good-practices` and `terraform-skill`; every other of the five is `false` there
-and in `dotfiles/.claude/settings.json`.
+All five are `false` in the user manifest (`~/.claude/settings.json`, which on workstation
+resolves into the ai-config checkout). Project settings, read on workstation only:
+`terraform_ansible/.claude/settings.json` enables `ansible-good-practices` and
+`terraform-skill`; `frontend-design`, `rust-analyzer-lsp` and `skill-creator` are `false`
+there and in `dotfiles/.claude/settings.json`. So two of the five are wanted in a project
+and stale; three are enabled nowhere and are dead installs.
+
+On `claude`, `studio` and `laptop-1` all five ids have a `user` record. Their `installedAt`
+dates (read 2026-11-06) are 2026-09-12 on `claude`, 2026-05-17 to 2026-06-13 on `studio`,
+2026-06-13 on `laptop-1`: all before the 2026-09-19 provisioning change.
 
 ### Cause
 
@@ -38,12 +43,14 @@ and in `dotfiles/.claude/settings.json`.
 (`lib/workflows.sh:279`). That is a recorded decision, not an oversight: the 2026-09-19
 provisioning spec (decision 2, ADR-0034) measured that `claude plugins install` of a
 `false` id rewrites it to `true` in the tracked `settings.json`, and that a following
-`claude plugins disable` restores the file byte-identical. The three clean hosts hold user
-records left by the pre-2026-09-19 hardcoded install list (inferred, `installedAt` not
-read). Workstation's state is what current dotfiles produces on a fresh machine.
+`claude plugins disable` restores the file byte-identical. The three clean hosts' user
+records predate that change (dates above), so they are leftovers of the old hardcoded
+install list. Workstation's state is what current dotfiles produces on a fresh machine,
+so the check stays useful after workstation is repaired.
 
-The remedy the backlog row proposed (`claude plugins install -s user <id>`) is therefore
-wrong for a `false` id: it would dirty ai-config and enable the plugin everywhere.
+The remedy the backlog row proposed (`claude plugins install -s user <id>`) is wrong for a
+`false` id (it would dirty ai-config and enable the plugin everywhere) and wrong for a dead
+install (it would promote a plugin nobody enables into one `-t update` refreshes forever).
 
 ### Gates already in the path
 
@@ -59,19 +66,25 @@ entries redundant with the user manifest and FAILed on them. Its objections, and
 check differs:
 
 - _FAIL fired when the operator enabled a plugin globally, and its remedy was a PR in
-  another session's repo._ This check reads installed state, not repo settings; it is a
-  WARN; every remedy is a local command on the machine that runs doctor.
+  another session's repo._ This check reads installed state; it is a WARN; every remedy
+  but one (an id absent from the user manifest) is a local command on the machine that
+  runs doctor.
 - _Close to decoration: output ephemeral, no copier of `enabledPlugins` exists._ Still
   partly true: doctor output is read by the operator at run time and kept nowhere. The
-  hazard is real here (five ids on workstation, measured), unlike the copier the dropped
-  check guarded against. The durable channel stays the backlog row for option B.
+  hazard is real here (five ids on workstation, measured), and a fresh machine reproduces
+  it. The durable channel is the backlog row below.
 
 ## Decision
 
-Option C of three: a doctor WARN now (this spec); changing the reconcile to install and
-then disable `false` ids (option B) goes to the backlog as its own decision, because it
-reverses ADR-0034 decision 2. The doctor check also covers project-only ids absent from
-the manifest, which B cannot reach.
+Option C of three: a doctor WARN now (this spec). Two alternatives go to one backlog row as
+rivals, because each is its own decision:
+
+- **B:** the reconcile installs `false` ids too, then disables them. Reverses ADR-0034
+  decision 2.
+- **In-place update:** `-t update` runs `cd <projectPath> && claude plugins update -s
+  <scope> <id>` for project-only records (`update` accepts `-s project|local`). Never
+  touches ai-config, but contradicts the operator rule that external plugins live at user
+  scope and keeps dead installs updated. Rejected for now (operator, 2026-11-06).
 
 ## Design
 
@@ -79,72 +92,102 @@ the manifest, which B cannot reach.
 
 The module already parses and validates `installed_plugins.json` (`_validate`: JSON
 object, supported `version`, a `plugins` object) and owns the `("project", "local")`
-scope set. A new mode reuses both and writes nothing:
+scope set. A new mode reuses both and writes nothing. One line per id that has no `user`
+record and at least one `project` or `local` record, sorted by id, records within a line
+sorted:
 
 ```
-<id>\t<scope>:<projectPath>[,<scope>:<projectPath>...]
+<id>\t<enablement>\t<scope>:<projectPath>[,<scope>:<projectPath>...]
 ```
 
-one line per id that has no `user` record and at least one `project` or `local` record,
-sorted by id; records within a line sorted. Exit 0 (no lines when none). An unusable file
-exits 3 with one `refused: <reason>` line, as `prune` does. A missing file exits 0 with no
-output (the shell decides absence first; see below). Records with a missing
-`projectPath` print `-`.
+`<enablement>` is `enabled` when at least one record's project enables the id, `unknown`
+when none does and at least one record's project settings could not be read, otherwise
+`disabled`. For one record, the project enables the id when its effective value is `true`:
+`<projectPath>/.claude/settings.local.json` `enabledPlugins[<id>]` when that file has the
+key, else `<projectPath>/.claude/settings.json`'s. A missing file or missing key is not
+enabled. A file that exists but cannot be read or parsed as a JSON object makes that record
+unreadable. A record with no `projectPath`, or one whose directory is gone, is not enabled
+and prints `-` for a missing path.
+
+Exit 0 (no lines when none). An unusable plugins file exits 3 with one `refused: <reason>`
+line, as `prune` does.
+
+**Parser shape.** `--list-project-only` takes only `--file`; combining it with
+`--backup-dir`, `--keep` or `--dry-run` is a `parser.error` (exit 2). Without
+`--list-project-only`, `--backup-dir` stays mandatory (`parser.error`, exit 2), so an argv
+that loses the mode flag can never reach `prune()`.
 
 ### Doctor check: `_doctor_check_plugin_scope`
 
 Called from `run_doctor` immediately after `_doctor_check_plugin_node_paths`. Reads the
 plugins file through the existing `_OVERRIDE_CLAUDE_PLUGINS_FILE` seam and the interpreter
-through `_CLAUDE_PRUNE_PYTHON`.
+through `_CLAUDE_PRUNE_PYTHON`. The user manifest is read once per check via
+`_claude_plugin_manifest`.
 
 - Plugins file absent: no section, no counted check (no Claude Code plugins).
 - Interpreter missing, or the helper refuses or exits non-zero: header plus one WARN naming
   the reason (`python3 not found`, or the `refused:` line). Never a PASS.
 - No project-only id: header `Claude plugin scope:` plus one PASS.
 - Otherwise one WARN per id, label `<id>`, detail
-  `installed only at <scope>:<path>[, ...] — never updated by -t update — run: <remedy>`.
-  The remedy depends on the id's value in `_claude_plugin_manifest`:
+  `installed only at <scope>:<path>[, ...] — never updated by -t update — <remedy>`.
 
-| Manifest value      | Remedy                                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `true`              | `claude plugins install -s user <id>`, detail also says the reconcile did not install it                                              |
-| `false`             | `claude plugins install -s user <id> && claude plugins disable -s user <id>`                                                          |
-| absent              | `add <id> to ai-config .claude/settings.json enabledPlugins, or (cd '<path>' && claude plugins uninstall -s <scope> <id>)` per record |
-| manifest unreadable | no remedy command; detail says `user manifest unreadable — cannot choose a remedy`                                                    |
+`<settings-check>` below is
+`git -C "$(dirname "$(readlink -f ~/.claude/settings.json)")" diff --exit-code settings.json`,
+which exits non-zero if the install left the tracked file changed.
 
-The manifest is read once per check, not per id.
+| Enablement | User manifest | Remedy text |
+| --- | --- | --- |
+| `disabled` | any | `run: (cd '<path>' && claude plugins uninstall -s <scope> <id>)` per record, joined with `; ` |
+| `enabled` | `true` | `run: claude plugins install -s user <id>` and `setup_claude_plugins did not install it` |
+| `enabled` | `false` | `run: claude plugins install -s user <id>; claude plugins disable -s user <id>; <settings-check>` |
+| `enabled` | absent | `add <id> as false to ai-config .claude/settings.json enabledPlugins, then run: claude plugins install -s user <id>; claude plugins disable -s user <id>; <settings-check>` |
+| `enabled` | unreadable | `user manifest unreadable — cannot choose a remedy` (no command) |
+| `unknown` | any | `cannot read project settings for <path> — cannot choose a remedy` (no command) |
 
-WARN, not FAIL: the cost is a plugin that goes stale, not a broken session.
+`;`, not `&&`, between install and disable: if install flips the tracked file and then
+exits non-zero, disable still runs and the settings check still reports. Once the user
+record exists, the next `-t update` prunes the project records (ADR-0055).
+
+WARN, not FAIL: the cost is a stale or dead plugin, not a broken session.
 
 ## Testing
 
 - pytest (`tests/test_claude_plugin_prune.py`): `--list-project-only` on a fixture shaped
   like workstation's file (16 ids, the five project-only ones, one with two project
-  paths, one with both user and project records) asserts the exact five-line output; the
+  paths, one with both user and project records) plus fixture project directories with
+  settings files reproducing workstation's enablement asserts the exact five-line output;
+  `settings.local.json` overriding `settings.json` in both directions; an unreadable
+  project settings file gives `unknown`; a gone `projectPath` gives `disabled`; the plugins
   file is byte-identical afterwards and no backup directory is created; refusal on a
   non-object file exits 3; `local` scope listed; an id with a `user` record never listed.
-- bats (new `tests/setup_env/plugin_scope.bats`, mirroring `plugin_node_paths.bats`):
-  absent file (no output, no counters moved); PASS; one case per manifest row (true,
-  false, absent, unreadable) asserting the exact remedy line; refusal; missing
-  interpreter via `_CLAUDE_PRUNE_PYTHON`; `run_doctor` calls the check after the
-  node-path check.
+  Parser: `--file f` alone exits 2 with the file byte-identical; `--list-project-only`
+  with `--backup-dir` exits 2.
+- bats (new `tests/setup_env/plugin_scope.bats`, mirroring `plugin_node_paths.bats`): every
+  remedy case drives the real helper on a fixture plugins file and fixture project
+  directories; a stubbed interpreter is used only for the missing-interpreter and
+  helper-failure cases. Cases: absent file (no output, no counters moved); PASS; one case
+  per remedy-table row asserting the exact remedy text; refusal; missing interpreter via
+  `_CLAUDE_PRUNE_PYTHON`; `run_doctor` calls the check after the node-path check.
 
 ## Requirements
 
-- **R1.** `lib/claude_plugin_prune.py --list-project-only --file <f>` prints one line `<id>\t<scope>:<projectPath>[,...]` per id with no `user` record and at least one `project` or `local` record, sorted by id, and exits 0.
-- **R2.** `--list-project-only` never writes the plugins file and never creates or writes the backup directory.
-- **R3.** `--list-project-only` on a file `_validate` rejects or cannot parse exits 3 with one line starting `refused: `.
-- **R4.** `run_doctor` calls `_doctor_check_plugin_scope` immediately after `_doctor_check_plugin_node_paths`.
-- **R5.** With the plugins file absent, `_doctor_check_plugin_scope` prints nothing and changes no doctor counter.
-- **R6.** With no project-only id, the check prints the header `Claude plugin scope:` and exactly one PASS.
-- **R7.** For a project-only id whose manifest value is `true`, the WARN's remedy is `claude plugins install -s user <id>`.
-- **R8.** For a project-only id whose manifest value is `false`, the WARN's remedy is `claude plugins install -s user <id> && claude plugins disable -s user <id>`.
-- **R9.** For a project-only id absent from the manifest, the WARN names adding the id to ai-config `.claude/settings.json` `enabledPlugins` and, per record, `(cd '<path>' && claude plugins uninstall -s <scope> <id>)`.
-- **R10.** When `_claude_plugin_manifest` fails, each project-only id gets a WARN containing `user manifest unreadable` and no `claude plugins` command.
-- **R11.** When the interpreter is missing or the helper exits non-zero, the check prints one WARN naming the reason and no PASS.
-- **R12.** The Backlog of `docs/superpowers/README.md` gains a row for installing then disabling `false` ids in the reconcile (option B), citing this spec, and the "Some Claude plugins are installed only at project scope" row is closed or rewritten to point at this spec.
-- **V1.** On workstation, before any repair, `./setup_env.sh -t doctor` prints exactly five plugin-scope WARNs, each with the R8 remedy.
-- **V2.** On workstation, run one R8 remedy; `cmp` shows ai-config `.claude/settings.json` byte-identical to its pre-remedy copy and `git -C ai-config status --porcelain` is empty.
+- **R1.** `lib/claude_plugin_prune.py --list-project-only --file <f>` prints one line `<id>\t<enablement>\t<scope>:<projectPath>[,...]` per id with no `user` record and at least one `project` or `local` record, sorted by id, and exits 0.
+- **R2.** `<enablement>` is `enabled` if any record's project has an effective `enabledPlugins[<id>]` of `true` (`.claude/settings.local.json` when it has the key, else `.claude/settings.json`), else `unknown` if any record's project settings file exists but cannot be read or parsed as a JSON object, else `disabled`.
+- **R3.** `--list-project-only` never writes the plugins file and never creates or writes the backup directory.
+- **R4.** `--list-project-only` on a plugins file `_validate` rejects or cannot parse exits 3 with one line starting `refused: `.
+- **R5.** `--list-project-only` combined with `--backup-dir`, `--keep` or `--dry-run` exits 2; without `--list-project-only`, an argv lacking `--backup-dir` exits 2 and leaves the plugins file byte-identical.
+- **R6.** `run_doctor` calls `_doctor_check_plugin_scope` immediately after `_doctor_check_plugin_node_paths`.
+- **R7.** With the plugins file absent, `_doctor_check_plugin_scope` prints nothing and changes no doctor counter.
+- **R8.** With no project-only id, the check prints the header `Claude plugin scope:` and exactly one PASS.
+- **R9.** A `disabled` id's WARN gives `(cd '<path>' && claude plugins uninstall -s <scope> <id>)` for each record, joined with `; `.
+- **R10.** An `enabled` id whose user manifest value is `true` gets the remedy `claude plugins install -s user <id>`.
+- **R11.** An `enabled` id whose user manifest value is `false` gets the remedy `claude plugins install -s user <id>; claude plugins disable -s user <id>; git -C "$(dirname "$(readlink -f ~/.claude/settings.json)")" diff --exit-code settings.json`.
+- **R12.** An `enabled` id absent from the user manifest gets the R11 command preceded by an instruction to add the id as `false` to ai-config `.claude/settings.json` `enabledPlugins`.
+- **R13.** An `enabled` id when `_claude_plugin_manifest` fails, and every `unknown` id, gets a WARN containing `cannot choose a remedy` and no `claude plugins` command.
+- **R14.** When the interpreter is missing or the helper exits non-zero, the check prints one WARN naming the reason and no PASS.
+- **R15.** The Backlog of `docs/superpowers/README.md` gains one row naming both B (reconcile installs then disables `false` ids) and the in-place `update -s project` alternative, citing this spec, and the "Some Claude plugins are installed only at project scope" row is removed and replaced by a pointer to this spec.
+- **V1.** On workstation, before any repair, `./setup_env.sh -t doctor` prints one plugin-scope WARN per project-only id: R9 remedies for `frontend-design`, `rust-analyzer-lsp` and `skill-creator`, and R11 remedies for `ansible-good-practices` and `terraform-skill` (less any id repaired by the 2026-11-06 probe).
+- **V2.** On workstation, paste one R11 remedy and one R9 remedy: the R11 line's `git diff --exit-code` exits 0, `cmp` shows ai-config `.claude/settings.json` byte-identical to its pre-remedy copy, and a following `-t doctor` no longer lists either id.
 - **V3.** On `claude`, `studio` and `laptop-1`, `-t doctor` prints the plugin-scope PASS.
 - **N1.** The check never runs `claude` and writes no file.
 - **N2.** `setup_claude_plugins` and ADR-0034 decision 2 are unchanged.
@@ -158,19 +201,19 @@ Reviewed at commit: `5702ffa9` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: The remedy table branches on the wrong input. Whether staleness costs anything depends on whether any settings scope enables the plugin, not on the user manifest value. Measured read-only on workstation: of the five, only `ansible-good-practices` and `terraform-skill` are `true` anywhere (terraform_ansible project settings); `frontend-design`, `rust-analyzer-lsp` and `skill-creator` are `false` in user, terraform_ansible and dotfiles settings, so they are dead installs and the right remedy is `uninstall -s project` per record. Yet V1 requires the R8 remedy for all five, which would turn three dead records into user-scope plugins `-t update` refreshes forever. Simpler path not weighed: `claude plugins update` accepts `-s project|local`, so `-t update` could update project-only records in place (`cd <projectPath> && claude plugins update -s <scope> <id>`), never touching ai-config and not reversing ADR-0034. Reads-it test: consumer is the operator at doctor time; changes a decision (yes); durable output none. Premise verified at `5702ffa9` (`lib/workflows.sh:279`; update loop at 1000-1014 updates any user-installed manifest id, `true` or `false`; ids absent from the manifest are never updated even with a user record). Empty-helper check: R5, R6, V3 pass on empty output; R7-R10 and V1 would fail.
 Assumption: a project-scope install serves only sessions inside its `projectPath`, so a fresh machine reproduces this only through Claude Code's project-install prompt; if a user-scope install satisfies project `enabledPlugins` without re-prompting, R8 is a one-time fix and the check is near-decoration after workstation is repaired. Settle by opening terraform_ansible on a host with no user record and observing the prompt, and by reading `installedAt` of the user records on the three clean hosts (before 2026-09-19 or not).
-Disposition:
+Disposition: Addressed (operator, 2026-11-06) — remedy now branches on project enablement (dead installs get `uninstall -s project`); in-place `update -s project` recorded as a rejected rival in the B backlog row (R15); `installedAt` read on the clean hosts, all before 2026-09-19, so a fresh machine reproduces the state.
 
 ### Ergonomics
 
 Finding: Same defect as Goal-Fit, reached independently: R8 is wrong for 3 of 5 ids (orphan installs enabled nowhere); fix is one more input, `enabledPlugins` from each record's `<projectPath>/.claude/settings.json`: install-then-disable only when some project enables the id, otherwise uninstall. Secondary: (a) with `&&`, an `install` that rewrites `settings.json` then exits non-zero skips `disable`, leaving ai-config dirty with no signal; (b) V2 proves byte-identity but not that a user record now exists; add a doctor re-run showing the WARN gone; (c) the absent row's remedy ("add … or (cd …)") is prose, not pasteable. Premise verified (`lib/workflows.sh:79-87`, `:279`; workstation `~/.claude/settings.json` resolves into ai-config). Empty-helper: R6 and V3 pass on empty output; pytest five-line fixture and V1 catch it.
 Assumption: `claude plugins install -s user <id>` adds a user record when a project record for the same id exists, rather than exiting 0 as "already installed"; if false, R7/R8 do nothing and the WARN recurs. Settle on a scratch `HOME` with a copied `installed_plugins.json`, or by running V2 and re-running doctor.
-Disposition:
+Disposition: Addressed (operator, 2026-11-06) — enablement input added (R2); `;` instead of `&&` plus a settings diff check (R11); V2 re-runs doctor; absent-from-manifest remedy is a stated instruction plus a pasteable command (R12).
 
 ### Risk
 
 Finding: Low risk overall, not over-engineered; two write-path gaps. (1) `claude_plugin_prune.py`'s `main()` has no mode: `--file` and `--backup-dir` are `required=True` and any accepted argv runs `prune()`, which rewrites the file. Doctor will not pass `--backup-dir`, so the implementer must relax it, and the spec does not say how; if `--backup-dir` gains a default, any call that loses `--list-project-only` (empty array element, quoting slip, refactor) silently prunes. Needs an R: list mode excludes `--backup-dir`/`--keep`/`--dry-run`, `--backup-dir` stays mandatory otherwise (`parser.error`), and a test that `--file f` alone exits 2 with the file byte-identical. (2) R8's `&&`: if install succeeds and disable fails, the plugin is enabled in every session on that host and the shared ai-config checkout holds a dirty tracked file a peer session could commit; use `;` and append `git -C ~/git-repos/personal/ai-config diff --exit-code .claude/settings.json`. Empty-helper: R6, V3 and the bats PASS case pass on empty output; the pytest fixture is hand-built (a real schema change would not show); the bats remedy cases catch it only if they drive the real helper rather than a stubbed interpreter, which the spec does not say; after V2 repairs workstation no host produces output, so an always-empty check looks healthy from then on. Premise verified (workstation probe: 16 ids, the same five; `:279` as cited).
 Assumption: same as Ergonomics: `install -s user` creates a separate user record beside an existing project record, and the following `disable -s user` restores `settings.json` byte-identical in that situation (ADR-0034 measured only ids with no existing record). Settled by V2, which changes state and so is the operator's to run.
-Disposition:
+Disposition: Addressed (operator, 2026-11-06) — parser shape pinned (R5, `--file f` alone exits 2 byte-identical); `;` plus settings diff check (R11); bats remedy cases drive the real helper on fixtures. Install-beside-project-record assumption: probe handed to the operator after the auto-mode classifier refused the remote write.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
