@@ -149,3 +149,29 @@ WARN, not FAIL: the cost is a plugin that goes stale, not a broken session.
 - **N1.** The check never runs `claude` and writes no file.
 - **N2.** `setup_claude_plugins` and ADR-0034 decision 2 are unchanged.
 - **N3.** No plugin-scope result is a FAIL.
+
+## Multi-Lens Review
+
+Reviewed at commit: `5702ffa9` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The remedy table branches on the wrong input. Whether staleness costs anything depends on whether any settings scope enables the plugin, not on the user manifest value. Measured read-only on workstation: of the five, only `ansible-good-practices` and `terraform-skill` are `true` anywhere (terraform_ansible project settings); `frontend-design`, `rust-analyzer-lsp` and `skill-creator` are `false` in user, terraform_ansible and dotfiles settings, so they are dead installs and the right remedy is `uninstall -s project` per record. Yet V1 requires the R8 remedy for all five, which would turn three dead records into user-scope plugins `-t update` refreshes forever. Simpler path not weighed: `claude plugins update` accepts `-s project|local`, so `-t update` could update project-only records in place (`cd <projectPath> && claude plugins update -s <scope> <id>`), never touching ai-config and not reversing ADR-0034. Reads-it test: consumer is the operator at doctor time; changes a decision (yes); durable output none. Premise verified at `5702ffa9` (`lib/workflows.sh:279`; update loop at 1000-1014 updates any user-installed manifest id, `true` or `false`; ids absent from the manifest are never updated even with a user record). Empty-helper check: R5, R6, V3 pass on empty output; R7-R10 and V1 would fail.
+Assumption: a project-scope install serves only sessions inside its `projectPath`, so a fresh machine reproduces this only through Claude Code's project-install prompt; if a user-scope install satisfies project `enabledPlugins` without re-prompting, R8 is a one-time fix and the check is near-decoration after workstation is repaired. Settle by opening terraform_ansible on a host with no user record and observing the prompt, and by reading `installedAt` of the user records on the three clean hosts (before 2026-09-19 or not).
+Disposition:
+
+### Ergonomics
+
+Finding: Same defect as Goal-Fit, reached independently: R8 is wrong for 3 of 5 ids (orphan installs enabled nowhere); fix is one more input, `enabledPlugins` from each record's `<projectPath>/.claude/settings.json`: install-then-disable only when some project enables the id, otherwise uninstall. Secondary: (a) with `&&`, an `install` that rewrites `settings.json` then exits non-zero skips `disable`, leaving ai-config dirty with no signal; (b) V2 proves byte-identity but not that a user record now exists; add a doctor re-run showing the WARN gone; (c) the absent row's remedy ("add … or (cd …)") is prose, not pasteable. Premise verified (`lib/workflows.sh:79-87`, `:279`; workstation `~/.claude/settings.json` resolves into ai-config). Empty-helper: R6 and V3 pass on empty output; pytest five-line fixture and V1 catch it.
+Assumption: `claude plugins install -s user <id>` adds a user record when a project record for the same id exists, rather than exiting 0 as "already installed"; if false, R7/R8 do nothing and the WARN recurs. Settle on a scratch `HOME` with a copied `installed_plugins.json`, or by running V2 and re-running doctor.
+Disposition:
+
+### Risk
+
+Finding: Low risk overall, not over-engineered; two write-path gaps. (1) `claude_plugin_prune.py`'s `main()` has no mode: `--file` and `--backup-dir` are `required=True` and any accepted argv runs `prune()`, which rewrites the file. Doctor will not pass `--backup-dir`, so the implementer must relax it, and the spec does not say how; if `--backup-dir` gains a default, any call that loses `--list-project-only` (empty array element, quoting slip, refactor) silently prunes. Needs an R: list mode excludes `--backup-dir`/`--keep`/`--dry-run`, `--backup-dir` stays mandatory otherwise (`parser.error`), and a test that `--file f` alone exits 2 with the file byte-identical. (2) R8's `&&`: if install succeeds and disable fails, the plugin is enabled in every session on that host and the shared ai-config checkout holds a dirty tracked file a peer session could commit; use `;` and append `git -C ~/git-repos/personal/ai-config diff --exit-code .claude/settings.json`. Empty-helper: R6, V3 and the bats PASS case pass on empty output; the pytest fixture is hand-built (a real schema change would not show); the bats remedy cases catch it only if they drive the real helper rather than a stubbed interpreter, which the spec does not say; after V2 repairs workstation no host produces output, so an always-empty check looks healthy from then on. Premise verified (workstation probe: 16 ids, the same five; `:279` as cited).
+Assumption: same as Ergonomics: `install -s user` creates a separate user record beside an existing project record, and the following `disable -s user` restores `settings.json` byte-identical in that situation (ADR-0034 measured only ids with no existing record). Settled by V2, which changes state and so is the operator's to run.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
