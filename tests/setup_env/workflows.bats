@@ -2478,6 +2478,32 @@ _stub_refresher_fail() {
   [[ "$output" == *"aws-cli not installed"* ]]
 }
 
+@test "run_setup_or_developer warns and continues when setup_vim_plugins fails" {
+  # A failed plug.vim download is optional, like aws-cli: warn, keep going,
+  # and still write the setup ledger entry.
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_macos_packages() { return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 22; }
+  _ledger_write_run_entry() { printf 'ledger %s %s\n' "$1" "$2" >> "${MOCK_CALLS_FILE}"; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[WARN]"*"vim plugins incomplete"* ]]
+  grep -q "^ledger setup 0$" "${MOCK_CALLS_FILE}"
+}
+
+@test "run_setup_or_developer prints no vim warning when setup_vim_plugins succeeds" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  install_macos_packages() { return 0; }
+  install_aws_tools() { return 0; }
+  setup_vim_plugins() { return 0; }
+  run run_setup_or_developer
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"vim plugins incomplete"* ]]
+}
+
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
 
 @test "run_developer_or_ansible returns non-zero when jscpd npm install fails" {
