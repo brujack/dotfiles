@@ -4092,6 +4092,22 @@ _az_cloud_env() {
   refute_grep "install --cask azure-cli" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_brew_packages: a failed azure-cli cask install is named and returns 2" {
+  # Fail only this cask; every other call goes to the PATH mock. A shim on PATH,
+  # not a brew() function: the function under test checks `[ -x "$(command -v
+  # brew)" ]`, which a function name fails.
+  local _shim="${BATS_TEST_TMPDIR}/brew-shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nif [[ "$*" == "install --cask azure-cli" ]]; then\n  printf "brew %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n  exit 1\nfi\nexec "%s/tests/mocks/brew" "$@"\n' "${REPO_ROOT}" > "${_shim}/brew"
+  chmod +x "${_shim}/brew"
+  PATH="${_shim}:${PATH}"
+  export MOCK_BREW_LIST_CASK=""
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"package(s) failed:"*" azure-cli"* ]]
+  [[ "$output" != *"azure-cli-apt-remove"* ]]
+}
+
 @test "_install_ubuntu_brew_packages: removes the apt azure-cli once brew az runs" {
   export MOCK_DPKG_S_STATUS="install ok installed"
   run _install_ubuntu_brew_packages
