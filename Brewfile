@@ -8,7 +8,6 @@ tap "teamookla/speedtest"                    # [HAS_DEVTOOLS]
 brew "argocd"                                # [HAS_K8S]
 brew "autoconf"                              # [HAS_DEVTOOLS]
 brew "automake"                              # [HAS_DEVTOOLS]
-brew "azure-cli"                             # [HAS_DEVTOOLS]
 brew "bash"
 brew "bat"
 brew "bats-core"
@@ -138,6 +137,7 @@ cask "adobe-acrobat-reader"
 cask "adobe-creative-cloud"                  # [HAS_DEVTOOLS]
 cask "alfred"
 cask "appcleaner"
+cask "azure-cli"                             # [HAS_DEVTOOLS]
 cask "balenaetcher"                          # [HAS_DEVTOOLS]
 cask "bambu-studio"                          # [HAS_DEVTOOLS]
 cask "beyond-compare"                        # [HAS_DEVTOOLS]

@@ -722,6 +722,20 @@ _gnubin_present() {
   [[ "${output}" == *"Linked"* ]]
 }
 
+# ── Brewfile: formulae migrated to casks ─────────────────────────────────────
+#
+# homebrew-core moved azure-cli to homebrew/cask on 2026-10-06. A `brew` line
+# for it still installs the cask through tap_migrations, so brew-drift reports
+# the cask as untracked on every run, while the old formula stays installed,
+# frozen at 2.90.0, and keeps owning `az` on PATH.
+
+@test "Brewfile lists azure-cli as a cask, never as a formula" {
+  run grep -cE '^brew "azure-cli"' "${REPO_ROOT}/Brewfile"
+  [ "$output" = "0" ]
+  run grep -cE '^cask "azure-cli" +# \[HAS_DEVTOOLS\]$' "${REPO_ROOT}/Brewfile"
+  [ "$output" = "1" ]
+}
+
 # ── install_macos_casks ───────────────────────────────────────────────────────
 
 @test "install_macos_casks calls brew bundle with main Brewfile" {

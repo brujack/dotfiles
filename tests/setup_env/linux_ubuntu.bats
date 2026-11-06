@@ -4075,10 +4075,37 @@ _az_cloud_env() {
   unset HAS_DEVTOOLS
 }
 
-@test "_install_ubuntu_brew_packages: installs azure-cli via brew" {
+@test "_install_ubuntu_brew_packages: installs azure-cli as a cask, not a formula" {
+  # homebrew-core moved azure-cli to homebrew/cask on 2026-10-06; the formula
+  # guard greps `brew list --formula` and never sees the cask.
+  export MOCK_BREW_LIST_CASK=""
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  grep -q "^brew install --cask azure-cli" "${MOCK_CALLS_FILE}"
+  refute_grep "^brew install azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: skips azure-cli when the cask is installed" {
+  export MOCK_BREW_LIST_CASK="azure-cli"
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 0 ]
+  refute_grep "install --cask azure-cli" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_brew_packages: a failed azure-cli cask install is named and returns 2" {
+  # Fail only this cask; every other call goes to the PATH mock. A shim on PATH,
+  # not a brew() function: the function under test checks `[ -x "$(command -v
+  # brew)" ]`, which a function name fails.
+  local _shim="${BATS_TEST_TMPDIR}/brew-shim"
+  mkdir -p "${_shim}"
+  printf '#!/usr/bin/env bash\nif [[ "$*" == "install --cask azure-cli" ]]; then\n  printf "brew %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n  exit 1\nfi\nexec "%s/tests/mocks/brew" "$@"\n' "${REPO_ROOT}" > "${_shim}/brew"
+  chmod +x "${_shim}/brew"
+  PATH="${_shim}:${PATH}"
+  export MOCK_BREW_LIST_CASK=""
+  run _install_ubuntu_brew_packages
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"package(s) failed:"*" azure-cli"* ]]
+  [[ "$output" != *"azure-cli-apt-remove"* ]]
 }
 
 @test "_install_ubuntu_brew_packages: removes the apt azure-cli once brew az runs" {
@@ -4145,7 +4172,7 @@ _az_cloud_env() {
   export MOCK_DPKG_S_STATUS="install ok installed"
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  grep -q "brew install --cask azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "az version" "${MOCK_CALLS_FILE}"
   refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"
@@ -4174,7 +4201,7 @@ _az_cloud_env() {
   export MOCK_DPKG_S_STATUS="install ok installed"
   run _install_ubuntu_brew_packages
   [ "$status" -eq 0 ]
-  grep -q "brew install azure-cli" "${MOCK_CALLS_FILE}"
+  grep -q "brew install --cask azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "^system-az " "${MOCK_CALLS_FILE}"
   refute_grep "dpkg -s azure-cli" "${MOCK_CALLS_FILE}"
   refute_grep "apt-get remove" "${MOCK_CALLS_FILE}"

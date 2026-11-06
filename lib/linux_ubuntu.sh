@@ -1440,13 +1440,18 @@ _install_ubuntu_brew_packages() {
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
     starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
-    go-task azure-cli; do
+    go-task; do
     # go-task is `go-task`, NOT `go-task/tap/go-task`: the tap-qualified name resolves
     # to a macOS Cask that shells out to /usr/bin/xattr and exits 127 on Linux. Core
     # ships the formula now. Same for `bun` over `oven-sh/bun/bun`, and `codeburn` is
     # only ever the tap-qualified name -- bare `codeburn` resolves to nothing.
     brew_install_formula "${_f}" || _failed+=("${_f}")
   done
+
+  # azure-cli is a cask since homebrew-core migrated it on 2026-10-06. Installing it
+  # through brew_install_formula never sees the cask, and a box that kept the old
+  # formula stays frozen at its last version with that formula owning `az`.
+  brew_install_cask azure-cli || _failed+=(azure-cli)
 
   # Migration: once the brew az demonstrably runs, drop the apt package it replaces.
   # Gated on dpkg's exact Status line so a config-files-only residue is not re-removed.
