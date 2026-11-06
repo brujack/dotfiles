@@ -647,7 +647,8 @@ run_setup_or_developer() {
   # was dormant. doctor's key-expiry arm and the printed install failure
   # above are what surface the gap now -- not this line aborting the run.
   install_aws_tools || log_warn "aws-cli not installed — see above; setup_env.sh -t doctor reports the gap"
-  setup_vim_plugins
+  # Optional like aws-cli: a failed plug.vim download warns and the run goes on.
+  setup_vim_plugins || log_warn "vim plugins incomplete — see above"
   _ledger_write_run_entry "setup" 0 || true
 }
 

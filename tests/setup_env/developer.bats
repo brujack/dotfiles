@@ -61,6 +61,14 @@ teardown() {
   ! grep -q "curl.*plug.vim" "${MOCK_CALLS_FILE}"
 }
 
+@test "setup_vim_plugins: returns non-zero when the plug.vim download fails" {
+  # run_setup_or_developer warns on this status, so it must not be swallowed.
+  export MOCK_CURL_EXIT=22
+  run setup_vim_plugins
+  [ "$status" -ne 0 ]
+  [ ! -s "${HOME}/.vim/autoload/plug.vim" ]
+}
+
 # ── update_aws_cli ───────────────────────────────────────────────────────────
 
 @test "update_aws_cli: returns 1 when curl fails on macOS" {
