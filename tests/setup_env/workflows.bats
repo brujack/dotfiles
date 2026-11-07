@@ -2691,6 +2691,8 @@ CASES
   grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g firecrawl-cli@1.26.3" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g exa-mcp-server@3.4.2" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g firecrawl-mcp@3.38.0" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g @upstash/context7-mcp@4.4.4" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_developer_or_ansible leaves no unpinned npm global install" {
@@ -3890,12 +3892,14 @@ _claude_only_env() {
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
   grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
-  # The update chain installs all three packages in ONE invocation, so only the
-  # first package literally follows "npm install -g " — the other two sit
+  # The update chain installs every package in ONE invocation, so only the
+  # first package literally follows "npm install -g " — the others sit
   # further along the same line. Anchor at line start instead so dropping -g
   # (which would still leave the version pins intact) is still caught.
   grep -qE '^npm install -g .*firecrawl-cli@1\.26\.3' "${MOCK_CALLS_FILE}"
   grep -qE '^npm install -g .*exa-mcp-server@3\.4\.2' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*firecrawl-mcp@3\.38\.0' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*@upstash/context7-mcp@4\.4\.4' "${MOCK_CALLS_FILE}"
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
@@ -3951,10 +3955,16 @@ _claude_only_env() {
   JSCPD_VER=""
   # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
   EXA_MCP_SERVER_VER=""
+  # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
+  FIRECRAWL_MCP_VER=""
+  # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
+  CONTEXT7_MCP_VER=""
   run _require_npm_pins
   [ "$status" -ne 0 ]
   [[ "$output" == *"JSCPD_VER"* ]]
   [[ "$output" == *"EXA_MCP_SERVER_VER"* ]]
+  [[ "$output" == *"FIRECRAWL_MCP_VER"* ]]
+  [[ "$output" == *"CONTEXT7_MCP_VER"* ]]
 }
 
 @test "run_developer_or_ansible refuses to install when a pin is empty" {

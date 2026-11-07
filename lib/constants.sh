@@ -21,9 +21,13 @@ GITLEAKS_VER="8.30.1"
 # `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching
 # its npm version. See docs/superpowers/plans/2026-07-29-npm-global-pinning.md.
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
+CONTEXT7_MCP_VER="4.4.4"
+# read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 EXA_MCP_SERVER_VER="3.4.2"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 FIRECRAWL_CLI_VER="1.26.3"
+# read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
+FIRECRAWL_MCP_VER="3.38.0"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSCPD_VER="5.4.1"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible

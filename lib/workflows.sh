@@ -663,6 +663,8 @@ _require_npm_pins() {
   [[ -z "${JSON2YAML_VER}" ]] && _missing="${_missing} JSON2YAML_VER"
   [[ -z "${FIRECRAWL_CLI_VER}" ]] && _missing="${_missing} FIRECRAWL_CLI_VER"
   [[ -z "${EXA_MCP_SERVER_VER}" ]] && _missing="${_missing} EXA_MCP_SERVER_VER"
+  [[ -z "${FIRECRAWL_MCP_VER}" ]] && _missing="${_missing} FIRECRAWL_MCP_VER"
+  [[ -z "${CONTEXT7_MCP_VER}" ]] && _missing="${_missing} CONTEXT7_MCP_VER"
   if [[ -n "${_missing}" ]]; then
     printf "ERROR: unset npm version pin(s):%s — refusing to install unpinned globals\n" \
       "${_missing}" >&2
@@ -691,6 +693,12 @@ run_developer_or_ansible() {
 
   printf "Installing exa-mcp-server via npm\n"
   npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
+
+  printf "Installing firecrawl-mcp via npm\n"
+  npm install -g "firecrawl-mcp@${FIRECRAWL_MCP_VER}" || return 1
+
+  printf "Installing context7-mcp via npm\n"
+  npm install -g "@upstash/context7-mcp@${CONTEXT7_MCP_VER}" || return 1
 
   install_ruby || return 1
   setup_ansible || return 1
@@ -1126,7 +1134,9 @@ run_update() {
     if _require_npm_pins; then
       npm install -g "jscpd@${JSCPD_VER}" "json2yaml@${JSON2YAML_VER}" \
         "firecrawl-cli@${FIRECRAWL_CLI_VER}" \
-        "exa-mcp-server@${EXA_MCP_SERVER_VER}" 2>&1 \
+        "exa-mcp-server@${EXA_MCP_SERVER_VER}" \
+        "firecrawl-mcp@${FIRECRAWL_MCP_VER}" \
+        "@upstash/context7-mcp@${CONTEXT7_MCP_VER}" 2>&1 \
         | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
       _update_record_end "npm" "${PIPESTATUS[0]}"
     else
