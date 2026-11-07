@@ -1,5 +1,13 @@
 # Doctor WARN for Claude plugins installed only at project scope
 
+**Status: Retired 2026-11-06, before implementation.** The round-2 Goal-fit lens found
+the premise false: every project-only record dated from before 2026-09-19, when dotfiles
+stopped writing project scope, so nothing current recreates them. The operator chose a
+one-time repair over the check. Round-2 dispositions were not recorded, because the spec
+was retired instead of revised. See `## Retirement` at the end of this file for the
+repair and its measurements, and the Backlog rows in `docs/superpowers/README.md` for
+the open follow-ups.
+
 ## Problem
 
 `-t update` updates Claude plugins with `claude plugins update -s user`, and only for
@@ -226,3 +234,37 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 **Ergonomics.** Finding: the `disabled` row (R9) is unsafe or unclearable in two spec-created cases and is the only row without a tracked-file check. (1) A missing path prints `-`, and `(cd '-' && …)` in zsh jumps to `OLDPWD` (measured: `zsh -fc 'cd /etc; cd /tmp; (cd '-' && pwd)'` printed `/etc`), so the paste runs a project uninstall in an arbitrary directory. (2) A gone directory is classed `disabled`, the `cd` fails, and the WARN recurs forever; ADR-0055 §2 says the CLI cannot reach gone-directory records, and worktree sessions create them. (3) `uninstall -s project` may rewrite the project's tracked `.claude/settings.json`. Checked fine: settings-check resolves and runs rc 0 on `claude`; `; ` joining; line length acceptable. Latent today: 7 project/local records on workstation, 0 gone paths. Assumption: `uninstall -s project` leaves `<path>/.claude/settings.json` unchanged; settle in a scratch git repo (install -s project, commit, uninstall -s project, `git diff --exit-code`), state-changing. Disposition:
 
 **Risk.** Finding: R9 writes tracked files in peer repos with no check. Claude Code 2.1.318 binary strings indicate uninstall removes the id's line from that scope's settings file; on workstation every `disabled` record is under `terraform_ansible` (another session's repo, git-workflow-020) plus one under `dotfiles`, both tracking `.claude/settings.json` with the ids as `false`. V2 compares only ai-config. Fix: `git -C '<path>' diff --exit-code .claude/settings.json` after each uninstall and coordinate with the owning session. Secondary: gone `projectPath` needs its own row; R5 sound; proportionate. Assumption: same as Ergonomics (strings suggest yes, unproven). Disposition:
+
+## Retirement
+
+Retired 2026-11-06 by the operator after the round-2 Multi-Lens Review, in favour of a
+one-time repair on `workstation`. The `terraform_ansible` session ran the repair there,
+each block approved by the operator in that session. Results:
+
+- `claude plugins uninstall -s project` removed the project records for
+  `frontend-design`, `rust-analyzer-lsp` and `skill-creator` (in `terraform_ansible` and
+  `dotfiles`), and the stale `caveman@caveman` 2.7.0 project record in
+  `terraform_ansible`. The first fleet count missed that caveman record because it had a
+  user record beside it, and the prune keeps it (see below).
+- **Measured: `uninstall -s project <id>` deletes `<id>`'s key from the project's tracked
+  `.claude/settings.json`,** whether the key is `true` or `false`, and moves the
+  `enabledPlugins` object to the end of the file. This was seen on `terraform_ansible`'s
+  real file and reproduced on `claude` with a throwaway git project (Claude Code
+  2.1.318). Each uninstall was therefore followed by
+  `git checkout -- .claude/settings.json`, which left `"caveman@caveman": true` in place.
+  The R9 remedy in this spec would have disabled caveman in every `terraform_ansible`
+  session.
+- `claude plugins install -s user` then `disable -s user` added user records for
+  `ansible-good-practices` and `terraform-skill`. The ai-config manifest kept both
+  `false`, **but the file was not restored byte-identical**: `skillListingBudgetFraction`
+  and the `skillOverrides` block moved from the end of the file to after `model`, with no
+  value changed. That contradicts the 2026-09-19 measurement behind ADR-0034 decision 2.
+  The operator had it reverted with `git checkout -- .claude/settings.json`; both ids
+  stayed `false`.
+- After the repair, the only non-user records on `workstation` are the
+  `terraform_ansible` project records of `ansible-good-practices` and `terraform-skill`.
+  Their new user records are newer, so the next `-t update` prunes both.
+- `CLAUDE_CONFIG_DIR` does not isolate `claude plugins install`: the `claude` probe
+  wrote a project record into the real `~/.claude/plugins/installed_plugins.json` while
+  `uninstall` cleaned only the redirected copy. The stray record was removed by hand,
+  with a backup taken first.
