@@ -792,6 +792,51 @@ _check_red_suite() {
     return 1
 }
 
+# A trace records file:line pairs, and scoring reads the files as they are when
+# it runs. If an instrumented file changes while bats runs (a commit, checkout
+# or edit landing in this tree), the trace mixes line numbers from more than
+# one version and the score is wrong while looking normal: measured 2026-10-04,
+# 76%/88% for a tree that measures 91%/92.4%, with nothing but a jump in the
+# heuristic-disagreement count to show for it. So every instrumented file is
+# fingerprinted before bats starts and again once it ends, and any difference
+# refuses the run. A refusal, not a retry: the tree is not stable, so a second
+# run proves nothing about the first. Residual window: an edit after the
+# second fingerprint is not seen. In a single traced run that is the seconds
+# before _score_trace reads the files. Under --trace-only it lasts until the
+# separate --score run, which fingerprints nothing; CI is safe only because
+# every shard job and the scoring job check out the same commit.
+_source_fingerprints() {
+    local _f _h
+    for _f in "${INCLUDE_FILES[@]}"; do
+        if [[ -f "${_f}" ]]; then
+            _h="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+                git hash-object -- "${_f}")" || return 1
+        else
+            _h="absent"
+        fi
+        printf '%s %s\n' "${_h}" "${_f}"
+    done
+}
+
+_check_sources_unchanged() {
+    local _before="${1}" _after
+    if ! _after="$(_source_fingerprints)"; then
+        printf "\nERROR: could not fingerprint the instrumented files after the traced run — refusing to score\n" >&2
+        return 1
+    fi
+    [[ "${_after}" == "${_before}" ]] && return 0
+    local -a _b _a
+    mapfile -t _b <<<"${_before}"
+    mapfile -t _a <<<"${_after}"
+    printf "\nERROR: instrumented file(s) changed during the traced run — refusing to score a trace that mixes line numbers from more than one version:\n" >&2
+    local _i
+    for _i in "${!_b[@]}"; do
+        [[ "${_b[_i]}" == "${_a[_i]:-}" ]] || printf "  %s\n" "${_b[_i]#* }" >&2
+    done
+    printf "Re-run once nothing is committing to, checking out in, or editing this tree.\n" >&2
+    return 1
+}
+
 # Scores TRACE ($1) against the instrumented set: the per-file table, TOTAL,
 # "Overall bash coverage: N%" and the heuristic-disagreement list. Sets the
 # global `overall` for the --json step. Shared by the main run and --score so
@@ -1082,6 +1127,13 @@ _out="$(_coverage_bats_args)" || exit 2
 mapfile -t _bats_args <<<"${_out}"
 _coverage_bats_mode "${_bats_args[@]}"
 
+# Before the FIFO exists, for the same reason as the bats check above: an exit
+# after the reader starts would leave it blocked on the pipe.
+_sources_before="$(_source_fingerprints)" || {
+    printf "ERROR: could not fingerprint the instrumented files before the traced run\n" >&2
+    exit 1
+}
+
 if [[ -n "${_TRACE_ONLY_DIR}" ]]; then
     mkdir -p "${_TRACE_ONLY_DIR}" || exit 1
 fi
@@ -1142,6 +1194,9 @@ wait "${grep_pid}" 2>/dev/null || true
 if [[ -n "${_TRACE_ONLY_DIR}" && ! "${bats_log}" -ef "${_TRACE_ONLY_DIR}/bats_run.log" ]]; then
     cp "${bats_log}" "${_TRACE_ONLY_DIR}/bats_run.log" || exit 1
 fi
+# Ahead of the red check: a file changing mid-run can itself turn tests red,
+# and the operator needs the cause named, not only its symptom.
+_check_sources_unchanged "${_sources_before}" || exit 1
 _check_red_suite "${bats_status}" "${bats_log}" || exit 1
 
 if [[ ! -f "${TRACE_FILE}" || ! -s "${TRACE_FILE}" ]]; then
