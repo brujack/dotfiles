@@ -55,9 +55,12 @@ file's layout.
   `$FirecrawlCliVersion = '1.26.3'`. Its comment names `FIRECRAWL_CLI_VER` in
   `lib/constants.sh` and the bats test that keeps the two equal.
   `Set-NpmGlobalPackages` installs `"firecrawl-cli@$FirecrawlCliVersion"`.
-- The Pester test at `setup_windows.Tests.ps1:728` asserts that some npm argument matches
-  `^firecrawl-cli@\d+\.\d+\.\d+$` and that no argument is the bare `firecrawl-cli`. It does
-  not repeat the version, so there is no third copy.
+- The Pester test at `setup_windows.Tests.ps1:728` asserts that some npm argument equals
+  `"firecrawl-cli@$FirecrawlCliVersion"`, read from the dot-sourced script, and that no
+  argument is the bare `firecrawl-cli`. Comparing against the variable, not just a version
+  pattern, closes one hole: a hardcoded `firecrawl-cli@1.27.0` sitting next to an unused
+  `$FirecrawlCliVersion` would otherwise pass both this test and the drift test. The test
+  does not repeat the version, so there is no third copy.
 - A new `tests/scripts/windows_npm_pins.bats` extracts the version from each file and
   requires exactly one definition per file, matching `^[0-9]+\.[0-9]+\.[0-9]+$`, with the
   two values equal. A failure names both files and both values.
@@ -83,6 +86,8 @@ Treat each package exactly like `EXA_MCP_SERVER_VER`:
 `assert_all_npm_globals_pinned` judges a token pinned only when a non-empty version
 follows the last `@`, and that `@` is not at position 0. In other words the token is
 `<name>@<ver>` or `@<scope>/<name>@<ver>`, and `@<scope>/<name>` with no version fails.
+The helper's header comment (`tests/setup_env/workflows.bats:2638`, "Does not handle
+@scope/pkg specs; none are used here") is rewritten to state the rule.
 
 ### Tests (bats, `tests/setup_env/workflows.bats`)
 
@@ -113,13 +118,31 @@ machine without that binary, firecrawl is then down. The ai-config session corre
 earlier "safe to land first" on 2026-11-07, and is holding its PR.
 
 The binaries are installed by `./setup_env.sh -t developer` or by `-t update` with the npm
-section (a full run, or `UPDATE_CLAUDE`). `-t setup_user` does not run the npm installs, so
+section (a full run, or `--claude-only`). `-t setup_user` does not run the npm installs, so
 it is not the step to use.
+
+**A single `-t update` from a stale dotfiles checkout does not install them.**
+`_UPDATE_SECTION_ORDER` (`lib/update_summary.sh:5`) runs `ai-config`, then `npm`, then
+`git-repos`, and `git-repos` is the step that pulls dotfiles itself. So the npm section runs
+the package list from the checkout as it was when the run started. A machine whose dotfiles
+predates this PR pulls the new wrapper and installs the old list in the same run.
+
+The per-machine step, on every machine with the firecrawl or context7 wrapper registered
+(`claude mcp list`), run before ai-config's PR merges:
+
+```bash
+git -C ~/git-repos/personal/dotfiles pull --ff-only && \
+  ~/git-repos/personal/dotfiles/setup_env.sh -t update --claude-only
+```
+
+then `command -v firecrawl-mcp context7-mcp` to confirm both resolve. The ai-config session
+is asked to make its wrapper's missing-binary message name this command instead of
+`-t developer`.
 
 ## Requirements
 
 - **R1.** `[A]` `powershell/setup_windows.ps1` installs `firecrawl-cli` only as `firecrawl-cli@$FirecrawlCliVersion`, where `$FirecrawlCliVersion` is a single literal `'1.26.3'`.
-- **R2.** `[A]` The Pester test fails if `Set-NpmGlobalPackages` passes a bare `firecrawl-cli`, and passes on any `firecrawl-cli@X.Y.Z`.
+- **R2.** `[A]` The Pester test fails unless `Set-NpmGlobalPackages` passes exactly `firecrawl-cli@$FirecrawlCliVersion`, and fails on a bare `firecrawl-cli`.
 - **R3.** `[A]` `tests/scripts/windows_npm_pins.bats` fails when the `.ps1` version differs from `FIRECRAWL_CLI_VER`, when either file has zero or more than one definition, or when either value is not `X.Y.Z`.
 - **R4.** `[B]` `lib/constants.sh` defines `FIRECRAWL_MCP_VER="3.38.0"` and `CONTEXT7_MCP_VER="4.4.4"`.
 - **R5.** `[B]` `_require_npm_pins` returns non-zero and names `FIRECRAWL_MCP_VER` or `CONTEXT7_MCP_VER` when either is unset or empty.
@@ -128,7 +151,51 @@ it is not the step to use.
 - **R8.** `[Docs]` Backlog row 379 is removed, row 378 carries no pin count, and the CLAUDE.md `setup_windows.ps1 -update` line says the install is pinned.
 - **V1.** `make test` exits 0 with 0 `not ok`. Changing one of the two firecrawl-cli literals turns `windows_npm_pins.bats` red. Reverting R7's helper change turns the new scoped-token test red.
 - **V2.** The CI `powershell` job passes, since Pester is not installed on `claude`.
-- **V3.** After merge, `./setup_env.sh -t update` with the npm section on `claude` leaves `firecrawl-mcp` and `context7-mcp` on `PATH` at the pinned versions.
+- **V3.** After merge, on `claude`, the workstation and the Studio, the Rollout's pull-then-`--claude-only` command leaves `firecrawl-mcp` and `context7-mcp` on `PATH` at the pinned versions; record the `command -v` and `npm ls -g` output in the PR body.
 - **N1.** No PowerShell code reads `lib/constants.sh`, and no shared pin manifest is introduced.
 - **N2.** No MCP server package is installed on native Windows.
 - **N3.** No other npm pin changes value, and `firecrawl-cli` stays installed on every platform.
+
+## Multi-Lens Review
+
+Reviewed at commit: `9f5899a3` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building, and B and C are hard prerequisites. ai-config's `mcp-wrapper.sh`
+has no `npx` fallback. Premises were verified: the `*@?*` blindness, the bin names, the
+context7 stdio default with its `CONTEXT7_API_KEY` env var, and node >=22 across the fleet.
+One minor gap: the stale "Does not handle @scope/pkg specs" comment at
+`workflows.bats:2638`.
+Assumption: No uncertain assumption found. The closest is operational: which machines will
+have the wrapper registered when ai-config merges (today only `claude`).
+Disposition: Addressed. Section C now rewrites the comment.
+
+### Ergonomics
+
+Finding: A single `-t update` from a stale dotfiles checkout pulls the new ai-config wrapper
+before it pulls dotfiles, so it installs the old npm list. Firecrawl and context7 stay down
+until a second run. The wrapper's fix message names the heavier `-t developer`. The Pester
+regex also passes a hardcoded literal sitting next to an unused variable.
+Assumption: The operator runs `-t update` from a dotfiles checkout already at the merged
+commit. Refuted by reading the code: `_UPDATE_SECTION_ORDER` runs ai-config, then npm, then
+git-repos (verified).
+Disposition: Addressed. Rollout now requires pull-then-`--claude-only` on each registered
+machine before ai-config merges, V3 covers all three development boxes, ai-config is asked
+to change its message, and Pester (R2) asserts equality with the variable.
+
+### Risk
+
+Finding: The design is sound and the new installs are low risk (no install scripts, no bin
+collisions, global prefix on the wrapper PATH). Merge order is a human-enforced control. An
+`npx` fallback in ai-config's wrapper would remove the hazard.
+Assumption: Every machine has the binaries before its ai-config checkout reaches the
+exec-binary wrapper. This is uncertain outside `run_update`, where manual pulls, session
+resets and failed first runs are uncontrolled.
+Disposition: Accepted, reason: operator chose the per-machine pull-then-`--claude-only` step
+over an `npx` fallback, which would bring back the first-launch timeout and a second pin
+copy. ai-config holds its PR until the binaries are installed on the development boxes.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
