@@ -2635,8 +2635,8 @@ _stub_refresher_fail() {
 # Every whitespace-separated token after '-g' on an npm global install line must be
 # pkg@<version>. Catches three regressions one regex cannot: an unpinned package, an
 # empty constant expanding to 'pkg@' (npm resolves that to latest), and a package
-# added later that no enumerated pattern knows about. Does not handle @scope/pkg
-# specs; none are used here.
+# added later that no enumerated pattern knows about. A pinned token is name@ver or
+# @scope/name@ver with a non-empty version; a scope's leading '@' is not a version.
 assert_all_npm_globals_pinned() {
   local _line
   local -a _toks
@@ -2646,7 +2646,7 @@ assert_all_npm_globals_pinned() {
         read -ra _toks <<< "${_line#npm install -g }"
         local _tok
         for _tok in "${_toks[@]}"; do
-          if [[ "${_tok}" != *@?* ]]; then
+          if ! [[ "${_tok}" =~ ^(@[^/@]+/)?[^@/]+@[^@]+$ ]]; then
             printf "unpinned npm global: %s (in: %s)\n" "${_tok}" "${_line}" >&2
             return 1
           fi
@@ -2655,6 +2655,30 @@ assert_all_npm_globals_pinned() {
     esac
   done < "${1}"
   return 0
+}
+
+@test "assert_all_npm_globals_pinned judges scoped and unscoped tokens" {
+  local _spec _expected _file _n=0
+  # Each row: expected status, then the install line. A scope's leading '@' must not
+  # count as a version separator, and 'pkg@' (empty version) must be refused.
+  while IFS='|' read -r _expected _spec; do
+    _n=$((_n + 1))
+    _file="${BATS_TEST_TMPDIR}/calls-${_n}"
+    printf '%s\n' "${_spec}" > "${_file}"
+    run assert_all_npm_globals_pinned "${_file}"
+    [ "${status}" -eq "${_expected}" ] || {
+      printf 'case %s (%s): expected %s got %s\n' "${_n}" "${_spec}" "${_expected}" "${status}" >&2
+      return 1
+    }
+  done <<'CASES'
+1|npm install -g @upstash/context7-mcp
+0|npm install -g @upstash/context7-mcp@4.4.4
+1|npm install -g jscpd
+1|npm install -g jscpd@
+0|npm install -g jscpd@5.4.1
+CASES
+  # Every row ran: an emptied table would otherwise pass having tested nothing.
+  [ "${_n}" -eq 5 ]
 }
 
 @test "run_developer_or_ansible pins every npm global package" {
@@ -2667,6 +2691,8 @@ assert_all_npm_globals_pinned() {
   grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g firecrawl-cli@1.26.3" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g exa-mcp-server@3.4.2" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g firecrawl-mcp@3.38.0" "${MOCK_CALLS_FILE}"
+  grep -q "npm install -g @upstash/context7-mcp@4.4.4" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_developer_or_ansible leaves no unpinned npm global install" {
@@ -3852,7 +3878,7 @@ _claude_only_env() {
   run run_update
   [ "$status" -eq 0 ]
   # Machines set up before the -g fix hold a cwd-local, unpinned copy. The update
-  # chain is what converges them, so json2yaml has to be in it like the other three.
+  # chain is what converges them, so json2yaml has to be in it like every other npm global.
   grep -qE '^npm install -g .*json2yaml@1\.1\.0' "${MOCK_CALLS_FILE}"
 }
 
@@ -3866,12 +3892,14 @@ _claude_only_env() {
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
   grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
-  # The update chain installs all three packages in ONE invocation, so only the
-  # first package literally follows "npm install -g " — the other two sit
+  # The update chain installs every package in ONE invocation, so only the
+  # first package literally follows "npm install -g " — the others sit
   # further along the same line. Anchor at line start instead so dropping -g
   # (which would still leave the version pins intact) is still caught.
   grep -qE '^npm install -g .*firecrawl-cli@1\.26\.3' "${MOCK_CALLS_FILE}"
   grep -qE '^npm install -g .*exa-mcp-server@3\.4\.2' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*firecrawl-mcp@3\.38\.0' "${MOCK_CALLS_FILE}"
+  grep -qE '^npm install -g .*@upstash/context7-mcp@4\.4\.4' "${MOCK_CALLS_FILE}"
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
 
@@ -3927,10 +3955,16 @@ _claude_only_env() {
   JSCPD_VER=""
   # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
   EXA_MCP_SERVER_VER=""
+  # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
+  FIRECRAWL_MCP_VER=""
+  # shellcheck disable=SC2034 # read by _require_npm_pins after source; shellcheck cannot see the consumer
+  CONTEXT7_MCP_VER=""
   run _require_npm_pins
   [ "$status" -ne 0 ]
   [[ "$output" == *"JSCPD_VER"* ]]
   [[ "$output" == *"EXA_MCP_SERVER_VER"* ]]
+  [[ "$output" == *"FIRECRAWL_MCP_VER"* ]]
+  [[ "$output" == *"CONTEXT7_MCP_VER"* ]]
 }
 
 @test "run_developer_or_ansible refuses to install when a pin is empty" {

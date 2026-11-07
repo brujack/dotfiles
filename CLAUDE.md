@@ -133,7 +133,7 @@ See `~/.claude/standards/powershell.md` for the full PowerShell coding and testi
 
 **Hooks gap:** `.claude/hooks/` bash scripts are not linked on native Windows — they run only in WSL2 via `setup_env.sh`.
 
-`setup_windows.ps1 -update` pulls the latest ai-config (`Install-AiConfig`) and updates npm globals (`Set-NpmGlobalPackages` → `firecrawl-cli`).
+`setup_windows.ps1 -update` pulls the latest ai-config (`Install-AiConfig`) and installs pinned npm globals (`Set-NpmGlobalPackages` → `firecrawl-cli@$FirecrawlCliVersion`, kept equal to `FIRECRAWL_CLI_VER` by `tests/scripts/windows_npm_pins.bats`).
 
 Requires: admin terminal (symlinks need elevation), Node.js (installed via Chocolatey `nodejs`).
 

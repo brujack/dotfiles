@@ -725,14 +725,16 @@ Describe "Set-NpmGlobalPackages" {
     Mock Write-Warning { }
   }
 
-  It "calls npm install -g firecrawl-cli when node is available" {
+  It "installs firecrawl-cli pinned to `$FirecrawlCliVersion when node is available" {
     Mock Get-Command {
       [PSCustomObject]@{ Name = 'node' }
     } -ParameterFilter { $Name -eq 'node' }
+    $FirecrawlCliVersion | Should -Match '^\d+\.\d+\.\d+$'
     Set-NpmGlobalPackages
     Should -Invoke npm -ParameterFilter {
-      $args -contains 'install' -and $args -contains '-g' -and $args -contains 'firecrawl-cli'
+      $args -contains 'install' -and $args -contains '-g' -and $args -contains "firecrawl-cli@$FirecrawlCliVersion"
     } -Times 1
+    Should -Invoke npm -ParameterFilter { $args -contains 'firecrawl-cli' } -Times 0
   }
 
   It "skips npm and warns when node is not in PATH" {
