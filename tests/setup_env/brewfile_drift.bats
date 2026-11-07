@@ -302,6 +302,26 @@ teardown() {
   run ! grep -qE '^brew list --cask --versions [^-]' "${MOCK_CALLS_FILE}"
 }
 
+@test "_update_check_brewfile_drift: two half-installed casks are counted and each named, the healthy one is not" {
+  export MACOS=1
+  printf 'brew "git"\ncask "gcloud-cli"\ncask "warp"\ncask "zoom"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="gcloud-cli warp zoom"
+  export MOCK_BREW_BROKEN_CASKS="gcloud-cli zoom"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "2 broken casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ "$(grep -c 'brew reinstall --cask' "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift")" -eq 2 ]
+  grep -qx "    cask: gcloud-cli (brew reinstall --cask gcloud-cli)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -qx "    cask: zoom (brew reinstall --cask zoom)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+}
+
 @test "_update_check_brewfile_drift: a failed --versions listing with no broken cask is a WARN, never clean" {
   export MACOS=1
   printf 'brew "git"\ncask "warp"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
