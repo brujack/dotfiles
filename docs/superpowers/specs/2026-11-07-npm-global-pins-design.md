@@ -111,33 +111,41 @@ The helper's header comment (`tests/setup_env/workflows.bats:2638`, "Does not ha
 
 ### Rollout
 
-**This PR must merge before ai-config's wrapper PR, and the binaries must be installed
-before that PR lands.** `~/.claude/scripts` is a symlink into ai-config's main checkout, so
-the moment ai-config's PR merges, its firecrawl wrapper execs `firecrawl-mcp`. On any
-machine without that binary, firecrawl is then down. The ai-config session corrected its
-earlier "safe to land first" on 2026-11-07, and is holding its PR.
+**Install the binaries on a machine before that machine is re-registered onto the
+wrappers.** The order the PRs merge in does not gate anything. Measured 2026-11-07 by the
+round-2 lens, from `~/.claude.json`:
+- On `claude` and the workstation, firecrawl is registered as `npx -y firecrawl-mcp` and
+  context7 as `http` to `mcp.context7.com`. Neither calls a wrapper.
+- The Studio registers only exa.
+
+Merging ai-config's wrapper PR therefore changes nothing on those machines. The cutover on
+a machine is its re-run of the `claude mcp add ... -- ~/.claude/scripts/{firecrawl,context7}-mcp.sh`
+that `mcp-drift-check.sh` prints. A machine whose `~/.claude.json` already points at those
+scripts would break when ai-config merges. None was found on the reachable machines; the
+laptop and the work Macs were not checked.
 
 The binaries are installed by `./setup_env.sh -t developer` or by `-t update` with the npm
-section (a full run, or `--claude-only`). `-t setup_user` does not run the npm installs, so
-it is not the step to use.
+section (a full run, or `--claude-only`, which sets `UPDATE_CLAUDE`). `-t setup_user` does
+not run the npm installs.
 
-**A single `-t update` from a stale dotfiles checkout does not install them.**
-`_UPDATE_SECTION_ORDER` (`lib/update_summary.sh:5`) runs `ai-config`, then `npm`, then
-`git-repos`, and `git-repos` is the step that pulls dotfiles itself. So the npm section runs
-the package list from the checkout as it was when the run started. A machine whose dotfiles
-predates this PR pulls the new wrapper and installs the old list in the same run.
+**A single full `-t update` from a stale dotfiles checkout does not install them.**
+`run_update` pulls ai-config at `lib/workflows.sh:947`, runs npm at `:1121`, and pulls
+dotfiles itself only in `git-repos` at `:1360` (`lib/git_sync.sh:113`). So the npm section
+installs the package list the checkout had when the run started. `--claude-only` skips the
+ai-config section, which runs on full runs only.
 
-The per-machine step, on every machine with the firecrawl or context7 wrapper registered
-(`claude mcp list`), run before ai-config's PR merges:
+Per machine, before re-registering it:
 
 ```bash
-git -C ~/git-repos/personal/dotfiles pull --ff-only && \
-  ~/git-repos/personal/dotfiles/setup_env.sh -t update --claude-only
+# interactive shell: plain `ssh host '...'` has no brew/npm on PATH and fails at the brew check
+zsh -i -c 'git -C ~/git-repos/personal/dotfiles pull --ff-only && \
+  ~/git-repos/personal/dotfiles/setup_env.sh -t update --claude-only'
+zsh -i -c 'command -v firecrawl-mcp' && zsh -i -c 'command -v context7-mcp'
 ```
 
-then `command -v firecrawl-mcp context7-mcp` to confirm both resolve. The ai-config session
-is asked to make its wrapper's missing-binary message name this command instead of
-`-t developer`.
+Each binary is checked separately: under bash, `command -v a b` exits 0 when only one name
+resolves. Then re-register with the commands `mcp-drift-check.sh` prints, and confirm that
+`claude mcp list` shows firecrawl and context7 connected.
 
 ## Requirements
 
@@ -151,7 +159,7 @@ is asked to make its wrapper's missing-binary message name this command instead 
 - **R8.** `[Docs]` Backlog row 379 is removed, row 378 carries no pin count, and the CLAUDE.md `setup_windows.ps1 -update` line says the install is pinned.
 - **V1.** `make test` exits 0 with 0 `not ok`. Changing one of the two firecrawl-cli literals turns `windows_npm_pins.bats` red. Reverting R7's helper change turns the new scoped-token test red.
 - **V2.** The CI `powershell` job passes, since Pester is not installed on `claude`.
-- **V3.** After merge, on `claude`, the workstation and the Studio, the Rollout's pull-then-`--claude-only` command leaves `firecrawl-mcp` and `context7-mcp` on `PATH` at the pinned versions; record the `command -v` and `npm ls -g` output in the PR body.
+- **V3.** After merge, on `claude`, the workstation and the Studio, the Rollout's per-machine command leaves `firecrawl-mcp` and `context7-mcp` each resolving on `PATH` (checked separately) at the pinned versions. Record the `command -v` and `npm ls -g` output in the PR body.
 - **N1.** No PowerShell code reads `lib/constants.sh`, and no shared pin manifest is introduced.
 - **N2.** No MCP server package is installed on native Windows.
 - **N3.** No other npm pin changes value, and `firecrawl-cli` stays installed on every platform.
@@ -199,3 +207,21 @@ copy. ai-config holds its PR until the binaries are installed on the development
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (scoped: Section A Pester bullet, Section C last paragraph, Rollout, R2, V3)
+
+Reviewed at commit: `06c09f80`
+
+Finding: The Pester design, `--claude-only`, the paths and the empty-input behaviour are all
+clean. The Rollout's hazard model was wrong: the cutover is each machine's re-registration
+onto the wrappers, not ai-config's merge, because `claude` and the workstation still
+register firecrawl via `npx` and context7 via HTTP. Minor problems:
+- the command fails under a non-interactive `ssh`;
+- `command -v a b` exits 0 under bash with one name missing;
+- the cite pointed at `_UPDATE_SECTION_ORDER`, which is display order, not run order.
+Assumption: the laptop and the work Macs do not already register firecrawl or context7
+through `~/.claude/scripts/*-mcp.sh`. They are unreachable from here. To refute it on each
+machine, read `mcpServers.<name>.command` in `~/.claude.json`.
+Disposition: Addressed (operator, 2026-11-07). The Rollout is rewritten around
+re-registration, using an interactive shell, a per-binary check and `workflows.sh`
+run-order cites, and V3 is reworded.
