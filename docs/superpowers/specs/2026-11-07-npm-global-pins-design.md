@@ -1,7 +1,8 @@
 # npm global pins: Windows firecrawl-cli, and the firecrawl and context7 MCP servers
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-11-07
+- **Approved:** 2026-11-07
 
 ## Problem
 
