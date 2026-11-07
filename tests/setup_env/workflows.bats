@@ -2635,8 +2635,8 @@ _stub_refresher_fail() {
 # Every whitespace-separated token after '-g' on an npm global install line must be
 # pkg@<version>. Catches three regressions one regex cannot: an unpinned package, an
 # empty constant expanding to 'pkg@' (npm resolves that to latest), and a package
-# added later that no enumerated pattern knows about. Does not handle @scope/pkg
-# specs; none are used here.
+# added later that no enumerated pattern knows about. A pinned token is name@ver or
+# @scope/name@ver with a non-empty version; a scope's leading '@' is not a version.
 assert_all_npm_globals_pinned() {
   local _line
   local -a _toks
@@ -2646,7 +2646,7 @@ assert_all_npm_globals_pinned() {
         read -ra _toks <<< "${_line#npm install -g }"
         local _tok
         for _tok in "${_toks[@]}"; do
-          if [[ "${_tok}" != *@?* ]]; then
+          if ! [[ "${_tok}" =~ ^(@[^/@]+/)?[^@/]+@[^@]+$ ]]; then
             printf "unpinned npm global: %s (in: %s)\n" "${_tok}" "${_line}" >&2
             return 1
           fi
@@ -2655,6 +2655,28 @@ assert_all_npm_globals_pinned() {
     esac
   done < "${1}"
   return 0
+}
+
+@test "assert_all_npm_globals_pinned judges scoped and unscoped tokens" {
+  local _spec _expected _file _n=0
+  # Each row: expected status, then the install line. A scope's leading '@' must not
+  # count as a version separator, and 'pkg@' (empty version) must be refused.
+  while IFS='|' read -r _expected _spec; do
+    _n=$((_n + 1))
+    _file="${BATS_TEST_TMPDIR}/calls-${_n}"
+    printf '%s\n' "${_spec}" > "${_file}"
+    run assert_all_npm_globals_pinned "${_file}"
+    [ "${status}" -eq "${_expected}" ] || {
+      printf 'case %s (%s): expected %s got %s\n' "${_n}" "${_spec}" "${_expected}" "${status}" >&2
+      return 1
+    }
+  done <<'CASES'
+1|npm install -g @upstash/context7-mcp
+0|npm install -g @upstash/context7-mcp@4.4.4
+1|npm install -g jscpd
+1|npm install -g jscpd@
+0|npm install -g jscpd@5.4.1
+CASES
 }
 
 @test "run_developer_or_ansible pins every npm global package" {
