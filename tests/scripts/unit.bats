@@ -2271,6 +2271,93 @@ _run_cov_tree() {
   [ ! -e "${BATS_TEST_TMPDIR}/out/bats_run.log" ]
 }
 
+# An instrumented file changing during the traced run mixes line numbers from
+# two versions into one trace, and the score that follows is wrong while
+# looking normal (measured 2026-10-04: 76%/88% for a tree that measures
+# 91%/92.4%). The run must refuse rather than score.
+_add_mutate_fixture() {
+  cp "${REPO_ROOT}/tests/fixtures/coverage-shard/mutate.bats.fixture" "${COV_TREE}/tests/mutate.bats"
+  printf 'tests/green_a.bats\ntests/mutate.bats\n' > "${BATS_TEST_TMPDIR}/list"
+}
+
+@test "run-bash-coverage.sh traced run exits 1 without a score when an instrumented file changes mid-run" {
+  _make_cov_tree
+  _add_mutate_fixture
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"changed during the traced run"* ]]
+  [[ "$output" == *"${COV_TREE}/lib/tiny.sh"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+  # The unchanged file is not named.
+  [[ "$output" != *"${COV_TREE}/setup_env.sh"* ]]
+}
+
+@test "run-bash-coverage.sh --trace-only exits 1 and publishes no trace when an instrumented file changes mid-run" {
+  _make_cov_tree
+  _add_mutate_fixture
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"changed during the traced run"* ]]
+  # The log is still kept for the CI upload; the trace is not.
+  [ -s "${BATS_TEST_TMPDIR}/out/bats_run.log" ]
+  [ ! -e "${BATS_TEST_TMPDIR}/out/bash_trace.txt" ]
+}
+
+@test "run-bash-coverage.sh traced run exits 1 naming an instrumented file deleted mid-run" {
+  _make_cov_tree
+  _add_mutate_fixture
+  COV_FIXTURE_MUTATION=delete run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"changed during the traced run"* ]]
+  [[ "$output" == *"${COV_TREE}/lib/tiny.sh"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+}
+
+# A git shim ahead of the real one: every call passes through except
+# `hash-object`, which fails from call number COV_HASH_FAIL_FROM on. The fixture
+# tree instruments two files, so 1 fails the fingerprint taken before bats and
+# 3 fails the one taken after.
+_install_failing_hash_git() {
+  local _real_git _clean_path
+  _clean_path="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
+  _real_git="$(PATH="${_clean_path}" command -v git)"
+  mkdir -p "${BATS_TEST_TMPDIR}/shim"
+  cat > "${BATS_TEST_TMPDIR}/shim/git" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "hash-object" ]]; then
+  _n=\$(( \$(cat "${BATS_TEST_TMPDIR}/hash-calls" 2>/dev/null || printf 0) + 1 ))
+  printf '%s' "\${_n}" > "${BATS_TEST_TMPDIR}/hash-calls"
+  (( _n >= COV_HASH_FAIL_FROM )) && exit 128
+fi
+exec "${_real_git}" "\$@"
+EOF
+  chmod +x "${BATS_TEST_TMPDIR}/shim/git"
+}
+
+@test "run-bash-coverage.sh exits 1 without running bats when the files cannot be fingerprinted first" {
+  _make_cov_tree
+  _install_failing_hash_git
+  printf 'tests/green_a.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  PATH="${BATS_TEST_TMPDIR}/shim:${PATH}" COV_HASH_FAIL_FROM=1 \
+    run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not fingerprint the instrumented files before the traced run"* ]]
+  [[ "$output" != *"Running "*" tests with coverage tracer"* ]]
+  [ ! -e "${COV_TREE}/coverage/bash_trace.fifo" ]
+}
+
+@test "run-bash-coverage.sh exits 1 without a score when the files cannot be fingerprinted after the run" {
+  _make_cov_tree
+  _install_failing_hash_git
+  printf 'tests/green_a.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  PATH="${BATS_TEST_TMPDIR}/shim:${PATH}" COV_HASH_FAIL_FROM=3 \
+    run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not fingerprint the instrumented files after the traced run"* ]]
+  [[ "$output" == *"ok 1 fixture green a"* ]]
+  [[ "$output" != *"Overall bash coverage"* ]]
+}
+
 # The union-equality assertion below is structural (a union is order- and
 # duplication-insensitive); the specific TOTAL covered count is the real check
 # that the traces were scored at all.

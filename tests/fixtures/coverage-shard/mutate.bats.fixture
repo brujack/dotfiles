@@ -1,0 +1,12 @@
+# Green, but changes an instrumented file while the traced run is in progress:
+# the shape of a commit landing in the worktree mid-run. COV_FIXTURE_MUTATION
+# picks the change: "append" (content changes) or "delete" (file goes away).
+@test "fixture mutate" {
+  source "${BATS_TEST_DIRNAME}/../lib/tiny.sh"
+  run tiny_add 1
+  [ "$status" -eq 0 ]
+  case "${COV_FIXTURE_MUTATION:-append}" in
+    delete) rm -f "${BATS_TEST_DIRNAME}/../lib/tiny.sh" ;;
+    *) printf '# mid-run edit\n' >> "${BATS_TEST_DIRNAME}/../lib/tiny.sh" ;;
+  esac
+}
