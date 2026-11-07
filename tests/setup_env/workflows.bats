@@ -2677,6 +2677,8 @@ assert_all_npm_globals_pinned() {
 1|npm install -g jscpd@
 0|npm install -g jscpd@5.4.1
 CASES
+  # Every row ran: an emptied table would otherwise pass having tested nothing.
+  [ "${_n}" -eq 5 ]
 }
 
 @test "run_developer_or_ansible pins every npm global package" {
