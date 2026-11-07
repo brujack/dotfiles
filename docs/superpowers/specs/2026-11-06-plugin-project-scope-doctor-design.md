@@ -268,3 +268,14 @@ each block approved by the operator in that session. Results:
   wrote a project record into the real `~/.claude/plugins/installed_plugins.json` while
   `uninstall` cleaned only the redirected copy. The stray record was removed by hand,
   with a backup taken first.
+
+**Addendum 2026-11-07: the retirement premise was wrong.** Claude Code itself writes a
+`project` record for every plugin a project's `.claude/settings.json` enables, on every
+session start, in every project directory and worktree. Measured on `claude` (Claude Code
+2.1.318): a one-turn `claude -p` in a scratch repo enabling only `context7` created exactly
+that record, and a scratch repo with no project settings created none. The fleet count above
+found none on `claude` only because each such record also had a user record beside it. The
+records do not change what loads: with a scratch repo's `security-guidance` record hand-set to
+2.0.17, the session loaded 2.0.18. The remaining cost is accumulation, including records for
+deleted worktrees; the Backlog row "Claude Code writes a project-scope plugin record per
+project and worktree" carries it.
