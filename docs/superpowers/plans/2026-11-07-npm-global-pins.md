@@ -1,5 +1,7 @@
 # npm Global Pins Implementation Plan
 
+> **Status: DONE** — merged in dotfiles#433 (256817b3), 2026-11-07.
+
 spec: docs/superpowers/specs/2026-11-07-npm-global-pins-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
