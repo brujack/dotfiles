@@ -27,9 +27,8 @@ coverage/
 #
 # `.coverage` is the only one that was genuinely untracked here -- a `coverage
 # run` during review left one in the worktree, one `git add -A` from being
-# committed. `__pycache__/` and `*.pyc` were already covered two ways:
-# `.gitignore_global` carries both, and `.claude/scripts/*` below already
-# shadows that directory. They are repeated here anyway because a global
+# committed. `__pycache__/` and `*.pyc` were already covered by
+# `.gitignore_global`. They are repeated here anyway because a global
 # excludesFile is per-machine and buys nothing on CI or a fresh clone.
 #
 # `.hypothesis/` is deliberately ABSENT. Hypothesis writes

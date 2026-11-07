@@ -227,8 +227,8 @@ endif
 # This runs SERIAL, and as a prerequisite of `test` -- so under a serial
 # `make test` (what CI and pre-push run; not under -j, which may overlap
 # prerequisites) it finishes before the parallel bats phase starts and gets
-# none of `--jobs`. Adding a second
-# suite here is what makes that worth saying: the figure a `make test` run
+# none of `--jobs`. With several suites
+# here that is worth saying: the figure a `make test` run
 # reports for wall-clock is the bats phase, and this phase is invisible in it.
 # Parallelising it is backlogged, not done.
 test-python:
