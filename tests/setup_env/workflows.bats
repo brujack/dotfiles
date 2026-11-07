@@ -3878,7 +3878,7 @@ _claude_only_env() {
   run run_update
   [ "$status" -eq 0 ]
   # Machines set up before the -g fix hold a cwd-local, unpinned copy. The update
-  # chain is what converges them, so json2yaml has to be in it like the other three.
+  # chain is what converges them, so json2yaml has to be in it like every other npm global.
   grep -qE '^npm install -g .*json2yaml@1\.1\.0' "${MOCK_CALLS_FILE}"
 }
 
