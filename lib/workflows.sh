@@ -661,7 +661,6 @@ _require_npm_pins() {
   local _missing=""
   [[ -z "${JSCPD_VER}" ]] && _missing="${_missing} JSCPD_VER"
   [[ -z "${JSON2YAML_VER}" ]] && _missing="${_missing} JSON2YAML_VER"
-  [[ -z "${FIRECRAWL_CLI_VER}" ]] && _missing="${_missing} FIRECRAWL_CLI_VER"
   [[ -z "${EXA_MCP_SERVER_VER}" ]] && _missing="${_missing} EXA_MCP_SERVER_VER"
   if [[ -n "${_missing}" ]]; then
     printf "ERROR: unset npm version pin(s):%s — refusing to install unpinned globals\n" \
@@ -685,9 +684,6 @@ run_developer_or_ansible() {
 
   printf "Installing jscpd via npm\n"
   npm install -g "jscpd@${JSCPD_VER}" || return 1
-
-  printf "Installing firecrawl-cli via npm\n"
-  npm install -g "firecrawl-cli@${FIRECRAWL_CLI_VER}" || return 1
 
   printf "Installing exa-mcp-server via npm\n"
   npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
@@ -1125,7 +1121,6 @@ run_update() {
     # continues. Silently installing latest would defeat the pins entirely.
     if _require_npm_pins; then
       npm install -g "jscpd@${JSCPD_VER}" "json2yaml@${JSON2YAML_VER}" \
-        "firecrawl-cli@${FIRECRAWL_CLI_VER}" \
         "exa-mcp-server@${EXA_MCP_SERVER_VER}" 2>&1 \
         | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
       _update_record_end "npm" "${PIPESTATUS[0]}"

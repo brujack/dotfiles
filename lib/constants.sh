@@ -23,8 +23,6 @@ GITLEAKS_VER="8.30.1"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 EXA_MCP_SERVER_VER="3.4.2"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
-FIRECRAWL_CLI_VER="1.26.3"
-# read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSCPD_VER="5.4.1"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSON2YAML_VER="1.1.0"

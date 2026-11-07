@@ -2520,7 +2520,7 @@ _stub_refresher_fail() {
   [ "$status" -ne 0 ]
 }
 
-@test "run_developer_or_ansible does not install firecrawl-cli when jscpd npm install fails" {
+@test "run_developer_or_ansible does not install exa-mcp-server when jscpd npm install fails" {
   export MACOS=1
   unset LINUX UBUNTU
   npm() {
@@ -2531,7 +2531,7 @@ _stub_refresher_fail() {
     return 0
   }
   run run_developer_or_ansible
-  ! grep -q "firecrawl-cli" "${MOCK_CALLS_FILE}"
+  ! grep -q "exa-mcp-server" "${MOCK_CALLS_FILE}"
 }
 
 @test "run_developer_or_ansible on Linux neither fetches nor builds ruby-install" {
@@ -2665,7 +2665,6 @@ assert_all_npm_globals_pinned() {
   # bats then emits no `not ok` line at all, so the failing assertion is invisible.
   [ "$status" -eq 0 ]
   grep -q "npm install -g jscpd@5.4.1" "${MOCK_CALLS_FILE}"
-  grep -q "npm install -g firecrawl-cli@1.26.3" "${MOCK_CALLS_FILE}"
   grep -q "npm install -g exa-mcp-server@3.4.2" "${MOCK_CALLS_FILE}"
 }
 
@@ -3852,7 +3851,7 @@ _claude_only_env() {
   run run_update
   [ "$status" -eq 0 ]
   # Machines set up before the -g fix hold a cwd-local, unpinned copy. The update
-  # chain is what converges them, so json2yaml has to be in it like the other three.
+  # chain is what converges them, so json2yaml has to be in it like the other two.
   grep -qE '^npm install -g .*json2yaml@1\.1\.0' "${MOCK_CALLS_FILE}"
 }
 
@@ -3870,7 +3869,6 @@ _claude_only_env() {
   # first package literally follows "npm install -g " — the other two sit
   # further along the same line. Anchor at line start instead so dropping -g
   # (which would still leave the version pins intact) is still caught.
-  grep -qE '^npm install -g .*firecrawl-cli@1\.26\.3' "${MOCK_CALLS_FILE}"
   grep -qE '^npm install -g .*exa-mcp-server@3\.4\.2' "${MOCK_CALLS_FILE}"
   assert_all_npm_globals_pinned "${MOCK_CALLS_FILE}"
 }
@@ -3917,10 +3915,10 @@ _claude_only_env() {
 }
 
 @test "_require_npm_pins returns non-zero for an UNSET pin, not just an empty one" {
-  unset FIRECRAWL_CLI_VER
+  unset EXA_MCP_SERVER_VER
   run _require_npm_pins
   [ "$status" -ne 0 ]
-  [[ "$output" == *"FIRECRAWL_CLI_VER"* ]]
+  [[ "$output" == *"EXA_MCP_SERVER_VER"* ]]
 }
 
 @test "_require_npm_pins names every missing pin, not only the first" {

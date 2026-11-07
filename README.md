@@ -230,7 +230,7 @@ Each `update` run appends a timestamped entry to `~/.dotfiles-update.log`. The e
 [OK]   apt                  14 package(s) (curl 7.88.1, git 2.44.0, ...)
 [OK]   snap                 2 package(s) (firefox 124.0, chromium 123.0)
 [OK]   mas                  1 app(s) (Slack (4.42))
-[OK]   claude               2 plugin(s) updated (superpowers: 5.0.8, context7: 1.2.0)
+[OK]   claude               2 plugin(s) updated (superpowers: 5.0.8, caveman: 4.0.1)
 [OK]   pip                  3 package(s) (ansible, boto3, requests)
 [OK]   pyenv-shims          every venv entry has a shim
 [OK]   cargo-tools          1 crate(s) (cargo-tarpaulin 0.35.2)

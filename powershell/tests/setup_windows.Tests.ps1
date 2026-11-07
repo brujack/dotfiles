@@ -442,7 +442,6 @@ Describe "Invoke-DotfilesSetup" {
     Mock Install-AiConfig                      { }
     Mock Set-ClaudeConfig                      { }
     Mock Set-CursorConfig                      { }
-    Mock Set-NpmGlobalPackages                 { }
   }
 
   It "calls Set-WindowsOption" {
@@ -487,10 +486,6 @@ Describe "Invoke-DotfilesSetup" {
     Invoke-DotfilesSetup
     Should -Invoke Set-CursorConfig -Times 1 -Exactly
   }
-  It "calls Set-NpmGlobalPackages" {
-    Invoke-DotfilesSetup
-    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
-  }
 }
 
 Describe "Invoke-DotfilesUpdate" {
@@ -498,7 +493,6 @@ Describe "Invoke-DotfilesUpdate" {
     Mock choco                 { }
     Mock Install-WindowsUpdate { }
     Mock Install-AiConfig      { }
-    Mock Set-NpmGlobalPackages { }
     Mock Test-Path             { $false }
     Mock Write-Output          { }
   }
@@ -518,10 +512,6 @@ Describe "Invoke-DotfilesUpdate" {
   It "calls Install-AiConfig to pull latest config" {
     Invoke-DotfilesUpdate
     Should -Invoke Install-AiConfig -Times 1 -Exactly
-  }
-  It "calls Set-NpmGlobalPackages to update npm globals" {
-    Invoke-DotfilesUpdate
-    Should -Invoke Set-NpmGlobalPackages -Times 1 -Exactly
   }
 }
 
@@ -718,27 +708,3 @@ Describe "Set-CursorConfig" {
   }
 }
 
-Describe "Set-NpmGlobalPackages" {
-  BeforeEach {
-    Mock npm           { }
-    Mock Write-Output  { }
-    Mock Write-Warning { }
-  }
-
-  It "calls npm install -g firecrawl-cli when node is available" {
-    Mock Get-Command {
-      [PSCustomObject]@{ Name = 'node' }
-    } -ParameterFilter { $Name -eq 'node' }
-    Set-NpmGlobalPackages
-    Should -Invoke npm -ParameterFilter {
-      $args -contains 'install' -and $args -contains '-g' -and $args -contains 'firecrawl-cli'
-    } -Times 1
-  }
-
-  It "skips npm and warns when node is not in PATH" {
-    Mock Get-Command { $null } -ParameterFilter { $Name -eq 'node' }
-    Set-NpmGlobalPackages
-    Should -Invoke npm           -Times 0
-    Should -Invoke Write-Warning -Times 1
-  }
-}
