@@ -800,9 +800,11 @@ _check_red_suite() {
 # heuristic-disagreement count to show for it. So every instrumented file is
 # fingerprinted before bats starts and again once it ends, and any difference
 # refuses the run. A refusal, not a retry: the tree is not stable, so a second
-# run proves nothing about the first. Residual window: an edit between the
-# second fingerprint and _score_trace reading the files is not seen; it is
-# seconds against the minutes the suite takes.
+# run proves nothing about the first. Residual window: an edit after the
+# second fingerprint is not seen. In a single traced run that is the seconds
+# before _score_trace reads the files. Under --trace-only it lasts until the
+# separate --score run, which fingerprints nothing; CI is safe only because
+# every shard job and the scoring job check out the same commit.
 _source_fingerprints() {
     local _f _h
     for _f in "${INCLUDE_FILES[@]}"; do
