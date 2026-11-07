@@ -439,7 +439,7 @@ Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing Syst
 ```bash
 make test          # lint + Python tests + all BATS tests (parallel; override with JOBS=N, force serial with HAVE_PARALLEL=)
 make test-unit     # unit + profiles tests only (faster)
-make test-python   # the vendored .claude/scripts/triage_log.py suite only
+make test-python   # the Python helper suites only (tests/test_*.py)
 make lint          # syntax + shellcheck only (shellcheck runs JOBS parallel workers)
 make bash-coverage # measure bash line coverage (PS4 xtrace, parallel under JOBS); CI gates at 91%
 make install-hooks # install pre-commit hook (runs lint + ggshield before each commit)

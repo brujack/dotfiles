@@ -1,6 +1,6 @@
 """Tests for scripts/phrase_check.py.
 
-Loaded by path (the script is not a package) — same pattern as test_triage_log.py.
+Loaded by path (the script is not a package).
 """
 
 import contextlib

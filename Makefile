@@ -219,16 +219,16 @@ ifneq ($(strip $(BATS_SERIAL_RAN)),)
 endif
 endif
 
-# Python here is .claude/scripts/triage_log.py, vendored from ai-config so
-# bug-fix-cycle can emit telemetry, and scripts/phrase_check.py, the CLAUDE.md
-# manifest checker. Each ships with its suite rather than untested: a repo
+# Python here is the scripts/ and lib/ helpers (scripts/phrase_check.py,
+# lib/claude_plugin_prune.py and the rest) that `unittest discover` finds a
+# tests/test_*.py for. Each ships with its suite rather than untested: a repo
 # gating at 90% coverage does not take unverified code to unblock a gate.
 #
 # This runs SERIAL, and as a prerequisite of `test` -- so under a serial
 # `make test` (what CI and pre-push run; not under -j, which may overlap
 # prerequisites) it finishes before the parallel bats phase starts and gets
-# none of `--jobs`. Adding a second
-# suite here is what makes that worth saying: the figure a `make test` run
+# none of `--jobs`. With several suites
+# here that is worth saying: the figure a `make test` run
 # reports for wall-clock is the bats phase, and this phase is invisible in it.
 # Parallelising it is backlogged, not done.
 test-python:
