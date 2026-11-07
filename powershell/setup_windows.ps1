@@ -16,6 +16,10 @@ param(
   [Switch]$update
 )
 
+# Copy of FIRECRAWL_CLI_VER in lib/constants.sh (this script cannot source it);
+# tests/scripts/windows_npm_pins.bats fails if the two differ.
+$FirecrawlCliVersion = '1.26.3'
+
 function New-SafeLink {
   param(
     [string]$Target,
@@ -100,7 +104,7 @@ function Set-NpmGlobalPackages {
     return
   }
   Write-Output "Installing npm global packages"
-  npm install -g firecrawl-cli
+  npm install -g "firecrawl-cli@$FirecrawlCliVersion"
 }
 
 function Install-ChocolateyPackage {

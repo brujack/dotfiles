@@ -25,6 +25,7 @@ CONTEXT7_MCP_VER="4.4.4"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 EXA_MCP_SERVER_VER="3.4.2"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
+# also copied into powershell/setup_windows.ps1 ($FirecrawlCliVersion); tests/scripts/windows_npm_pins.bats fails on drift
 FIRECRAWL_CLI_VER="1.26.3"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 FIRECRAWL_MCP_VER="3.38.0"
