@@ -219,9 +219,9 @@ ifneq ($(strip $(BATS_SERIAL_RAN)),)
 endif
 endif
 
-# Python here is .claude/scripts/triage_log.py, vendored from ai-config so
-# bug-fix-cycle can emit telemetry, and scripts/phrase_check.py, the CLAUDE.md
-# manifest checker. Each ships with its suite rather than untested: a repo
+# Python here is the scripts/ and lib/ helpers (scripts/phrase_check.py,
+# lib/claude_plugin_prune.py and the rest) that `unittest discover` finds a
+# tests/test_*.py for. Each ships with its suite rather than untested: a repo
 # gating at 90% coverage does not take unverified code to unblock a gate.
 #
 # This runs SERIAL, and as a prerequisite of `test` -- so under a serial
