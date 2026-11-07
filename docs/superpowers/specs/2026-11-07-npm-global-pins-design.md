@@ -226,3 +226,25 @@ machine, read `mcpServers.<name>.command` in `~/.claude.json`.
 Disposition: Addressed (operator, 2026-11-07). The Rollout is rewritten around
 re-registration, using an interactive shell, a per-binary check and `workflows.sh`
 run-order cites, and V3 is reworded.
+
+## Spec alignment (2026-11-07)
+
+- spec: docs/superpowers/specs/2026-11-07-npm-global-pins-design.md
+- anchor: df9a61aca6a21db77316860ac3a59a430493aa32
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: make test at 53f7c6cf: 3838 ok, 0 not ok, python 225 OK, rc 0. Mutation $FirecrawlCliVersion='1.26.4' -> windows_npm_pins.bats 1 not ok; reverting helper to *@?* -> 'judges scoped' case 1 expected 1 got 0.
+- V2: pending: CI powershell job runs on the PR. Pester run locally on the Studio (4/4) and with Pester 6.2.0 in a scratch copy on claude.
+- V3: pending post-merge per-machine rollout on claude, workstation, Studio.
