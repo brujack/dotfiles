@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
@@ -18,6 +20,8 @@ teardown() {
   unset MOCK_BREW_LEAVES
   unset MOCK_BREW_LIST_FORMULA
   unset MOCK_BREW_LIST_CASK
+  unset MOCK_BREW_BROKEN_CASKS
+  unset MOCK_BREW_LIST_CASK_VERSIONS_EXIT
   unset MOCK_BREW_TAPS
   unset MOCK_WHICH_MISSING
   unset MACOS
@@ -256,6 +260,101 @@ teardown() {
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
   grep -q "missing casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
   grep -q "cask: missing-app" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+}
+
+# ── half-installed casks (macOS only) ─────────────────────────────────────────
+# A cask whose Caskroom `latest` link points at a missing version directory is
+# still named by `brew list --cask`, but `brew list --cask --versions` exits 1
+# on it. Seen 2026-11-07 on laptop-1 (gcloud-cli, broken since 2026-10-20)
+# while drift reported "casks clean".
+
+@test "_update_check_brewfile_drift: WARN names a half-installed cask and its reinstall remedy" {
+  export MACOS=1
+  printf 'brew "git"\ncask "gcloud-cli"\ncask "warp"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="gcloud-cli warp"
+  export MOCK_BREW_BROKEN_CASKS="gcloud-cli"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "1 broken casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -qx "    cask: gcloud-cli (brew reinstall --cask gcloud-cli)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  run ! grep -q "reinstall --cask warp" "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+}
+
+@test "_update_check_brewfile_drift: healthy casks cost one --versions call and no per-cask probe" {
+  export MACOS=1
+  printf 'brew "git"\ncask "gcloud-cli"\ncask "warp"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="gcloud-cli warp"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "OK" ]
+  grep -q "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ "$(grep -cx 'brew list --cask --versions' "${MOCK_CALLS_FILE}")" -eq 1 ]
+  run ! grep -qE '^brew list --cask --versions [^-]' "${MOCK_CALLS_FILE}"
+}
+
+@test "_update_check_brewfile_drift: two half-installed casks are counted and each named, the healthy one is not" {
+  export MACOS=1
+  printf 'brew "git"\ncask "gcloud-cli"\ncask "warp"\ncask "zoom"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="gcloud-cli warp zoom"
+  export MOCK_BREW_BROKEN_CASKS="gcloud-cli zoom"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -q "2 broken casks" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  [ "$(grep -c 'brew reinstall --cask' "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift")" -eq 2 ]
+  grep -qx "    cask: gcloud-cli (brew reinstall --cask gcloud-cli)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  grep -qx "    cask: zoom (brew reinstall --cask zoom)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+}
+
+@test "_update_check_brewfile_drift: a failed --versions listing with no broken cask is a WARN, never clean" {
+  export MACOS=1
+  printf 'brew "git"\ncask "warp"\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="warp"
+  export MOCK_BREW_LIST_CASK_VERSIONS_EXIT=3
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  run ! grep -q "casks clean" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -q "cask listing failed (rc 3)" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
+  grep -qx 'brew list --cask --versions warp' "${MOCK_CALLS_FILE}"
+}
+
+@test "_update_check_brewfile_drift: a half-installed cask is reported even when its capability tag is inactive" {
+  export MACOS=1
+  unset HAS_DOCKER
+  printf 'brew "git"\ncask "docker"  # [HAS_DOCKER]\n' > "${BATS_TEST_TMPDIR}/Brewfile"
+  export _OVERRIDE_BREWFILE_PATH="${BATS_TEST_TMPDIR}/Brewfile"
+  export MOCK_BREW_LEAVES="git"
+  export MOCK_BREW_LIST_FORMULA="git"
+  export MOCK_BREW_LIST_CASK="docker"
+  export MOCK_BREW_BROKEN_CASKS="docker"
+  export MOCK_BREW_TAPS=""
+  run _update_check_brewfile_drift
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_brew-drift")" = "WARN" ]
+  grep -qx "    cask: docker (brew reinstall --cask docker)" \
+    "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"
+  run ! grep -q "untracked" "${_DOTFILES_RUN_TMPDIR}/result_brew-drift"
 }
 
 # ── Linux: casks not checked ──────────────────────────────────────────────────

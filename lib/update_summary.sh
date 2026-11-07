@@ -878,7 +878,9 @@ _brewfile_parse_inactive() {
 
 # _update_check_brewfile_drift
 # Compares Brewfile (formulae, casks on macOS, taps) against locally installed
-# Homebrew packages. Records OK/WARN/SKIP into the update summary.
+# Homebrew packages. Records OK/WARN/SKIP into the update summary. On macOS it
+# also reports half-installed casks (`brew list --cask --versions` fails on them)
+# with a `brew reinstall --cask` remedy.
 # Entries tagged # [HAS_*] in the Brewfile are invisible to drift detection on
 # machines where that capability is not set — they are neither "missing" nor
 # "untracked", so packages installed for another profile cause no noise.
@@ -944,11 +946,30 @@ _update_check_brewfile_drift() {
     "${_DOTFILES_RUN_TMPDIR}/drift_inst_taps")
 
   # Cask drift: macOS only (Linux Homebrew does not support casks)
-  local _untracked_casks="" _missing_casks=""
+  local _untracked_casks="" _missing_casks="" _broken_casks="" _cask_list_rc=0
   if [[ -n ${MACOS:-} ]]; then
     _brewfile_parse_section  cask "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_bf_casks"
     _brewfile_parse_inactive cask "${_brewfile}" | sort > "${_DOTFILES_RUN_TMPDIR}/drift_ignore_casks"
-    brew list --cask 2>/dev/null | sort \
+    # `brew list --cask` names a half-installed cask (Caskroom `latest` link to a
+    # missing version directory) as installed; `--versions` exits 1 on it. One
+    # --versions call covers the healthy case; only on failure probe each cask to
+    # name the broken ones. A broken cask is reported whatever its capability tag:
+    # a broken install is never another profile's noise.
+    brew list --cask --versions > "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_versions" 2>/dev/null \
+      || _cask_list_rc=$?
+    if [[ "${_cask_list_rc}" -eq 0 ]]; then
+      cut -d' ' -f1 "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_versions" \
+        > "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_names"
+    else
+      brew list --cask 2>/dev/null > "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_names"
+      local _cask
+      while IFS= read -r _cask; do
+        [[ -z "${_cask}" ]] && continue
+        brew list --cask --versions "${_cask}" >/dev/null 2>&1 </dev/null \
+          || _broken_casks+="${_cask}"$'\n'
+      done < "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_names"
+    fi
+    sort "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks_names" \
       | comm -23 - "${_DOTFILES_RUN_TMPDIR}/drift_ignore_casks" \
       > "${_DOTFILES_RUN_TMPDIR}/drift_inst_casks"
     _untracked_casks=$(comm -13 "${_DOTFILES_RUN_TMPDIR}/drift_bf_casks" \
@@ -965,6 +986,13 @@ _update_check_brewfile_drift() {
   [[ -n "${_missing_taps}" ]]       && _has_drift=1
   [[ -n "${_untracked_casks}" ]]    && _has_drift=1
   [[ -n "${_missing_casks}" ]]      && _has_drift=1
+  [[ -n "${_broken_casks}" ]]       && _has_drift=1
+  # A failed listing that no single cask explains is unknown, not clean.
+  local _cask_list_unexplained=0
+  if [[ "${_cask_list_rc}" -ne 0 ]] && [[ -z "${_broken_casks}" ]]; then
+    _cask_list_unexplained=1
+    _has_drift=1
+  fi
 
   if [[ "${_has_drift}" -eq 0 ]]; then
     local _clean_msg="formulae clean"
@@ -990,6 +1018,11 @@ _update_check_brewfile_drift() {
     _missing_c_count=$(printf '%s\n' "${_missing_casks}" | grep -c . || true)
     [[ "${_untracked_c_count}" -gt 0 ]] && _summary+="${_untracked_c_count} untracked casks, "
     [[ "${_missing_c_count}" -gt 0 ]]   && _summary+="${_missing_c_count} missing casks, "
+    local _broken_c_count
+    _broken_c_count=$(printf '%s' "${_broken_casks}" | grep -c . || true)
+    [[ "${_broken_c_count}" -gt 0 ]]    && _summary+="${_broken_c_count} broken casks, "
+    [[ "${_cask_list_unexplained}" -eq 1 ]] \
+      && _summary+="cask listing failed (rc ${_cask_list_rc}), "
   fi
   [[ "${_untracked_t_count}" -gt 0 ]] && _summary+="${_untracked_t_count} untracked taps, "
   [[ "${_missing_t_count}" -gt 0 ]]   && _summary+="${_missing_t_count} missing taps, "
@@ -1028,6 +1061,16 @@ _update_check_brewfile_drift() {
       [[ -z "${_pkg}" ]] && continue
       _detail+="    tap: ${_pkg}"$'\n'
     done <<< "${_missing_taps}"
+  fi
+  if [[ -n "${_broken_casks}" ]]; then
+    _detail+="  Broken (installed, brew cannot read its version):"$'\n'
+    while IFS= read -r _pkg; do
+      [[ -z "${_pkg}" ]] && continue
+      _detail+="    cask: ${_pkg} (brew reinstall --cask ${_pkg})"$'\n'
+    done <<< "${_broken_casks}"
+  fi
+  if [[ "${_cask_list_unexplained}" -eq 1 ]]; then
+    _detail+="  brew list --cask --versions exited ${_cask_list_rc}, but every per-cask probe succeeded; cask state unknown"$'\n'
   fi
 
   printf '%s' "${_detail}" > "${_DOTFILES_RUN_TMPDIR}/detail_brew-drift"

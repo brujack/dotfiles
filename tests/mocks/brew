@@ -8,6 +8,31 @@ case "$1" in
     exit 0
     ;;
   list)
+    # MOCK_BREW_BROKEN_CASKS (space-separated) models a half-installed cask: real
+    # `brew list --cask` still names it, but `brew list --cask --versions` exits 1
+    # with "Error: Cask '<name>' is not installed." -- for the whole listing, and
+    # for a per-name probe of that cask. MOCK_BREW_LIST_CASK_VERSIONS_EXIT fails
+    # only the whole-listing --versions call, leaving per-name probes healthy.
+    if [[ "$*" == *"--cask"* && "$*" == *"--versions"* ]]; then
+      _mock_names=()
+      for _mock_arg in "${@:2}"; do
+        [[ "${_mock_arg}" == -* ]] || _mock_names+=("${_mock_arg}")
+      done
+      # shellcheck disable=SC2086 # word-splitting is the point: the variable is a space-separated list
+      for _mock_broken in ${MOCK_BREW_BROKEN_CASKS:-}; do
+        if [[ ${#_mock_names[@]} -eq 0 || " ${_mock_names[*]} " == *" ${_mock_broken} "* ]]; then
+          printf "Error: Cask '%s' is not installed.\n" "${_mock_broken}" >&2
+          exit 1
+        fi
+      done
+      if [[ ${#_mock_names[@]} -gt 0 ]]; then
+        printf "%s 1.0\n" "${_mock_names[@]}"
+        exit 0
+      fi
+      if [[ -n "${MOCK_BREW_LIST_CASK_VERSIONS_EXIT:-}" ]]; then
+        exit "${MOCK_BREW_LIST_CASK_VERSIONS_EXIT}"
+      fi
+    fi
     if [[ "$*" == *"--cask"* ]]; then
       # shellcheck disable=SC2086 # word-splitting is the point: renders a space-separated list one-per-line, as real brew does
       printf "%s\n" ${MOCK_BREW_LIST_CASK:-}
