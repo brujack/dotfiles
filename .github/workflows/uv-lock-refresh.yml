@@ -66,19 +66,19 @@ jobs:
             tar -xzf /tmp/uv.tar.gz -C /tmp
             sudo install -m755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
             uv --version | grep -q "uv ${UV_VER}"
-          } 2>&1 | tee "${RUNNER_TEMP}/install-uv.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/10-install-uv.log"
 
       - name: Refresh lock
         run: |
           mkdir -p "${RUNNER_TEMP}/out"
           # stdout carries only the result word; the script's tool output is stderr.
           { bash scripts/refresh-uv-lock.sh "${RUNNER_TEMP}/out/body.md" > "${RUNNER_TEMP}/refresh.out"; } \
-            2>&1 | tee "${RUNNER_TEMP}/refresh.log"
+            2>&1 | tee "${RUNNER_TEMP}/20-refresh.log"
           result="$(tail -n 1 "${RUNNER_TEMP}/refresh.out")"
           case "${result}" in
             "changed" | "no changes") ;;
             *)
-              printf 'unexpected result word: %s\n' "${result}" 2>&1 | tee -a "${RUNNER_TEMP}/refresh.log"
+              printf 'unexpected result word: %s\n' "${result}" 2>&1 | tee -a "${RUNNER_TEMP}/20-refresh.log"
               exit 1
               ;;
           esac
@@ -140,7 +140,7 @@ jobs:
                 ;;
             esac
             printf 'result=%s\n' "${result}" >> "${GITHUB_OUTPUT}"
-          } 2>&1 | tee "${RUNNER_TEMP}/read-result.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/30-read-result.log"
 
       # Exactly the six files, by name: the artifact came from a job that ran
       # third-party build code, so nothing else is taken from it.
@@ -154,7 +154,7 @@ jobs:
             cp "${RUNNER_TEMP}/in/requirements-ci-test.txt" requirements-ci-test.txt
             cp "${RUNNER_TEMP}/in/requirements-ci-mutation.txt" requirements-ci-mutation.txt
             cp "${RUNNER_TEMP}/in/requirements-ci-audit.txt" requirements-ci-audit.txt
-          } 2>&1 | tee "${RUNNER_TEMP}/stage.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/40-stage.log"
 
       # The repo is public and a fork can name its branch the same; only a PR
       # from this repository counts.
@@ -170,7 +170,7 @@ jobs:
             fi
             number="$(jq -r '.[0].number // empty' <<< "${prs}")"
             printf 'number=%s\n' "${number}" >> "${GITHUB_OUTPUT}"
-          } 2>&1 | tee "${RUNNER_TEMP}/find-pr.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/50-find-pr.log"
 
       - name: Publish refresh branch and PR
         if: steps.refresh.outputs.result == 'changed'
@@ -190,7 +190,7 @@ jobs:
               gh pr create --base master --head chore/uv-lock-refresh \
                 --title "chore(deps): refresh uv.lock" --body-file "${RUNNER_TEMP}/in/body.md"
             fi
-          } 2>&1 | tee "${RUNNER_TEMP}/publish.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/60-publish.log"
 
       - name: Close refresh PR when nothing changed
         if: steps.refresh.outputs.result == 'no changes' && steps.find_pr.outputs.number != ''
@@ -200,7 +200,7 @@ jobs:
           {
             gh pr comment "${PR_NUMBER}" --body "master already holds the current resolution; closing."
             gh pr close "${PR_NUMBER}"
-          } 2>&1 | tee "${RUNNER_TEMP}/close-pr.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/70-close-pr.log"
 
       - name: Close failure issue
         run: |
@@ -210,7 +210,7 @@ jobs:
               gh issue comment "${issue}" --body "Recovered in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
               gh issue close "${issue}"
             fi
-          } 2>&1 | tee "${RUNNER_TEMP}/close-issue.log"
+          } 2>&1 | tee "${RUNNER_TEMP}/80-close-issue.log"
 
       - name: Upload publish logs
         if: always()
@@ -246,7 +246,13 @@ jobs:
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           newest=""
           if [[ -d "${RUNNER_TEMP}/logs" ]]; then
-            newest="$(find "${RUNNER_TEMP}/logs" -maxdepth 1 -name '*.log' -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)"
+            # Downloaded files all carry extraction-time mtimes, so order by the
+            # numeric name prefix: a failed step stops its job, so the highest
+            # number is the failing (or last-run) step.
+            name="$(find "${RUNNER_TEMP}/logs" -maxdepth 1 -name '[0-9][0-9]-*.log' -printf '%f\n' | LC_ALL=C sort | tail -n 1)"
+            if [[ -n "${name}" ]]; then
+              newest="${RUNNER_TEMP}/logs/${name}"
+            fi
           fi
           {
             printf 'Run: %s\n\n' "${run_url}"

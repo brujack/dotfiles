@@ -484,3 +484,29 @@ _pin_of() {
     }
   done
 }
+
+# --- log order ----------------------------------------------------------------
+
+@test "step logs carry a two-digit order prefix, strictly increasing in file order" {
+  local _targets _bad _prefixes _sorted
+  # Every tee target in the workflow, in file order.
+  _targets="$(command grep -oE 'tee( -a)? "\$\{RUNNER_TEMP\}/[^"]*"' "${WF}" | sed -E 's/^tee( -a)? //')"
+  # Positive control: all eight step logs were found.
+  [ "$(printf '%s\n' "${_targets}" | LC_ALL=C sort -u | wc -l)" -eq 8 ]
+  _bad="$(printf '%s\n' "${_targets}" | command grep -vE '^"\$\{RUNNER_TEMP\}/[0-9][0-9]-[a-z-]+\.log"$' || true)"
+  [ -z "${_bad}" ]
+  # The `tee -a` repeat of a log is adjacent, so uniq collapses it.
+  _prefixes="$(printf '%s\n' "${_targets}" | sed -E 's|^"\$\{RUNNER_TEMP\}/([0-9][0-9])-.*|\1|' | uniq)"
+  _sorted="$(printf '%s\n' "${_prefixes}" | LC_ALL=C sort -u)"
+  [ "${_prefixes}" = "${_sorted}" ]
+}
+
+@test "report picks the highest-numbered step log by name, never by mtime" {
+  local _rep
+  _rep="$(_step report "Report failure")"
+  [[ "${_rep}" == *"-name '[0-9][0-9]-*.log'"* ]]
+  [[ "${_rep}" == *'LC_ALL=C sort'* ]]
+  [[ "${_rep}" == *'tail -n 1'* ]]
+  _none_in "${_rep}" -F '%T@'
+  _none_in "${_rep}" -F 'sort -rn'
+}
