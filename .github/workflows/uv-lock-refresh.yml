@@ -1,0 +1,151 @@
+name: uv-lock-refresh
+
+# Weekly uv.lock refresh. Opens or updates one PR from chore/uv-lock-refresh
+# with GITHUB_TOKEN. Such a PR starts no CI of its own: the operator starts it
+# with a close and reopen, then merges by hand (the auto-merge gate holds bot
+# PRs). Spec: docs/superpowers/specs/2026-11-08-uv-lock-refresh-design.md
+
+on:
+  schedule:
+    # Monday 06:00 UTC, after Renovate's "before 5am on monday" window.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+# The repo's default workflow permission is write, so this line is load-bearing.
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    # A scheduled run and a manual dispatch must never overlap: both could see
+    # no open PR and both try to create one.
+    concurrency:
+      group: uv-lock-refresh
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Full history so the forced branch is built on the current tip.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv (pinned)
+        env:
+          UV_VER: "0.13.0"
+          UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+        run: |
+          {
+            curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/uv.tar.gz \
+              "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
+            echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c -
+            tar -xzf /tmp/uv.tar.gz -C /tmp
+            sudo install -m755 /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+            uv --version | grep -q "uv ${UV_VER}"
+          } 2>&1 | tee "${RUNNER_TEMP}/install-uv.log"
+
+      - name: Refresh lock
+        id: refresh
+        run: |
+          # stdout carries only the result word; the script's tool output is stderr.
+          { bash scripts/refresh-uv-lock.sh "${RUNNER_TEMP}/body.md" > "${RUNNER_TEMP}/refresh.out"; } \
+            2>&1 | tee "${RUNNER_TEMP}/refresh.log"
+          result="$(tail -n 1 "${RUNNER_TEMP}/refresh.out")"
+          case "${result}" in
+            "changed" | "no changes") ;;
+            *)
+              printf 'unexpected result word: %s\n' "${result}" 2>&1 | tee -a "${RUNNER_TEMP}/refresh.log"
+              exit 1
+              ;;
+          esac
+          printf 'result=%s\n' "${result}" >> "${GITHUB_OUTPUT}"
+
+      # The repo is public and a fork can name its branch the same; only a PR
+      # from this repository counts.
+      - name: Find open refresh PR
+        id: find_pr
+        run: |
+          {
+            prs="$(gh pr list --head chore/uv-lock-refresh --state open --json number,isCrossRepository --jq '[.[]|select(.isCrossRepository==false)]')"
+            count="$(jq 'length' <<< "${prs}")"
+            if [[ "${count}" -gt 1 ]]; then
+              printf 'more than one open refresh PR: %s\n' "${count}"
+              exit 1
+            fi
+            number="$(jq -r '.[0].number // empty' <<< "${prs}")"
+            printf 'number=%s\n' "${number}" >> "${GITHUB_OUTPUT}"
+          } 2>&1 | tee "${RUNNER_TEMP}/find-pr.log"
+
+      - name: Publish refresh branch and PR
+        if: steps.refresh.outputs.result == 'changed'
+        env:
+          PR_NUMBER: ${{ steps.find_pr.outputs.number }}
+        run: |
+          {
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git switch -C chore/uv-lock-refresh
+            git add -- uv.lock requirements-ci.txt requirements-runtime-ci.txt requirements-ci-test.txt requirements-ci-mutation.txt requirements-ci-audit.txt
+            git commit -m "chore(deps): refresh uv.lock"
+            git push --force origin chore/uv-lock-refresh
+            if [[ -n "${PR_NUMBER}" ]]; then
+              gh pr edit "${PR_NUMBER}" --body-file "${RUNNER_TEMP}/body.md"
+            else
+              gh pr create --base master --head chore/uv-lock-refresh \
+                --title "chore(deps): refresh uv.lock" --body-file "${RUNNER_TEMP}/body.md"
+            fi
+          } 2>&1 | tee "${RUNNER_TEMP}/publish.log"
+
+      - name: Close refresh PR when nothing changed
+        if: steps.refresh.outputs.result == 'no changes' && steps.find_pr.outputs.number != ''
+        env:
+          PR_NUMBER: ${{ steps.find_pr.outputs.number }}
+        run: |
+          {
+            gh pr comment "${PR_NUMBER}" --body "master already holds the current resolution; closing."
+            gh pr close "${PR_NUMBER}"
+          } 2>&1 | tee "${RUNNER_TEMP}/close-pr.log"
+
+      - name: Close failure issue
+        run: |
+          {
+            issue="$(gh issue list --state open --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
+            if [[ -n "${issue}" ]]; then
+              gh issue comment "${issue}" --body "Recovered in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+              gh issue close "${issue}"
+            fi
+          } 2>&1 | tee "${RUNNER_TEMP}/close-issue.log"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          newest="$(find "${RUNNER_TEMP}" -maxdepth 1 -name '*.log' -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)"
+          {
+            printf 'Run: %s\n\n' "${run_url}"
+            if [[ -n "${newest}" ]]; then
+              printf 'Last 40 lines of %s:\n\n```\n' "$(basename "${newest}")"
+              tail -n 40 "${newest}"
+              printf '```\n'
+            else
+              printf 'No step log was written before the failure.\n'
+            fi
+          } > "${RUNNER_TEMP}/failure-body.md"
+          issue="$(gh issue list --state open --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
+          if [[ -n "${issue}" ]]; then
+            gh issue comment "${issue}" --body-file "${RUNNER_TEMP}/failure-body.md"
+          else
+            gh issue create --title "uv.lock refresh failed" --body-file "${RUNNER_TEMP}/failure-body.md"
+          fi
