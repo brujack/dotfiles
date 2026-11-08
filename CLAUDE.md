@@ -466,6 +466,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Set `_OVERRIDE_CLAUDE_PLUGINS_FILE`/`_OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR` to fixtures (`load_mocks` points the file at a missing path, so no test reaches the real `~/.claude`); `_CLAUDE_PRUNE_PYTHON` stubs the interpreter. → `dotfiles-test-seams.md` § `claude plugin prune seams`
 
+- Drive `scripts/refresh-uv-lock.sh` through `_UV_BIN`/`_MAKE_BIN` (`tests/stubs/uv-refresh-stub`, `make-refresh-stub`), `REFRESH_UV_LOCK_ROOT` (a fixture holding `uv.lock`) and `_DOWNGRADE_HELPER`; the uv stub prints change lines on stderr like real uv, so keep the script's `2>&1` capture. → `dotfiles-test-seams.md` § `uv lock refresh seams`
+
 ### Mock Pattern
 
 - The full `MOCK_*` env var reference table and the general mock usage pattern live in `dotfiles-bats-test-infrastructure.md` — this group's own suffix target, not a `CLAUDE.md` section. → `dotfiles-bats-test-infrastructure.md` § `Mock Pattern full reference pointer (superseded by this section)`
