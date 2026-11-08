@@ -11,6 +11,7 @@
 #   _UV_BIN               uv binary (default: uv)
 #   _MAKE_BIN             make binary (default: make)
 #   REFRESH_UV_LOCK_ROOT  directory holding uv.lock (default: this repo's root)
+#   _DOWNGRADE_HELPER     downgrade checker (default: uv_lock_downgrades.py beside this script)
 
 _REFRESH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -37,8 +38,8 @@ The five CI renderings were re-synced and `check-lock` and `check-requirements-c
 
 1. Start CI (a GITHUB_TOKEN PR gets none): `gh pr close chore/uv-lock-refresh && gh pr reopen chore/uv-lock-refresh`
 2. Read the change list above and the diff.
-3. Merge by hand: `gh pr merge chore/uv-lock-refresh --squash`
-4. Re-run the refresh when wanted: `gh workflow run uv-lock-refresh.yml`
+3. Merge by hand, because the auto-merge gate holds bot PRs and a label only re-runs CI: `gh pr merge chore/uv-lock-refresh --squash`
+4. A later weekly run replaces this PR's contents with a fresh refresh from master, and `gh workflow run uv-lock-refresh.yml` does that now.
 BODY
   } > "${body_file}" || return 1
 }
@@ -74,7 +75,7 @@ _refresh_run() {
     return 1
   }
 
-  "${_UV_BIN}" lock --upgrade > "${log}" 2>&1
+  "${_UV_BIN}" lock --upgrade --color never > "${log}" 2>&1
   rc=$?
   cat "${log}" >&2
   if [[ ${rc} -ne 0 ]]; then
@@ -100,13 +101,20 @@ _refresh_run() {
   fi
 
   local offenders
-  offenders="$(python3 "${_REFRESH_SCRIPT_DIR}/uv_lock_downgrades.py" < "${lines}")"
+  offenders="$(python3 "${_DOWNGRADE_HELPER}" < "${lines}")"
   rc=$?
-  if [[ ${rc} -ne 0 ]]; then
-    _refresh_err "refusing downgrade: ${offenders//$'\n'/, }"
-    _refresh_err "if a release was yanked, raise the pyproject.toml floor past it, then re-run"
-    return 1
-  fi
+  case "${rc}" in
+    0) ;;
+    1)
+      _refresh_err "refusing downgrade: ${offenders//$'\n'/, }"
+      _refresh_err "if a release was yanked, raise the pyproject.toml floor past it, then re-run"
+      return 1
+      ;;
+    *)
+      _refresh_err "downgrade check failed (helper rc ${rc})"
+      return 1
+      ;;
+  esac
 
   _refresh_make sync-requirements-ci 0 || return 1
   _refresh_make check-lock 1 || return 1
@@ -126,6 +134,7 @@ main() {
     return 2
   fi
   : "${_UV_BIN:=uv}" "${_MAKE_BIN:=make}"
+  : "${_DOWNGRADE_HELPER:=${_REFRESH_SCRIPT_DIR}/uv_lock_downgrades.py}"
   # Resolve before the cd below, so a relative path means the caller's cwd.
   [[ "${body_file}" == /* ]] || body_file="${PWD}/${body_file}"
   local root="${REFRESH_UV_LOCK_ROOT:-${_REFRESH_SCRIPT_DIR}/..}"

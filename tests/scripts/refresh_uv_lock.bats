@@ -13,6 +13,8 @@ setup() {
   export _UV_BIN="${REPO_ROOT}/tests/stubs/uv-refresh-stub"
   export _MAKE_BIN="${REPO_ROOT}/tests/stubs/make-refresh-stub"
   export STUB_MAKE_LOG="${BATS_TEST_TMPDIR}/make.log"
+  export STUB_UV_ARGS_LOG="${BATS_TEST_TMPDIR}/uv.args"
+  unset _DOWNGRADE_HELPER
   BODY="${BATS_TEST_TMPDIR}/body.md"
   unset STUB_UV_LINES STUB_UV_EXIT STUB_UV_CHANGE STUB_MAKE_FAIL
 }
@@ -42,6 +44,8 @@ run_script() {
   command grep -qF 'gh pr close chore/uv-lock-refresh && gh pr reopen chore/uv-lock-refresh' "${BODY}"
   command grep -qF 'gh pr merge chore/uv-lock-refresh --squash' "${BODY}"
   command grep -qF 'gh workflow run uv-lock-refresh.yml' "${BODY}"
+  command grep -qF 'the auto-merge gate holds bot PRs and a label only re-runs CI' "${BODY}"
+  command grep -qF "replaces this PR's contents with a fresh refresh from master" "${BODY}"
   command grep -qF 'changed 3 package entries' "${BODY}"
 }
 
@@ -61,6 +65,7 @@ run_script() {
   [[ "${stderr}" == *"refusing downgrade: acme"* ]]
   [[ "${stderr}" == *"yanked"* ]]
   [ ! -e "${STUB_MAKE_LOG}" ]
+  [ ! -e "${BODY}" ]
 }
 
 @test "comma form downgrade is refused and comma form upgrade passes" {
@@ -69,6 +74,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"refusing downgrade: six"* ]]
+  [ ! -e "${BODY}" ]
   export STUB_UV_LINES='Updated six v1.15.0, v1.16.0 -> v1.16.0'
   run_script
   [ "${status}" -eq 0 ]
@@ -81,6 +87,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"unparseable: Updated acme sideways"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "uv failure exits 1 with its own message" {
@@ -88,6 +95,8 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"uv lock --upgrade failed"* ]]
+  [[ "${stderr}" == *"STUB-UV-SENTINEL"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "sync-requirements-ci failure is named" {
@@ -96,6 +105,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"make sync-requirements-ci failed"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "check-lock failure is named" {
@@ -104,6 +114,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"make check-lock failed"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "check-requirements-ci failure is named" {
@@ -112,6 +123,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"make check-requirements-ci failed"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "both checks run with REQUIRE_TOOLS=1 and the sync does not" {
@@ -129,7 +141,46 @@ run_script() {
   run_script
   [ "${status}" -eq 0 ]
   [ "${output}" = "changed" ]
-  [[ "${stderr}" == *"STUB-SENTINEL"* ]]
+  [[ "${output}" != *"STUB-UV-SENTINEL"* ]]
+  [[ "${output}" != *"STUB-MAKE-SENTINEL"* ]]
+  [[ "${stderr}" == *"STUB-UV-SENTINEL"* ]]
+  [[ "${stderr}" == *"STUB-MAKE-SENTINEL"* ]]
+}
+
+@test "uv runs with --color never" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  run_script
+  [ "${status}" -eq 0 ]
+  command grep -qx 'uv lock --upgrade --color never' "${STUB_UV_ARGS_LOG}"
+}
+
+@test "lowest-fork downgrade is refused" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated a v1.0, v3.0 -> v0.5, v3.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"refusing downgrade: a"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "helper crash is reported as a failed check, not a downgrade" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  printf 'import sys\nsys.exit(2)\n' > "${BATS_TEST_TMPDIR}/crash.py"
+  export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/crash.py"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"downgrade check failed (helper rc 2)"* ]]
+  [[ "${stderr}" != *"refusing downgrade"* ]]
+  [[ "${stderr}" != *"yanked"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "helper missing is reported as a failed check" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/absent.py"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"downgrade check failed (helper rc 2)"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "missing body-file argument exits 2" {
