@@ -1226,6 +1226,58 @@ _build_no_root_makefile_repo() {
   [[ "$output" != *"no install-hooks target"* ]]
 }
 
+# _build_locked_root_repo REPO_BASE NAME: a root Makefile that DOES declare
+# install-hooks but cannot be read, plus a tracked ansible/Makefile that also
+# declares it. A resolver that treats the unreadable root as "no target"
+# falls through and resolves ansible/ -- the wrong directory.
+_build_locked_root_repo() {
+  _build_subdir_target_repo "$1" "$2" "ansible"
+  printf 'install-hooks:\n\t@true\n' > "$1/$2/Makefile"
+  chmod 000 "$1/$2/Makefile"
+}
+
+_skip_if_root_reads_anything() {
+  # root reads a mode-000 file, so the unreadable case cannot be built.
+  [[ "$(id -u)" -ne 0 ]] || skip "running as root: mode 000 does not block reads"
+}
+
+@test "_git_hooks_target_dir refuses an unreadable root Makefile with rc 5, never a subdirectory target" {
+  _skip_if_root_reads_anything
+  local _base="${TESTDIR}/root-locked"
+  mkdir -p "${_base}"
+  _build_locked_root_repo "${_base}" "locked"
+  # Control: the fixture really is unreadable to grep.
+  run grep -q '^install-hooks:' "${_base}/locked/Makefile"
+  [ "$status" -eq 2 ]
+
+  run _git_hooks_target_dir "${_base}/locked"
+  [ "$status" -eq 5 ]
+  # No resolved directory, and no grep error leaking onto the terminal.
+  [ -z "$output" ]
+}
+
+@test "an unreadable root Makefile is reported :root-unreadable, never :no-target or a subdirectory install" {
+  _skip_if_root_reads_anything
+  local _base="${TESTDIR}/root-locked-sweep"
+  mkdir -p "${_base}"
+  _build_locked_root_repo "${_base}" "locked"
+
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_discover
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  HOOK_EXPECTED_REPOS=(locked)
+  PERSONAL_GITREPOS="${_base}" run _git_hooks_gap_repos
+  [ "$status" -eq 0 ]
+  [ "$output" = "locked:root-unreadable" ]
+
+  PERSONAL_GITREPOS="${_base}" run install_git_hooks_all_repos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"locked: root Makefile could not be read"* ]]
+  [[ "$output" != *"no install-hooks target"* ]]
+  [[ "$output" != *"could not list tracked Makefiles"* ]]
+}
+
 @test "_git_hooks_target_dir ignores a leaked GIT_DIR when listing subdirectory Makefiles" {
   # A pre-push hook pushed from a worktree exports GIT_DIR, and this repo's
   # pre-push runs `make test`. Unstripped, ls-files would list the DECOY's
