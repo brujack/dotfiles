@@ -40,6 +40,10 @@ fi
 #   exit 4 -- no usable Makefile at the root or one level down. A candidate
 #             skipped below (newline/tab name, not a regular file) does not
 #             count, so it is reported as missing. Prints nothing.
+#   exit 5 -- the root Makefile exists but grep could not read it. Prints
+#             nothing and never falls through: the root wins, so a target
+#             one level down would be the wrong directory, and "no target"
+#             would be a false cause.
 # Subdirectory candidates come from `git ls-files`, so an untracked scratch
 # Makefile below the root is never a candidate. The root check is a
 # filesystem test, as it was before this resolver.
@@ -55,10 +59,14 @@ _git_hooks_target_dir() {
   local _any_makefile=0
   if [[ -f "${_repo}/Makefile" ]]; then
     _any_makefile=1
-    if grep -q '^install-hooks:' "${_repo}/Makefile"; then
-      printf '%s\n' "${_repo}"
-      return 0
-    fi
+    local _root_rc=0
+    grep -q '^install-hooks:' "${_repo}/Makefile" 2>/dev/null || _root_rc=$?
+    case ${_root_rc} in
+      0) printf '%s\n' "${_repo}"
+         return 0 ;;
+      1) ;;
+      *) return 5 ;;
+    esac
   fi
 
   # The listing below runs in a process substitution, whose exit status is
@@ -254,7 +262,7 @@ _git_hooks_check_complete() {
   return 1
 }
 
-# _git_hooks_gap_repos prints five distinct gap shapes for repos on
+# _git_hooks_gap_repos prints six distinct gap shapes for repos on
 # HOOK_EXPECTED_REPOS, one name per line:
 #   "${name}"           -- exists under PERSONAL_GITREPOS as a real git
 #                          repo but carries no Makefile at the root or one
@@ -276,6 +284,8 @@ _git_hooks_check_complete() {
 #                          a target and the root carries none. Not run:
 #                          hooks are repo-wide, so the recipes would
 #                          overwrite each other.
+#   "${name}:root-unreadable" -- the root Makefile could not be read, so
+#                          whether it declares the target is unknown.
 #   "${name}:unreadable" -- `git ls-files` failed, so whether a target
 #                          exists below the root is unknown. Kept apart
 #                          from ":no-target" so a broken index is never
@@ -327,6 +337,7 @@ _git_hooks_gap_repos() {
       2) printf '%s:ambiguous\n' "${_name}" ;;
       3) printf '%s:unreadable\n' "${_name}" ;;
       4) printf '%s\n' "${_name}" ;;
+      5) printf '%s:root-unreadable\n' "${_name}" ;;
       *) printf '%s:no-target\n' "${_name}" ;;
     esac
   done
@@ -590,11 +601,12 @@ install_git_hooks_all_repos() {
   # _git_hooks_gap_repos catches gaps _git_hooks_discover cannot see at
   # all: a listed repo with no Makefile, or a Makefile with no
   # install-hooks: target, has nothing (or nothing matching) for discover
-  # to glob a decision from. Its five shapes stay distinct labels here
+  # to glob a decision from. Its six shapes stay distinct labels here
   # too -- a bare name (real repo, no Makefile at all) needs hook scripts
   # AND a target added; ":no-target" (real repo, Makefile present, target
   # missing) needs only the target added; ":ambiguous" needs one of the
-  # competing targets removed; ":unreadable" needs the repo's index
+  # competing targets removed; ":root-unreadable" needs the root
+  # Makefile's permissions fixed; ":unreadable" needs the repo's index
   # repaired; ":absent" (never cloned) needs the clone itself. Collapsing
   # any of these would state a false cause in an operator-facing report, the
   # same way collapsing check_complete's rc 1/2 would.
@@ -611,6 +623,9 @@ install_git_hooks_all_repos() {
         ;;
       *:ambiguous)
         _gap_lines+=("${_gap_name%:ambiguous}: install-hooks target in more than one subdirectory Makefile")
+        ;;
+      *:root-unreadable)
+        _gap_lines+=("${_gap_name%:root-unreadable}: root Makefile could not be read (check its permissions)")
         ;;
       *:unreadable)
         _gap_lines+=("${_gap_name%:unreadable}: could not list tracked Makefiles (git ls-files failed)")
