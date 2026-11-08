@@ -39,6 +39,7 @@ install-hooks`). This would fix the one repo, but it needs a change in a repo an
 | 2    | two or more subdirectory Makefiles have the target                                      | never run: hooks are repo-wide and the recipes would overwrite each other | `:ambiguous`  |
 | 3    | `git ls-files` failed (e.g. a corrupt index)                                            | —                                                                         | `:unreadable` |
 | 4    | no usable Makefile at the root or one level down                                        | —                                                                         | bare name     |
+| 5    | the root Makefile exists but grep could not read it                                     | never run: the root wins, so falling through would pick the wrong directory | `:root-unreadable` |
 
 Discovery and the gap report both call it, so they agree on what counts as a target.
 Subdirectory candidates come from `git ls-files -- ':(glob)*/Makefile'`, so an untracked
