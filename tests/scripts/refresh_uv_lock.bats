@@ -220,20 +220,48 @@ run_script() {
   [[ "${stderr}" == *"usage"* ]]
 }
 
-@test "unreachable root exits 1" {
+@test "unreachable root exits 1 before anything downstream runs" {
   export REFRESH_UV_LOCK_ROOT="${BATS_TEST_TMPDIR}/nope"
+  # A cwd with no uv.lock, so a missing return cannot fall through to the
+  # repo root's real lock and still exit 1 by another route.
+  cd "${BATS_TEST_TMPDIR}"
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot cd"* ]]
+  [[ "${stderr}" != *"cannot read uv.lock"* ]]
+  [[ "${stderr}" != *"no change lines"* ]]
+  [ ! -e "${STUB_UV_ARGS_LOG}" ]
   [ ! -e "${BODY}" ]
 }
 
-@test "missing uv.lock exits 1" {
+@test "missing uv.lock exits 1 before uv runs" {
   rm -f "${FIXTURE}/uv.lock"
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot read uv.lock"* ]]
+  [[ "${stderr}" != *"no change lines"* ]]
+  [ ! -e "${STUB_UV_ARGS_LOG}" ]
   [ ! -e "${BODY}" ]
+}
+
+@test "unwritable body file exits 1 and never reports changed" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  BODY="${BATS_TEST_TMPDIR}/nodir/body.md"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cannot write"* ]]
+  [[ "${output}" != *changed* ]]
+}
+
+# The make stub accepts any target, so pin the script's targets to real
+# Makefile rules: exactly three, each defined.
+@test "every make target the script runs is a Makefile rule" {
+  local targets t
+  targets="$(command grep -oE '_refresh_make [a-z-]+' "${SCRIPT}" | cut -d' ' -f2 | LC_ALL=C sort -u)"
+  [ "$(printf '%s\n' "${targets}" | command grep -c .)" -eq 3 ]
+  for t in ${targets}; do
+    command grep -qE "^${t}:" "${REPO_ROOT}/Makefile"
+  done
 }
 
 @test "relative body-file resolves against the caller's cwd" {
