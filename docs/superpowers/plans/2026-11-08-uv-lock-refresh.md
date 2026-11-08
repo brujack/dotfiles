@@ -206,3 +206,13 @@ The orchestrator runs `make test` once after this task.
 ## Non-goal check
 
 Reviewer verdicts (2026-11-08, fresh reviewer, plan and N1-N4 only): N1 CLEAR, N2 CLEAR, N3 CLEAR, N4 CLEAR. No plan revision or amendment needed. The reviewer noted that Task 1's PR close/reopen and plan commit are the orchestrator's (operator identity), not the workflow's, and that `gh pr merge` appears only as body text.
+
+## Probe result
+
+Probe result: PASS (2026-11-08, Task 1, R1).
+
+- Probe PR #444, opened by `app/github-actions` (`is_bot: true`) with `GITHUB_TOKEN` from a `push`-triggered workflow on `probe/token-pr`; head `ceae0b3e0b8388581aeb4c379f8793978278b43e`, based on `master`.
+- At open, `pull_request` runs for `CI` and `PR Title Lint` were created with actor `github-actions[bot]` and completed `failure` with 0 jobs. They carry no required context, but they show red in the PR's run list until the reopen.
+- After `gh pr close 444 && gh pr reopen 444` (operator identity), CI run 42511893512 (actor `brujack`) passed. The check-runs on the head SHA include `test`, `lint-macos`, `test-macos`, `powershell`, `secret-scan` and `renderings-install`, all `success`; 0 runs `action_required`; `mergeStateStatus` `CLEAN`.
+- The auto-merge gate held it: `bot PR (app/github-actions) lacks automerge-ok -- leaving open for triage`. Not merged.
+- Cleanup: #444 closed; `probe/token-pr` and `probe/token-pr-head` deleted on origin; nothing reached master.
