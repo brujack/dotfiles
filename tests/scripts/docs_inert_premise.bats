@@ -12,7 +12,9 @@ bats_require_minimum_version 1.5.0
 # never the working tree, so its verdict varies with CLAUDE.md. A docs-only push
 # is still covered: the hook runs the check before the inert exit, pinned by
 # pre_push.bats's CLAUDE.md-only refusal case.
-ALLOWED_TEST_PREREQS=(test-prereqs lint check-lock check-requirements-ci test-python check-claude-md-budget test-bats)
+# check-bats-manifest reads tests/bats-files.txt and `git ls-files '*.bats'`,
+# no .md.
+ALLOWED_TEST_PREREQS=(test-prereqs lint check-lock check-requirements-ci test-python check-claude-md-budget check-bats-manifest test-bats)
 
 # "<file>|<reason>" entries for tests allowed to read a tracked .md outside
 # tests/. Empty today. tests/test_relocation_check.py needs no entry: it reads

@@ -114,7 +114,7 @@ BATS_PARALLEL_RAN := $(filter-out $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget test-bats test-prereqs
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget check-bats-manifest test-bats test-prereqs
 
 help:
 	@printf "Available targets:\n"
@@ -179,9 +179,9 @@ lint:
 # The non-bats half of `make test`, separate so one CI shard can run it while
 # the others skip it. The literal prerequisites are repeated on the `test:`
 # line below on purpose: tests read that line, and make runs each target once.
-test-prereqs: lint check-lock check-requirements-ci test-python check-claude-md-budget
+test-prereqs: lint check-lock check-requirements-ci test-python check-claude-md-budget check-bats-manifest
 
-test: test-prereqs lint check-lock check-requirements-ci test-python check-claude-md-budget test-bats
+test: test-prereqs lint check-lock check-requirements-ci test-python check-claude-md-budget check-bats-manifest test-bats
 
 # The bats phase of `make test`, separate so a CI shard can run it on its own
 # list. BATS_FILES_FROM names a file of one .bats path per line (a shard);
@@ -245,6 +245,12 @@ ifndef PYTHON3
 else
 	python3 scripts/claude_md_budget.py HEAD
 endif
+
+# The tracked .bats files must equal tests/bats-files.txt. The CI suite gates
+# derive their expected set from the walk that builds the shard lists, so a
+# deleted test file passes them; this manifest is the independent anchor.
+check-bats-manifest:
+	bash scripts/check-bats-manifest.sh
 
 # Shard inputs reach run-bash-coverage.sh as arguments only. COVERAGE_TRACE_DIR
 # is read from the environment like BATS_FILES_FROM and unexported for the same

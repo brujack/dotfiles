@@ -190,6 +190,16 @@ _run_bash_coverage() {
   ! command grep -qE '^[[:space:]]*bats[[:space:]]' <<< "${output}"
 }
 
+@test "make -n test-prereqs runs the bats manifest check" {
+  # test-prereqs is the half CI's shard 1 and macOS shard 1 run, and pre-push
+  # runs via make test, so this is the one place the check needs to be wired.
+  _strip_make_leak_env
+  PATH="${SHIM}" run --separate-stderr make --no-print-directory -n \
+    -C "${REPO_ROOT}" test-prereqs JOBS=4
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scripts/check-bats-manifest.sh"* ]]
+}
+
 @test "bash-coverage: both variables set pass --files and --trace-only as arguments, never as environment" {
   _install_coverage_stub
   export BATS_FILES_FROM="${LIST}"
