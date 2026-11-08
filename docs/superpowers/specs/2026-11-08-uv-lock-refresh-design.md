@@ -246,6 +246,10 @@ itself.
 - **N3.** The workflow never merges, approves or labels a PR, never closes or edits a PR whose head is not this repository's `chore/uv-lock-refresh`, and never writes to `master`.
 - **N4.** No `exclude-newer` setting or flag anywhere: not in `pyproject.toml`, not in the script.
 
+## Amendments
+
+- R6 -> When the lock changed but no `Updated`/`Added`/`Removed` line was captured, when a captured `Updated` line's highest new version is lower than its highest old version or its lowest new version is lower than its lowest old version (each side may list several comma-separated versions, compared as PEP 440 versions by a standard-library comparator that treats any form outside epoch, release, `a`/`b`/`rc`, `.post` and `.dev` as unparseable) or the line does not parse, or when any `uv` or `make` step fails, the script exits non-zero with a message naming the cause (uv's own output when `uv lock` fails), and no body file is written. — Task 2 review: `packaging` is not installed in CI's test jobs or reliably on any runner (Homebrew's python lacks it), and a max-only rule missed a downgrade inside one resolution fork (`v1.0, v3.0 -> v0.5, v3.0`).
+
 ## Multi-Lens Review
 
 Reviewed at commit: `39932f11` (round 1, before revision)
