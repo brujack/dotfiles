@@ -327,7 +327,8 @@ check-requirements-install:
 
 # Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
 # the machine out of committing the very change that would install it. CI
-# installs a pinned uv, so the check genuinely runs there rather than skipping.
+# installs a pinned uv, so the check runs there, but unlike shellcheck
+# (REQUIRE_SHELLCHECK) nothing makes CI fail if uv is missing; see the backlog.
 check-requirements-ci:
 ifeq ($(UV),)
 	@printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"

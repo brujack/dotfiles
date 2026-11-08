@@ -20,6 +20,10 @@ setup() {
   # ambient state so an unrelated leak from whatever invoked bats can't
   # change what a "no GIT_DIR set" test observes.
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+  # CI's test-shard and test-macos-shard export REQUIRE_SHELLCHECK=1 for their
+  # own lint; inherited here it turns every SHELLCHECK= skip case into a
+  # refusal. Tests that need it set it on their own make call.
+  unset REQUIRE_SHELLCHECK
   # MAKEFLAGS is deliberately left untouched here, unlike the GIT_* vars
   # above. make exports it into every recipe subshell automatically,
   # including this file's own `bats --recursive tests/` recipe under

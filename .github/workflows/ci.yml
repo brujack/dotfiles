@@ -29,7 +29,8 @@ jobs:
     permissions:
       contents: read
     # make lint skips a missing shellcheck so a bare machine can still commit;
-    # here the pin is installed first, so a skip would be a silent pass.
+    # here the pin is installed first, so a skip would be a silent pass. Only
+    # shard 1 runs lint (make test-prereqs); the other legs ignore it.
     # See the Makefile lint recipe and tests/scripts/makefile_lint_scope.bats.
     env:
       REQUIRE_SHELLCHECK: "1"
