@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Stand-in for `uv lock --upgrade`, driven by the STUB_UV_* variables.
+# STUB_UV_LINES: text printed on stderr (real uv prints its change lines there)
+# STUB_UV_EXIT: exit status (default 0)
+# STUB_UV_CHANGE: 1 appends a line to ./uv.lock
+# STUB_UV_ARGS_LOG: file receiving the argv line
+printf 'STUB-UV-SENTINEL\n'
+printf "uv %s\n" "$*" >> "${STUB_UV_ARGS_LOG:-/dev/null}"
+printf 'Using CPython 3.14.0\n' >&2
+if [[ -n "${STUB_UV_LINES:-}" ]]; then
+  printf '%s\n' "${STUB_UV_LINES}" >&2
+fi
+printf 'Resolved 269 packages in 244ms\n'
+if [[ "${STUB_UV_CHANGE:-0}" == "1" ]]; then
+  printf '# refreshed\n' >> uv.lock
+fi
+exit "${STUB_UV_EXIT:-0}"

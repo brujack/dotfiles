@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Stand-in for make in refresh-uv-lock.sh tests.
+# STUB_MAKE_LOG: file receiving "<target> REQUIRE_TOOLS=<value>" per call
+# STUB_MAKE_FAIL: target name that exits 1
+printf 'STUB-MAKE-SENTINEL\n'
+printf '%s REQUIRE_TOOLS=%s\n' "${1:-}" "${REQUIRE_TOOLS:-unset}" >> "${STUB_MAKE_LOG:-/dev/null}"
+if [[ "${1:-}" == "${STUB_MAKE_FAIL:-}" ]]; then
+  exit 1
+fi
+exit 0

@@ -216,3 +216,9 @@ Probe result: PASS (2026-11-08, Task 1, R1).
 - After `gh pr close 444 && gh pr reopen 444` (operator identity), CI run 42511893512 (actor `brujack`) passed. The check-runs on the head SHA include `test`, `lint-macos`, `test-macos`, `powershell`, `secret-scan` and `renderings-install`, all `success`; 0 runs `action_required`; `mergeStateStatus` `CLEAN`.
 - The auto-merge gate held it: `bot PR (app/github-actions) lacks automerge-ok -- leaving open for triage`. Not merged.
 - Cleanup: #444 closed; `probe/token-pr` and `probe/token-pr-head` deleted on origin; nothing reached master.
+
+## Probe 2 result
+
+- Run 42516663365: a `GITHUB_TOKEN` push creating a ref at `0614a338` (an older master whose `ci.yml` differs) was rejected with "refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` without `workflows` permission"; creating one at the master tip was accepted.
+- The follow-up run: force-updating `probe/wf-target2` from `0614a338` to master `6cec2214` was accepted (rc 0).
+- Conclusion: the refresh branch (master plus a lock-only commit) can be force-updated weekly; the probe branches were deleted.
