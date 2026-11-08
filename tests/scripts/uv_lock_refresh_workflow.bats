@@ -19,10 +19,25 @@ _line() {
 
 # Fails when grep finds the pattern; a function, because bats does not fail a
 # test on a mid-body `!` (SC2314).
+# Only grep's rc 1 (no match) passes: rc 2 is a bad pattern or an unreadable
+# file, which must fail the test rather than read as absence.
 _absent() {
-  if command grep "$@" "${WF}"; then
-    return 1
-  fi
+  local _rc=0
+  command grep "$@" "${WF}" > /dev/null || _rc=$?
+  [[ "${_rc}" -eq 1 ]]
+}
+
+# Lines of one step (from its `- name:` line to the next step), by name.
+_step() {
+  awk -v name="$1" '
+    /^      - / { on = ($0 == "      - name: " name) }
+    on { print }
+  ' "${WF}"
+}
+
+# Workflow lines that are not comments.
+_code() {
+  command grep -vE '^[[:space:]]*#' "${WF}"
 }
 
 # Fails unless every argument is present in the workflow, in increasing order.
@@ -103,6 +118,28 @@ _job_value() {
   command grep -qF 'GH_TOKEN: ${{ github.token }}' "${WF}"
 }
 
+@test "job default shell is bash, which supplies pipefail for the tee pipelines" {
+  local _shell
+  _shell="$(awk '
+    /^    defaults:$/ { d = 1; next }
+    d && /^      run:$/ { r = 1; next }
+    d && r && /^        shell: / { print $2; exit }
+    /^    [A-Za-z]/ { d = 0; r = 0 }
+  ' "${WF}")"
+  [ "${_shell}" = "bash" ]
+}
+
+@test "a guard step refuses any ref but master, runs before checkout, and checkout pins ref: master" {
+  local _guard
+  _guard="$(_step "Require master ref")"
+  [[ -n "${_guard}" ]]
+  [[ "${_guard}" == *'GITHUB_REF'* ]]
+  [[ "${_guard}" == *'refs/heads/master'* ]]
+  [[ "${_guard}" == *'exit 1'* ]]
+  _assert_order '- name: Require master ref' 'actions/checkout@'
+  command grep -qE '^          ref: master$' "${WF}"
+}
+
 @test "every uses: is pinned to a 40-hex SHA and at least one exists" {
   local _total _pinned
   _total="$(command grep -cE '^[[:space:]]*-?[[:space:]]*uses:' "${WF}")"
@@ -113,8 +150,13 @@ _job_value() {
 }
 
 @test "uv download is verified with sha256sum -c" {
-  command grep -qF 'sha256sum -c' "${WF}"
-  _assert_order 'sha256sum -c' 'tar -xzf'
+  # On a non-comment line of the install step, ahead of the extraction.
+  local _install
+  _install="$(_step "Install uv (pinned)" | command grep -vE '^[[:space:]]*#')"
+  [[ "${_install}" == *'sha256sum -c'* ]]
+  [[ "${_install}" == *'tar -xzf'* ]]
+  _install="${_install%%tar -xzf*}"
+  [[ "${_install}" == *'sha256sum -c'* ]]
 }
 
 @test "UV_VER and UV_SHA256 equal the test-shard job's values in ci.yml" {
@@ -152,8 +194,12 @@ _job_value() {
 }
 
 @test "issue lookup selects by exact title and never by search" {
-  command grep -qF '.title == "uv.lock refresh failed"' "${WF}"
+  # One lookup in the success step, one in the failure step; both exact.
+  [ "$(_code | command grep -cF 'select(.title == "uv.lock refresh failed")')" -eq 2 ]
+  [ "$(_code | command grep -cF 'gh issue list')" -eq 2 ]
+  command grep -qF -- '--title "uv.lock refresh failed"' "${WF}"
   _absent -qF -- '--search'
+  _absent -qF 'contains('
 }
 
 @test "no event free-text interpolation and no merge, approve, label or master write" {
@@ -164,6 +210,7 @@ _job_value() {
   _absent -qF 'label'
   _absent -qE 'git push[^#]*master'
   _absent -qF 'exclude-newer'
+  _absent -qF -- '--delete-branch'
 }
 
 @test "steps appear in order: refresh, fork filter, edit, create, close, issue close, failure" {
@@ -179,8 +226,41 @@ _job_value() {
 }
 
 @test "more than one open same-repo refresh PR fails the job" {
-  command grep -qF 'select(.isCrossRepository==false)' "${WF}"
-  command grep -qE '(-gt|-ge) 1|-gt 1' "${WF}"
+  local _find _guard
+  _find="$(_step "Find open refresh PR")"
+  [[ "${_find}" == *'select(.isCrossRepository==false)'* ]]
+  # The exit must sit inside the `-gt 1` block, not merely somewhere nearby.
+  _guard="$(printf '%s\n' "${_find}" | awk '
+    /if \[\[ "\$\{count\}" -gt 1 \]\]; then/ { b = 1; next }
+    b && /^ *fi$/ { exit }
+    b { print }
+  ')"
+  [[ "${_guard}" == *'exit 1'* ]]
+}
+
+@test "PR number, base branch and close are pinned to the found PR and master" {
+  local _pub _close
+  _pub="$(_step "Publish refresh branch and PR")"
+  [[ "${_pub}" == *'PR_NUMBER: ${{ steps.find_pr.outputs.number }}'* ]]
+  [[ "${_pub}" == *'gh pr edit "${PR_NUMBER}" --body-file "${RUNNER_TEMP}/body.md"'* ]]
+  [[ "${_pub}" == *'--base master'* ]]
+  [[ "${_pub}" == *'--head chore/uv-lock-refresh'* ]]
+  _close="$(_step "Close refresh PR when nothing changed")"
+  [[ "${_close}" == *'PR_NUMBER: ${{ steps.find_pr.outputs.number }}'* ]]
+  [[ "${_close}" == *'gh pr comment "${PR_NUMBER}"'* ]]
+  [[ "${_close}" == *'gh pr close "${PR_NUMBER}"'* ]]
+  # The close line carries no extra flags (no branch deletion, no reopen tricks).
+  printf '%s\n' "${_close}" | command grep -qE '^ +gh pr close "\$\{PR_NUMBER\}"$'
+  [[ "${_close}" == *"steps.refresh.outputs.result == 'no changes'"* ]]
+}
+
+@test "success issue-close runs only on success and the failure step also runs on cancel" {
+  local _step_if
+  _step_if="$(_step "Close failure issue" | command grep -E '^        if:' || true)"
+  [[ -z "${_step_if}" || "${_step_if}" == "        if: success()" ]]
+  [[ "$(_step "Close failure issue")" == *'gh issue close'* ]]
+  # timeout-minutes cancels the job; failure() alone does not fire on a cancel.
+  [[ "$(_step "Report failure" | command grep -E '^        if:')" == "        if: failure() || cancelled()" ]]
 }
 
 @test "failure step reads the newest RUNNER_TEMP log, last 40 lines, and links the run" {
@@ -195,8 +275,13 @@ _job_value() {
 }
 
 @test "every step after checkout tees to a RUNNER_TEMP log" {
-  local _tees
-  _tees="$(command grep -cF 'tee "${RUNNER_TEMP}/' "${WF}")"
-  # uv install, refresh, find PR, publish, close, issue close; failure step posts.
-  [ "${_tees}" -ge 5 ]
+  local _name
+  for _name in "Install uv (pinned)" "Refresh lock" "Find open refresh PR" \
+    "Publish refresh branch and PR" "Close refresh PR when nothing changed" \
+    "Close failure issue"; do
+    [[ "$(_step "${_name}")" == *'| tee "${RUNNER_TEMP}/'* ]] || {
+      printf 'no tee in step: %s\n' "${_name}" >&2
+      return 1
+    }
+  done
 }

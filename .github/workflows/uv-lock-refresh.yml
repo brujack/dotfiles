@@ -37,9 +37,20 @@ jobs:
       run:
         shell: bash
     steps:
-      # Full history so the forced branch is built on the current tip.
+      # A dispatch can name any ref; the refresh branch must be master plus one
+      # lock-only commit, so refuse anything else before touching the tree.
+      - name: Require master ref
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/master" ]]; then
+            printf 'refusing to run from %s; dispatch from master\n' "${GITHUB_REF}" >&2
+            exit 1
+          fi
+
+      # ref pins the base to master; full history lets the force-push compare
+      # against the current tip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: master
           fetch-depth: 0
 
       - name: Install uv (pinned)
@@ -129,7 +140,7 @@ jobs:
           } 2>&1 | tee "${RUNNER_TEMP}/close-issue.log"
 
       - name: Report failure
-        if: failure()
+        if: failure() || cancelled()
         run: |
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           newest="$(find "${RUNNER_TEMP}" -maxdepth 1 -name '*.log' -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)"
