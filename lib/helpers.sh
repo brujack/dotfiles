@@ -628,6 +628,7 @@ run_doctor() {
   _doctor_check_brew_links
   _doctor_check_conffile_dist
   _doctor_check_flatpak_gl
+  _doctor_check_dpkg_state
   _doctor_check_inotify_limits
   _doctor_check_kernel_keys
   _doctor_check_pyenv_shims
@@ -1235,6 +1236,65 @@ _doctor_check_conffile_dist() {
     doctor_warn "${_f}" "package copy kept beside your file; diff it against ${_live}, merge, then delete it (empty diff: just delete)"
   done < <(find "${_root}" \( -name '*.dpkg-dist' -o -name '*.ucf-dist' \) -print0 2>/dev/null)
   [[ ${_n} -gt 0 ]] || doctor_pass "no .dpkg-dist or .ucf-dist under ${_root}"
+}
+
+# _dpkg_missing_conffiles <pkg> -- prints each conffile dpkg lists for <pkg>
+# that is absent on disk, one per line; prints nothing when the package is not
+# installed or every conffile is there. An "obsolete" conffile is skipped (the
+# package no longer ships it), and a dangling symlink counts as present.
+# Shared by _doctor_check_dpkg_state and _install_ubuntu_powershell's guard so
+# the two cannot disagree about what "intact" means.
+# Seams: _DPKG_QUERY_BIN (default dpkg-query); _DPKG_CONFFILE_ROOT, a prefix for
+# the existence test (default empty, the real filesystem).
+_dpkg_missing_conffiles() {
+  local _pkg="$1" _list _path _sum _flag
+  _list="$("${_DPKG_QUERY_BIN:-dpkg-query}" -W -f="\${Conffiles}\n" "${_pkg}" 2>/dev/null)" || return 0
+  while read -r _path _sum _flag; do
+    [[ -n "${_path}" && "${_flag}" != obsolete ]] || continue
+    [[ -e "${_DPKG_CONFFILE_ROOT:-}${_path}" || -L "${_DPKG_CONFFILE_ROOT:-}${_path}" ]] \
+      || printf '%s\n' "${_path}"
+  done <<< "${_list}"
+}
+
+# Why this exists: a package left unpacked but not configured (an earlier
+# conffile prompt hit EOF) makes every later apt transaction fail, and
+# packages-microsoft-prod with its keyring or source deleted makes every apt
+# update fail. Neither repairs itself: `apt-get install --reinstall` of the
+# Microsoft package exits 0 and restores nothing (its only source is the one
+# whose key is gone; measured in an ubuntu:26.04 container, 2026-11-08), and
+# the setup install path used to skip once pwsh ran. Reports only; the
+# remedies are printed for the operator, never run.
+# Spec: docs/superpowers/specs/2026-10-03-apt-conffile-noninteractive-design.md (R19)
+_doctor_check_dpkg_state() {
+  [[ -n ${LINUX} ]] || return 0
+  printf "\ndpkg package state:\n"
+  local _status _abbrev _pkg _stuck=() _missing _failed=0
+  if ! _status="$("${_DPKG_QUERY_BIN:-dpkg-query}" -W -f="\${db:Status-Abbrev}\t\${Package}\n" 2>/dev/null)"; then
+    doctor_warn "dpkg-query" "cannot list package states"
+    return 0
+  fi
+  # Status-Abbrev is want, state, error flag. Half-installed, unpacked,
+  # half-configured and trigger-waiting states, and the reinstall-required
+  # flag, are the ones `dpkg --audit` reports.
+  while IFS=$'\t' read -r _abbrev _pkg; do
+    case "${_abbrev:1:2}" in
+      [UFHWt]? | ?R) _stuck+=("${_pkg}") ;;
+    esac
+  done <<< "${_status}"
+  if ((${#_stuck[@]} > 0)); then
+    doctor_fail "dpkg" "not fully configured: ${_stuck[*]}; finish them with:"
+    # The command is a %s argument, not printf's format: tests/scripts/dpkg_sudo_frontend.bats
+    # scans text for sudo dpkg calls, and a trailing \n' would glue onto --force-confold.
+    printf '    %s\n' 'sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a --force-confdef --force-confold'
+    _failed=1
+  fi
+  _missing="$(_dpkg_missing_conffiles packages-microsoft-prod)"
+  if [[ -n "${_missing}" ]]; then
+    doctor_fail "packages-microsoft-prod" "installed but missing ${_missing//$'\n'/, }; apt update fails on its source. Re-run the verified install (reinstalls with --force-confmiss):"
+    printf '    ./setup_env.sh -t developer\n'
+    _failed=1
+  fi
+  ((_failed)) || doctor_pass "every package configured; packages-microsoft-prod conffiles present or not installed"
 }
 
 # Spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md. Reports

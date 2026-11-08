@@ -315,7 +315,6 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - A new test seam's description goes to `ai-config/docs/knowledge/dotfiles-test-seams.md`; `CLAUDE.md` gets a one-line rule and pointer only.
 
-
 - A test seam is a variable with a production default — `local _file="${VAR:-<real path>}"` — not a naming rule: seams below are named `_RUSTUP_INIT_*`, `GGSHIELD_BIN`, `LEDGER_BIN`, `_AWS_*`, `_RHN_*`, `_CARGO_BIN`, and more.
 - In tests, set the seam variable to a writable temp copy; leave it unset in production code. → `dotfiles-test-seams.md` § `Test seam idiom and override pattern`
 
@@ -331,6 +330,8 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - `_OVERRIDE_CONFFILE_DIST_ROOT` (`lib/helpers.sh:_doctor_check_conffile_dist`)
   - Point it at a fixture directory, never the real `/etc`; tests must set or unset `LINUX` explicitly, since developer shells export it and the check returns early without it.
+
+- `load_mocks` points `_DPKG_QUERY_BIN` at `tests/stubs/dpkg-query-stub` (fed by `STUB_DPKG_*`), so no test reads the host package database; set `_DPKG_CONFFILE_ROOT` to a fixture for conffile-existence cases. → `dotfiles-test-seams.md` § `dpkg-query seam and conffile root`
 
 - Set `_OVERRIDE_DOCKER_DAEMON_JSON` to a fixture and always use `tests/mocks/nvidia-ctk` (`MOCK_NVIDIA_CTK_WRITES`/`MOCK_NVIDIA_CTK_TARGET`/`MOCK_NVIDIA_CTK_EXIT`): the `sudo` mock otherwise execs the real `nvidia-ctk` against the live `/etc/docker/daemon.json` (absent on the Studio, so a green local run proves nothing). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: docker daemon.json seam and nvidia-ctk mock`
 

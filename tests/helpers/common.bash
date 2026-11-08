@@ -120,6 +120,9 @@ load_mocks() {
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.
   export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-nvidia-version"
+  # Linux hosts and CI runners carry a real package database; the stub reports
+  # no packages and no conffiles unless a test feeds it (tests/stubs/dpkg-query-stub).
+  export _DPKG_QUERY_BIN="${REPO_ROOT}/tests/stubs/dpkg-query-stub"
   export _OVERRIDE_RUSTUP_BREW_KEGS="${BATS_TEST_TMPDIR:-/nonexistent}/no-rustup-keg"
   # _install_ubuntu_hashicorp writes a source file and a keyring through
   # tests/mocks/sudo, which execs real commands; keep both under the test tmpdir
