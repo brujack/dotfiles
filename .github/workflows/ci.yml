@@ -39,7 +39,7 @@ jobs:
           SC_VER: "0.11.0"
           SC_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
         run: |
-          curl -fsSL -o /tmp/sc.tar.xz \
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/sc.tar.xz \
             "https://github.com/koalaman/shellcheck/releases/download/v${SC_VER}/shellcheck-v${SC_VER}.linux.x86_64.tar.xz"
           echo "${SC_SHA256}  /tmp/sc.tar.xz" | sha256sum -c -
           tar -xJf /tmp/sc.tar.xz -C /tmp
@@ -51,7 +51,7 @@ jobs:
           UV_VER: "0.13.0"
           UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
         run: |
-          curl -fsSL -o /tmp/uv.tar.gz \
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/uv.tar.gz \
             "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
           echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c -
           tar -xzf /tmp/uv.tar.gz -C /tmp
@@ -236,7 +236,7 @@ jobs:
           SC_VER: "0.11.0"
           SC_SHA256: "56affdd8de5527894dca6dc3d7e0a99a873b0f004d7aabc30ae407d3f48b0a79"
         run: |
-          curl -fsSL -o /tmp/sc.tar.xz \
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/sc.tar.xz \
             "https://github.com/koalaman/shellcheck/releases/download/v${SC_VER}/shellcheck-v${SC_VER}.darwin.aarch64.tar.xz"
           echo "${SC_SHA256}  /tmp/sc.tar.xz" | shasum -a 256 -c -
           tar -xJf /tmp/sc.tar.xz -C /tmp
@@ -248,7 +248,7 @@ jobs:
           UV_VER: "0.13.0"
           UV_SHA256: "a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
         run: |
-          curl -fsSL -o /tmp/uv.tar.gz \
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/uv.tar.gz \
             "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-aarch64-apple-darwin.tar.gz"
           echo "${UV_SHA256}  /tmp/uv.tar.gz" | shasum -a 256 -c -
           tar -xzf /tmp/uv.tar.gz -C /tmp
@@ -356,7 +356,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget apt-transport-https software-properties-common
           source /etc/os-release
-          wget -q "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -O "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
           sudo dpkg -i packages-microsoft-prod.deb
           sudo apt-get update
           sudo apt-get install -y powershell
@@ -410,7 +410,7 @@ jobs:
         run: |
           set -e
           source lib/constants.sh
-          wget -qO /tmp/gitleaks.tar.gz \
+          curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
