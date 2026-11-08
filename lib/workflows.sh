@@ -1854,7 +1854,7 @@ _release_pin_constants_path() {
   printf '%s\n' "${_OVERRIDE_CONSTANTS_PATH:-${DOTFILES_REPO_ROOT}/lib/constants.sh}"
 }
 
-# _update_release_pin <tool> <var> <latest> -- moves a kind/yq version pin and
+# _update_release_pin <tool> <var> <latest> -- moves a kind/yq/gitleaks version pin and
 # its sha256 pins together. Works on a same-directory temp copy and renames it
 # over lib/constants.sh only when the version edit and the refresh both
 # succeed, so any failure leaves the file byte-identical. Each failure names
@@ -1900,8 +1900,13 @@ _update_release_pin() {
     return 1
   fi
   printf "  Updated %s → %s\n" "${_var}" "${_latest}"
-  printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
-    "${_tool}" "${_latest}"
+  if [[ "${_tool}" == "gitleaks" ]]; then
+    printf "  %s: commit lib/constants.sh and merge the PR; CI's secret-scan job downloads and verifies %s, nothing installs it locally\n" \
+      "${_tool}" "${_latest}"
+  else
+    printf "  %s: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install %s\n" \
+      "${_tool}" "${_latest}"
+  fi
 }
 
 # _update_apt_version_pin <tool> <var> <latest> -- moves a packer/vagrant pin.
@@ -1960,7 +1965,7 @@ _prompt_version_update() {
         _update_python_pin "${_pinned}" "${_latest}" || return 1
         printf "  Updated %s → %s\n" "${_var}" "${_latest}"
         ;;
-      kind|yq)
+      kind|yq|gitleaks)
         _update_release_pin "${_tool}" "${_var}" "${_latest}" || return 1
         ;;
       packer|vagrant)
@@ -2205,7 +2210,9 @@ run_check_versions() {
   _run_cv_pinned_release "shellcheck" "${SHELLCHECK_VER}" "koalaman/shellcheck" "SHELLCHECK_VER"
   _run_cv_pinned_release "vagrant"    "${VAGRANT_VER}"    "hashicorp/vagrant"   "VAGRANT_VER"
   _run_cv_pinned_release "packer"     "${PACKER_VER}"     "hashicorp/packer"    "PACKER_VER"
-  _run_cv_check "gitleaks"  "${GITLEAKS_VER}"    "gitleaks/gitleaks"   "gitleaks version"     "[0-9]+\.[0-9]+\.[0-9]+"    "GITLEAKS_VER"
+  # By the pin, not a local binary: CI downloads and verifies GITLEAKS_VER, and
+  # nothing installs gitleaks on a machine.
+  _run_cv_pinned_release "gitleaks"   "${GITLEAKS_VER}"   "gitleaks/gitleaks"   "GITLEAKS_VER"
   _run_cv_pinned_release "kind"       "${KIND_VER}"       "kubernetes-sigs/kind" "KIND_VER"
   _check_cv_homebrew_install
 

@@ -1714,9 +1714,9 @@ _stub_refresher_fail() {
   export _OVERRIDE_REFRESH_PINS="${_REFRESHER}"
 }
 
-@test "_prompt_version_update on y moves yq and kind versions, both pins and _FOR_VER together" {
+@test "_prompt_version_update on y moves yq, kind and gitleaks versions, both pins and _FOR_VER together" {
   local _t _T
-  for _t in yq kind; do
+  for _t in yq kind gitleaks; do
     _T="$(printf '%s' "${_t}" | tr '[:lower:]' '[:upper:]')"
     setup_constants_copy
     export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
@@ -1730,7 +1730,13 @@ _stub_refresher_fail() {
     grep -Fqx "${_T}_SHA256_ARM64=\"$(printf 'd%.0s' {1..64})\"" "${_TEST_CONSTANTS_PATH}"
     [ "$(grep -E "^${_T}_(VER|SHA256_AMD64|SHA256_ARM64|SHA256_FOR_VER)=" "${_TEST_CONSTANTS_PATH}")" != "${_before}" ]
     [[ "$output" == *"Updated ${_T}_VER → 9.10.0"* ]]
-    [[ "$output" == *"${_t}: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install 9.10.0"* ]]
+    if [[ "${_t}" == gitleaks ]]; then
+      # Nothing outside CI installs gitleaks: the next step is the merge itself.
+      [[ "$output" == *"gitleaks: commit lib/constants.sh and merge the PR; CI's secret-scan job downloads and verifies 9.10.0, nothing installs it locally"* ]]
+      [[ "$output" != *"setup_env.sh -t developer"* ]]
+    else
+      [[ "$output" == *"${_t}: commit lib/constants.sh and merge the PR, then run ./setup_env.sh -t developer on each Linux box to install 9.10.0"* ]]
+    fi
     # no temp file left beside the constants file
     [ -z "$(find "${BATS_TEST_TMPDIR}" -maxdepth 1 -name '.constants.*')" ]
   done
@@ -1857,11 +1863,14 @@ _stub_refresher_fail() {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
   _stub_refresher_fail
-  run _prompt_version_update "gitleaks" "GITLEAKS_VER" "8.30.1" "8.31.0" <<< "y"
+  local _pin
+  _pin="$(sed -n 's/^RUBY_VER="\(.*\)"$/\1/p' "${_TEST_CONSTANTS_PATH}")"
+  [ -n "${_pin}" ]
+  run _prompt_version_update "ruby" "RUBY_VER" "${_pin}" "99.0.0" <<< "y"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Updated GITLEAKS_VER → 8.31.0"* ]]
-  grep -Fqx 'GITLEAKS_VER="8.31.0"' "${_TEST_CONSTANTS_PATH}"
-  # the refresher belongs to kind/yq only: this arm must never call it
+  [[ "$output" == *"Updated RUBY_VER → 99.0.0"* ]]
+  grep -Fqx 'RUBY_VER="99.0.0"' "${_TEST_CONSTANTS_PATH}"
+  # the refresher belongs to kind/yq/gitleaks only: this arm must never call it
   [[ "$output" != *"refresh sha256 pins"* ]]
   [ "$(diff "${REPO_ROOT}/lib/constants.sh" "${_TEST_CONSTANTS_PATH}" | grep -c '^>')" -eq 1 ]
 }
@@ -2072,13 +2081,18 @@ _stub_refresher_fail() {
 
 # ── run_check_versions — tool inclusion ───────────────────────────────────────
 
-@test "run_check_versions checks gitleaks version" {
-  local _checked_tools="${BATS_TEST_TMPDIR}/checked_tools"
-  _check_one_version() {
-    printf '%s\n' "$1" >> "${_checked_tools}"
-  }
+@test "run_check_versions checks gitleaks by its pin, not by an installed binary" {
+  # CI downloads and verifies GITLEAKS_VER and nothing installs gitleaks locally,
+  # so the check compares the pin to upstream, as for kind and yq.
+  # The stubs write to fixed paths, not a test local: run_check_versions'
+  # helpers declare their own locals (_pinned among them), and bash's dynamic
+  # scoping would hand the stub theirs.
+  : >"${BATS_TEST_TMPDIR}/rec-pinned"; : >"${BATS_TEST_TMPDIR}/rec-installed"
+  _check_one_pinned_release() { printf '%s %s %s\n' "$1" "$2" "$3" >> "${BATS_TEST_TMPDIR}/rec-pinned"; }
+  _check_one_version() { printf '%s\n' "$1" >> "${BATS_TEST_TMPDIR}/rec-installed"; }
   run_check_versions
-  grep -q "gitleaks" "${_checked_tools}"
+  grep -Fqx "gitleaks ${GITLEAKS_VER} gitleaks/gitleaks" "${BATS_TEST_TMPDIR}/rec-pinned"
+  ! command grep -q "gitleaks" "${BATS_TEST_TMPDIR}/rec-installed"
 }
 
 @test "run_check_versions checks homebrew-install SHA" {
@@ -4215,13 +4229,13 @@ _stub_cv_callees() {
   [ "${_warn_ln}" -lt "${_summary_ln}" ]
 }
 
-@test "run_check_versions runs two version checks, five pinned-release checks and two feed checks with a valid token" {
+@test "run_check_versions runs one version check, six pinned-release checks and two feed checks with a valid token" {
   _stub_cv_callees
   export GITHUB_TOKEN="ok-tok"
   run run_check_versions
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
-  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 5 ]
+  [ "$(grep -c '^_check_one_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 1 ]
+  [ "$(grep -c '^_check_one_pinned_release$' "${BATS_TEST_TMPDIR}/rec")" -eq 6 ]
   [ "$(grep -c '^_check_one_pin_version$' "${BATS_TEST_TMPDIR}/rec")" -eq 2 ]
   [[ "$output" != *"not checked"* ]]
 }
@@ -4240,6 +4254,7 @@ _stub_cv_callees() {
       kubernetes-sigs/kind) printf '%s' "${KIND_VER}" ;;
       mikefarah/yq) printf '%s' "${YQ_VER}" ;;
       koalaman/shellcheck) printf '%s' "${SHELLCHECK_VER}" ;;
+      gitleaks/gitleaks) printf '%s' "${GITLEAKS_VER}" ;;
     esac
   }
   export UPDATE_VERSIONS=1
@@ -4250,6 +4265,7 @@ _stub_cv_callees() {
   [[ "$output" == *"[OK]"*"kind"*"pinned=${KIND_VER}"*"latest=${KIND_VER}"* ]]
   [[ "$output" == *"[OK]"*"yq"*"pinned=${YQ_VER}"*"latest=${YQ_VER}"* ]]
   [[ "$output" == *"[OK]"*"shellcheck"*"pinned=${SHELLCHECK_VER}"*"latest=${SHELLCHECK_VER}"* ]]
+  [[ "$output" == *"[OK]"*"gitleaks"*"pinned=${GITLEAKS_VER}"*"latest=${GITLEAKS_VER}"* ]]
   [[ "$output" != *"[y/N]"* ]]
 }
 
@@ -4263,17 +4279,19 @@ _stub_cv_callees() {
   CARGO_TOOLS=(foo@1.0.0)
   _fetch_github_latest() {
     case "$1" in
-      kubernetes-sigs/kind | mikefarah/yq | koalaman/shellcheck) printf '99.0.0' ;;
+      kubernetes-sigs/kind | mikefarah/yq | koalaman/shellcheck | gitleaks/gitleaks) printf '99.0.0' ;;
     esac
   }
   _prompt_version_update() { printf '%s %s %s %s\n' "$1" "$2" "$3" "$4" >> "${BATS_TEST_TMPDIR}/prompts"; }
   : > "${BATS_TEST_TMPDIR}/prompts"
   export UPDATE_VERSIONS=1
   run run_check_versions
-  [ "$(wc -l < "${BATS_TEST_TMPDIR}/prompts")" -eq 3 ]
+  [ "$(wc -l < "${BATS_TEST_TMPDIR}/prompts" | tr -d ' ')" -eq 4 ]
   grep -Fqx "kind KIND_VER ${KIND_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
   grep -Fqx "yq YQ_VER ${YQ_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
   grep -Fqx "shellcheck SHELLCHECK_VER ${SHELLCHECK_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
+  # gitleaks is judged by its pin, not by a local binary: no gitleaks on PATH here.
+  grep -Fqx "gitleaks GITLEAKS_VER ${GITLEAKS_VER} 99.0.0" "${BATS_TEST_TMPDIR}/prompts"
 }
 
 # ── run_check_versions summary counting ──────────────────────────────────────
