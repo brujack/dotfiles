@@ -370,6 +370,34 @@ EOF
   [ "$output" = "${_tmp_dir}/gnubin" ]
 }
 
+@test "6_path.zsh macOS gnubin path survives word splitting and a spaced path" {
+  local _base _dir
+  _base="$(mktemp -d)"
+  _dir="${_base}/dir with space"
+  mkdir -p "${_dir}"
+
+  # The macOS twin of "6_path.zsh Linux coreutils gnubin path survives word
+  # splitting and a spaced path": `setopt shwordsplit` is what lets this fail
+  # (zsh does not split unquoted expansions by default, so without it the
+  # quoted and unquoted forms agree). Under it an unquoted ${_gnubin} lands as
+  # three path entries. setopt, not emulate sh -- see that test for why.
+  run zsh -c "
+    setopt shwordsplit
+    unset MACOS LINUX
+    export MACOS=1
+    export _OVERRIDE_GNUBIN_ARM='${_dir}'
+    export _OVERRIDE_GNUBIN_INTEL='/nonexistent/gnubin-intel'
+    # A spaced entry already first on PATH: the rest of path must survive
+    # the prepend too, not only the gnubin dir.
+    export PATH='${_base}/pre existing':\"\${PATH}\"
+    source '${ZSHRC_D}/6_path.zsh' 2>/dev/null
+    printf '%s\n' \"\${path[1]}\" \"\${path[2]}\"
+  "
+  rm -rf "${_base}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_dir}"$'\n'"${_base}/pre existing" ]
+}
+
 @test "6_path.zsh prepends Intel gnubin dir to PATH when only /usr/local prefix present" {
   local _tmp_dir
   _tmp_dir="$(mktemp -d)"

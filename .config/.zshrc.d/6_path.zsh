@@ -40,7 +40,7 @@ if [[ ${MACOS} ]]; then
   # docs/superpowers/specs/2026-08-12-gnu-make-4-on-macos-design.md).
   for _gnubin in "${_OVERRIDE_GNUBIN_ARM:-/opt/homebrew/opt/make/libexec/gnubin}" \
                  "${_OVERRIDE_GNUBIN_INTEL:-/usr/local/opt/make/libexec/gnubin}"; do
-    [[ -d ${_gnubin} ]] && { path=(${_gnubin} $path); break }
+    [[ -d ${_gnubin} ]] && { path=("${_gnubin}" "${path[@]}"); break }
   done
   unset _gnubin
 fi
