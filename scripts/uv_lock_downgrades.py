@@ -16,6 +16,8 @@ Prints the package name for each downgrade and `unparseable: <line>` for an
 Exit 0: nothing found. Exit 1: findings. Exit 2: unreadable input.
 """
 
+from __future__ import annotations
+
 import re
 import sys
 
@@ -84,5 +86,14 @@ def main() -> int:
     return 1 if reports else 0
 
 
+def run() -> int:
+    """Run main(); any uncaught exception exits 2, never 1 (1 means findings)."""
+    try:
+        return main()
+    except Exception as err:  # noqa: BLE001 - the exit code is the contract
+        print(f"uv_lock_downgrades: crashed: {err!r}", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

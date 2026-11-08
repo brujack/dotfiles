@@ -106,6 +106,11 @@ _refresh_run() {
   case "${rc}" in
     0) ;;
     1)
+      if [[ -z "${offenders}" ]]; then
+        # rc 1 with no names is a crash that exited like a finding.
+        _refresh_err "downgrade check failed (helper rc ${rc})"
+        return 1
+      fi
       _refresh_err "refusing downgrade: ${offenders//$'\n'/, }"
       _refresh_err "if a release was yanked, raise the pyproject.toml floor past it, then re-run"
       return 1

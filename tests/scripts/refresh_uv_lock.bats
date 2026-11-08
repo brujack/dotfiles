@@ -164,13 +164,44 @@ run_script() {
 
 @test "helper crash is reported as a failed check, not a downgrade" {
   export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
-  printf 'import sys\nsys.exit(2)\n' > "${BATS_TEST_TMPDIR}/crash.py"
+  printf 'raise RuntimeError("boom")\n' > "${BATS_TEST_TMPDIR}/crash.py"
   export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/crash.py"
   run_script
   [ "${status}" -eq 1 ]
-  [[ "${stderr}" == *"downgrade check failed (helper rc 2)"* ]]
+  [[ "${stderr}" == *"downgrade check failed"* ]]
   [[ "${stderr}" != *"refusing downgrade"* ]]
   [[ "${stderr}" != *"yanked"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "helper rc 1 with no offenders is a crash, not a downgrade" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  printf 'import sys\nsys.exit(1)\n' > "${BATS_TEST_TMPDIR}/rc1.py"
+  export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/rc1.py"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"downgrade check failed (helper rc 1)"* ]]
+  [[ "${stderr}" != *"yanked"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "unexpected helper rc is a failed check and writes no body" {
+  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  printf 'import sys\nsys.exit(5)\n' > "${BATS_TEST_TMPDIR}/rc5.py"
+  export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/rc5.py"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"helper rc 5"* ]]
+  [ ! -e "${BODY}" ]
+  [ ! -e "${STUB_MAKE_LOG}" ]
+}
+
+@test "two downgrades are both named" {
+  export STUB_UV_CHANGE=1
+  export STUB_UV_LINES=$'Updated a v2 -> v1\nUpdated b v3 -> v2'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"refusing downgrade: a, b"* ]]
   [ ! -e "${BODY}" ]
 }
 
@@ -194,6 +225,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot cd"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "missing uv.lock exits 1" {
@@ -201,6 +233,7 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot read uv.lock"* ]]
+  [ ! -e "${BODY}" ]
 }
 
 @test "relative body-file resolves against the caller's cwd" {

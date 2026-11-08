@@ -120,6 +120,36 @@ class DowngradeCheckTest(unittest.TestCase):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertNotRegex(source, r"(?m)^\s*(import|from)\s+packaging")
 
+    def test_trailing_zero_forms_pass(self) -> None:
+        self.assertEqual(run_check(upd("v1.0", "v1")), (0, ""))
+        self.assertEqual(run_check(upd("v1", "v1.0")), (0, ""))
+
+    def test_post_dev_above_final(self) -> None:
+        self.assertEqual(run_check(upd("v1.0", "v1.0.post1.dev1")), (0, ""))
+
+    def test_post0_to_final_flagged(self) -> None:
+        self.assertEqual(run_check(upd("v1.0.post0", "v1.0")), (1, "a\n"))
+
+    def test_lower_prerelease_number_flagged(self) -> None:
+        self.assertEqual(run_check(upd("v1.0a2", "v1.0a1")), (1, "a\n"))
+
+    def test_uncaught_exception_exits_2(self) -> None:
+        # Import the helper with main() forced to raise, then call run().
+        code = (
+            "import importlib.util,sys\n"
+            f"spec=importlib.util.spec_from_file_location('h',{str(SCRIPT)!r})\n"
+            "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n"
+            "def boom():\n    raise RuntimeError('boom')\n"
+            "m.main=boom\n"
+            "sys.exit(m.run())\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", code], capture_output=True, check=False
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn(b"boom", proc.stderr)
+        self.assertEqual(proc.stdout, b"")
+
     def test_undecodable_input_exits_2(self) -> None:
         proc = run_raw(b"Updated a v1 -> v\xff\n")
         self.assertEqual(proc.returncode, 2)
