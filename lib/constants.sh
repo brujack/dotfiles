@@ -14,7 +14,7 @@
 # software versions to install
 # read by tests/helpers/common.bash:load_setup_env (exported for mocks) and tests/setup_env/unit.bats
 BATS_VER="1.14.0"
-# read by lib/workflows.sh:run_check_versions (_run_cv_check) and, with the three
+# read by lib/workflows.sh:run_check_versions (_run_cv_pinned_release) and, with the three
 # pins below, by scripts/verify-release-asset.sh in CI's secret-scan job, which
 # refuses to run gitleaks unless GITLEAKS_SHA256_FOR_VER equals this value and
 # the download matches GITLEAKS_SHA256_AMD64. check-versions --update moves all
