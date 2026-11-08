@@ -1,5 +1,7 @@
 # Weekly uv.lock refresh PR Implementation Plan
 
+> **Status: DONE** — merged in #445 (641c9a35), 2026-11-08. V1/V2 post-merge dispatch checks pending.
+
 spec: docs/superpowers/specs/2026-11-08-uv-lock-refresh-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
