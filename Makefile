@@ -162,6 +162,9 @@ lint:
 	  if [ -n "$(BATS_FILES)" ]; then \
 	    printf '%s\n' $(BATS_FILES) | xargs -n 4 -P $(JOBS) shellcheck --severity=warning && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
 	  fi; \
+	elif [ "$${REQUIRE_SHELLCHECK:-}" = 1 ]; then \
+	  printf "shellcheck not found and REQUIRE_SHELLCHECK=1: refusing to skip (CI installs the pinned shellcheck before lint; check that step)\n"; \
+	  failed=1; \
 	else \
 	  if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then \
 	    printf "shellcheck not found, skipping (install: brew install shellcheck)\n"; \

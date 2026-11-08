@@ -28,6 +28,11 @@ jobs:
     timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
     permissions:
       contents: read
+    # make lint skips a missing shellcheck so a bare machine can still commit;
+    # here the pin is installed first, so a skip would be a silent pass.
+    # See the Makefile lint recipe and tests/scripts/makefile_lint_scope.bats.
+    env:
+      REQUIRE_SHELLCHECK: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -222,6 +227,9 @@ jobs:
     # Homebrew bottles. It only needs to read the checkout.
     permissions:
       contents: read
+    # Same as test-shard: shard 1's make test runs lint, which must not skip.
+    env:
+      REQUIRE_SHELLCHECK: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
