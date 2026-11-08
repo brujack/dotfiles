@@ -804,6 +804,22 @@ _ms_require_gnu_ar() {
   refute_grep "^(wget|dpkg|sudo|apt) " "${MOCK_CALLS_FILE}" -E
 }
 
+@test "_install_ubuntu_powershell: pwsh runs but a Microsoft conffile was deleted -- reinstalls with confmiss" {
+  # The guard used to trust a running pwsh alone, so a machine whose
+  # microsoft-prod keyring was deleted after install was never repaired and
+  # apt update kept failing on it (spec 2026-10-03 R19). Same-version
+  # dpkg -i --force-confmiss is the measured repair.
+  _PWSH_BIN="$(_pwsh_stub_bin 0)"
+  export _DPKG_CONFFILE_ROOT="${BATS_TEST_TMPDIR}/root"
+  mkdir -p "${_DPKG_CONFFILE_ROOT}"
+  printf ' /usr/share/keyrings/microsoft-prod.gpg 9d87c5b1\n' > "${BATS_TEST_TMPDIR}/conffiles"
+  export STUB_DPKG_CONFFILES="${BATS_TEST_TMPDIR}/conffiles"
+  run _install_ubuntu_powershell
+  [ "$status" -eq 0 ]
+  grep -q "wget.*packages-microsoft-prod.deb" "${MOCK_CALLS_FILE}"
+  grep -qE "dpkg -i .*--force-confmiss" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_powershell: pwsh resolves but does not run still installs" {
   # A `command -v pwsh`-only guard would see this stub as "installed" (it
   # exists and is executable) and stop here -- the guard must actually RUN

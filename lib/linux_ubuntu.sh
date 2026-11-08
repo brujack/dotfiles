@@ -482,7 +482,11 @@ _install_ubuntu_powershell() {
   # attempt hit the resolute gap below downloaded and dpkg -i'd the WRONG
   # config, leaving a `pwsh` that resolves via `command -v` but is absent or
   # broken. A presence-only guard would loop forever on that box.
-  if _pwsh_probe_runs; then
+  # A running pwsh is not enough on its own: if the Microsoft keyring or source
+  # was deleted after install, apt update fails on that source and only the
+  # confmiss reinstall below restores it, so the guard must let it through
+  # (spec 2026-10-03 R19; _doctor_check_dpkg_state reports the same state).
+  if _pwsh_probe_runs && [[ -z "$(_dpkg_missing_conffiles packages-microsoft-prod)" ]]; then
     printf "pwsh is installed\\n"
     return 0
   fi

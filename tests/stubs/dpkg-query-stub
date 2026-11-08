@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Stand-in for dpkg-query, reached only through _DPKG_QUERY_BIN (load_mocks
+# points the seam here, so no test reads the host's package database).
+#   STUB_DPKG_ARGV       file: each call's arguments, one per line, then "--"
+#   STUB_DPKG_QUERY_EXIT force this exit status
+#   no package argument: prints STUB_DPKG_STATUS ("<abbrev>\t<pkg>" lines), or nothing
+#   a package argument:  prints STUB_DPKG_CONFFILES (dpkg's ${Conffiles} shape),
+#                        or exits 1 like dpkg-query for a package that is not installed
+if [[ -n "${STUB_DPKG_ARGV:-}" ]]; then
+  printf '%s\n' "$@" -- >> "${STUB_DPKG_ARGV}"
+fi
+[[ -z "${STUB_DPKG_QUERY_EXIT:-}" ]] || exit "${STUB_DPKG_QUERY_EXIT}"
+_last="${*: -1}"
+if [[ "${_last}" == -* ]]; then
+  [[ -z "${STUB_DPKG_STATUS:-}" ]] || cat "${STUB_DPKG_STATUS}"
+  exit 0
+fi
+[[ -n "${STUB_DPKG_CONFFILES:-}" ]] || exit 1
+cat "${STUB_DPKG_CONFFILES}"
