@@ -175,6 +175,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 - `JOBS` defaults to 24; override per call with `make test JOBS=6`, never `JOBS="$(nproc)"` (worst setting on a 2-vCPU runner). Force serial with `make test HAVE_PARALLEL=`.
 - In a **test** that invokes make inside make, `unset MAKEFLAGS MFLAGS MAKELEVEL JOBS` (`tests/makefile_parallel_target.bats:21`); test-scoped only, since stripping `MAKEFLAGS` elsewhere drops `--no-print-directory`.
 - The bats file list is a filesystem walk; add to `BATS_SERIAL_FILES` only with a measurement showing failure under `--jobs`. → `dotfiles-bats-test-infrastructure.md` § `Testing: make test parallelism and lint targets`
+- Adding or deleting a `.bats` file needs the same change in `tests/bats-files.txt` (`git ls-files '*.bats' | LC_ALL=C sort > tests/bats-files.txt`); `make check-bats-manifest`, in `test-prereqs`, fails otherwise, because the CI gates derive their file set from the same walk as the shards and cannot see a deleted file.
 
 - `tests/bats-weights.tsv` holds CPU s of `bats --jobs 3 <file>` on macOS and decides shard balance only, never coverage; reseed per ai-config `docs/knowledge/dotfiles-bats-test-infrastructure.md` § `Shard weights: reseed procedure`. `make test-bats` runs the bats files alone, or only the list named by `BATS_FILES_FROM`.
 
