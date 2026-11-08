@@ -31,6 +31,16 @@ BATS_FLAGS := --print-output-on-failure
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
 UV := $(shell command -v uv 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
+# A make variable, not a literal, so a test can name a missing path and reach
+# the skip and refusal branches without touching the tracked file.
+LIB_TRAP_SCANNER := scripts/check-lib-exit-traps.sh
+
+# Every tool guard below skips rather than fails, so a machine without the tool
+# can still commit the change that installs it. CI installs each tool first and
+# sets REQUIRE_TOOLS=1, which turns every skip into a failure: there a skip
+# would be a silent pass. Read from the environment by the recipe shell.
+# $(1) is what is missing, $(2) what it would skip.
+REQUIRE_TOOLS_REFUSE = if [ "$${REQUIRE_TOOLS:-}" = 1 ]; then printf '%s and REQUIRE_TOOLS=1: refusing to skip %s (CI installs it before make runs; check that step)\n' "$(1)" "$(2)"; exit 1; fi
 
 # SHELL_FILES is content-derived (every tracked file whose first line is a
 # bash/sh shebang), not pathspec-derived: a pathspec cannot express "every
@@ -162,8 +172,8 @@ lint:
 	  if [ -n "$(BATS_FILES)" ]; then \
 	    printf '%s\n' $(BATS_FILES) | xargs -n 4 -P $(JOBS) shellcheck --severity=warning && printf "shellcheck bats OK\n" || { printf "shellcheck bats FAIL\n"; failed=1; }; \
 	  fi; \
-	elif [ "$${REQUIRE_SHELLCHECK:-}" = 1 ]; then \
-	  printf "shellcheck not found and REQUIRE_SHELLCHECK=1: refusing to skip (CI installs the pinned shellcheck before lint; check that step)\n"; \
+	elif [ "$${REQUIRE_TOOLS:-}" = 1 ]; then \
+	  printf "shellcheck not found and REQUIRE_TOOLS=1: refusing to skip shellcheck (CI installs the pinned shellcheck before lint; check that step)\n"; \
 	  failed=1; \
 	else \
 	  if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then \
@@ -172,10 +182,13 @@ lint:
 	    printf "shellcheck not found, skipping (install: ./setup_env.sh -t developer on Ubuntu (installs the pinned SHELLCHECK_VER))\n"; \
 	  fi; \
 	fi; \
-	if [ -f scripts/check-lib-exit-traps.sh ]; then \
-	  bash scripts/check-lib-exit-traps.sh || failed=1; \
+	if [ -f "$(LIB_TRAP_SCANNER)" ]; then \
+	  bash "$(LIB_TRAP_SCANNER)" || failed=1; \
+	elif [ "$${REQUIRE_TOOLS:-}" = 1 ]; then \
+	  printf "%s missing and REQUIRE_TOOLS=1: refusing to skip the lib exit-trap scan (a tracked file; restore it: git checkout %s)\n" "$(LIB_TRAP_SCANNER)" "$(LIB_TRAP_SCANNER)"; \
+	  failed=1; \
 	else \
-	  printf "scripts/check-lib-exit-traps.sh missing, skipping (restore it: git checkout scripts/check-lib-exit-traps.sh)\n"; \
+	  printf "%s missing, skipping (restore it: git checkout %s)\n" "$(LIB_TRAP_SCANNER)" "$(LIB_TRAP_SCANNER)"; \
 	fi; \
 	exit $$failed
 
@@ -236,7 +249,8 @@ endif
 # Parallelising it is backlogged, not done.
 test-python:
 ifndef PYTHON3
-	@printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
+	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,Python tests); \
+	printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
 else
 	python3 -m unittest discover -s tests -p 'test_*.py'
 endif
@@ -244,7 +258,8 @@ endif
 # Reads CLAUDE.md only through `git show HEAD:CLAUDE.md`, never the working tree.
 check-claude-md-budget:
 ifndef PYTHON3
-	@printf "python3 not found, skipping CLAUDE.md budget check (install: brew install python@3 / apt-get install python3)\n"
+	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,the CLAUDE.md budget check); \
+	printf "python3 not found, skipping CLAUDE.md budget check (install: brew install python@3 / apt-get install python3)\n"
 else
 	python3 scripts/claude_md_budget.py HEAD
 endif
@@ -327,11 +342,11 @@ check-requirements-install:
 
 # Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
 # the machine out of committing the very change that would install it. CI
-# installs a pinned uv, so the check runs there, but unlike shellcheck
-# (REQUIRE_SHELLCHECK) nothing makes CI fail if uv is missing; see the backlog.
+# installs a pinned uv and sets REQUIRE_TOOLS=1, so a missing uv fails there.
 check-requirements-ci:
 ifeq ($(UV),)
-	@printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
+	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the requirements-ci drift check); \
+	printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
 else
 	@./scripts/sync-requirements-ci.sh check
 endif
@@ -350,7 +365,8 @@ endif
 # satisfy. Same missing-tool guard as above, for the same reason.
 check-lock:
 ifeq ($(UV),)
-	@printf "uv not found, skipping uv.lock consistency check (install: brew install uv)\n"
+	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the uv.lock consistency check); \
+	printf "uv not found, skipping uv.lock consistency check (install: brew install uv)\n"
 else
 	@$(UV) lock --check
 endif

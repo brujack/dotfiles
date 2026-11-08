@@ -20,10 +20,10 @@ setup() {
   # ambient state so an unrelated leak from whatever invoked bats can't
   # change what a "no GIT_DIR set" test observes.
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-  # CI's test-shard and test-macos-shard export REQUIRE_SHELLCHECK=1 for their
-  # own lint; inherited here it turns every SHELLCHECK= skip case into a
+  # CI's test-shard and test-macos-shard export REQUIRE_TOOLS=1 for their own
+  # make test; inherited here it turns every SHELLCHECK= skip case into a
   # refusal. Tests that need it set it on their own make call.
-  unset REQUIRE_SHELLCHECK
+  unset REQUIRE_TOOLS
   # MAKEFLAGS is deliberately left untouched here, unlike the GIT_* vars
   # above. make exports it into every recipe subshell automatically,
   # including this file's own `bats --recursive tests/` recipe under
@@ -1337,70 +1337,100 @@ _words_missing_from() {
   [[ "${output}" != *"${_not}"* ]]
 }
 
-# --- REQUIRE_SHELLCHECK: CI may not skip ------------------------------------
-# A missing shellcheck is a skip, not a failure, so a machine without it can
-# still commit the change that installs it. CI pins and verifies shellcheck,
-# but its lint ran through the same skip: had the install step been removed,
-# moved after lint or failed to land on PATH, CI would have reported lint OK
-# with no shellcheck. REQUIRE_SHELLCHECK=1 turns the skip into a failure, and
-# every CI job that runs root lint sets it.
+# --- REQUIRE_TOOLS: CI may not skip ----------------------------------------
+# Every tool guard in make test (shellcheck and the lib-trap scanner in lint,
+# uv in check-lock and check-requirements-ci, python3 in test-python and
+# check-claude-md-budget) skips rather than fails, so a machine without the
+# tool can still commit the change that installs it. CI installs each of them
+# before make runs, but its make test ran through the same skips: had an
+# install step been removed, moved or failed to land on PATH, CI would have
+# reported green having run none of those checks. REQUIRE_TOOLS=1 turns every
+# skip into a failure, and every CI job that runs one of these targets sets it.
 
-@test "lint fails when REQUIRE_SHELLCHECK=1 and shellcheck is missing" {
-  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    REQUIRE_SHELLCHECK=1 PATH="${CLEAN_PATH}" \
-    make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
-  [ "$status" -ne 0 ]
-  [[ "${output}" == *"shellcheck not found and REQUIRE_SHELLCHECK=1"* ]]
-  [[ "${output}" != *"skipping"* ]]
+# One row per guard: target, command-line override that makes the tool look
+# absent, and the noun both messages name. The lint rows also clear
+# SHELLCHECK so the run is fast; the scanner row asserts its own message.
+_require_tools_cases() {
+  printf '%s\n' \
+    "lint|SHELLCHECK=|shellcheck not found" \
+    "lint|LIB_TRAP_SCANNER=${BATS_TEST_TMPDIR}/absent-scanner.sh|absent-scanner.sh missing" \
+    "check-lock|UV=|uv not found" \
+    "check-requirements-ci|UV=|uv not found" \
+    "test-python|PYTHON3=|python3 not found" \
+    "check-claude-md-budget|PYTHON3=|python3 not found"
 }
 
-@test "lint still skips, and passes, without REQUIRE_SHELLCHECK or with it set to 0" {
+_require_tools_make() {
+  # $1 = REQUIRE_TOOLS value or "unset"; $2 = target; $3 = override.
+  local _req=(REQUIRE_TOOLS="$1")
+  [[ "$1" == unset ]] && _req=(-u REQUIRE_TOOLS)
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    "${_req[@]}" PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" "$2" "$3" SHELLCHECK=
+}
+
+@test "REQUIRE_TOOLS=1 turns every make test tool skip into a failure" {
+  local _row _target _override _noun _n=0
+  while IFS='|' read -r _target _override _noun; do
+    _require_tools_make 1 "${_target}" "${_override}"
+    [ "$status" -ne 0 ] || { printf '%s %s: rc 0\n%s\n' "${_target}" "${_override}" "$output"; return 1; }
+    [[ "${output}" == *"${_noun} and REQUIRE_TOOLS=1: refusing to skip"* ]] \
+      || { printf '%s %s: no refusal\n%s\n' "${_target}" "${_override}" "$output"; return 1; }
+    [[ "${output}" != *"skipping"* ]] \
+      || { printf '%s %s: skipped anyway\n%s\n' "${_target}" "${_override}" "$output"; return 1; }
+    _n=$((_n + 1))
+  done < <(_require_tools_cases)
+  [ "${_n}" -eq 6 ]
+}
+
+@test "every make test tool guard still skips, and passes, with REQUIRE_TOOLS unset, 0 or empty" {
   # The skip is the point locally: a hard fail would lock a machine out of
-  # committing the change that installs shellcheck.
-  local _v
-  for _v in unset 0 ""; do
-    if [[ "${_v}" == unset ]]; then
-      run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-        -u REQUIRE_SHELLCHECK PATH="${CLEAN_PATH}" \
-        make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
-    else
-      run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-        REQUIRE_SHELLCHECK="${_v}" PATH="${CLEAN_PATH}" \
-        make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
-    fi
-    [ "$status" -eq 0 ] || { printf 'REQUIRE_SHELLCHECK=%s: rc %s\n%s\n' "${_v}" "$status" "$output"; return 1; }
-    [[ "${output}" == *"shellcheck not found, skipping"* ]]
-  done
+  # committing the change that installs the tool.
+  local _target _override _noun _v _n=0
+  while IFS='|' read -r _target _override _noun; do
+    for _v in unset 0 ""; do
+      _require_tools_make "${_v}" "${_target}" "${_override}"
+      [ "$status" -eq 0 ] \
+        || { printf '%s %s REQUIRE_TOOLS=%s: rc %s\n%s\n' "${_target}" "${_override}" "${_v}" "$status" "$output"; return 1; }
+      [[ "${output}" == *"${_noun}, skipping"* ]] \
+        || { printf '%s %s REQUIRE_TOOLS=%s: no skip\n%s\n' "${_target}" "${_override}" "${_v}" "$output"; return 1; }
+      _n=$((_n + 1))
+    done
+  done < <(_require_tools_cases)
+  [ "${_n}" -eq 18 ]
 }
 
-@test "REQUIRE_SHELLCHECK=1 is inert when shellcheck is present" {
+@test "REQUIRE_TOOLS=1 is inert when every tool is present" {
   command -v shellcheck >/dev/null || skip "no shellcheck on this host"
+  command -v uv >/dev/null || skip "no uv on this host"
+  command -v python3 >/dev/null || skip "no python3 on this host"
   run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-    REQUIRE_SHELLCHECK=1 \
-    make --no-print-directory -C "${REPO_ROOT}" lint
+    REQUIRE_TOOLS=1 \
+    make --no-print-directory -C "${REPO_ROOT}" lint check-lock check-claude-md-budget
   [ "$status" -eq 0 ]
   [[ "${output}" == *"shellcheck OK"* ]]
+  [[ "${output}" != *"refusing to skip"* ]]
 }
 
-@test "every CI job that runs root lint sets REQUIRE_SHELLCHECK=1" {
+@test "every CI job that runs a guarded root make target sets REQUIRE_TOOLS=1" {
   # Per job, honouring working-directory: the powershell job's `make test`
-  # runs powershell/Makefile, which has no shellcheck.
+  # runs powershell/Makefile, which has none of these guards.
   local _wf="${REPO_ROOT}/.github/workflows/ci.yml" _report
   _report="$(awk '
     function flush() {
-      if (job != "" && runs_lint) printf "%s %s\n", job, (has_env ? "SET" : "MISSING")
+      if (job != "" && guarded) printf "%s %s\n", job, (has_env ? "SET" : "MISSING")
     }
     /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
-      flush(); job = $1; sub(/:$/, "", job); runs_lint = 0; has_env = 0; wd = 0; next
+      flush(); job = $1; sub(/:$/, "", job); guarded = 0; has_env = 0; wd = 0; next
     }
     /^      - / { wd = 0 }
     /^        working-directory:/ { wd = 1 }
-    /REQUIRE_SHELLCHECK: "1"/ { has_env = 1 }
-    !wd && /make([[:space:]]+-[^[:space:]]+)*[[:space:]]+(lint|test|test-prereqs)([[:space:]]|$)/ { runs_lint = 1 }
+    /REQUIRE_TOOLS: "1"/ { has_env = 1 }
+    !wd && /make([[:space:]]+-[^[:space:]]+)*[[:space:]]+(lint|test|test-prereqs|check-lock|check-requirements-ci|test-python|check-claude-md-budget)([[:space:]]|$)/ { guarded = 1 }
     END { flush() }
   ' "${_wf}")"
   printf '%s\n' "${_report}"
-  # Positive control: the two jobs known to run root lint are found.
+  # Positive control: the two jobs known to run make test's guards are found.
   [[ "${_report}" == *"test-shard "* ]]
   [[ "${_report}" == *"test-macos-shard "* ]]
   ! command grep -q ' MISSING$' <<<"${_report}"
