@@ -30,6 +30,7 @@ tests/scripts/osx.bats
 tests/scripts/pre_commit_hook.bats
 tests/scripts/pre_push.bats
 tests/scripts/refresh_sha256_pins.bats
+tests/scripts/refresh_uv_lock.bats
 tests/scripts/unit.bats
 tests/scripts/verify_ms_deb.bats
 tests/scripts/verify_release_asset.bats
