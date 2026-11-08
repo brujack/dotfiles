@@ -20,6 +20,10 @@ setup() {
   # ambient state so an unrelated leak from whatever invoked bats can't
   # change what a "no GIT_DIR set" test observes.
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
+  # CI's test-shard and test-macos-shard export REQUIRE_SHELLCHECK=1 for their
+  # own lint; inherited here it turns every SHELLCHECK= skip case into a
+  # refusal. Tests that need it set it on their own make call.
+  unset REQUIRE_SHELLCHECK
   # MAKEFLAGS is deliberately left untouched here, unlike the GIT_* vars
   # above. make exports it into every recipe subshell automatically,
   # including this file's own `bats --recursive tests/` recipe under
@@ -1331,6 +1335,75 @@ _words_missing_from() {
   [[ "${output}" == *"shellcheck not found, skipping"* ]]
   [[ "${output}" == *"${_want}"* ]]
   [[ "${output}" != *"${_not}"* ]]
+}
+
+# --- REQUIRE_SHELLCHECK: CI may not skip ------------------------------------
+# A missing shellcheck is a skip, not a failure, so a machine without it can
+# still commit the change that installs it. CI pins and verifies shellcheck,
+# but its lint ran through the same skip: had the install step been removed,
+# moved after lint or failed to land on PATH, CI would have reported lint OK
+# with no shellcheck. REQUIRE_SHELLCHECK=1 turns the skip into a failure, and
+# every CI job that runs root lint sets it.
+
+@test "lint fails when REQUIRE_SHELLCHECK=1 and shellcheck is missing" {
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    REQUIRE_SHELLCHECK=1 PATH="${CLEAN_PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+  [ "$status" -ne 0 ]
+  [[ "${output}" == *"shellcheck not found and REQUIRE_SHELLCHECK=1"* ]]
+  [[ "${output}" != *"skipping"* ]]
+}
+
+@test "lint still skips, and passes, without REQUIRE_SHELLCHECK or with it set to 0" {
+  # The skip is the point locally: a hard fail would lock a machine out of
+  # committing the change that installs shellcheck.
+  local _v
+  for _v in unset 0 ""; do
+    if [[ "${_v}" == unset ]]; then
+      run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        -u REQUIRE_SHELLCHECK PATH="${CLEAN_PATH}" \
+        make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+    else
+      run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        REQUIRE_SHELLCHECK="${_v}" PATH="${CLEAN_PATH}" \
+        make --no-print-directory -C "${REPO_ROOT}" lint SHELLCHECK=
+    fi
+    [ "$status" -eq 0 ] || { printf 'REQUIRE_SHELLCHECK=%s: rc %s\n%s\n' "${_v}" "$status" "$output"; return 1; }
+    [[ "${output}" == *"shellcheck not found, skipping"* ]]
+  done
+}
+
+@test "REQUIRE_SHELLCHECK=1 is inert when shellcheck is present" {
+  command -v shellcheck >/dev/null || skip "no shellcheck on this host"
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    REQUIRE_SHELLCHECK=1 \
+    make --no-print-directory -C "${REPO_ROOT}" lint
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"shellcheck OK"* ]]
+}
+
+@test "every CI job that runs root lint sets REQUIRE_SHELLCHECK=1" {
+  # Per job, honouring working-directory: the powershell job's `make test`
+  # runs powershell/Makefile, which has no shellcheck.
+  local _wf="${REPO_ROOT}/.github/workflows/ci.yml" _report
+  _report="$(awk '
+    function flush() {
+      if (job != "" && runs_lint) printf "%s %s\n", job, (has_env ? "SET" : "MISSING")
+    }
+    /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
+      flush(); job = $1; sub(/:$/, "", job); runs_lint = 0; has_env = 0; wd = 0; next
+    }
+    /^      - / { wd = 0 }
+    /^        working-directory:/ { wd = 1 }
+    /REQUIRE_SHELLCHECK: "1"/ { has_env = 1 }
+    !wd && /make([[:space:]]+-[^[:space:]]+)*[[:space:]]+(lint|test|test-prereqs)([[:space:]]|$)/ { runs_lint = 1 }
+    END { flush() }
+  ' "${_wf}")"
+  printf '%s\n' "${_report}"
+  # Positive control: the two jobs known to run root lint are found.
+  [[ "${_report}" == *"test-shard "* ]]
+  [[ "${_report}" == *"test-macos-shard "* ]]
+  ! command grep -q ' MISSING$' <<<"${_report}"
 }
 
 # --- parallel shellcheck passes (xargs -n 4 -P $(JOBS)) ---------------------
