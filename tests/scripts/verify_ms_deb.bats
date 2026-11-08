@@ -22,7 +22,11 @@ setup() {
   elif command -v gar >/dev/null 2>&1; then
     GNU_AR="gar"
   fi
-  [[ -n "${GNU_AR}" ]] && export _MS_AR_BIN="${GNU_AR}"
+  # An if, not `[[ ]] && export`: as setup's last command a false test would
+  # return 1 and fail every test on a Mac without GNU ar instead of skipping.
+  if [[ -n "${GNU_AR}" ]]; then
+    export _MS_AR_BIN="${GNU_AR}"
+  fi
 }
 
 _require_gnu_ar() {
