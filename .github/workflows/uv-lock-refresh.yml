@@ -6,9 +6,10 @@ name: uv-lock-refresh
 # PRs). Spec: docs/superpowers/specs/2026-11-08-uv-lock-refresh-design.md
 #
 # Three jobs, split by trust. The resolve runs PyPI build code for sdist-only
-# packages, so it runs in a job with no token and no persisted credentials; a
-# separate job holds the write scopes and takes only six named files from the
-# artifact; a third files the failure issue from uploaded logs.
+# packages, so it runs in a job with only read access, no token exposed to its
+# steps and no persisted credentials; a separate job holds the write scopes and
+# takes from the artifact only the six named files, a validated result word and
+# the PR body text; a third files the failure issue from uploaded logs.
 
 on:
   schedule:
@@ -94,6 +95,8 @@ jobs:
           path: ${{ runner.temp }}/out
           if-no-files-found: error
           retention-days: 7
+          # A re-run attempt reuses the run id; overwrite lets it upload at all.
+          overwrite: true
 
       - name: Upload refresh logs
         if: always()
@@ -103,6 +106,8 @@ jobs:
           path: ${{ runner.temp }}/*.log
           if-no-files-found: warn
           retention-days: 7
+          # A re-run attempt reuses the run id; overwrite lets it upload at all.
+          overwrite: true
 
   publish:
     needs: refresh
@@ -115,8 +120,9 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      # Full history so the force-push compares against the current tip; this
-      # checkout keeps its credentials because this job pushes.
+      # The refresh commit goes on top of current master and replaces the branch
+      # with a plain force-push; this checkout keeps its credentials because
+      # this job pushes.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: master
@@ -143,7 +149,8 @@ jobs:
           } 2>&1 | tee "${RUNNER_TEMP}/30-read-result.log"
 
       # Exactly the six files, by name: the artifact came from a job that ran
-      # third-party build code, so nothing else is taken from it.
+      # third-party build code, so no other file enters the tree (the result
+      # word is validated above and body.md is only PR body text).
       - name: Stage refreshed files
         if: steps.refresh.outputs.result == 'changed'
         run: |
@@ -220,6 +227,8 @@ jobs:
           path: ${{ runner.temp }}/*.log
           if-no-files-found: warn
           retention-days: 7
+          # A re-run attempt reuses the run id; overwrite lets it upload at all.
+          overwrite: true
 
   report:
     needs: [refresh, publish]

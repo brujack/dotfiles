@@ -215,9 +215,9 @@ _pin_of() {
   _absent -qF 'contains('
 }
 
-# --- job refresh: no token, no persisted credentials --------------------------
+# --- job refresh: read-only, no exposed token, no persisted credentials --------
 
-@test "refresh job has no permissions key, no token, no gh, no push and persist-credentials: false" {
+@test "refresh job has no permissions key, no exposed token, no gh, no push and persist-credentials: false" {
   local _r
   _r="$(_job refresh)"
   [[ -n "${_r}" ]]
@@ -509,4 +509,17 @@ _pin_of() {
   [[ "${_rep}" == *'tail -n 1'* ]]
   _none_in "${_rep}" -F '%T@'
   _none_in "${_rep}" -F 'sort -rn'
+}
+
+# A re-run attempt reuses the run id, so a fixed artifact name collides with
+# the earlier attempt's upload unless overwrite is set (ci.yml, #359).
+@test "every upload-artifact step sets overwrite: true so a re-run attempt can upload" {
+  local _uploads _overwrites _name
+  _uploads="$(_code < "${WF}" | command grep -cE 'uses: actions/upload-artifact@')"
+  [[ "${_uploads}" -eq 3 ]]
+  _overwrites="$(_code < "${WF}" | command grep -cE '^          overwrite: true$')"
+  [[ "${_overwrites}" -eq "${_uploads}" ]]
+  for _name in "refresh Upload refresh output" "refresh Upload refresh logs" "publish Upload publish logs"; do
+    [[ "$(_step "${_name%% *}" "${_name#* }")" == *'          overwrite: true'* ]]
+  done
 }
