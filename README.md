@@ -448,6 +448,8 @@ make check-requirements-ci # fail if any of the five renderings has drifted from
 make check-requirements-install # install the three consumed renderings on the required Python (network; CI job renderings-install)
 ```
 
+`.github/workflows/uv-lock-refresh.yml` runs `uv lock --upgrade` and `make sync-requirements-ci` every Monday and proposes the result as the `chore/uv-lock-refresh` PR, which is merged by hand.
+
 Install bats-core first: `brew install bats-core` (macOS) or `sudo apt-get install bats` (Ubuntu).
 The durable fix is `./setup_env.sh -t setup_user`, which provisions bats on both platforms —
 a machine that needs the one-liner above is a machine whose provisioning has not been re-run.
