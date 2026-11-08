@@ -58,6 +58,13 @@ sections 2 and 2b. #280 fixed this for `full-upgrade` only.
   nala is not `ii`, so a package already `iU` from an earlier failure, or an archive-setup
   package at `ii` with a deleted keyring/source, is not repaired by this change. Recorded as a
   backlog row (R19); the guards are unchanged.
+  - **Update 2026-11-08:** R19 is closed. `-t doctor`'s `_doctor_check_dpkg_state` reports any
+    package not fully configured (remedy: `dpkg --configure -a` with the conffile options) and a
+    `packages-microsoft-prod` with a missing conffile, and `_install_ubuntu_powershell`'s guard now
+    skips only when pwsh runs and those conffiles are present, so `-t developer` re-runs the
+    confmiss install. `apt-get install --reinstall` was not usable as the remedy: with the keyring
+    gone it exits 0 and restores nothing (measured in an ubuntu:26.04 container). The volian
+    packages are no longer installed (#311), so nala needs no repair path.
 - `.ucf-dist` copies are now surfaced; `claude` already has `/etc/default/grub.ucf-dist`, so
   the check WARNs there until the operator handles it.
 - The scan runs unprivileged, so it skips root-only directories under `/etc`; none holding

@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
 
-# Covers lib/helpers.sh's _doctor_check_conffile_dist.
+# Covers lib/helpers.sh's _doctor_check_conffile_dist and, below it,
+# _doctor_check_dpkg_state and _dpkg_missing_conffiles.
 #
-# Every case sets or unsets LINUX explicitly: developer shells export it, and
-# the check is gated on it. _OVERRIDE_CONFFILE_DIST_ROOT always points at a
-# fixture directory, never the real /etc.
+# Every doctor-check case sets or unsets LINUX explicitly: developer shells
+# export it, and both checks are gated on it (_dpkg_missing_conffiles is not,
+# so its cases do not). _OVERRIDE_CONFFILE_DIST_ROOT always points at a fixture
+# directory, never the real /etc; _DPKG_CONFFILE_ROOT likewise.
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
@@ -159,8 +161,10 @@ teardown() {
 # --- dpkg package state (spec 2026-10-03 R19) --------------------------------
 # A package left unpacked-not-configured by an earlier conffile failure, and a
 # packages-microsoft-prod whose keyring or source was deleted after install, both
-# leave apt failing. Neither repaired itself: the install guards skip once pwsh
-# runs. _doctor_check_dpkg_state reports both with a remedy and runs nothing.
+# leave apt failing. Before this check neither was reported, and the Microsoft
+# case was never repaired because _install_ubuntu_powershell skipped once pwsh
+# ran; its guard now also needs the conffiles present (tested in
+# linux_ubuntu.bats). _doctor_check_dpkg_state reports both and runs nothing.
 # _DPKG_QUERY_BIN is the stub load_mocks exports; tests feed it fixtures.
 
 _dpkg_status() { printf '%b' "$1" > "${BATS_TEST_TMPDIR}/dpkg-status"; export STUB_DPKG_STATUS="${BATS_TEST_TMPDIR}/dpkg-status"; }
