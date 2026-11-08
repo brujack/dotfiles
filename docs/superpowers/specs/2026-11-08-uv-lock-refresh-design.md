@@ -10,10 +10,11 @@ change since 2026-09-29 was reactive: 8 of the last 12 lock commits (#297, #302,
 
 Measured 2026-11-08 at master `cb57dfb6`, in a `git archive` copy of `pyproject.toml` and
 `uv.lock`, with uv 0.13.7 (population: this repo's lock, one point in time): a real
-`uv lock --upgrade` exits 0, resolves 269 packages and prints 103 `Updated`, 1 `Added`
-(`cloudpickle`) and 1 `Removed` (`greenlet`) lines. `--dry-run` prints `Update`/`Add`/`Remove`
-instead, and omits the `Removed` line. With `--exclude-newer` set 14 days back, the same run
-changes 96 packages (Step 8 goal-fit lens, same copy).
+`uv lock --upgrade` exits 0, resolves 269 packages, prints 103 `Updated`, 1 `Added`
+(`cloudpickle`) and 1 `Removed` (`greenlet`) lines, moves no package below its locked version,
+writes no `[options]` block, and leaves `uv lock --check` at rc 0. `--dry-run` prints
+`Update`/`Add`/`Remove` instead and omits the `Removed` line, so only the real run's words are
+used.
 
 Renovate cannot do this refresh. It runs with `enabledManagers` `github-actions`, `npm` and
 `pep621` and no `lockFileMaintenance`. Across its whole history it opened two PRs touching
@@ -28,8 +29,8 @@ refresh") named the blocker: a PR opened with a workflow's `GITHUB_TOKEN` starts
 
 ## Decision
 
-A scheduled workflow opens the PR with `GITHUB_TOKEN`, and the operator starts CI when
-reviewing (operator's choice, 2026-11-08, over a GitHub App token, a fine-grained PAT and a
+A scheduled workflow opens or updates the PR with `GITHUB_TOKEN`, and the operator starts CI
+when reviewing (operator's choice, 2026-11-08, over a GitHub App token, a fine-grained PAT and a
 local cadence agent). The reasoning:
 
 - `scripts/auto-merge-gate.sh` holds this PR for a human whichever identity opens it. Its
@@ -39,82 +40,66 @@ local cadence agent). The reasoning:
   is applied. The other identity options buy only "CI has already run when you look".
 - No new credential exists. The workflow's write scope is its own job's `GITHUB_TOKEN`.
 - `ci.yml` triggers on `pull_request` types `opened, synchronize, reopened,
-ready_for_review, labeled`. A close and reopen by the operator, or the operator applying any
-  label, is a user event, so it should start CI: `gh pr close <n> && gh pr reopen <n>`.
-- **This has never been exercised in this fleet.** ai-config's learnings-aggregator was cited
-  as precedent, but every scheduled run from 2026-07-03 to 2026-11-03 failed, and no
-  github-actions-authored PR exists in ai-config or dotfiles (Step 8 ergonomics lens). R1 makes
-  proving it the first piece of work, before anything else is built.
+  ready_for_review, labeled`. A close and reopen by the operator is a user event, so it should
+  start CI: `gh pr close chore/uv-lock-refresh && gh pr reopen chore/uv-lock-refresh`.
+- **This has never been exercised in this fleet.** No github-actions-authored PR exists in
+  ai-config or dotfiles, and ai-config's learnings-aggregator, which would have been the
+  precedent, has failed every scheduled run from 2026-07-03 to 2026-11-03 (Step 8 round 1).
+  R1 makes proving it the first piece of work.
 - The repo setting "Allow GitHub Actions to create and approve pull requests" is on
-  (`can_approve_pull_request_reviews: true`, read 2026-11-08). Master protection has required
-  checks and `enforce_admins: false`; a `GITHUB_TOKEN` push to master is rejected for lack of
-  them, so the job can reach only its own branch.
+  (`can_approve_pull_request_reviews: true`, read 2026-11-08). Master protection requires the
+  six checks `test`, `lint-macos`, `test-macos`, `powershell`, `secret-scan` and
+  `renderings-install`, with `enforce_admins: false`. A `GITHUB_TOKEN` write to master is
+  rejected for lack of them, so the job can reach only its own branch.
 
-### Release-age cooldown
+### No release-age cooldown
 
-The refresh resolves with `--exclude-newer` set to 14 days before the run, matching Renovate's
-`"minimumReleaseAge": "14 days"` (`renovate.json`). Without it a Monday run takes releases
-published minutes earlier, and the merged lock reaches every machine's `-t update`
-(`uv sync --frozen`). Nothing in CI installs `requirements-runtime-ci.txt` (ansible,
-ansible-core, ansible-lint, molecule), and ai-config CI installs the other renderings live
-from master, with `--require-hashes` pinned to this same resolution.
+Round 1 added `--exclude-newer` (14 days, matching Renovate's `minimumReleaseAge`). Rounds 2
+and 3 measured that it breaks the design twice over, and the operator dropped it on
+2026-11-08:
 
-`--exclude-newer` writes the cutoff into `uv.lock` as `[options] exclude-newer`, and a bare
-`uv lock --check` (`make check-lock`) then rejects the lock: "Resolving despite existing
-lockfile due to removal of global exclude newer" (Step 8 round 2, reproduced). So the cutoff run
-is followed by a plain `uv lock`, which drops the option and keeps every pin. Measured at
-`cb57dfb6` with uv 0.13.7: 0 of 269 `name`/`version` pairs changed, no `[options]` left, and
-`uv lock --check` rc 0. Reproduced offline on a dependency-free fixture project: `--check`
-rc 1 with the option, rc 0 after the plain `uv lock`.
+- It writes `[options] exclude-newer` into `uv.lock`, so a bare `uv lock --check`
+  (`make check-lock`) rejects every changed lock. A following plain `uv lock` repairs that.
+- It drops locked versions as preferences, so it downgrades every package master holds at a
+  release younger than the cutoff. Measured at `cb57dfb6`: a 30-day cutoff downgrades 9
+  packages and a 45-day cutoff 12, among them the Dependabot CVE fixes in tornado, certifi,
+  pillow and gitpython. Replayed against upload dates, a run on 2026-10-26 would have opened a
+  PR reverting #364's certifi, pillow and gitpython fixes, each shown as an ordinary
+  `Updated a -> b` line.
+- A `pyproject.toml` floor that needs a release younger than the cutoff fails the resolution
+  outright (a 90-day cutoff: "only checkov<=3.3.9 is available").
 
-When a `pyproject.toml` floor requires a release younger than the cutoff, the cutoff resolution
-fails outright. Measured with a 90-day cutoff at `cb57dfb6`: "only checkov<=3.3.9 is available
-and dotfiles-venv:runtime depends on checkov>=3.3.13". The run then fails and the failure issue
-carries uv's message naming the package (operator's choice, 2026-11-08). It clears without
-action once that release is 14 days old, so at most two weekly runs fail.
+Fresh releases are therefore admitted, and the operator's review of the listed changes is the
+gate for them. The cooldown goes to the backlog with these measurements. As a guard against a
+silent revert from any cause, such as a yanked release, the script refuses any run that moves a
+package below master's version.
 
 ### Components
 
-**`scripts/refresh-uv-lock.sh`** does the lock work. Given a body path as `$1`:
+**`scripts/refresh-uv-lock.sh`** does the lock work. Given a body path as `$1`, it:
 
-1. Compute the cutoff: the reference time minus 14 days, UTC, RFC 3339. `REFRESH_UV_LOCK_NOW`
-   is the test seam for the reference time; the default is now.
-2. Run `uv lock --upgrade --exclude-newer <cutoff>`, capturing its `Updated`/`Added`/`Removed`
-   lines. On failure, exit 1 and print uv's output.
-3. Run plain `uv lock` to drop `[options] exclude-newer`.
-4. If `uv.lock` is byte-identical to before step 2, print `no changes` and exit 0.
-5. If the lock changed but no `Updated`/`Added`/`Removed` line was captured, exit 1: uv's output
-   format moved and the PR would carry an empty change list.
-6. Run `make sync-requirements-ci`, then `REQUIRE_TOOLS=1 make check-lock` and
+1. Runs `uv lock --upgrade`, capturing its `Updated`/`Added`/`Removed` lines. On failure it
+   exits 1 and prints uv's output.
+2. If `uv.lock` is byte-identical to before, prints `no changes` and exits 0.
+3. If the lock changed but no `Updated`/`Added`/`Removed` line was captured, exits 1: uv's
+   output format moved and the PR would carry an empty change list.
+4. If any captured `Updated <pkg> v<a> -> v<b>` line has `b` lower than `a`, exits 1 naming
+   each such package.
+5. Runs `make sync-requirements-ci`, then `REQUIRE_TOOLS=1 make check-lock` and
    `REQUIRE_TOOLS=1 make check-requirements-ci`, so a missing uv fails rather than skips. If
-   either fails, exit 1 naming the step.
-7. Write the PR body to `$1`. It contains the cutoff, the change count and the captured lines,
-   plus the review steps:
-   - start CI with `gh pr close <n> && gh pr reopen <n>`;
+   either fails, exits 1 naming the step.
+6. Writes the PR body to `$1`: the change count, the captured lines, and the review steps:
+   - start CI with `gh pr close chore/uv-lock-refresh && gh pr reopen chore/uv-lock-refresh`;
    - read the list;
-   - merge manually with `gh pr merge <n> --squash`, because the auto-merge gate holds bot PRs
-     and a label only re-runs CI;
-   - if the PR conflicts, the next weekly run replaces it, or run
-     `gh workflow run uv-lock-refresh.yml` to replace it now.
-8. Print `changed` and exit 0. The workflow branches on that word, not on the exit status
-   alone.
+   - merge manually with `gh pr merge chore/uv-lock-refresh --squash`, because the auto-merge
+     gate holds bot PRs and a label only re-runs CI;
+   - a later weekly run replaces this PR's contents with a fresh refresh from `master`, and
+     `gh workflow run uv-lock-refresh.yml` does that now.
+7. Prints `changed` and exits 0.
 
-The script never commits or calls `gh`, and makes no remote writes.
-
-**`scripts/uv-lock-refresh-pr.sh`** decides what to do about an existing refresh PR, so its
-branches are testable. It takes `$1`, the path of a JSON array from
-`gh pr list --head chore/uv-lock-refresh --state open --json number,mergeable,isCrossRepository`,
-and prints one word:
-
-- `none`: no same-repository PR. Fork PRs (`isCrossRepository: true`) are ignored, because the
-  repo is public and a fork can name its branch `chore/uv-lock-refresh`.
-- `keep <n>`: a same-repository PR whose `mergeable` is `MERGEABLE`.
-- `replace <n>`: a same-repository PR whose `mergeable` is `CONFLICTING`.
-- `unknown <n>`: `mergeable` is `UNKNOWN`. GitHub computes it lazily, and an idle PR reads
-  `UNKNOWN` on the first query. Measured 2026-11-08 on five idle fleet PRs: all `UNKNOWN`, then
-  `MERGEABLE` 20 seconds later.
-
-More than one same-repository PR exits 1. Malformed JSON exits 2.
+All `uv` and `make` output goes to stderr. The last line of stdout is the result word, and the
+workflow reads only that line. The script never commits, never calls `gh` and makes no remote
+writes.
 
 **`.github/workflows/uv-lock-refresh.yml`**, one job:
 
@@ -128,104 +113,109 @@ More than one same-repository PR exits 1. Malformed JSON exits 2.
 - Checkout pinned by SHA (ADR-0006). uv is installed with the same `UV_VER` and `UV_SHA256` as
   `ci.yml`'s Linux `test-shard` job (`ci.yml` also carries a macOS digest), verified with
   `sha256sum -c` (ci-002).
+- Every step after checkout tees its output to `${RUNNER_TEMP}/<step>.log` (the pattern
+  `ci.yml` already uses for `make test`), because a later step cannot read an earlier step's
+  log through the API until the job ends.
 - Steps:
-  1. Run `uv-lock-refresh-pr.sh`. On `unknown`, re-query up to 6 times, 10 seconds apart; still
-     `unknown` fails the job.
-  2. On `keep`, stop with a notice.
-  3. On `none` or `replace`, run `refresh-uv-lock.sh`.
-  4. Only after it prints `changed`:
-     - on `replace`, comment on the old PR and close it;
-     - commit exactly `uv.lock` and the five renderings to `chore/uv-lock-refresh` on top of
-       current `master` (force-update of that branch on origin);
-     - run `gh pr create --base master --head chore/uv-lock-refresh --title
+  1. Run `refresh-uv-lock.sh` against current `master`.
+  2. Find the open same-repository refresh PR:
+     `gh pr list --head chore/uv-lock-refresh --state open --json number,isCrossRepository`,
+     filtered to `isCrossRepository == false`. The repo is public, and a fork can name its
+     branch `chore/uv-lock-refresh`. More than one match fails the job.
+  3. On `changed`:
+     - commit exactly `uv.lock` and the five renderings on top of current `master`;
+     - force-update `chore/uv-lock-refresh` on origin to that commit;
+     - if step 2 found a PR, replace its body with `gh pr edit <n> --body-file <body>`,
+       otherwise run `gh pr create --base master --head chore/uv-lock-refresh --title
        "chore(deps): refresh uv.lock" --body-file <body>`.
-  5. On `no changes` with a `replace`, comment on the conflicted PR that master already holds
-     the current resolution, and close it.
+  4. On `no changes` with an open refresh PR, comment that master already holds the current
+     resolution and close it.
+  5. If an open issue titled `uv.lock refresh failed` exists, comment the run URL and close it.
 - An `if: failure()` step opens an issue titled `uv.lock refresh failed` with the run URL and the
-  last 40 lines of the failing step's log. If an open issue with that title exists, it comments
-  there instead. ai-config's aggregator failed for five months with only the Actions tab to show
-  it.
+  last 40 lines of the failing step's `${RUNNER_TEMP}` log. If an open issue with that title
+  exists, it comments there instead.
 
-The force-update replaces whatever `chore/uv-lock-refresh` held. It runs only after the open-PR
-rule and after a successful refresh, so what it can destroy is a closed refresh PR's branch,
-including any commit the operator added there. That is accepted: a closed refresh is
-abandoned, and the run re-derives the lock from `master`.
+The force-update replaces whatever `chore/uv-lock-refresh` held, including an open refresh PR's
+head and any commit the operator added to it. That is accepted (operator, 2026-11-08): the PR is
+bot output rebuilt from `master` in under a minute. A force-update by `GITHUB_TOKEN` starts no
+CI, so the new head carries no checks until the operator's next close and reopen.
 
 ### Failure handling
 
-A failed step fails the job, nothing is written to origin or closed, and the failure step opens
-or updates the issue. A resolution that `check-lock` or `check-requirements-ci` rejects never
-reaches a PR. A run that finds a mergeable refresh PR does nothing.
+A failed step fails the job, and the failure step opens or updates the issue. A refusal from the
+script (an empty change list, a downgrade, a failed check) happens before anything is written to
+origin. A failure in step 3 after the force-update leaves the branch updated and the PR body
+stale. The next run, or `gh workflow run uv-lock-refresh.yml`, repairs both.
 
 ### First task: prove the CI path
 
-Before any other change, a throwaway probe settles whether the design works at all.
-1. `.github/workflows/probe-token-pr.yml` on a branch `probe/token-pr`, triggered by `on: push`
-   for that branch, commits a one-line change with `GITHUB_TOKEN` to `probe/token-pr-head` and
-   opens a PR against `master`.
-2. The operator runs `gh pr close <n> && gh pr reopen <n>`.
-3. Check `gh pr checks <n>` and `gh api repos/brujack/dotfiles/commits/<sha>/check-runs`. The
-   required contexts must all appear on the head SHA: `test`, `lint-macos`, `test-macos`,
-   `powershell`, `secret-scan` and `renderings-install`.
-4. Cleanup, whatever the result:
-   - close the PR;
-   - delete both probe branches on origin;
-   - nothing reaches master.
+Before any other change, a throwaway probe settles whether the design works at all:
 
-The auto-merge gate holds the probe PR as a bot PR, so it cannot merge itself.
+1. `.github/workflows/probe-token-pr.yml` is committed on a branch `probe/token-pr`, triggered by
+   `on: push` for that branch. It creates `probe/token-pr-head` from `master` plus a one-line
+   change, writes it to origin with `GITHUB_TOKEN`, and opens a PR against `master`. Because the
+   head is based on `master`, the PR's diff carries only that one line, not the workflow file.
+2. The operator runs `gh pr close <n> && gh pr reopen <n>`.
+3. Run `gh api repos/brujack/dotfiles/commits/<sha>/check-runs` and
+   `gh run list --event pull_request --commit <sha>`. All six required checks must appear on the
+   head SHA, and no run may be `action_required`.
+4. Cleanup is manual and is done whatever the result:
+   - close the PR;
+   - delete `probe/token-pr` and `probe/token-pr-head` on origin.
+
+Nothing reaches master. The auto-merge gate holds the probe PR as a bot PR, so it cannot merge
+itself.
 
 ## Testing
 
-- `tests/scripts/refresh_uv_lock.bats` drives `refresh-uv-lock.sh` through a `uv` stub
-  (`_UV_BIN` seam) and a stubbed `make`, against a fixture root (`REFRESH_UV_LOCK_ROOT` seam).
-  The stub's change lines are copied from the real capture above. Cases:
-  - lock unchanged: `no changes`, no body;
-  - lock changed and checks pass: `changed`, the body lists every stub line plus `gh pr close`,
-    `gh pr reopen`, `gh pr merge` and `gh workflow run uv-lock-refresh.yml`;
+- `tests/scripts/refresh_uv_lock.bats` drives the script through a `uv` stub (`_UV_BIN` seam)
+  and a stubbed `make`, against a fixture root (`REFRESH_UV_LOCK_ROOT` seam). The stub's change
+  lines are copied from the real capture above. Cases:
+  - lock unchanged: last stdout line `no changes`, no body;
+  - lock changed and checks pass: last stdout line `changed`; the body lists every stub line
+    plus `gh pr close`, `gh pr reopen`, `gh pr merge` and `gh workflow run uv-lock-refresh.yml`;
   - lock changed with no change lines: non-zero, no body;
+  - a stub `Updated x v2.0 -> v1.9` line: non-zero, names `x`, no body;
   - the upgrade fails: non-zero, uv's message printed, no body;
   - a check fails: non-zero, names the check;
   - the stubbed `make` sees `REQUIRE_TOOLS=1` for both checks;
-  - with `REFRESH_UV_LOCK_NOW` fixed, the stub receives exactly the cutoff 14 days earlier, and a
-    plain `uv lock` call follows the cutoff call.
-- One real-uv case, skipped only when `uv` is absent, runs offline (`UV_OFFLINE=1`) on a
-  dependency-free fixture project. `uv lock --exclude-newer` makes `uv lock --check` fail, and
-  after the script's plain `uv lock` it passes. A stub cannot show either half.
-- `tests/scripts/uv_lock_refresh_pr.bats` gives `uv-lock-refresh-pr.sh` fixture JSON for each
-  word: empty array, fork-only, `MERGEABLE`, `CONFLICTING`, `UNKNOWN`, two same-repo PRs (exit
-  1) and malformed JSON (exit 2).
+  - `uv`/`make` stub output never appears on stdout.
 - `tests/scripts/uv_lock_refresh_workflow.bats` parses the workflow per job:
-  - the cron and `workflow_dispatch`, and no other trigger;
-  - workflow-level `contents: read`; job permissions exactly the three named;
-  - every `uses:` pinned to a 40-hex SHA;
+  - `schedule` with cron `0 6 * * 1` and `workflow_dispatch` are present, and exactly two
+    triggers exist;
+  - workflow-level `contents: read` is present, and the job permissions are exactly the three
+    named;
+  - every `uses:` is pinned to a 40-hex SHA, and at least one `uses:` exists;
   - a `sha256sum -c` line;
-  - `UV_VER`/`UV_SHA256` equal to `ci.yml`'s `test-shard` values, read from that job alone;
+  - `UV_VER`/`UV_SHA256` equal `ci.yml`'s `test-shard` values, read from that job alone;
   - `timeout-minutes: 10`;
-  - the PR-rule script runs before the refresh script, the close follows the refresh, and the
-    `if: failure()` step names the issue title.
-- All three new files are added to `tests/bats-files.txt`.
+  - the refresh step, the `isCrossRepository` filter, `gh pr edit`, `gh pr create`, the
+    `no changes` close, the success issue-close and the `if: failure()` issue step are each
+    present, in that order;
+  - the failure step reads a `${RUNNER_TEMP}` log file.
+- Both new files are added to `tests/bats-files.txt`.
 
 ## Requirements
 
-- **R1.** `[PR1]` Before any other change, the probe in "First task" runs from a `push`-triggered workflow on `probe/token-pr`. Its GITHUB_TOKEN-opened PR, after the operator closes and reopens it, shows `test`, `lint-macos`, `test-macos`, `powershell`, `secret-scan` and `renderings-install` on its head SHA, or implementation stops and the identity decision returns to the operator. The probe PR is closed and both probe branches are deleted on origin either way.
-- **R2.** `[PR1]` `scripts/refresh-uv-lock.sh` runs `uv lock --upgrade --exclude-newer <cutoff>` with `<cutoff>` exactly 14 days before the reference time (`REFRESH_UV_LOCK_NOW`, default now, UTC), then plain `uv lock`, then `make sync-requirements-ci`, `REQUIRE_TOOLS=1 make check-lock` and `REQUIRE_TOOLS=1 make check-requirements-ci`; it never commits, never calls `gh` and makes no remote writes.
-- **R3.** `[PR1]` When `uv.lock` is byte-identical after both `uv lock` runs, the script prints `no changes`, writes no body file and exits 0.
-- **R4.** `[PR1]` When the lock changed, at least one `Updated`/`Added`/`Removed` line was captured and both checks pass, the script prints `changed`, exits 0, and writes a body file containing the cutoff, every captured line, `gh pr close`, `gh pr reopen`, `gh pr merge` and `gh workflow run uv-lock-refresh.yml`.
-- **R5.** `[PR1]` When the lock changed but no `Updated`/`Added`/`Removed` line was captured, or any `uv` or `make` step fails, the script exits non-zero with a message naming the cause (uv's own output when `uv lock` fails), and no body file is written.
-- **R6.** `[PR1]` `scripts/uv-lock-refresh-pr.sh` prints `none` when no PR in its input has `isCrossRepository` false, otherwise `keep <n>`, `replace <n>` or `unknown <n>` for `MERGEABLE`, `CONFLICTING` or `UNKNOWN`; it exits 1 for more than one same-repository PR and 2 for malformed input.
+- **R1.** `[PR1]` Before any other change, the probe in "First task" runs from a `push`-triggered workflow on `probe/token-pr`. Its GITHUB_TOKEN-opened PR, after the operator closes and reopens it, shows `test`, `lint-macos`, `test-macos`, `powershell`, `secret-scan` and `renderings-install` on its head SHA with no `action_required` run, or implementation stops and the identity decision returns to the operator. The probe PR is closed and both probe branches are deleted on origin either way.
+- **R2.** `[PR1]` `scripts/refresh-uv-lock.sh` runs `uv lock --upgrade` (no `--exclude-newer`), then `make sync-requirements-ci`, `REQUIRE_TOOLS=1 make check-lock` and `REQUIRE_TOOLS=1 make check-requirements-ci`; it never commits, never calls `gh` and makes no remote writes.
+- **R3.** `[PR1]` The script sends all `uv` and `make` output to stderr, and its last stdout line is exactly `changed` or `no changes` on exit 0.
+- **R4.** `[PR1]` When `uv.lock` is byte-identical after the upgrade, the script prints `no changes`, writes no body file and exits 0.
+- **R5.** `[PR1]` When the lock changed, at least one `Updated`/`Added`/`Removed` line was captured, no captured `Updated` line moves a package to a lower version, and both checks pass, the script prints `changed`, exits 0, and writes a body file containing every captured line, `gh pr close`, `gh pr reopen`, `gh pr merge` and `gh workflow run uv-lock-refresh.yml`.
+- **R6.** `[PR1]` When the lock changed but no `Updated`/`Added`/`Removed` line was captured, when a captured `Updated` line moves a package to a lower version, or when any `uv` or `make` step fails, the script exits non-zero with a message naming the cause, and no body file is written.
 - **R7.** `[PR1]` `.github/workflows/uv-lock-refresh.yml` triggers on `schedule` cron `0 6 * * 1` and on `workflow_dispatch`, and on nothing else.
 - **R8.** `[PR1]` The workflow sets workflow-level `permissions: contents: read`; its job declares exactly `contents: write`, `pull-requests: write` and `issues: write`, `timeout-minutes: 10` and `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`; every `uses:` is pinned to a 40-hex SHA.
 - **R9.** `[PR1]` The workflow installs uv with the `UV_VER` and `UV_SHA256` of `ci.yml`'s `test-shard` job and verifies the download with `sha256sum -c`; a test fails when the two differ.
-- **R10.** `[PR1]` On `unknown` the workflow re-queries up to 6 times, 10 seconds apart, and fails if still `unknown`; on `keep` it stops before the refresh; on `replace` it closes the old PR only after the refresh prints `changed` or `no changes`, never before.
-- **R11.** `[PR1]` On `changed`, the workflow commits exactly `uv.lock`, `requirements-ci.txt`, `requirements-runtime-ci.txt`, `requirements-ci-test.txt`, `requirements-ci-mutation.txt` and `requirements-ci-audit.txt` to `chore/uv-lock-refresh` on top of current `master`, and opens a PR against `master` titled `chore(deps): refresh uv.lock` with the script's body.
-- **R12.** `[PR1]` When any step fails, the workflow opens an issue titled `uv.lock refresh failed` containing the run URL and the failing step's last 40 log lines, or comments them on the open issue with that title.
-- **R13.** `[PR1]` All three new bats files are listed in `tests/bats-files.txt`, and the backlog row "Automate the weekly `uv lock --upgrade` and `make sync-requirements-ci` refresh" is removed.
-- **V1.** After merge, run the workflow once with `workflow_dispatch`. It must open a PR from `chore/uv-lock-refresh` whose diff touches only the six files in R11 and whose `uv.lock` has no `[options]` block. The auto-merge gate must hold it as `bot PR (...) lacks automerge-ok`. After the operator's close and reopen, all six required checks must pass on it.
-- **V2.** A second `workflow_dispatch` while that PR is open and mergeable must open no second PR.
+- **R10.** `[PR1]` On `changed`, the workflow commits exactly `uv.lock`, `requirements-ci.txt`, `requirements-runtime-ci.txt`, `requirements-ci-test.txt`, `requirements-ci-mutation.txt` and `requirements-ci-audit.txt` on top of current `master`, force-updates `chore/uv-lock-refresh` to it, and then edits the body of the single open same-repository PR from that branch, or opens one against `master` titled `chore(deps): refresh uv.lock`; more than one such PR fails the job.
+- **R11.** `[PR1]` On `no changes`, the workflow closes an open same-repository refresh PR with a comment; it never closes a fork PR.
+- **R12.** `[PR1]` When any step fails, the workflow opens an issue titled `uv.lock refresh failed` containing the run URL and the last 40 lines of the failing step's `${RUNNER_TEMP}` log, or comments them on the open issue with that title; when a run succeeds, it comments the run URL on that open issue and closes it.
+- **R13.** `[PR1]` Both new bats files are listed in `tests/bats-files.txt`; the backlog row "Automate the weekly `uv lock --upgrade` and `make sync-requirements-ci` refresh" is removed, and a backlog row records the dropped release-age cooldown with this spec's downgrade and `[options]` measurements.
+- **V1.** After merge, run the workflow once with `workflow_dispatch`. It must open a PR from `chore/uv-lock-refresh` whose diff touches only the six files in R10. The auto-merge gate must hold it as `bot PR (...) lacks automerge-ok`. After the operator's close and reopen, all six required checks must pass on it.
+- **V2.** A second `workflow_dispatch` while that PR is open must update that PR (same number) and open no second PR.
 - **N1.** No change to `ci.yml` triggers, `renovate.json` or `scripts/auto-merge-gate.sh`.
 - **N2.** No new repository secret, and no token other than the job's `GITHUB_TOKEN`.
-- **N3.** The workflow never merges, approves or labels a PR, never closes a PR that is not a same-repository `CONFLICTING` refresh PR, and never writes to `master`.
-- **N4.** `pyproject.toml` gets no `exclude-newer` setting; the cooldown applies to the scheduled refresh only.
+- **N3.** The workflow never merges, approves or labels a PR, never closes or edits a PR whose head is not this repository's `chore/uv-lock-refresh`, and never writes to `master`.
+- **N4.** No `exclude-newer` setting or flag anywhere: not in `pyproject.toml`, not in the script.
 
 ## Multi-Lens Review
 
@@ -274,3 +264,25 @@ Disposition: Addressed (operator, 2026-11-08): poll up to 6 times 10 s apart and
 Finding: Same `[options]` defect; the conflicted PR was closed before a refresh that always failed; a fork PR named `chore/uv-lock-refresh` matched the branch filter in this public repo; the R1 trigger was impossible as written. A floor demanding a release younger than the cutoff fails the resolution (measured with a 90-day cutoff: checkov).
 Assumption: That the plain `uv lock` keeps the cutoff's pins when a locked package is newer than the cutoff. Measured with a 90-day cutoff: that resolution fails outright instead (above), so the fix never runs on such input; with 14 days it kept all 269 pins.
 Disposition: Addressed (operator, 2026-11-08): close only after the refresh; `isCrossRepository == false` filter; push-triggered probe with cleanup. A floor younger than the cutoff fails the run and the issue reports it (operator's choice over auto-exemption or dropping the cooldown).
+
+### Round 3
+
+Reviewed at commit: `8aecadca`
+
+#### Goal-Fit
+
+Finding: The plain-`uv lock` repair works (0 of 269 pins changed, `--check` rc 0), but the keep/replace/unknown PR script, its polling and its two close paths existed only to preserve an open refresh PR, which is bot output rebuilt in under a minute; regenerating and updating the PR in place removes all of it. The result word shared stdout with `make` output.
+Assumption: That the operator's close and reopen of a GITHUB_TOKEN-opened PR runs all six required checks on the head SHA; R1 settles it.
+Disposition: Addressed (operator, 2026-11-08): every run regenerates from `master`, force-updates the branch and edits or creates the PR; the PR script and polling are removed; the result word is the last stdout line with tool output on stderr.
+
+#### Ergonomics
+
+Finding: An `if: failure()` step cannot read an earlier step's log; the body's `<n>` cannot be known when the body is written; the failure issue never closed after a later success; the failure-handling sentence contradicted the close-then-create order.
+Assumption: Same as goal-fit (R1), plus that reopened runs are not held as `action_required`.
+Disposition: Addressed (operator, 2026-11-08): each step tees to `${RUNNER_TEMP}`; the body names the PR by branch; a successful run closes the issue; failure handling restated; R1 also rejects `action_required` runs.
+
+#### Risk
+
+Finding: `--upgrade --exclude-newer` drops locked versions as preferences and downgrades every package master holds at a release younger than the cutoff. Measured: 9 downgrades at 30 days and 12 at 45, including the tornado, certifi, pillow and gitpython CVE fixes; a run on 2026-10-26 would have reverted #364. The probe's cleanup is manual and its head branch base was unstated.
+Assumption: Same as goal-fit (R1).
+Disposition: Addressed (operator, 2026-11-08): the cooldown is dropped and backlogged with these measurements (plain `uv lock --upgrade` measured with 0 downgrades); any downgrade line refuses the run; probe cleanup is manual and its head is based on `master`.
