@@ -14,8 +14,18 @@
 # software versions to install
 # read by tests/helpers/common.bash:load_setup_env (exported for mocks) and tests/setup_env/unit.bats
 BATS_VER="1.14.0"
-# read by lib/workflows.sh:run_check_versions (_run_cv_check)
+# read by lib/workflows.sh:run_check_versions (_run_cv_check) and, with the three
+# pins below, by scripts/verify-release-asset.sh in CI's secret-scan job, which
+# refuses to run gitleaks unless GITLEAKS_SHA256_FOR_VER equals this value and
+# the download matches GITLEAKS_SHA256_AMD64. check-versions --update moves all
+# four together through scripts/refresh-sha256-pins.sh.
 GITLEAKS_VER="8.30.1"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+GITLEAKS_SHA256_AMD64="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+# read by lib/linux_ubuntu.sh:_release_asset_sha
+GITLEAKS_SHA256_ARM64="e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080"
+# read by scripts/refresh-sha256-pins.sh and scripts/verify-release-asset.sh
+GITLEAKS_SHA256_FOR_VER="8.30.1"
 # npm global packages — pinned by exact version at both lib/workflows.sh call sites.
 # Unlike the GitHub-release pins above, these are NOT covered by
 # `./setup_env.sh -t check-versions`: only jscpd publishes GitHub releases matching

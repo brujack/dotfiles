@@ -1632,17 +1632,17 @@ _install_apt_keyring() {
 }
 
 # Print the GitHub release asset URL for a tool at its pinned *_VER.
-# Usage: _release_asset_url <kind|yq|shellcheck> <amd64|arm64>
+# Usage: _release_asset_url <kind|yq|shellcheck|gitleaks> <amd64|arm64>
 # Returns 2 for an unknown tool, 3 for an unknown arch; prints nothing on failure.
 _release_asset_url() {
-  local _tool="${1:-}" _arch="${2:-}" _sc_arch
+  local _tool="${1:-}" _arch="${2:-}" _sc_arch _gl_arch
   case "${_tool}" in
-    kind | yq | shellcheck) ;;
+    kind | yq | shellcheck | gitleaks) ;;
     *) return 2 ;;
   esac
   case "${_arch}" in
-    amd64) _sc_arch="x86_64" ;;
-    arm64) _sc_arch="aarch64" ;;
+    amd64) _sc_arch="x86_64" _gl_arch="x64" ;;
+    arm64) _sc_arch="aarch64" _gl_arch="arm64" ;;
     *) return 3 ;;
   esac
   case "${_tool}" in
@@ -1656,17 +1656,21 @@ _release_asset_url() {
       printf 'https://github.com/koalaman/shellcheck/releases/download/v%s/shellcheck-v%s.linux.%s.tar.xz\n' \
         "${SHELLCHECK_VER}" "${SHELLCHECK_VER}" "${_sc_arch}"
       ;;
+    gitleaks)
+      printf 'https://github.com/gitleaks/gitleaks/releases/download/v%s/gitleaks_%s_linux_%s.tar.gz\n' \
+        "${GITLEAKS_VER}" "${GITLEAKS_VER}" "${_gl_arch}"
+      ;;
   esac
 }
 
 # Print "<VARIABLE> <value>" for a tool's sha256 pin. Explicit case so a grep
 # for a pin variable finds its reader.
-# Usage: _release_asset_sha <kind|yq|shellcheck> <amd64|arm64>
+# Usage: _release_asset_sha <kind|yq|shellcheck|gitleaks> <amd64|arm64>
 # Returns 2 for an unknown tool, 3 for an unknown arch.
 _release_asset_sha() {
   local _tool="${1:-}" _arch="${2:-}"
   case "${_tool}" in
-    kind | yq | shellcheck) ;;
+    kind | yq | shellcheck | gitleaks) ;;
     *) return 2 ;;
   esac
   case "${_arch}" in
@@ -1680,6 +1684,8 @@ _release_asset_sha() {
     yq:arm64) printf '%s %s\n' YQ_SHA256_ARM64 "${YQ_SHA256_ARM64}" ;;
     shellcheck:amd64) printf '%s %s\n' SHELLCHECK_SHA256_AMD64 "${SHELLCHECK_SHA256_AMD64}" ;;
     shellcheck:arm64) printf '%s %s\n' SHELLCHECK_SHA256_ARM64 "${SHELLCHECK_SHA256_ARM64}" ;;
+    gitleaks:amd64) printf '%s %s\n' GITLEAKS_SHA256_AMD64 "${GITLEAKS_SHA256_AMD64}" ;;
+    gitleaks:arm64) printf '%s %s\n' GITLEAKS_SHA256_ARM64 "${GITLEAKS_SHA256_ARM64}" ;;
   esac
 }
 

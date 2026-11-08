@@ -1854,7 +1854,7 @@ _release_pin_constants_path() {
   printf '%s\n' "${_OVERRIDE_CONSTANTS_PATH:-${DOTFILES_REPO_ROOT}/lib/constants.sh}"
 }
 
-# _update_release_pin <tool> <var> <latest> -- moves a kind/yq version pin and
+# _update_release_pin <tool> <var> <latest> -- moves a kind/yq/gitleaks version pin and
 # its sha256 pins together. Works on a same-directory temp copy and renames it
 # over lib/constants.sh only when the version edit and the refresh both
 # succeed, so any failure leaves the file byte-identical. Each failure names
@@ -1960,7 +1960,7 @@ _prompt_version_update() {
         _update_python_pin "${_pinned}" "${_latest}" || return 1
         printf "  Updated %s → %s\n" "${_var}" "${_latest}"
         ;;
-      kind|yq)
+      kind|yq|gitleaks)
         _update_release_pin "${_tool}" "${_var}" "${_latest}" || return 1
         ;;
       packer|vagrant)

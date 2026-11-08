@@ -1714,9 +1714,9 @@ _stub_refresher_fail() {
   export _OVERRIDE_REFRESH_PINS="${_REFRESHER}"
 }
 
-@test "_prompt_version_update on y moves yq and kind versions, both pins and _FOR_VER together" {
+@test "_prompt_version_update on y moves yq, kind and gitleaks versions, both pins and _FOR_VER together" {
   local _t _T
-  for _t in yq kind; do
+  for _t in yq kind gitleaks; do
     _T="$(printf '%s' "${_t}" | tr '[:lower:]' '[:upper:]')"
     setup_constants_copy
     export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
@@ -1857,11 +1857,14 @@ _stub_refresher_fail() {
   setup_constants_copy
   export _OVERRIDE_CONSTANTS_PATH="${_TEST_CONSTANTS_PATH}"
   _stub_refresher_fail
-  run _prompt_version_update "gitleaks" "GITLEAKS_VER" "8.30.1" "8.31.0" <<< "y"
+  local _pin
+  _pin="$(sed -n 's/^RUBY_VER="\(.*\)"$/\1/p' "${_TEST_CONSTANTS_PATH}")"
+  [ -n "${_pin}" ]
+  run _prompt_version_update "ruby" "RUBY_VER" "${_pin}" "99.0.0" <<< "y"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Updated GITLEAKS_VER → 8.31.0"* ]]
-  grep -Fqx 'GITLEAKS_VER="8.31.0"' "${_TEST_CONSTANTS_PATH}"
-  # the refresher belongs to kind/yq only: this arm must never call it
+  [[ "$output" == *"Updated RUBY_VER → 99.0.0"* ]]
+  grep -Fqx 'RUBY_VER="99.0.0"' "${_TEST_CONSTANTS_PATH}"
+  # the refresher belongs to kind/yq/gitleaks only: this arm must never call it
   [[ "$output" != *"refresh sha256 pins"* ]]
   [ "$(diff "${REPO_ROOT}/lib/constants.sh" "${_TEST_CONSTANTS_PATH}" | grep -c '^>')" -eq 1 ]
 }

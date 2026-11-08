@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Refresh the sha256 pins of kind, yq and shellcheck in lib/constants.sh from the
+# Refresh the sha256 pins of kind, yq, shellcheck and gitleaks in lib/constants.sh from the
 # digest field of the GitHub releases API, so no release asset is downloaded.
 #
 # Usage: refresh-sha256-pins.sh [--constants <file>] [--accept-changed] [tool...]
@@ -24,7 +24,7 @@ _cleanup_tmp() {
 }
 
 _usage() {
-  printf "usage: %s [--constants <file>] [--accept-changed] [kind|yq|shellcheck ...]\n" "$(basename "$0")" >&2
+  printf "usage: %s [--constants <file>] [--accept-changed] [kind|yq|shellcheck|gitleaks ...]\n" "$(basename "$0")" >&2
 }
 
 # Print the API's digest for asset <name> from release JSON file <body>, or nothing.
@@ -230,7 +230,7 @@ main() {
         _ACCEPT_CHANGED=1
         shift
         ;;
-      kind | yq | shellcheck)
+      kind | yq | shellcheck | gitleaks)
         case " ${_tools[*]:-} " in
           *" $1 "*) ;;
           *) _tools+=("$1") ;;
@@ -270,7 +270,7 @@ main() {
   source "${_REPO_ROOT}/lib/linux_ubuntu.sh" || return 1
 
   if [[ "${#_tools[@]}" -eq 0 ]]; then
-    for _tool in kind yq shellcheck; do
+    for _tool in kind yq shellcheck gitleaks; do
       _up="${_tool^^}"
       _for_var="${_up}_SHA256_FOR_VER"
       _ver_var="${_up}_VER"

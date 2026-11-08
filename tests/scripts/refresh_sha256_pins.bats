@@ -524,3 +524,27 @@ _shim_fail() {
   _unchanged
   run ! compgen -G "${BATS_TEST_TMPDIR}/.refresh-pins.*"
 }
+
+@test "gitleaks URLs and asset names are looked up" {
+  sed -i.bak 's/^GITLEAKS_VER=.*/GITLEAKS_VER="1.2.3"/' "${C}"
+  _release_json gitleaks_1.2.3_linux_x64.tar.gz "sha256:${DA}" gitleaks_1.2.3_linux_arm64.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" gitleaks
+  [ "$status" -eq 0 ]
+  [ "$(_val GITLEAKS_SHA256_AMD64)" = "${DA}" ]
+  [ "$(_val GITLEAKS_SHA256_ARM64)" = "${DB}" ]
+  [ "$(_val GITLEAKS_SHA256_FOR_VER)" = "1.2.3" ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/gitleaks/gitleaks/releases/tags/v1.2.3" ]
+}
+
+@test "default selects a stale gitleaks when the other tools are current" {
+  sed -i.bak -E -e 's/^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=.*/\1_SHA256_FOR_VER="1.2.3"/' \
+    -e 's/^GITLEAKS_VER=.*/GITLEAKS_VER="1.2.3"/' "${C}"
+  [ "$(grep -cE '^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER="1.2.3"$' "${C}")" -eq 3 ]
+  _release_json gitleaks_1.2.3_linux_x64.tar.gz "sha256:${DA}" gitleaks_1.2.3_linux_arm64.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}"
+  [ "$status" -eq 0 ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/gitleaks/gitleaks/releases/tags/v1.2.3" ]
+  [ "$(_val GITLEAKS_SHA256_FOR_VER)" = "1.2.3" ]
+}

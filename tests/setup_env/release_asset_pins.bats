@@ -9,6 +9,7 @@ setup() {
   export KIND_VER="1.2.3"
   export YQ_VER="1.2.3"
   export SHELLCHECK_VER="1.2.3"
+  export GITLEAKS_VER="1.2.3"
 }
 
 @test "_release_asset_url kind amd64" {
@@ -47,6 +48,18 @@ setup() {
   [ "$output" = "https://github.com/koalaman/shellcheck/releases/download/v1.2.3/shellcheck-v1.2.3.linux.aarch64.tar.xz" ]
 }
 
+@test "_release_asset_url gitleaks amd64 maps to linux_x64" {
+  run _release_asset_url gitleaks amd64
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://github.com/gitleaks/gitleaks/releases/download/v1.2.3/gitleaks_1.2.3_linux_x64.tar.gz" ]
+}
+
+@test "_release_asset_url gitleaks arm64 maps to linux_arm64" {
+  run _release_asset_url gitleaks arm64
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://github.com/gitleaks/gitleaks/releases/download/v1.2.3/gitleaks_1.2.3_linux_arm64.tar.gz" ]
+}
+
 @test "_release_asset_url unknown tool returns 2 with no output" {
   run _release_asset_url nosuchtool amd64
   [ "$status" -eq 2 ]
@@ -72,12 +85,14 @@ _set_pins() {
   export YQ_SHA256_ARM64="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   export SHELLCHECK_SHA256_AMD64="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   export SHELLCHECK_SHA256_ARM64="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  export GITLEAKS_SHA256_AMD64="1111111111111111111111111111111111111111111111111111111111111111"
+  export GITLEAKS_SHA256_ARM64="2222222222222222222222222222222222222222222222222222222222222222"
 }
 
 @test "_release_asset_sha prints variable name and value for every tool/arch" {
   _set_pins
   local _t _a _var _want
-  for _t in kind yq shellcheck; do
+  for _t in kind yq shellcheck gitleaks; do
     for _a in amd64 arm64; do
       _var="${_t^^}_SHA256_${_a^^}"
       _want="${!_var}"
@@ -102,11 +117,11 @@ _set_pins() {
   [ -z "$output" ]
 }
 
-@test "committed constants define four 64-hex kind/yq pins and three _FOR_VER lines" {
-  run grep -cE '^(KIND|YQ)_SHA256_(AMD64|ARM64)="[[:xdigit:]]{64}"$' "${REPO_ROOT}/lib/constants.sh"
+@test "committed constants define six 64-hex kind/yq/gitleaks pins and four _FOR_VER lines" {
+  run grep -cE '^(KIND|YQ|GITLEAKS)_SHA256_(AMD64|ARM64)="[[:xdigit:]]{64}"$' "${REPO_ROOT}/lib/constants.sh"
+  [ "$output" -eq 6 ]
+  run grep -cE '^(KIND|YQ|SHELLCHECK|GITLEAKS)_SHA256_FOR_VER=' "${REPO_ROOT}/lib/constants.sh"
   [ "$output" -eq 4 ]
-  run grep -cE '^(KIND|YQ|SHELLCHECK)_SHA256_FOR_VER=' "${REPO_ROOT}/lib/constants.sh"
-  [ "$output" -eq 3 ]
 }
 
 # Reads the real lib/constants.sh in a clean child shell: setup() overrides the
@@ -117,11 +132,11 @@ _committed() {
     printf -v v "%s" "${!2}"; printf "%s" "$v"' _ "${REPO_ROOT}" "$1"
 }
 
-@test "committed pins: each of the six is a real 64-hex digest, not zeros" {
+@test "committed pins: each of the eight is a real 64-hex digest, not zeros" {
   local zeros v
   zeros="$(printf '0%.0s' {1..64})"
   for name in KIND_SHA256_AMD64 KIND_SHA256_ARM64 YQ_SHA256_AMD64 YQ_SHA256_ARM64 \
-    SHELLCHECK_SHA256_AMD64 SHELLCHECK_SHA256_ARM64; do
+    SHELLCHECK_SHA256_AMD64 SHELLCHECK_SHA256_ARM64 GITLEAKS_SHA256_AMD64 GITLEAKS_SHA256_ARM64; do
     v="$(_committed "${name}")"
     _sha256_pin_ok "${v}" || { printf '%s=%s\n' "${name}" "${v}" >&2; return 1; }
     [ "${v}" != "${zeros}" ] || { printf '%s is zeros\n' "${name}" >&2; return 1; }
@@ -135,5 +150,7 @@ _committed() {
   a="$(_committed YQ_VER)"; b="$(_committed YQ_SHA256_FOR_VER)"
   [ -n "${a}" ]; [ "${a}" = "${b}" ]
   a="$(_committed SHELLCHECK_VER)"; b="$(_committed SHELLCHECK_SHA256_FOR_VER)"
+  [ -n "${a}" ]; [ "${a}" = "${b}" ]
+  a="$(_committed GITLEAKS_VER)"; b="$(_committed GITLEAKS_SHA256_FOR_VER)"
   [ -n "${a}" ]; [ "${a}" = "${b}" ]
 }

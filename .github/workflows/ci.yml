@@ -354,9 +354,14 @@ jobs:
       - name: Install PowerShell
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget apt-transport-https software-properties-common
+          # gnupg and binutils (ar) for verify-ms-deb.sh
+          sudo apt-get install -y apt-transport-https software-properties-common gnupg binutils
           source /etc/os-release
           curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -O "https://packages.microsoft.com/config/ubuntu/${VERSION_ID}/packages-microsoft-prod.deb"
+          # The .deb installs Microsoft's apt signing key as root: verify its
+          # debsig signature against the vendored key first (never a sha256
+          # pin; Microsoft rewrites the file in place per release).
+          bash scripts/verify-ms-deb.sh packages-microsoft-prod.deb
           sudo dpkg -i packages-microsoft-prod.deb
           sudo apt-get update
           sudo apt-get install -y powershell
@@ -412,6 +417,9 @@ jobs:
           source lib/constants.sh
           curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/gitleaks.tar.gz \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VER}/gitleaks_${GITLEAKS_VER}_linux_x64.tar.gz"
+          # GITLEAKS_SHA256_AMD64 in lib/constants.sh; refuses pins recorded for
+          # another GITLEAKS_VER.
+          bash scripts/verify-release-asset.sh gitleaks amd64 /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
 
