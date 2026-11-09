@@ -103,11 +103,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: refresh-logs
+          # Named per attempt so a re-run uploads beside the earlier attempt's
+          # logs instead of replacing them, and report reads only its own.
+          name: refresh-logs-${{ github.run_attempt }}
           path: ${{ runner.temp }}/*.log
           if-no-files-found: warn
           retention-days: 7
-          # A re-run attempt reuses the run id; overwrite lets it upload at all.
+          # Kept for the uniform upload rule; the per-attempt name already
+          # keeps a re-run from colliding.
           overwrite: true
 
   publish:
@@ -224,11 +227,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: publish-logs
+          # Named per attempt so a re-run uploads beside the earlier attempt's
+          # logs instead of replacing them, and report reads only its own.
+          name: publish-logs-${{ github.run_attempt }}
           path: ${{ runner.temp }}/*.log
           if-no-files-found: warn
           retention-days: 7
-          # A re-run attempt reuses the run id; overwrite lets it upload at all.
+          # Kept for the uniform upload rule; the per-attempt name already
+          # keeps a re-run from colliding.
           overwrite: true
 
   report:
@@ -242,18 +248,31 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      # Only the failed job's logs, and only this attempt's: merging every
+      # *-logs artifact quoted refresh's log when publish failed before its
+      # first logged step. A job that failed that early uploaded nothing, so a
+      # missing artifact must not stop the report.
       - name: Download step logs
         if: always()
+        continue-on-error: true
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: "*-logs"
-          merge-multiple: true
+          name: ${{ needs.refresh.result != 'success' && 'refresh' || 'publish' }}-logs-${{ github.run_attempt }}
           path: ${{ runner.temp }}/logs
 
       - name: Report failure
         if: always()
+        env:
+          REFRESH_RESULT: ${{ needs.refresh.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
           run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # Same rule as the download step's artifact name.
+          if [[ "${REFRESH_RESULT}" != "success" ]]; then
+            job="refresh" result="${REFRESH_RESULT}"
+          else
+            job="publish" result="${PUBLISH_RESULT}"
+          fi
           newest=""
           if [[ -d "${RUNNER_TEMP}/logs" ]]; then
             # Downloaded files all carry extraction-time mtimes, so order by the
@@ -266,12 +285,13 @@ jobs:
           fi
           {
             printf 'Run: %s\n\n' "${run_url}"
+            printf 'Failed job: %s (%s)\n\n' "${job}" "${result}"
             if [[ -n "${newest}" ]]; then
               printf 'Last 40 lines of %s:\n\n```\n' "$(basename "${newest}")"
               tail -n 40 "${newest}"
               printf '```\n'
             else
-              printf 'No step log was written before the failure.\n'
+              printf '%s wrote no step log before the failure.\n' "${job}"
             fi
           } > "${RUNNER_TEMP}/failure-body.md"
           issue="$(gh issue list --state open --limit 1000 --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
