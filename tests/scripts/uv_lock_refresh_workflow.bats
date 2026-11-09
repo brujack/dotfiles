@@ -451,13 +451,10 @@ _pin_of() {
   _none_in "${_r}" -E 'git push|(^|[^[:alnum:]_/.-])gh pr'
 }
 
-@test "report downloads every *-logs artifact merged, with if: always() on both steps" {
+@test "report download and report steps both run with if: always()" {
   local _dl _rep
   _dl="$(_step report "Download step logs")"
   [[ "${_dl}" == *'actions/download-artifact@'* ]]
-  [[ "${_dl}" == *"pattern: \"*-logs\""* ]]
-  [[ "${_dl}" == *'merge-multiple: true'* ]]
-  [[ "${_dl}" == *'path: ${{ runner.temp }}/logs'* ]]
   [[ "$(printf '%s\n' "${_dl}" | command grep -E '^        if:')" == "        if: always()" ]]
   _rep="$(_step report "Report failure")"
   [[ "$(printf '%s\n' "${_rep}" | command grep -E '^        if:')" == "        if: always()" ]]
@@ -472,7 +469,7 @@ _pin_of() {
   [[ "${_rep}" == *'${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}'* ]]
   [[ "${_rep}" == *'gh issue create'* ]]
   [[ "${_rep}" == *'gh issue comment'* ]]
-  [[ "${_rep}" == *'No step log was written before the failure.'* ]]
+  [[ "${_rep}" == *'wrote no step log before the failure.'* ]]
 }
 
 # --- tee coverage -------------------------------------------------------------
@@ -549,4 +546,74 @@ _pin_of() {
     printf 'retry window %s x %s s is under 120 s\n' "${_n}" "${_d}" >&2
     return 1
   fi
+}
+
+@test "report downloads only the failed job's logs from this attempt" {
+  # Merging every *-logs artifact let the report quote refresh's log when
+  # publish failed before its first logged step, and quote a stale attempt's
+  # publish log when a re-run failed in refresh.
+  local _dl
+  _dl="$(_step report "Download step logs")"
+  [[ "${_dl}" == *'actions/download-artifact@'* ]]
+  [[ "${_dl}" == *"name: \${{ needs.refresh.result != 'success' && 'refresh' || 'publish' }}-logs-\${{ github.run_attempt }}"* ]]
+  [[ "${_dl}" == *'path: ${{ runner.temp }}/logs'* ]]
+  _none_in "${_dl}" -E 'pattern:|merge-multiple:'
+  # A job that failed before its first logged step uploaded nothing; the
+  # missing artifact must not stop the issue from being filed.
+  [[ "${_dl}" == *'        continue-on-error: true'* ]]
+}
+
+@test "step-log artifacts are named per attempt, matching what report downloads" {
+  # A fixed name let a re-run's report read the earlier attempt's logs.
+  [[ "$(_step refresh "Upload refresh logs")" == *'          name: refresh-logs-${{ github.run_attempt }}'* ]]
+  [[ "$(_step publish "Upload publish logs")" == *'          name: publish-logs-${{ github.run_attempt }}'* ]]
+}
+
+# Runs the report job's real `Report failure` script, cut from the workflow,
+# against a fixture RUNNER_TEMP and a gh stub that finds no open issue.
+# Prints the issue body it wrote.
+_run_report() {
+  local _refresh="$1" _publish="$2" _bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${_bin}" "${BATS_TEST_TMPDIR}/rt"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s/gh.calls"\n' "${BATS_TEST_TMPDIR}" > "${_bin}/gh"
+  chmod +x "${_bin}/gh"
+  _step report "Report failure" \
+    | awk 'f { sub(/^          /, ""); print } /^        run: \|$/ { f = 1 }' \
+    > "${BATS_TEST_TMPDIR}/report.sh"
+  [[ -s "${BATS_TEST_TMPDIR}/report.sh" ]] || return 1
+  env PATH="${_bin}:${PATH}" RUNNER_TEMP="${BATS_TEST_TMPDIR}/rt" \
+    GITHUB_SERVER_URL=https://github.com GITHUB_REPOSITORY=o/r GITHUB_RUN_ID=7 \
+    REFRESH_RESULT="${_refresh}" PUBLISH_RESULT="${_publish}" \
+    bash "${BATS_TEST_TMPDIR}/report.sh" || return 1
+  cat "${BATS_TEST_TMPDIR}/rt/failure-body.md"
+}
+
+@test "report names publish as the failed job and quotes no log when publish logged nothing" {
+  # The step runs only on ubuntu-latest and its find uses GNU -printf, which
+  # BSD find on the macOS shards lacks.
+  [[ "$(uname -s)" == Linux ]] || skip "report step runs on ubuntu-latest (GNU find)"
+  local _body
+  _body="$(_run_report success failure)"
+  [[ "${_body}" == *'Run: https://github.com/o/r/actions/runs/7'* ]]
+  [[ "${_body}" == *'Failed job: publish (failure)'* ]]
+  [[ "${_body}" == *'publish wrote no step log before the failure.'* ]]
+  _none_in "${_body}" -F 'Last 40 lines'
+  command grep -qF 'issue create' "${BATS_TEST_TMPDIR}/gh.calls"
+}
+
+@test "report names refresh and quotes its highest-numbered log when refresh fails or is cancelled" {
+  # The step runs only on ubuntu-latest and its find uses GNU -printf, which
+  # BSD find on the macOS shards lacks.
+  [[ "$(uname -s)" == Linux ]] || skip "report step runs on ubuntu-latest (GNU find)"
+  local _r _body
+  for _r in failure cancelled; do
+    rm -rf "${BATS_TEST_TMPDIR}/rt"
+    mkdir -p "${BATS_TEST_TMPDIR}/rt/logs"
+    printf 'uv installed\n' > "${BATS_TEST_TMPDIR}/rt/logs/10-install-uv.log"
+    printf 'resolution failed\n' > "${BATS_TEST_TMPDIR}/rt/logs/20-refresh.log"
+    _body="$(_run_report "${_r}" skipped)"
+    [[ "${_body}" == *"Failed job: refresh (${_r})"* ]]
+    [[ "${_body}" == *'Last 40 lines of 20-refresh.log'* ]]
+    [[ "${_body}" == *'resolution failed'* ]]
+  done
 }
