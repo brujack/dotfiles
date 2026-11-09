@@ -1288,7 +1288,7 @@ ci-test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
-    { name = "ruff" },
+    { name = "ruff", specifier = "==0.17.4" },
 ]
 runtime = [
     { name = "ansible" },
@@ -1332,7 +1332,7 @@ test-lint = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "radon" },
-    { name = "ruff" },
+    { name = "ruff", specifier = "==0.17.4" },
     { name = "vulture" },
 ]
 
