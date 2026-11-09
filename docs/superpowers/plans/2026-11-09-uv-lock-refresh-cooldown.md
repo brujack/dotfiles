@@ -1,5 +1,7 @@
 # uv.lock Refresh Cooldown Implementation Plan
 
+> **Status: DONE** (dotfiles#454, merged 440e7df0)
+
 spec: docs/superpowers/specs/2026-11-09-uv-lock-refresh-cooldown-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
