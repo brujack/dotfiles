@@ -176,12 +176,12 @@ class PlanTest(Case):
 
     def test_duplicate_entries_take_earliest_time(self) -> None:
         base = self.lock("b.lock", pkg("a", "1.0"))
-        new = self.lock("n.lock", pkg("a", "2.0", NEW), pkg("a", "2.0", OLD))
+        new = self.lock("n.lock", pkg("a", "2.0", OLD), pkg("a", "2.0", NEW))
         self.assertEqual(self.plan(base, new), (0, [], ""))
 
     def test_duplicate_entry_without_time_does_not_make_version_fresh(self) -> None:
         base = self.lock("b.lock", pkg("a", "1.0"))
-        new = self.lock("n.lock", pkg("a", "2.0", None), pkg("a", "2.0", OLD))
+        new = self.lock("n.lock", pkg("a", "2.0", OLD), pkg("a", "2.0", None))
         self.assertEqual(self.plan(base, new), (0, [], ""))
 
     def test_non_registry_source_ignored(self) -> None:
