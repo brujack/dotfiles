@@ -13,7 +13,8 @@ optional a/b/rc pre-release, optional .post and optional .dev. Any other form
 
 Prints the package name for each downgrade and `unparseable: <line>` for an
 `Updated` line it cannot read (fail closed).
-Exit 0: nothing found. Exit 1: findings. Exit 2: unreadable input.
+Exit 0: nothing found. Exit 1: findings. Exit 2: unreadable input or any
+uncaught exception (never 1, which means findings).
 """
 
 from __future__ import annotations

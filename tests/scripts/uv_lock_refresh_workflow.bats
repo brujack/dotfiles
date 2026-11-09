@@ -410,6 +410,16 @@ _pin_of() {
   command grep -qF -- '--title "uv.lock refresh failed"' "${WF}"
 }
 
+@test "issue lookups list past the 30-issue default page" {
+  [ "$(_code | command grep -cF 'gh issue list --state open --limit 1000 --json number,title')" -eq 2 ]
+}
+
+# uv lock runs PyPI build code for sdist-only packages, so any cache the
+# resolve writes could carry that code into a later run's trusted job.
+@test "no job restores or saves a cache" {
+  _none_in "$(_code)" -E 'actions/cache|setup-uv|setup-python|enable-cache|^[[:space:]]+cache:'
+}
+
 @test "publish uploads its logs as publish-logs with if: always()" {
   local _logs
   _logs="$(_step publish "Upload publish logs")"
