@@ -27,9 +27,9 @@ _refresh_err() {
 }
 
 # Write the PR body to ${1} from the change lines in ${2} and, when the held
-# report ${3} is non-empty, a section naming each held package.
+# bullets file ${3} is non-empty, a section naming each held package.
 _refresh_write_body() {
-  local body_file="${1}" lines_file="${2}" report="${3}" count
+  local body_file="${1}" lines_file="${2}" held_file="${3}" count
   count="$(wc -l < "${lines_file}")" || return 1
   count="${count//[[:space:]]/}"
   {
@@ -38,9 +38,9 @@ _refresh_write_body() {
     printf '```\n'
     cat "${lines_file}"
     printf '```\n\n'
-    if [[ -s "${report}" ]]; then
+    if [[ -s "${held_file}" ]]; then
       printf '### Held by the %s-day cooldown\n\n' "${REFRESH_COOLDOWN_DAYS}"
-      python3 "${_COOLDOWN_HELPER}" held "${report}" uv.lock || return 1
+      cat "${held_file}"
       printf '\n'
     fi
     cat <<'BODY'
@@ -126,14 +126,19 @@ _refresh_cooldown() {
 }
 
 # Every package uv reported (${1}) must be in the diff (${2}) or the held
-# report (${3}); a name in neither means the lock and uv disagree.
+# report (${3}); a name in neither means the lock and uv disagree. Names are
+# compared exactly, never as patterns or prefixes.
 _refresh_cross_check() {
   local uvlines="${1}" diff_lines="${2}" report="${3}" name missing=""
+  local -A seen=()
   while read -r _ name _; do
-    if command grep -qE "^(Updated|Added|Removed) ${name} " "${diff_lines}" \
-      || command grep -qE "^${name}	" "${report}"; then
-      continue
-    fi
+    seen["${name}"]=1
+  done < "${diff_lines}"
+  while IFS=$'\t' read -r name _; do
+    seen["${name}"]=1
+  done < "${report}"
+  while read -r _ name _; do
+    [[ -n ${seen[${name}]+x} ]] && continue
     missing+="${missing:+, }${name}"
   done < "${uvlines}"
   if [[ -n "${missing}" ]]; then
@@ -142,9 +147,33 @@ _refresh_cross_check() {
   fi
 }
 
+# Refuse a version drop in the diff lines ${1}.
+_refresh_downgrade_check() {
+  local lines_file="${1}" offenders rc
+  offenders="$(python3 "${_DOWNGRADE_HELPER}" < "${lines_file}")"
+  rc=$?
+  case "${rc}" in
+    0) ;;
+    1)
+      if [[ -z "${offenders}" ]]; then
+        # rc 1 with no names is a crash that exited like a finding.
+        _refresh_err "downgrade check failed (helper rc ${rc})"
+        return 1
+      fi
+      _refresh_err "refusing downgrade: ${offenders//$'\n'/, }"
+      _refresh_err "if a release was yanked, raise the pyproject.toml floor past it, then re-run"
+      return 1
+      ;;
+    *)
+      _refresh_err "downgrade check failed (helper rc ${rc})"
+      return 1
+      ;;
+  esac
+}
+
 # Everything that needs temp files; runs in a subshell so the trap is scoped.
 _refresh_run() {
-  local body_file="${1}" tmp log lines uvlines report before rc
+  local body_file="${1}" tmp log lines uvlines report held before rc
   tmp="$(mktemp -d)" || exit 1
   # shellcheck disable=SC2064 # expand now: ${tmp} is fixed for this subshell's life
   trap "rm -rf -- '${tmp}'" EXIT
@@ -153,6 +182,7 @@ _refresh_run() {
   before="${tmp}/uv.lock.before"
   uvlines="${tmp}/uvlines"
   report="${tmp}/report"
+  held="${tmp}/held"
 
   cp uv.lock "${before}" || {
     _refresh_err "cannot read uv.lock"
@@ -189,6 +219,9 @@ _refresh_run() {
     _refresh_err "cooldown helper failed (rc ${rc})"
     return 1
   fi
+  # Before the empty-diff exit: a parser that misreads versions makes the diff
+  # empty, and that is exactly what this guard exists to catch.
+  _refresh_cross_check "${uvlines}" "${lines}" "${report}" || return 1
   if [[ ! -s "${lines}" ]]; then
     # The cap put every version back; restore the exact base bytes (a re-lock
     # can still differ in file entries of an unchanged version).
@@ -199,35 +232,29 @@ _refresh_run() {
     printf 'no changes\n'
     return 0
   fi
+  if [[ ! -s "${uvlines}" ]]; then
+    # --upgrade moved a version, so uv printed change lines; none means misread.
+    _refresh_err "cannot read uv change lines"
+    return 1
+  fi
 
-  _refresh_cross_check "${uvlines}" "${lines}" "${report}" || return 1
-
-  local offenders
-  offenders="$(python3 "${_DOWNGRADE_HELPER}" < "${lines}")"
-  rc=$?
-  case "${rc}" in
-    0) ;;
-    1)
-      if [[ -z "${offenders}" ]]; then
-        # rc 1 with no names is a crash that exited like a finding.
-        _refresh_err "downgrade check failed (helper rc ${rc})"
-        return 1
-      fi
-      _refresh_err "refusing downgrade: ${offenders//$'\n'/, }"
-      _refresh_err "if a release was yanked, raise the pyproject.toml floor past it, then re-run"
-      return 1
-      ;;
-    *)
-      _refresh_err "downgrade check failed (helper rc ${rc})"
-      return 1
-      ;;
-  esac
+  _refresh_downgrade_check "${lines}" || return 1
 
   _refresh_make sync-requirements-ci 0 || return 1
   _refresh_make check-lock 1 || return 1
   _refresh_make check-requirements-ci 1 || return 1
 
-  _refresh_write_body "${body_file}" "${lines}" "${report}" || {
+  : > "${held}"
+  if [[ -s "${report}" ]]; then
+    python3 "${_COOLDOWN_HELPER}" held "${report}" uv.lock > "${held}"
+    rc=$?
+    if [[ ${rc} -ne 0 ]]; then
+      _refresh_err "cooldown helper failed (rc ${rc})"
+      return 1
+    fi
+  fi
+
+  _refresh_write_body "${body_file}" "${lines}" "${held}" || {
     _refresh_err "cannot write ${body_file}"
     return 1
   }

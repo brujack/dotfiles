@@ -26,7 +26,7 @@ setup() {
   unset _DOWNGRADE_HELPER _COOLDOWN_HELPER
   BODY="${BATS_TEST_TMPDIR}/body.md"
   unset STUB_UV_LINES STUB_UV_EXIT STUB_UV_FAIL_CALL STUB_MAKE_FAIL
-  unset WRAP_FAIL_SUB WRAP_FAIL_RC WRAP_DIFF_TEXT
+  unset WRAP_FAIL_SUB WRAP_FAIL_RC WRAP_DIFF_TEXT WRAP_PLAN_EMPTY WRAP_DIFF_EMPTY
 }
 
 # _lock FILE SPEC...: write a minimal valid lock. SPEC is
@@ -73,6 +73,11 @@ import sys
 sub = sys.argv[1]
 if sub == os.environ.get("WRAP_FAIL_SUB"):
     sys.exit(int(os.environ.get("WRAP_FAIL_RC", "2")))
+if sub == "plan" and os.environ.get("WRAP_PLAN_EMPTY"):
+    open(sys.argv[5], "w").close()
+    sys.exit(0)
+if sub == "diff" and os.environ.get("WRAP_DIFF_EMPTY"):
+    sys.exit(0)
 if sub == "diff" and os.environ.get("WRAP_DIFF_TEXT"):
     print(os.environ["WRAP_DIFF_TEXT"])
     sys.exit(0)
@@ -101,9 +106,10 @@ run_script() {
   run_script
   [ "${status}" -eq 0 ]
   [ "${lines[-1]}" = "changed" ]
+  cmp -s "${FIXTURE}/uv.lock" "${LOCKS}/1.lock"
   [ "$(wc -l < "${STUB_UV_ARGS_LOG}")" -eq 1 ]
   [[ "${output}" != *"Held by"* ]]
-  ! command grep -qF 'Held by the 14-day cooldown' "${BODY}"
+  run ! command grep -qF 'Held by the 14-day cooldown' "${BODY}"
 }
 
 @test "a fresh change is capped and the body lists it" {
@@ -111,6 +117,7 @@ run_script() {
   run_script
   [ "${status}" -eq 0 ]
   [ "${lines[-1]}" = "changed" ]
+  cmp -s "${FIXTURE}/uv.lock" "${LOCKS}/3.lock"
   [ "$(sed -n 1p "${STUB_UV_ARGS_LOG}")" = "uv lock --upgrade --color never" ]
   [ "$(sed -n 2p "${STUB_UV_ARGS_LOG}")" = "uv lock --color never --upgrade-package acme --exclude-newer-package acme=${CUTOFF}" ]
   [ "$(sed -n 3p "${STUB_UV_ARGS_LOG}")" = "uv lock --color never" ]
@@ -167,7 +174,7 @@ PY
   run_script
   [ "${status}" -eq 0 ]
   [ "${lines[-1]}" = "changed" ]
-  ! command grep -q 'exclude-newer' "${FIXTURE}/uv.lock"
+  run ! command grep -q 'exclude-newer' "${FIXTURE}/uv.lock"
 }
 
 @test "a cap that restores every version is no changes and leaves uv.lock as it was" {
@@ -216,7 +223,7 @@ PY
 
 @test "a failing cooldown helper is reported with its rc at every step" {
   local sub
-  for sub in cutoff plan verify diff; do
+  for sub in cutoff plan verify diff held; do
     _capped_change
     rm -f "${LOCKS}/.calls"
     _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
@@ -255,6 +262,67 @@ PY
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cooldown change list disagrees with uv: ghost"* ]]
   [ ! -e "${BODY}" ]
+}
+
+@test "a parser that sees no change while uv reported one is refused, not no changes" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,1.0,${OLD},${OLD}"
+  export STUB_UV_LINES='Updated acme v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown change list disagrees with uv: acme"* ]]
+  [[ "${output}" != *"no changes"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a helper whose plan, diff and report are all empty is refused when uv reported a change" {
+  _simple_change
+  _wrap_helper
+  export WRAP_PLAN_EMPTY=1 WRAP_DIFF_EMPTY=1
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown change list disagrees with uv: acme"* ]]
+  [[ "${output}" != *"no changes"* ]]
+}
+
+@test "a lock change with no readable uv change lines is refused" {
+  _simple_change
+  unset STUB_UV_LINES
+  export STUB_UV_LINES='Bumped acme v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cannot read uv change lines"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a package held all the way back is in the report and not in the change list" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,2.0,${FRESH}" "other,6.0,${OLD}"
+  _lock "${LOCKS}/2.lock" "acme,1.0,${OLD}" "other,6.0,${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  export STUB_UV_LINES=$'Updated acme v1.0 -> v2.0\nUpdated other v5.0 -> v6.0'
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "changed" ]
+  command grep -qF '### Held by the 14-day cooldown' "${BODY}"
+  command grep -qE '^- acme: newest 2.0 ' "${BODY}"
+  run ! command grep -qE '^(Updated|Added|Removed) acme ' "${BODY}"
+  command grep -qF 'Updated other v5.0 -> v6.0' "${BODY}"
+}
+
+@test "package names are matched exactly, not as patterns or prefixes" {
+  local pair uvname diffname
+  for pair in "a.b aXb" "a ab"; do
+    read -r uvname diffname <<< "${pair}"
+    rm -f "${LOCKS}/.calls"
+    _simple_change
+    _wrap_helper
+    export WRAP_DIFF_TEXT="Updated ${diffname} v1.0 -> v2.0"
+    export STUB_UV_LINES="Updated ${uvname} v1.0 -> v2.0"
+    run_script
+    [ "${status}" -eq 1 ]
+    [[ "${stderr}" == *"cooldown change list disagrees with uv: ${uvname}"* ]]
+  done
 }
 
 @test "changed lock writes body with every line and the four review commands" {
