@@ -2,38 +2,332 @@
 
 bats_require_minimum_version 1.5.0
 
+# Fixed clock: cutoff = 2026-10-26T19:00:00Z (14 days earlier). OLD is aged,
+# FRESH is inside the cooldown.
+OLD="2026-10-01T00:00:00Z"
+AGED="2026-10-10T00:00:00Z"
+FRESH="2026-11-08T00:00:00Z"
+CUTOFF="2026-10-26T19:00:00Z"
+
 setup() {
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   SCRIPT="${REPO_ROOT}/scripts/refresh-uv-lock.sh"
   FIXTURE="${BATS_TEST_TMPDIR}/root"
-  mkdir -p "${FIXTURE}"
-  printf 'version = 1\n' > "${FIXTURE}/uv.lock"
+  LOCKS="${BATS_TEST_TMPDIR}/locks"
+  mkdir -p "${FIXTURE}" "${LOCKS}"
   export REFRESH_UV_LOCK_ROOT="${FIXTURE}"
   export _UV_BIN="${REPO_ROOT}/tests/stubs/uv-refresh-stub"
   export _MAKE_BIN="${REPO_ROOT}/tests/stubs/make-refresh-stub"
   export STUB_MAKE_LOG="${BATS_TEST_TMPDIR}/make.log"
   export STUB_UV_ARGS_LOG="${BATS_TEST_TMPDIR}/uv.args"
-  unset _DOWNGRADE_HELPER
+  export STUB_UV_LOCK_DIR="${LOCKS}"
+  export REFRESH_COOLDOWN_NOW="2026-11-09T19:00:00Z"
+  unset _DOWNGRADE_HELPER _COOLDOWN_HELPER
   BODY="${BATS_TEST_TMPDIR}/body.md"
-  unset STUB_UV_LINES STUB_UV_EXIT STUB_UV_CHANGE STUB_MAKE_FAIL
+  unset STUB_UV_LINES STUB_UV_EXIT STUB_UV_FAIL_CALL STUB_MAKE_FAIL
+  unset WRAP_FAIL_SUB WRAP_FAIL_RC WRAP_DIFF_TEXT WRAP_PLAN_EMPTY WRAP_DIFF_EMPTY
+}
+
+# _lock FILE SPEC...: write a minimal valid lock. SPEC is
+# name,version,upload-time[,wheel-upload-time]; a repeated name is a fork.
+_lock() {
+  local file="${1}" spec name version up wheel
+  shift
+  printf 'version = 1\nrequires-python = ">=3.12"\n' > "${file}"
+  for spec in "$@"; do
+    IFS=, read -r name version up wheel <<< "${spec}"
+    printf '\n[[package]]\nname = "%s"\nversion = "%s"\n' "${name}" "${version}" >> "${file}"
+    printf 'source = { registry = "https://pypi.org/simple" }\n' >> "${file}"
+    printf 'sdist = { url = "u", hash = "h", size = 1, upload-time = "%s" }\n' "${up}" >> "${file}"
+    if [[ -n "${wheel}" ]]; then
+      printf 'wheels = [{ url = "w", hash = "h", size = 1, upload-time = "%s" }]\n' "${wheel}" >> "${file}"
+    fi
+  done
+}
+
+# One aged package moving 1.0 -> 2.0: nothing is held.
+_simple_change() {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,2.0,${OLD}"
+  export STUB_UV_LINES='Updated acme v1.0 -> v2.0'
+}
+
+# acme gains a fresh 2.0 (aged 1.1 exists); other moves 5.0 -> 6.0, aged.
+_capped_change() {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,2.0,${FRESH}" "other,6.0,${OLD}"
+  _lock "${LOCKS}/2.lock" "acme,1.1,${AGED}" "other,6.0,${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  export STUB_UV_LINES=$'Updated acme v1.0 -> v2.0\nUpdated other v5.0 -> v6.0'
+}
+
+# A cooldown helper that fails one subcommand or fakes diff output, and
+# otherwise runs the real helper.
+_wrap_helper() {
+  cat > "${BATS_TEST_TMPDIR}/wrap.py" <<'PY'
+import os
+import subprocess
+import sys
+
+sub = sys.argv[1]
+if sub == os.environ.get("WRAP_FAIL_SUB"):
+    sys.exit(int(os.environ.get("WRAP_FAIL_RC", "2")))
+if sub == "plan" and os.environ.get("WRAP_PLAN_EMPTY"):
+    open(sys.argv[5], "w").close()
+    sys.exit(0)
+if sub == "diff" and os.environ.get("WRAP_DIFF_EMPTY"):
+    sys.exit(0)
+if sub == "diff" and os.environ.get("WRAP_DIFF_TEXT"):
+    print(os.environ["WRAP_DIFF_TEXT"])
+    sys.exit(0)
+sys.exit(subprocess.call([sys.executable, os.environ["WRAP_REAL"], *sys.argv[1:]]))
+PY
+  export WRAP_REAL="${REPO_ROOT}/scripts/uv_lock_cooldown.py"
+  export _COOLDOWN_HELPER="${BATS_TEST_TMPDIR}/wrap.py"
 }
 
 run_script() {
   run --separate-stderr bash "${SCRIPT}" "${BODY}" < /dev/null
 }
 
-@test "unchanged lock prints no changes and writes no body" {
-  export STUB_UV_CHANGE=0
+@test "unchanged lock prints no changes, writes no body and calls uv once" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}"
   run_script
   [ "${status}" -eq 0 ]
   [ "${lines[-1]}" = "no changes" ]
   [ ! -e "${BODY}" ]
   [ ! -e "${STUB_MAKE_LOG}" ]
+  [ "$(wc -l < "${STUB_UV_ARGS_LOG}")" -eq 1 ]
+}
+
+@test "no fresh change makes exactly one uv call" {
+  _simple_change
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "changed" ]
+  cmp -s "${FIXTURE}/uv.lock" "${LOCKS}/1.lock"
+  [ "$(wc -l < "${STUB_UV_ARGS_LOG}")" -eq 1 ]
+  [[ "${output}" != *"Held by"* ]]
+  run ! command grep -qF 'Held by the 14-day cooldown' "${BODY}"
+}
+
+@test "a fresh change is capped and the body lists it" {
+  _capped_change
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "changed" ]
+  cmp -s "${FIXTURE}/uv.lock" "${LOCKS}/3.lock"
+  [ "$(sed -n 1p "${STUB_UV_ARGS_LOG}")" = "uv lock --upgrade --color never" ]
+  [ "$(sed -n 2p "${STUB_UV_ARGS_LOG}")" = "uv lock --color never --upgrade-package acme --exclude-newer-package acme=${CUTOFF}" ]
+  [ "$(sed -n 3p "${STUB_UV_ARGS_LOG}")" = "uv lock --color never" ]
+  [ "$(wc -l < "${STUB_UV_ARGS_LOG}")" -eq 3 ]
+  command grep -qF '### Held by the 14-day cooldown' "${BODY}"
+  command grep -qxF -- "- acme: newest 2.0 uploaded ${FRESH}; took 1.1" "${BODY}"
+  command grep -qF 'Updated acme v1.0 -> v1.1' "${BODY}"
+  command grep -qF 'Updated other v5.0 -> v6.0' "${BODY}"
+}
+
+@test "the cap cutoff is the helper's cutoff for the clock and 14 days" {
+  _capped_change
+  run_script
+  [ "${status}" -eq 0 ]
+  local want
+  want="$(python3 "${REPO_ROOT}/scripts/uv_lock_cooldown.py" cutoff "${REFRESH_COOLDOWN_NOW}" 14)"
+  [ "${want}" = "${CUTOFF}" ]
+  command grep -qF -- "--exclude-newer-package acme=${want}" "${STUB_UV_ARGS_LOG}"
+}
+
+@test "REFRESH_COOLDOWN_DAYS equals renovate.json's minimumReleaseAge" {
+  local days age
+  days="$(command grep -oE '^readonly REFRESH_COOLDOWN_DAYS=[0-9]+' "${SCRIPT}" | cut -d= -f2)"
+  age="$(python3 - "${REPO_ROOT}/renovate.json" <<'PY'
+import json
+import re
+import sys
+
+def find(node):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "minimumReleaseAge":
+                yield value
+            yield from find(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from find(item)
+
+ages = {re.fullmatch(r"(\d+) days?", v).group(1) for v in find(json.load(open(sys.argv[1])))}
+print(ages.pop() if len(ages) == 1 else "mixed")
+PY
+)"
+  [ -n "${days}" ]
+  [ "${days}" = "${age}" ]
+}
+
+@test "the final uv.lock holds no exclude-newer after a cap" {
+  _capped_change
+  {
+    cat "${LOCKS}/2.lock"
+    printf '\n[options]\nexclude-newer-package = { acme = "%s" }\n\n[options.exclude-newer-package]\nacme = "%s"\n' "${CUTOFF}" "${CUTOFF}"
+  } > "${LOCKS}/2.lock.new"
+  mv "${LOCKS}/2.lock.new" "${LOCKS}/2.lock"
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "changed" ]
+  run ! command grep -q 'exclude-newer' "${FIXTURE}/uv.lock"
+}
+
+@test "a cap that restores every version is no changes and leaves uv.lock as it was" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,2.0,${FRESH}"
+  _lock "${LOCKS}/2.lock" "acme,1.0,${OLD},${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  export STUB_UV_LINES='Updated acme v1.0 -> v2.0'
+  cp "${FIXTURE}/uv.lock" "${BATS_TEST_TMPDIR}/base.lock"
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "no changes" ]
+  cmp -s "${FIXTURE}/uv.lock" "${BATS_TEST_TMPDIR}/base.lock"
+  [ ! -e "${BODY}" ]
+  [ ! -e "${STUB_MAKE_LOG}" ]
+}
+
+@test "a re-resolve that keeps a fresh version is not honoured" {
+  _capped_change
+  _lock "${LOCKS}/2.lock" "acme,2.0,${FRESH}" "other,6.0,${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown not honoured: acme"* ]]
+  [ ! -e "${BODY}" ]
+  [ ! -e "${STUB_MAKE_LOG}" ]
+}
+
+@test "a failed re-resolve is named" {
+  _capped_change
+  export STUB_UV_FAIL_CALL=2
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown re-resolve failed"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a failed lock rewrite is named" {
+  _capped_change
+  export STUB_UV_FAIL_CALL=3
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown lock rewrite failed"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a failing cooldown helper is reported with its rc at every step" {
+  local sub
+  for sub in cutoff plan verify diff held; do
+    _capped_change
+    rm -f "${LOCKS}/.calls"
+    _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
+    _wrap_helper
+    export WRAP_FAIL_SUB="${sub}" WRAP_FAIL_RC=5
+    run_script
+    [ "${status}" -eq 1 ]
+    [[ "${stderr}" == *"cooldown helper failed (rc 5)"* ]]
+    [[ "${output}" != *changed* ]]
+    [ ! -e "${BODY}" ]
+  done
+}
+
+@test "a failing diff is a helper failure, never no changes" {
+  _capped_change
+  _wrap_helper
+  export WRAP_FAIL_SUB=diff WRAP_FAIL_RC=2
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown helper failed (rc 2)"* ]]
+  [[ "${output}" != *"no changes"* ]]
+}
+
+@test "a missing cooldown helper is a helper failure" {
+  _simple_change
+  export _COOLDOWN_HELPER="${BATS_TEST_TMPDIR}/absent.py"
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown helper failed (rc 2)"* ]]
+}
+
+@test "a change uv reported that the diff and the held report lack is refused" {
+  _simple_change
+  export STUB_UV_LINES=$'Updated acme v1.0 -> v2.0\nUpdated ghost v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown change list disagrees with uv: ghost"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a parser that sees no change while uv reported one is refused, not no changes" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,1.0,${OLD},${OLD}"
+  export STUB_UV_LINES='Updated acme v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown change list disagrees with uv: acme"* ]]
+  [[ "${output}" != *"no changes"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a helper whose plan, diff and report are all empty is refused when uv reported a change" {
+  _simple_change
+  _wrap_helper
+  export WRAP_PLAN_EMPTY=1 WRAP_DIFF_EMPTY=1
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cooldown change list disagrees with uv: acme"* ]]
+  [[ "${output}" != *"no changes"* ]]
+}
+
+@test "a lock change with no readable uv change lines is refused" {
+  _simple_change
+  unset STUB_UV_LINES
+  export STUB_UV_LINES='Bumped acme v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 1 ]
+  [[ "${stderr}" == *"cannot read uv change lines"* ]]
+  [ ! -e "${BODY}" ]
+}
+
+@test "a package held all the way back is in the report and not in the change list" {
+  _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,2.0,${FRESH}" "other,6.0,${OLD}"
+  _lock "${LOCKS}/2.lock" "acme,1.0,${OLD}" "other,6.0,${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  export STUB_UV_LINES=$'Updated acme v1.0 -> v2.0\nUpdated other v5.0 -> v6.0'
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "changed" ]
+  command grep -qF '### Held by the 14-day cooldown' "${BODY}"
+  command grep -qE '^- acme: newest 2.0 ' "${BODY}"
+  run ! command grep -qE '^(Updated|Added|Removed) acme ' "${BODY}"
+  command grep -qF 'Updated other v5.0 -> v6.0' "${BODY}"
+}
+
+@test "package names are matched exactly, not as patterns or prefixes" {
+  local pair uvname diffname
+  for pair in "a.b aXb" "a ab"; do
+    read -r uvname diffname <<< "${pair}"
+    rm -f "${LOCKS}/.calls"
+    _simple_change
+    _wrap_helper
+    export WRAP_DIFF_TEXT="Updated ${diffname} v1.0 -> v2.0"
+    export STUB_UV_LINES="Updated ${uvname} v1.0 -> v2.0"
+    run_script
+    [ "${status}" -eq 1 ]
+    [[ "${stderr}" == *"cooldown change list disagrees with uv: ${uvname}"* ]]
+  done
 }
 
 @test "changed lock writes body with every line and the four review commands" {
-  export STUB_UV_CHANGE=1
+  _lock "${FIXTURE}/uv.lock" "acme,5.7.0,${OLD}" "greenlet,3.5.5,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,5.9.0,${OLD}" "cloudpickle,3.1.2,${OLD}"
   export STUB_UV_LINES=$'Updated acme v5.7.0 -> v5.9.0\nAdded cloudpickle v3.1.2\nRemoved greenlet v3.5.5'
   run_script
   [ "${status}" -eq 0 ]
@@ -49,16 +343,9 @@ run_script() {
   command grep -qF 'changed 3 package entries' "${BODY}"
 }
 
-@test "changed lock with no change lines is refused" {
-  export STUB_UV_CHANGE=1
-  run_script
-  [ "${status}" -eq 1 ]
-  [[ "${stderr}" == *"uv printed no change lines"* ]]
-  [ ! -e "${BODY}" ]
-}
-
 @test "downgrade is refused" {
-  export STUB_UV_CHANGE=1
+  _lock "${FIXTURE}/uv.lock" "acme,2.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "acme,1.9,${OLD}"
   export STUB_UV_LINES='Updated acme v2.0 -> v1.9'
   run_script
   [ "${status}" -eq 1 ]
@@ -69,12 +356,16 @@ run_script() {
 }
 
 @test "comma form downgrade is refused and comma form upgrade passes" {
-  export STUB_UV_CHANGE=1
+  _lock "${FIXTURE}/uv.lock" "six,1.15.0,${OLD}" "six,1.16.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "six,1.15.0,${OLD}"
   export STUB_UV_LINES='Updated six v1.15.0, v1.16.0 -> v1.15.0'
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"refusing downgrade: six"* ]]
   [ ! -e "${BODY}" ]
+  rm -f "${LOCKS}/.calls"
+  _lock "${FIXTURE}/uv.lock" "six,1.15.0,${OLD}" "six,1.16.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "six,1.16.0,${OLD}"
   export STUB_UV_LINES='Updated six v1.15.0, v1.16.0 -> v1.16.0'
   run_script
   [ "${status}" -eq 0 ]
@@ -82,8 +373,10 @@ run_script() {
 }
 
 @test "unparseable Updated line is refused" {
-  export STUB_UV_CHANGE=1
-  export STUB_UV_LINES='Updated acme sideways'
+  _simple_change
+  _wrap_helper
+  export WRAP_DIFF_TEXT='Updated acme sideways'
+  export STUB_UV_LINES='Updated acme v1.0 -> v2.0'
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"unparseable: Updated acme sideways"* ]]
@@ -91,6 +384,7 @@ run_script() {
 }
 
 @test "uv failure exits 1 with its own message" {
+  _simple_change
   export STUB_UV_EXIT=2
   run_script
   [ "${status}" -eq 1 ]
@@ -100,7 +394,7 @@ run_script() {
 }
 
 @test "sync-requirements-ci failure is named" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   export STUB_MAKE_FAIL=sync-requirements-ci
   run_script
   [ "${status}" -eq 1 ]
@@ -109,7 +403,7 @@ run_script() {
 }
 
 @test "check-lock failure is named" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   export STUB_MAKE_FAIL=check-lock
   run_script
   [ "${status}" -eq 1 ]
@@ -118,7 +412,7 @@ run_script() {
 }
 
 @test "check-requirements-ci failure is named" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   export STUB_MAKE_FAIL=check-requirements-ci
   run_script
   [ "${status}" -eq 1 ]
@@ -127,7 +421,7 @@ run_script() {
 }
 
 @test "both checks run with REQUIRE_TOOLS=1 and the sync does not" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   unset REQUIRE_TOOLS
   run_script
   [ "${status}" -eq 0 ]
@@ -137,7 +431,7 @@ run_script() {
 }
 
 @test "stub sentinel stays off stdout and the last line is the result word" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   run_script
   [ "${status}" -eq 0 ]
   [ "${output}" = "changed" ]
@@ -148,14 +442,16 @@ run_script() {
 }
 
 @test "uv runs with --color never" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   run_script
   [ "${status}" -eq 0 ]
   command grep -qx 'uv lock --upgrade --color never' "${STUB_UV_ARGS_LOG}"
 }
 
 @test "lowest-fork downgrade is refused" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated a v1.0, v3.0 -> v0.5, v3.0'
+  _lock "${FIXTURE}/uv.lock" "a,1.0,${OLD}" "a,3.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "a,0.5,${OLD}" "a,3.0,${OLD}"
+  export STUB_UV_LINES='Updated a v1.0, v3.0 -> v0.5, v3.0'
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"refusing downgrade: a"* ]]
@@ -163,7 +459,7 @@ run_script() {
 }
 
 @test "helper crash is reported as a failed check, not a downgrade" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   printf 'raise RuntimeError("boom")\n' > "${BATS_TEST_TMPDIR}/crash.py"
   export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/crash.py"
   run_script
@@ -175,7 +471,7 @@ run_script() {
 }
 
 @test "helper rc 1 with no offenders is a crash, not a downgrade" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   printf 'import sys\nsys.exit(1)\n' > "${BATS_TEST_TMPDIR}/rc1.py"
   export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/rc1.py"
   run_script
@@ -186,7 +482,7 @@ run_script() {
 }
 
 @test "unexpected helper rc is a failed check and writes no body" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   printf 'import sys\nsys.exit(5)\n' > "${BATS_TEST_TMPDIR}/rc5.py"
   export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/rc5.py"
   run_script
@@ -197,16 +493,17 @@ run_script() {
 }
 
 @test "two downgrades are both named" {
-  export STUB_UV_CHANGE=1
-  export STUB_UV_LINES=$'Updated a v2 -> v1\nUpdated b v3 -> v2'
+  _lock "${FIXTURE}/uv.lock" "a,2.0,${OLD}" "b,3.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "a,1.0,${OLD}" "b,2.0,${OLD}"
+  export STUB_UV_LINES=$'Updated a v2.0 -> v1.0\nUpdated b v3.0 -> v2.0'
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"refusing downgrade: a, b"* ]]
   [ ! -e "${BODY}" ]
 }
 
-@test "helper missing is reported as a failed check" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+@test "downgrade helper missing is reported as a failed check" {
+  _simple_change
   export _DOWNGRADE_HELPER="${BATS_TEST_TMPDIR}/absent.py"
   run_script
   [ "${status}" -eq 1 ]
@@ -229,7 +526,6 @@ run_script() {
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot cd"* ]]
   [[ "${stderr}" != *"cannot read uv.lock"* ]]
-  [[ "${stderr}" != *"no change lines"* ]]
   [ ! -e "${STUB_UV_ARGS_LOG}" ]
   [ ! -e "${BODY}" ]
 }
@@ -239,13 +535,12 @@ run_script() {
   run_script
   [ "${status}" -eq 1 ]
   [[ "${stderr}" == *"cannot read uv.lock"* ]]
-  [[ "${stderr}" != *"no change lines"* ]]
   [ ! -e "${STUB_UV_ARGS_LOG}" ]
   [ ! -e "${BODY}" ]
 }
 
 @test "unwritable body file exits 1 and never reports changed" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   BODY="${BATS_TEST_TMPDIR}/nodir/body.md"
   run_script
   [ "${status}" -eq 1 ]
@@ -265,7 +560,7 @@ run_script() {
 }
 
 @test "relative body-file resolves against the caller's cwd" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   cd "${BATS_TEST_TMPDIR}"
   run --separate-stderr bash "${SCRIPT}" rel-body.md < /dev/null
   [ "${status}" -eq 0 ]
@@ -273,7 +568,7 @@ run_script() {
 }
 
 @test "no temp dir is left behind" {
-  export STUB_UV_CHANGE=1 STUB_UV_LINES='Updated acme v1 -> v2'
+  _simple_change
   export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
   mkdir -p "${TMPDIR}"
   run_script

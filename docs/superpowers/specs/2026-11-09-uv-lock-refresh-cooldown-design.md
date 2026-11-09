@@ -169,6 +169,9 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 ## Amendments
 
 - N4 -> No change to the five renderings' groups, and no ai-config change besides the `dotfiles-test-seams.md` entry that dotfiles' CLAUDE.md requires for a new test seam. — dotfiles' CLAUDE.md puts every new seam's description in that ai-config file, so the plan's non-goal check found N4 contradicting a mandatory step.
+- R1 -> `scripts/uv_lock_cooldown.py plan BASE NEW CUTOFF REPORT` prints, for each package whose version set differs between BASE and NEW and contains a version absent from BASE whose earliest `upload-time` is later than CUTOFF (or has none), `--upgrade-package P==V` when BASE holds P at a version V whose earliest `upload-time` is later than CUTOFF, else `--upgrade-package P --exclude-newer-package P=CUTOFF`, and writes each such package to REPORT as `name<TAB>newest<TAB>earliest-upload`; it prints nothing for any other package. — the held section needs the newest version and its upload time, and a fresh version already in BASE is not a change to hold.
+- finding R9 (2026-11-09, reviewer both): NOT-BUILT — The failure table R9 refers to is not in requirements.md or in my diff, so I cannot match messages to it; the diff does exit 1 with `cooldown helper failed (rc N)`, `cooldown re-resolve failed`, `cooldown lock rewrite failed`, `cooldown not honoured:`, `cooldown change list disagrees with uv:`, `cannot read uv change lines` and `cannot restore uv.lock`, but whether those are the table's stated messages is unverified.
+- R9 -> `refresh-uv-lock.sh` exits non-zero, writes no PR body, and names the failure on stderr with one of: `cooldown helper failed (rc N)` (any helper subcommand exits non-zero, `held` included), `cooldown re-resolve failed` (the cap `uv lock`), `cooldown lock rewrite failed` (the plain relock), `cooldown not honoured: <names>` (`verify` exit 1), `cooldown change list disagrees with uv: <names>` (R12), `cannot read uv change lines` (non-empty `diff` with no uv change lines read) or `cannot restore uv.lock` (the R5 copy fails). — R9 pointed at a table the reviewers cannot see; listing the messages makes it self-contained, and the last two were added by the Task 2 review rounds.
 
 ## Multi-Lens Review
 
@@ -205,3 +208,26 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 ### Round 3 (scoped Risk lens on the round-2 revision, `876b6578`)
 
 - Risk (`876b6578`): R5's restore trusts an empty `diff`, and the zero-package guard catches only a parser that fails outright; one that reads names but misreads versions would report `no changes` weekly, and `plan` and `verify` share its parser. Assumption (the parser fails all-or-nothing): uncertain; settled by renaming one entry's `version` key in a scratch copy and running `diff`. Disposition: Addressed (operator, 2026-11-09: "Approve, round 3 Addressed") — `diff` exits 2 on a versionless registry package, the script reads `diff`'s exit status before its output, and R12 cross-checks uv's own change lines against `diff` and the capped report. No fourth round: the remaining assumption is settled by Phase 2's first red test.
+
+## Spec alignment (2026-11-09)
+
+- spec: docs/superpowers/specs/2026-11-09-uv-lock-refresh-cooldown-design.md
+- anchor: 7f4b45d30c891ed2e72003c71c1870dfa8d4371a
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R9 | both | NOT-BUILT | The failure table R9 refers to is not in requirements.md or in my diff, so I cannot match messages to it; the diff does exit 1 with `cooldown helper failed (rc N)`, `cooldown re-resolve failed`, `cooldown lock rewrite failed`, `cooldown not honoured:`, `cooldown change list disagrees with uv:`, `cannot read uv change lines` and `cannot restore uv.lock`, but whether those are the table's stated messages is unverified. | - R9 -> `refresh-uv-lock.sh` exits non-zero, writes no PR body, and names the failure on stderr with one of: `cooldown helper failed (rc N)` (any helper subcommand exits non-zero, `held` included), `cooldown re-resolve failed` (the cap `uv lock`), `cooldown lock rewrite failed` (the plain relock), `cooldown not honoured: <names>` (`verify` exit 1), `cooldown change list disagrees with uv: <names>` (R12), `cannot read uv change lines` (non-empty `diff` with no uv change lines read) or `cannot restore uv.lock` (the R5 copy fails). — R9 pointed at a table the reviewers cannot see; listing the messages makes it self-contained, and the last two were added by the Task 2 review rounds. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-11-09, scripts/refresh-uv-lock.sh at 99fbad26 on a scratch copy of 41893754 with checksum-verified uv 0.13.0 and REFRESH_COOLDOWN_NOW=2026-11-09T19:00:00Z: exit 0 `changed`; uv_lock_cooldown.py verify exit 0 (0 versions after 2026-10-26T19:00:00Z); downgrade check passed; `uv lock --check` exit 0; split 55 at latest / 41 at an older aged release / 9 at base.
+- V2: no evidence recorded
+- V3: Same replay: `uv lock --check` exit 0 on the final lock (it equals a plain resolution, wheel lists included) and 0 `exclude-newer` lines; a separate uv 0.13.0 cap-then-relock at 41893754 moved 0 versions and changed 0 wheel counts between the capped and final locks.

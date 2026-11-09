@@ -1,17 +1,32 @@
 #!/usr/bin/env bash
-# Stand-in for `uv lock --upgrade`, driven by the STUB_UV_* variables.
-# STUB_UV_LINES: text printed on stderr (real uv prints its change lines there)
-# STUB_UV_EXIT: exit status (default 0)
-# STUB_UV_CHANGE: 1 appends a line to ./uv.lock
-# STUB_UV_ARGS_LOG: file receiving the argv line
+# Stand-in for `uv lock`, driven by the STUB_UV_* variables.
+# STUB_UV_LOCK_DIR: directory holding N.lock files and a call counter; on call N
+#   the stub copies N.lock over ./uv.lock when it exists (no file, no change)
+# STUB_UV_LINES: text printed on stderr on call 1 only (real uv prints its
+#   change lines there)
+# STUB_UV_FAIL_CALL: call number that exits 1
+# STUB_UV_EXIT: exit status of every call (default 0)
+# STUB_UV_ARGS_LOG: file receiving one argv line per call
 printf 'STUB-UV-SENTINEL\n'
 printf "uv %s\n" "$*" >> "${STUB_UV_ARGS_LOG:-/dev/null}"
+call=1
+if [[ -n "${STUB_UV_LOCK_DIR:-}" ]]; then
+  counter="${STUB_UV_LOCK_DIR}/.calls"
+  if [[ -f "${counter}" ]]; then
+    read -r call < "${counter}"
+    call=$((call + 1))
+  fi
+  printf '%s\n' "${call}" > "${counter}"
+  if [[ -f "${STUB_UV_LOCK_DIR}/${call}.lock" ]]; then
+    cp "${STUB_UV_LOCK_DIR}/${call}.lock" uv.lock
+  fi
+fi
 printf 'Using CPython 3.14.0\n' >&2
-if [[ -n "${STUB_UV_LINES:-}" ]]; then
+if [[ "${call}" == "1" && -n "${STUB_UV_LINES:-}" ]]; then
   printf '%s\n' "${STUB_UV_LINES}" >&2
 fi
 printf 'Resolved 269 packages in 244ms\n'
-if [[ "${STUB_UV_CHANGE:-0}" == "1" ]]; then
-  printf '# refreshed\n' >> uv.lock
+if [[ -n "${STUB_UV_FAIL_CALL:-}" && "${call}" == "${STUB_UV_FAIL_CALL}" ]]; then
+  exit 1
 fi
 exit "${STUB_UV_EXIT:-0}"
