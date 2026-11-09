@@ -533,3 +533,20 @@ _pin_of() {
     [[ "$(_step "${_name%% *}" "${_name#* }")" == *'          overwrite: true'* ]]
   done
 }
+
+@test "the unattended uv download retries for at least two minutes" {
+  # Run 42572284846 failed on four 504s inside --retry 3 --retry-delay 2
+  # (about 6 s of waiting) and filed #448. A scheduled run has no operator to
+  # re-run it, so the retry window must outlast a short upstream outage.
+  local _line _n _d
+  _line="$(_step refresh "Install uv (pinned)" | command grep -E 'curl .*uv\.tar\.gz')"
+  [[ -n "${_line}" ]]
+  _n="$(sed -nE 's/.*--retry ([0-9]+).*/\1/p' <<< "${_line}")"
+  _d="$(sed -nE 's/.*--retry-delay ([0-9]+).*/\1/p' <<< "${_line}")"
+  [[ -n "${_n}" && -n "${_d}" ]]
+  [[ "${_line}" == *"--retry-all-errors"* ]]
+  if (( _n * _d < 120 )); then
+    printf 'retry window %s x %s s is under 120 s\n' "${_n}" "${_d}" >&2
+    return 1
+  fi
+}

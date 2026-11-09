@@ -481,3 +481,34 @@ PY
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"DRIFT"* ]]
 }
+
+# A uv that resolves (executable) but whose export fails, the way a corrupt
+# uv.lock or a uv crash does. Prints a partial line first: a failed export can
+# still write some stdout before it dies.
+_failing_uv() {
+  local _stub="${BATS_TEST_TMPDIR}/failing-uv"
+  printf '#!/usr/bin/env bash\nprintf "partial==1.0\\n"\nprintf "uv: export failed\\n" >&2\nexit 2\n' > "${_stub}"
+  chmod +x "${_stub}"
+  export UV_BIN="${_stub}"
+}
+
+@test "sync fails and leaves the rendering untouched when uv export fails" {
+  _failing_uv
+  local _before
+  _before="$(cksum < "${TARGET}")"
+  run "${SCRIPT}" sync
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"FAILED to render group test-lint"* ]]
+  [ "$(cksum < "${TARGET}")" = "${_before}" ]
+}
+
+@test "check does not pass a header-only rendering while uv export fails" {
+  # The refresh workflow runs sync then check. When both see the same failed
+  # export, check must not compare the failure against itself and call it OK.
+  _failing_uv
+  printf '# Generated from uv.lock — do not edit.\n# Regenerate with: make sync-requirements-ci\n' > "${TARGET}"
+  run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"FAILED to render group test-lint"* ]]
+  [[ "${output}" != *"OK: "*"requirements-ci.txt matches"* ]]
+}

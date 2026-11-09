@@ -62,7 +62,7 @@ jobs:
           UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
         run: |
           {
-            curl -fsSL --retry 3 --retry-delay 2 --retry-all-errors -o /tmp/uv.tar.gz \
+            curl -fsSL --retry 8 --retry-delay 15 --retry-all-errors -o /tmp/uv.tar.gz \
               "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-gnu.tar.gz"
             echo "${UV_SHA256}  /tmp/uv.tar.gz" | sha256sum -c -
             tar -xzf /tmp/uv.tar.gz -C /tmp
