@@ -55,14 +55,16 @@ readonly HEADER="# Generated from uv.lock — do not edit.
 # Regenerate with: make sync-requirements-ci"
 
 # _render GROUP -- emit the rendering for one dependency group on stdout.
+# The export is captured before filtering, not piped into sed: a pipeline's
+# status is sed's, so a failed export rendered as a header-only file with
+# status 0, and `check` re-rendering the same failure then called it a match.
 _render() {
-  local _group="$1" _uv
+  local _group="$1" _uv _raw
   _uv="$(resolve_uv)" || return 1
-  {
-    printf "%s\n" "${HEADER}"
-    (cd "${REPO_ROOT}" && "${_uv}" export --frozen --only-group "${_group}" \
-       --format requirements-txt 2>/dev/null | sed '/^#/d')
-  } || return 1
+  _raw="$(cd "${REPO_ROOT}" && "${_uv}" export --frozen --only-group "${_group}" \
+    --format requirements-txt 2>/dev/null)" || return 1
+  printf "%s\n" "${HEADER}"
+  printf "%s\n" "${_raw}" | sed '/^#/d'
 }
 
 cmd_sync() {
