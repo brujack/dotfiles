@@ -1,7 +1,8 @@
 name: uv-lock-refresh
 
 # Weekly uv.lock refresh. Opens or updates one PR from chore/uv-lock-refresh
-# with GITHUB_TOKEN. Such a PR starts no CI of its own: the operator starts it
+# with GITHUB_TOKEN, and closes that PR when master already holds the
+# resolution. Such a PR starts no CI of its own: the operator starts it
 # with a close and reopen, then merges by hand (the auto-merge gate holds bot
 # PRs). Spec: docs/superpowers/specs/2026-11-08-uv-lock-refresh-design.md
 #
@@ -212,7 +213,7 @@ jobs:
       - name: Close failure issue
         run: |
           {
-            issue="$(gh issue list --state open --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
+            issue="$(gh issue list --state open --limit 1000 --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
             if [[ -n "${issue}" ]]; then
               gh issue comment "${issue}" --body "Recovered in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
               gh issue close "${issue}"
@@ -273,7 +274,7 @@ jobs:
               printf 'No step log was written before the failure.\n'
             fi
           } > "${RUNNER_TEMP}/failure-body.md"
-          issue="$(gh issue list --state open --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
+          issue="$(gh issue list --state open --limit 1000 --json number,title --jq '[.[]|select(.title == "uv.lock refresh failed")]|.[0].number // empty')"
           if [[ -n "${issue}" ]]; then
             gh issue comment "${issue}" --body-file "${RUNNER_TEMP}/failure-body.md"
           else
