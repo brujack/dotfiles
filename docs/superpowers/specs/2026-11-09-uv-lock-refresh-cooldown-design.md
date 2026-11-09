@@ -169,6 +169,7 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 ## Amendments
 
 - N4 -> No change to the five renderings' groups, and no ai-config change besides the `dotfiles-test-seams.md` entry that dotfiles' CLAUDE.md requires for a new test seam. — dotfiles' CLAUDE.md puts every new seam's description in that ai-config file, so the plan's non-goal check found N4 contradicting a mandatory step.
+- R1 -> `scripts/uv_lock_cooldown.py plan BASE NEW CUTOFF REPORT` prints, for each package whose version set differs between BASE and NEW and contains a version absent from BASE whose earliest `upload-time` is later than CUTOFF (or has none), `--upgrade-package P==V` when BASE holds P at a version V whose earliest `upload-time` is later than CUTOFF, else `--upgrade-package P --exclude-newer-package P=CUTOFF`, and writes each such package to REPORT as `name<TAB>newest<TAB>earliest-upload`; it prints nothing for any other package. — the held section needs the newest version and its upload time, and a fresh version already in BASE is not a change to hold.
 
 ## Multi-Lens Review
 

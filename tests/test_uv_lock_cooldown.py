@@ -75,6 +75,12 @@ class CutoffTest(Case):
         self.assertEqual(self.run_helper("cutoff", "2026-11-09T19:00:00Z", "x")[0], 2)
 
 
+    def test_cutoff_rejects_non_positive_or_signed_days(self) -> None:
+        for days in ("-14", "0", "+14", " 14 ", ""):
+            with self.subTest(days=days):
+                self.assertEqual(self.run_helper("cutoff", "2026-11-09T19:00:00Z", days)[0], 2)
+
+
 class PlanTest(Case):
     def test_unchanged_package_emits_nothing(self) -> None:
         base = self.lock("b.lock", pkg("a", "1.0", NEW))
@@ -146,6 +152,64 @@ class PlanTest(Case):
         self.assertEqual(lines[1], "a")
         self.assertEqual(lines[5], "b")
 
+    def test_missing_upload_time_report_row_is_unknown(self) -> None:
+        base = self.lock("b.lock", pkg("a", "1.0"))
+        new = self.lock("n.lock", pkg("a", "2.0", None))
+        self.assertEqual(self.plan(base, new)[2], "a\t2.0\tunknown\n")
+
+    def test_fresh_base_versions_pinned_to_highest_by_pep440(self) -> None:
+        base = self.lock("b.lock", pkg("a", "2.0rc1", NEW), pkg("a", "2.1", NEW))
+        new = self.lock("n.lock", pkg("a", "3.0", NEW))
+        self.assertEqual(self.plan(base, new)[1], ["--upgrade-package", "a==2.1"])
+
+    def test_pre_post_and_final_ordering(self) -> None:
+        base = self.lock(
+            "b.lock", pkg("a", "2.0rc1", NEW), pkg("a", "2.0", NEW), pkg("a", "2.0.post1", NEW)
+        )
+        new = self.lock("n.lock", pkg("a", "3.0", NEW))
+        self.assertEqual(self.plan(base, new)[1], ["--upgrade-package", "a==2.0.post1"])
+
+    def test_unorderable_version_exit_2(self) -> None:
+        base = self.lock("b.lock", pkg("a", "1.0+local", NEW), pkg("a", "1.1", NEW))
+        new = self.lock("n.lock", pkg("a", "3.0", NEW))
+        self.assertEqual(self.run_helper("plan", base, new, CUTOFF, str(self.dir / "r"))[0], 2)
+
+    def test_duplicate_entries_take_earliest_time(self) -> None:
+        base = self.lock("b.lock", pkg("a", "1.0"))
+        new = self.lock("n.lock", pkg("a", "2.0", NEW), pkg("a", "2.0", OLD))
+        self.assertEqual(self.plan(base, new), (0, [], ""))
+
+    def test_duplicate_entry_without_time_does_not_make_version_fresh(self) -> None:
+        base = self.lock("b.lock", pkg("a", "1.0"))
+        new = self.lock("n.lock", pkg("a", "2.0", None), pkg("a", "2.0", OLD))
+        self.assertEqual(self.plan(base, new), (0, [], ""))
+
+    def test_non_registry_source_ignored(self) -> None:
+        git = (
+            '[[package]]\nname = "g"\nversion = "%s"\n'
+            'source = { git = "https://x/y?rev=a#abc" }\n'
+        )
+        base = self.lock("b.lock", pkg("a", "1.0"), git % "1.0")
+        new = self.lock("n.lock", pkg("a", "1.0"), git % "2.0")
+        self.assertEqual(self.plan(base, new), (0, [], ""))
+        self.assertEqual(self.run_helper("verify", base, new, CUTOFF)[:2], (0, ""))
+        self.assertEqual(self.run_helper("diff", base, new)[:2], (0, ""))
+
+    def test_naive_datetime_upload_time_exit_2(self) -> None:
+        naive = (
+            '[[package]]\nname = "a"\nversion = "2.0"\n'
+            'source = { registry = "https://pypi.org/simple" }\n'
+            'sdist = { url = "u", upload-time = 2026-11-06T08:37:19 }\n'
+        )
+        base = self.lock("b.lock", pkg("a", "1.0"))
+        new = self.lock("n.lock", naive)
+        self.assertEqual(self.run_helper("plan", base, new, CUTOFF, str(self.dir / "r"))[0], 2)
+
+    def test_naive_string_upload_time_exit_2(self) -> None:
+        base = self.lock("b.lock", pkg("a", "1.0"))
+        new = self.lock("n.lock", pkg("a", "2.0", "2026-11-06T08:37:19"))
+        self.assertEqual(self.run_helper("plan", base, new, CUTOFF, str(self.dir / "r"))[0], 2)
+
 
 class VerifyTest(Case):
     def test_fresh_changed_and_added_named(self) -> None:
@@ -199,7 +263,23 @@ class HeldTest(Case):
         )
 
 
+    def test_removed_package_reports_removed(self) -> None:
+        report = self.dir / "r.tsv"
+        report.write_text(f"a\t2.0\t{NEW_SECONDS}\n", encoding="utf-8")
+        final = self.lock("f.lock", pkg("b", "1.0"))
+        self.assertEqual(
+            self.run_helper("held", str(report), final)[1],
+            f"- a: newest 2.0 uploaded {NEW_SECONDS}; took (removed)\n",
+        )
+
+
 class ErrorTest(Case):
+    def test_non_list_package_table_exit_2(self) -> None:
+        odd = self.dir / "odd.lock"
+        odd.write_text("package = 5\n", encoding="utf-8")
+        good = self.lock("g.lock", pkg("a", "1.0"))
+        self.assertEqual(self.run_helper("diff", str(odd), good)[0], 2)
+
     def test_zero_registry_packages_exit_2(self) -> None:
         empty = self.lock("e.lock")
         good = self.lock("g.lock", pkg("a", "1.0"))

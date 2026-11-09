@@ -14,8 +14,12 @@ Subcommands (each reads uv.lock files and prints to stdout):
   held REPORT FINAL          one markdown bullet per held package.
 
 A registry package is a [[package]] whose `source` has a `registry` key. The
-age of a version is the earliest `upload-time` over its sdist and wheels; a
-version with none is fresh. Fresh means strictly later than CUTOFF, so a file
+age of a version is the earliest `upload-time` over the sdist and wheels of
+every entry that names it (a version may appear in several resolution forks);
+a version none of whose entries has an `upload-time` is fresh. Timestamps
+without an offset are refused. Versions are ordered with
+uv_lock_downgrades.version_key and a version it cannot read is refused (exit
+2) rather than guessed. Fresh means strictly later than CUTOFF, so a file
 uploaded exactly at CUTOFF is aged. Only the standard library is used because
 CI's test jobs install no Python packages.
 
@@ -26,11 +30,13 @@ findings).
 
 from __future__ import annotations
 
-import re
 import sys
 import tomllib
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from uv_lock_downgrades import version_key  # noqa: E402 - needs the path insert above
 
 Versions = dict[str, dict[str, datetime | None]]  # name -> version -> earliest upload
 
@@ -62,7 +68,9 @@ def file_times(package: dict) -> list[datetime]:
     for entry in entries:
         stamp = entry.get("upload-time") if isinstance(entry, dict) else None
         if isinstance(stamp, datetime):
-            times.append(stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc))
+            if stamp.tzinfo is None:
+                raise InputError(f"timestamp {stamp} has no offset")
+            times.append(stamp)
         elif isinstance(stamp, str):
             times.append(parse_time(stamp))
     return times
@@ -74,7 +82,7 @@ def read_lock(path: str) -> Versions:
         data = tomllib.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
         raise InputError(f"cannot read {path}: {err}") from err
-    result: Versions = {}
+    seen: dict[str, dict[str, list[datetime]]] = {}
     for package in data.get("package", []):
         source = package.get("source")
         if not isinstance(source, dict) or "registry" not in source:
@@ -82,18 +90,14 @@ def read_lock(path: str) -> Versions:
         name, version = package.get("name"), package.get("version")
         if not isinstance(name, str) or not isinstance(version, str):
             raise InputError(f"{path}: registry package without name or version")
-        times = file_times(package)
-        earliest = min(times) if times else None
-        slot = result.setdefault(name, {})
-        known = slot.get(version)
-        if version in slot and known is not None and earliest is not None:
-            earliest = min(known, earliest)
-        elif version in slot and known is not None:
-            earliest = known
-        slot[version] = earliest
-    if not result:
+        slot = seen.setdefault(name, {})
+        slot.setdefault(version, []).extend(file_times(package))
+    if not seen:
         raise InputError(f"{path}: no registry packages")
-    return result
+    return {
+        name: {version: (min(times) if times else None) for version, times in versions.items()}
+        for name, versions in seen.items()
+    }
 
 
 def is_fresh(upload: datetime | None, cutoff: datetime) -> bool:
@@ -101,11 +105,11 @@ def is_fresh(upload: datetime | None, cutoff: datetime) -> bool:
 
 
 def version_sort_key(version: str) -> tuple:
-    """Loose numeric ordering to pick one version deterministically."""
-    return tuple(
-        (0, int(part), "") if part.isdigit() else (1, 0, part)
-        for part in re.split(r"[.\-+]", version)
-    )
+    """PEP 440 sort key; refuse a version uv_lock_downgrades cannot read."""
+    try:
+        return version_key("v" + version)
+    except ValueError as err:
+        raise InputError(f"cannot order version {version!r}") from err
 
 
 def changed_names(base: Versions, other: Versions) -> list[str]:
@@ -118,10 +122,9 @@ def changed_names(base: Versions, other: Versions) -> list[str]:
 
 def cmd_cutoff(args: list[str]) -> int:
     now_text, days_text = args
-    try:
-        days = int(days_text)
-    except ValueError as err:
-        raise InputError(f"bad day count {days_text!r}") from err
+    if not (days_text.isascii() and days_text.isdigit()) or int(days_text) < 1:
+        raise InputError(f"day count must be a positive integer, got {days_text!r}")
+    days = int(days_text)
     print(format_time(parse_time(now_text) - timedelta(days=days)))
     return 0
 
@@ -204,7 +207,7 @@ def cmd_held(args: list[str]) -> int:
         if len(fields) != 3:
             raise InputError(f"malformed report row: {row!r}")
         name, newest, uploaded = fields
-        took = ", ".join(sorted(final.get(name, {}), key=version_sort_key))
+        took = ", ".join(sorted(final.get(name, {}), key=version_sort_key)) or "(removed)"
         print(f"- {name}: newest {newest} uploaded {uploaded}; took {took}")
     return 0
 
