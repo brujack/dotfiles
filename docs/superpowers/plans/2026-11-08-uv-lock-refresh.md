@@ -1,6 +1,6 @@
 # Weekly uv.lock refresh PR Implementation Plan
 
-> **Status: DONE** — merged in #445 (641c9a35), 2026-11-08. V1/V2 post-merge dispatch checks pending.
+> **Status: DONE** — merged in #445 (641c9a35), 2026-11-08. V1 and V2 passed (runs 42537368799, 42539802105; refresh PR #446).
 
 spec: docs/superpowers/specs/2026-11-08-uv-lock-refresh-design.md
 

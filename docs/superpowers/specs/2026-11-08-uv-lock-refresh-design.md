@@ -356,5 +356,5 @@ Disposition: Addressed (operator, 2026-11-08): all seven folded in (PEP 440 comp
 
 ### Verifications
 
-- V1: no evidence recorded
-- V2: no evidence recorded
+- V1: 2026-11-08: workflow_dispatch run 42537368799 succeeded (refresh, publish; report skipped) and opened #446 as app/github-actions, same repository, diff exactly uv.lock and the five requirements-ci renderings (105 change lines). The pre-reopen CI and PR Title Lint runs were zero-job failures, not action_required. After close and reopen all required checks passed (test, lint-macos, test-macos, powershell, secret-scan, renderings-install), and auto-merge held it: 'bot PR (app/github-actions) lacks automerge-ok -- leaving open for triage'.
+- V2: 2026-11-09: a second dispatch, run 42539802105, succeeded and force-updated #446 in place (head 19b4411d -> 7f40b6e3); #446 stayed the only refresh PR, diff still the six files.
