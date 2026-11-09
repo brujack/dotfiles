@@ -166,6 +166,10 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 - **N3.** `plan` emits no argument for a package whose version set is the same in BASE and NEW.
 - **N4.** No change to the five renderings' groups or to ai-config.
 
+## Amendments
+
+- N4 -> No change to the five renderings' groups, and no ai-config change besides the `dotfiles-test-seams.md` entry that dotfiles' CLAUDE.md requires for a new test seam. — dotfiles' CLAUDE.md puts every new seam's description in that ai-config file, so the plan's non-goal check found N4 contradicting a mandatory step.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `d47b9b77` (Step 7 self-review commit, before Step 8 dispatch)
