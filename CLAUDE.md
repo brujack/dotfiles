@@ -540,6 +540,8 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 
 - Inline the shared Renovate preset into `renovate.json`, never `extends` it (ai-config is private, so `extends` throws `config-validation` and Renovate silently abandons the repo); hand-sync `extends`/`schedule`/`labels`/`packageRules` with `ai-config/renovate-presets/default.json`, since nothing detects drift. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Renovate preset inline`
 
+- Both automerge-ok `packageRules` (and the preset's) carry `"!ruff"`, so a ruff bump is a held PR that ai-config and state-ledger see before their renderings move; ruff is pinned exactly in `pyproject.toml` (`tests/setup_env/requirements_ci.bats` pins the exclusion; ai-config spec `2026-11-08-fleet-ruff-defaults-design.md`, R1, R2, R14).
+
 - Treat Renovate as running here (`pinDigests` and auto-merge work in production); do not cite the `mode=silent` finding as a live constraint without re-reading a current Mend job log. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency Renovate running`
 
 - Never conclude Renovate is inactive from a zero-PR count alone; first establish what it was permitted to do. → `dotfiles-conventions.md` § `CLAUDE.md budget: Dependency zero-PR count`
