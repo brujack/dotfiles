@@ -157,3 +157,29 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 - **N2.** No global `--exclude-newer` and no `exclude-newer` left in a committed `uv.lock`.
 - **N3.** `plan` emits no argument for a package whose version set is the same in BASE and NEW.
 - **N4.** No change to the five renderings' groups or to ai-config.
+
+## Multi-Lens Review
+
+Reviewed at commit: `d47b9b77` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: R5 moves the "nothing changed" decision from `cmp` onto the new `diff` helper's output. A `diff` that wrongly prints nothing with rc 0 (a parse bug, a future lock format) would restore base and report `no changes` every week, closing the PR with no issue filed. Today's refusal `uv printed no change lines but uv.lock changed` exists for exactly this and was added on purpose in the parent spec. Keep `cmp` as the authority: a byte difference with an empty `diff` must fail the run. V1 and V2 also pass on a run that does nothing.
+Assumption: one cap pass is enough, i.e. capping P never moves another package Q to a fresh version. Checked by the orchestrator: the planned flow replayed at five weekly points (2026-10-05, 10-12, 10-19, 10-26, 11-02; PyPI simulated with `--exclude-newer` at each date, cutoff 14 days earlier) plus `41893754` admitted 0 fresh versions in 6 of 6 runs and left no `[options]`.
+Disposition:
+
+### Ergonomics
+
+Finding: V1, V2 and the bats "restores everything" case all expect PASS and all pass on a cap pass that holds everything at base; a no-op or over-holding cap would show as a quiet weekly `no changes`. Pin V1 to the measured split at `41893754` (55 kept, 41 moved to an aged release, 9 held at base, ansible at 14.5.0). Not raised: the first run's held section will be large (about 50 lines) once; compute the cutoff in Python, since BSD `date` on the macOS shards has no `-d`.
+Assumption: CI pins uv 0.13.0, not the 0.13.7 the design was measured with. Checked by the orchestrator: the checksum-verified 0.13.0 binary reproduces the `41893754` replay exactly (55 / 41 / 9, 0 fresh admitted, `[options]` removed, `uv lock --check` rc 0).
+Disposition:
+
+### Risk
+
+Finding: (1) Same vacuity as Ergonomics: V1 and V2 cannot fail on a run that measures nothing. (2) The plain `uv lock` does more than remove `[options]`: uv's per-file cutoff can drop an aged version's late-uploaded wheels in the cap call (measured on `configobj` 5.0.9 in a scratch project), and the plain relock restores them. The spec does not say so and no test pins it, so skipping the relock (e.g. stripping `[options]` with sed) would leave sdist-only entries. (3) R3 says "changed from BASE"; an added package that a cap failed to honour is not clearly covered. Should read "changed or added".
+Assumption: the plain relock keeps every capped version and restores dropped files. Checked by the orchestrator at full scale with uv 0.13.0: between the capped lock and the final lock, 0 versions moved and 0 wheel counts changed.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
