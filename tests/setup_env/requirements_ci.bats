@@ -366,6 +366,23 @@ if len(rules) != 5:
 EOF
 }
 
+@test "every automerge-ok rule excludes ruff" {
+  # A ruff bump changes the lint rule set for every repo that installs these
+  # renderings by URL (ai-config, state-ledger), so it must never automerge:
+  # dotfiles#446 moved ruff 0.16.4 -> 0.17.4 with no PR in either consumer.
+  # Spec: ai-config docs/superpowers/specs/2026-11-08-fleet-ruff-defaults-design.md (R2).
+  python3 - "${REPO_ROOT}/renovate.json" <<'PY'
+import json, sys
+rules = json.load(open(sys.argv[1]))["packageRules"]
+armed = [r for r in rules if "automerge-ok" in r.get("addLabels", [])]
+if len(armed) != 2:
+    sys.exit(f"expected 2 rules adding automerge-ok, found {len(armed)}")
+for r in armed:
+    if "!ruff" not in r.get("matchPackageNames", []):
+        sys.exit(f"automerge-ok rule does not exclude ruff: {r}")
+PY
+}
+
 @test "no rendering has a single-segment name pip_requirements would match" {
   # The four narrow slices escape Renovate's pip_requirements pattern only
   # because they are two-segment names -- the pattern allows at most one

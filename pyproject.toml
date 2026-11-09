@@ -167,7 +167,7 @@ test-lint = [
   "pytest-xdist",
   "pre-commit",
   "radon",
-  "ruff",
+  "ruff==0.17.4",
   "vulture",
 ]
 
@@ -201,7 +201,7 @@ test-lint = [
 # and its CI `test` job had been running pytest serially for want of it. It
 # costs one package beyond itself (execnet). Same pin as test-lint.
 ci-test = [
-  "ruff",
+  "ruff==0.17.4",
   "pytest",
   "pytest-cov",                    # pulls coverage transitively
   "pytest-xdist",                  # pulls execnet; lets the test job run pytest -n
