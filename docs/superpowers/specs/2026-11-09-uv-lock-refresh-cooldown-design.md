@@ -3,6 +3,7 @@
 - **Date:** 2026-11-09
 - **Repo:** dotfiles
 - **Parent spec:** `2026-11-08-uv-lock-refresh-design.md` ("No release-age cooldown")
+- **Approved:** 2026-11-09, operator: "Approve, round 3 Addressed"
 - **Backlog row closed:** "Weekly lock refresh has no release-age cooldown"
 
 ## Problem
@@ -199,4 +200,4 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 
 ### Round 3 (scoped Risk lens on the round-2 revision, `876b6578`)
 
-- Risk (`876b6578`): R5's restore trusts an empty `diff`, and the zero-package guard catches only a parser that fails outright; one that reads names but misreads versions would report `no changes` weekly, and `plan` and `verify` share its parser. Assumption (the parser fails all-or-nothing): uncertain; settled by renaming one entry's `version` key in a scratch copy and running `diff`. Disposition:
+- Risk (`876b6578`): R5's restore trusts an empty `diff`, and the zero-package guard catches only a parser that fails outright; one that reads names but misreads versions would report `no changes` weekly, and `plan` and `verify` share its parser. Assumption (the parser fails all-or-nothing): uncertain; settled by renaming one entry's `version` key in a scratch copy and running `diff`. Disposition: Addressed (operator, 2026-11-09: "Approve, round 3 Addressed") — `diff` exits 2 on a versionless registry package, the script reads `diff`'s exit status before its output, and R12 cross-checks uv's own change lines against `diff` and the capped report. No fourth round: the remaining assumption is settled by Phase 2's first red test.
