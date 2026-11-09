@@ -589,6 +589,9 @@ _run_report() {
 }
 
 @test "report names publish as the failed job and quotes no log when publish logged nothing" {
+  # The step runs only on ubuntu-latest and its find uses GNU -printf, which
+  # BSD find on the macOS shards lacks.
+  [[ "$(uname -s)" == Linux ]] || skip "report step runs on ubuntu-latest (GNU find)"
   local _body
   _body="$(_run_report success failure)"
   [[ "${_body}" == *'Run: https://github.com/o/r/actions/runs/7'* ]]
@@ -599,6 +602,9 @@ _run_report() {
 }
 
 @test "report names refresh and quotes its highest-numbered log when refresh fails or is cancelled" {
+  # The step runs only on ubuntu-latest and its find uses GNU -printf, which
+  # BSD find on the macOS shards lacks.
+  [[ "$(uname -s)" == Linux ]] || skip "report step runs on ubuntu-latest (GNU find)"
   local _r _body
   for _r in failure cancelled; do
     rm -rf "${BATS_TEST_TMPDIR}/rt"
