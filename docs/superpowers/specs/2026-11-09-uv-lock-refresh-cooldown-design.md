@@ -61,7 +61,7 @@ versions per name, as `uv_lock_downgrades.py` already does.
 
    It also writes one report line per capped package to a file. When it prints no
    arguments the pass is skipped. Otherwise the script runs one `uv lock` with all of them,
-   then a plain `uv lock`. That relock does two things: it removes the `[options]` table the cap pass wrote, and it restores files the cap filtered out. uv applies the cutoff per file, so a capped package's aged version can lose wheels uploaded after the cutoff (measured on `configobj` 5.0.9 in a scratch project), and the relock, which keeps the capped versions as preferences, puts them back. The script never edits `uv.lock` text itself.
+   then a plain `uv lock`. That relock does two things: it removes the `[options]` table the cap pass wrote, and it restores files the cap filtered out. uv applies the cutoff per file, so a capped package's aged version can lose wheels uploaded after the cutoff (measured on `configobj` 5.0.9 in a scratch project), and the relock, which keeps the capped versions as preferences, puts them back. It re-resolves at all only because the cap's `[options]` table no longer matches the request; a plain `uv lock` on a lock that is still valid restores nothing. The script never edits `uv.lock` text itself.
 
 4. **Post-condition.** `uv_lock_cooldown.py verify <base> uv.lock <cutoff>` exits 1 and names
    any package whose version changed from `base` to a fresh version, so a cap uv did not
@@ -69,7 +69,7 @@ versions per name, as `uv_lock_downgrades.py` already does.
 5. **Net change list.** `uv_lock_cooldown.py diff <base> uv.lock` prints the net changes from
    `base` to the final lock as `Updated P vA -> vB`, `Added P vB` and `Removed P vA` lines,
    uv's own format. This replaces the grep of uv's output, which describes only the last uv
-   call. It feeds the downgrade check (unchanged) and the PR body. `cmp` against `base` stays the authority for `no changes`, as today: a byte-identical lock prints `no changes`, and a lock that differs while `diff` prints nothing fails the run with `cooldown change list empty but uv.lock changed`.
+   call. It feeds the downgrade check (unchanged) and the PR body. When it prints nothing, the version sets of `base` and the final lock are equal: `base` is copied back over `uv.lock` and the script prints `no changes`. `uv lock --upgrade` refreshes the file lists of versions it keeps, so a lock can differ from `base` by a newly uploaded wheel alone; such file-list-only changes wait for a run that moves a version, rather than failing a week in which the cap held every change. To keep a broken parser from reporting `no changes` silently, `diff` exits 2 when either lock parses to zero registry packages.
 6. Renderings, `check-lock`, `check-requirements-ci` and the body follow as today.
 
 Nothing is capped except packages this run changed, so a package master holds at a young
@@ -104,8 +104,7 @@ master's version. The section is absent when nothing was capped.
 | The cap `uv lock` fails (e.g. a fresh package new to the lock has no aged release) | exit non-zero, `cooldown re-resolve failed`; the workflow's existing report job files the issue |
 | The plain `uv lock` after it fails                                                 | exit non-zero, `cooldown lock rewrite failed`                                                   |
 | `verify` finds a fresh version                                                     | exit non-zero, `cooldown not honoured: <names>`                                                 |
-| `uv.lock` differs from base but `diff` prints nothing | exit non-zero, `cooldown change list empty but uv.lock changed` |
-| A helper exits 2 (unreadable lock, crash)                                          | exit non-zero, `cooldown helper failed (rc N)`                                                  |
+| A helper exits 2 (unreadable lock, a lock with zero registry packages, crash)                                          | exit non-zero, `cooldown helper failed (rc N)`                                                  |
 
 ### Measured feasibility
 
@@ -135,8 +134,10 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 - `tests/scripts/refresh_uv_lock.bats` drives the script through the existing `_UV_BIN`
   stub, extended to rewrite `uv.lock` per call, for: no fresh change (no cap call made);
   a capped run (cap call made with the expected arguments, then a plain `uv lock`, body
-  section present); a cap that restores every version (`no changes` only when `uv.lock` is byte-equal to base, a
-  refusal otherwise); each row of the failure table. The capped-run case asserts the exact
+  section present); a cap that restores every version while a wheel was added to an unchanged version (`no changes`,
+  `uv.lock` byte-equal to base afterwards); `diff` on a fixture pair cut from the real `41893754`
+  base and upgraded locks prints the expected non-empty line set, and exits 2 on a lock with no
+  registry packages; each row of the failure table. The capped-run case asserts the exact
   argument list the stub received, not only that a call was made. The cutoff is computed in
   Python, since BSD `date` on the macOS shards has no `-d`.
 - The constant test compares `REFRESH_COOLDOWN_DAYS` with `renovate.json`.
@@ -147,14 +148,14 @@ often than every 14 days (hypothesis, regex, typer in this replay) would never m
 - **R2.** `[PR1]` `refresh-uv-lock.sh` runs one `uv lock` with `plan`'s arguments followed by a plain `uv lock` only when `plan` printed arguments, and makes no extra `uv lock` call otherwise.
 - **R3.** `[PR1]` `uv_lock_cooldown.py verify BASE FINAL CUTOFF` exits 1 and names each package whose version changed from BASE, or which BASE lacks, to a version whose earliest `upload-time` is later than CUTOFF, and the refresh exits non-zero with `cooldown not honoured:` when it does.
 - **R4.** `[PR1]` The change list passed to the downgrade check and written to the PR body is `uv_lock_cooldown.py diff BASE FINAL`, in uv's `Updated`/`Added`/`Removed` line format, not a grep of uv's output.
-- **R5.** `[PR1]` The refresh prints `no changes` only when `uv.lock` is byte-identical to BASE, and exits non-zero with `cooldown change list empty but uv.lock changed` when it differs while `diff` prints nothing.
+- **R5.** `[PR1]` When `diff` prints nothing, the refresh copies BASE over `uv.lock` and prints `no changes`; `diff` exits 2 when either lock holds zero registry packages.
 - **R6.** `[PR1]` When any package was capped, the PR body contains a `### Held by the 14-day cooldown` section with one line per capped package naming its newest version, that version's earliest upload time and the version taken; the section is absent otherwise.
 - **R7.** `[PR1]` `REFRESH_COOLDOWN_DAYS` is 14, and a test fails if it differs from the day count in `renovate.json`'s `minimumReleaseAge`.
 - **R8.** `[PR1]` `REFRESH_COOLDOWN_NOW` overrides the clock; the cutoff string passed to `plan`, `verify` and `--exclude-newer-package` is computed once per run.
 - **R9.** `[PR1]` Each failure in the failure table exits non-zero with its stated message.
 - **R10.** `[PR1]` The Backlog row "Weekly lock refresh has no release-age cooldown" is removed, and the CLAUDE.md `uv-lock-refresh.yml` bullet states the 14-day cooldown.
-- **R11.** `[PR1]` After every cap `uv lock` the refresh runs a plain `uv lock`, and no step of the refresh writes `uv.lock` other than uv itself.
-- **V1.** Replaying the refresh at `41893754` with uv 0.13.0 (the CI pin) and `REFRESH_COOLDOWN_NOW=2026-11-09T19:00:00Z` keeps 55 upgrades at their latest version, moves 41 fresh changes to an aged release (ansible at 14.5.0), holds 9 at base, admits 0 versions uploaded after 2026-10-26T19:00:00Z, moves 0 packages below base and passes `make check-lock`.
+- **R11.** `[PR1]` After every cap `uv lock`, `refresh-uv-lock.sh` runs a plain `uv lock`, and the script writes `uv.lock` only through uv or R5's copy of BASE.
+- **V1.** Replaying the refresh at `41893754` with uv 0.13.0 (the CI pin) and `REFRESH_COOLDOWN_NOW=2026-11-09T19:00:00Z` admits 0 versions uploaded after 2026-10-26T19:00:00Z, moves 0 packages below base, passes `make check-lock`, and leaves every changed package either at the newest release uploaded on or before the cutoff or at its base version, with at least one package in each of those two states (measured 2026-11-09: 55 kept at latest, 41 at an older aged release, 9 at base; context, not a pass criterion).
 - **V2.** The first scheduled run after merge either reports `no changes` or opens a PR whose held section matches the upload times on PyPI for each listed package.
 - **V3.** In the V1 replay, the plain relock after the cap moves 0 versions and every capped package's final entry has the same wheel count as a plain `uv lock` of that version.
 - **N1.** No security-advisory lookup and no network call besides uv's own resolution.
@@ -187,3 +188,9 @@ Disposition: Addressed (operator, 2026-11-09) — the Flow states the relock's f
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (all three lenses, re-reviewed at `21d68dcf`)
+
+- Goal-Fit (`21d68dcf`): V1's exact counts depend on PyPI's state and drift within days; assert invariants instead and keep the counts as context. Assumption (a cap moves an unnamed package to a fresh version): checked by the orchestrator, 0 of 6 replays (one unnamed mover, `greenlet`, aged). Disposition: Addressed — V1 asserts the invariants plus at least one package at an older aged release and one at base; counts kept as context.
+- Ergonomics (`21d68dcf`): no load-bearing issue; the round-1 R5 refusal named no package and would recur weekly. Assumption (R5 refusals stay rare): 0 of 6 replays reached the path. Disposition: Addressed — superseded by the Risk decision below, which removes the refusal.
+- Risk (`21d68dcf`): R5 with a version-only `diff` fails a week in which the cap holds every change while `uv lock --upgrade` added a wheel to an unchanged version (reproduced in a scratch project); R11 contradicted the workflow's own staging copy. Assumption (uv 0.13.0 relock keeps capped versions): checked by the orchestrator with the checksum-verified 0.13.0 binary, 0 versions moved. Disposition: Addressed (operator, 2026-11-09: "Same versions = no changes") — R5 restores BASE when the version sets are equal, `diff` exits 2 on a lock with zero registry packages, R11 scoped to the script and allows R5's copy. Incident: this lens ran `uv lock` in the main checkout twice after failed `cd`s and restored `uv.lock` itself; the orchestrator confirmed the blob equals HEAD and no tracked change remained.
