@@ -60,3 +60,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0054](0054-single-linux-gate-sharded-coverage.md) | One sharded, traced Linux gate replaces the untraced test job and bash-coverage | 2026-10-31 | Accepted |
 | [0055](0055-prune-claude-plugin-project-records.md) | Prune Claude plugin project records after user-scope updates | 2026-11-05 | Accepted |
 | [0056](0056-weekly-uv-lock-refresh-workflow.md) | Weekly uv.lock refresh as a bot PR from a split-trust workflow | 2026-11-08 | Accepted |
+| [0057](0057-uv-lock-refresh-release-cooldown.md) | Per-package 14-day release cooldown in the weekly uv.lock refresh | 2026-11-09 | Accepted |
