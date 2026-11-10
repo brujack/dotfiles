@@ -139,6 +139,9 @@ class PathGoneTest(Base):
         open(f, "w").close()
         self.assertFalse(P.path_gone({"projectPath": os.path.join(f, "x")}))
 
+    def test_nul_in_path_not_gone(self):
+        self.assertFalse(P.path_gone({"scope": "project", "projectPath": "/x\x00y"}))
+
     def test_other_oserror_not_gone(self):
         with mock.patch.object(
             P.os, "lstat", side_effect=PermissionError(errno.EACCES, "denied")
@@ -361,6 +364,16 @@ class GonePathEndToEndTest(Base):
         self.assertEqual(sorted(after["plugins"]), ["h@m", "u@m"])
         self.assertEqual(after["plugins"]["h@m"], before["plugins"]["h@m"])
         self.assertEqual(after["plugins"]["u@m"], before["plugins"]["u@m"])
+
+    def test_nul_project_path_kept_file_unchanged(self):
+        # Two records (user + project with NUL path): none removed, both kept.
+        self.write({"version": 2, "plugins": {"n@m": [
+            rec("user", "1"), rec("project", "2", NEW, projectPath="/x\x00y")]}})
+        raw = self.raw()
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 0, kept 2$")
+        self.assertEqual(self.raw(), raw)
 
     def test_dry_run_same_line_file_unchanged(self):
         self.write(self.data())

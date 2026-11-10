@@ -52,7 +52,8 @@ def path_gone(record):
         os.lstat(p)
     except FileNotFoundError:
         return True
-    except OSError:
+    except (OSError, ValueError):
+        # ValueError: embedded NUL in the path; not proof of absence either.
         return False
     return False
 
