@@ -360,6 +360,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - When exercising `LEDGER_BIN`/`ledger_write_entry` always prepend `tests/mocks/ledger` to `PATH`; a `HOME`-only redirect loses to a real `ledger` on `PATH` (`workstation`/`claude`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: ledger bin seam`
 
 - `_OVERRIDE_LIB_TRAP_SCOPE` makes `scripts/check-lib-exit-traps.sh` use a plain glob; keep one no-override test against the real `lib/` asserting a non-empty scanned set, since the production path (`git ls-files` under the four-variable `env -u GIT_*` strip) is otherwise untested. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: lib trap scope seam`
+- `LIB_TRAP_SCANNER` (Makefile) is a `:=` make variable, overridable only on the make command line (`make lint LIB_TRAP_SCANNER=<path>`), never from the environment. → `dotfiles-test-seams.md` § `LIB_TRAP_SCANNER make-variable seam`
 
 - Drive `scripts/check-requirements-install.sh` through `RENDERINGS_INSTALL_PYTHON` (a stub interpreter; unset runs real `python3` and network pip), `RENDERINGS_INSTALL_ROOT` (fixture `pyproject.toml` and renderings) and `RENDERINGS_INSTALL_TMP_ROOT` (BSD `mktemp -d` ignores `TMPDIR`), all at `setup()` scope. → `dotfiles-test-seams.md` § `requirements install seams`
 
