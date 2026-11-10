@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-10
 **Status:** Approved
-**Approved:** 2026-11-10, operator: "approved"
+- **Approved:** 2026-11-10, operator: "approved"
 **Backlog row:** "Claude Code writes a project-scope plugin record per project and worktree, and
 none is ever removed" (P2, bugs/security)
 
