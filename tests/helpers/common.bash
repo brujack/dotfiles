@@ -120,6 +120,8 @@ load_mocks() {
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.
   export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-nvidia-version"
+  # claude and workstation carry a real libcuda.so.1 link, so an unset seam would read it.
+  export _NVIDIA_LIBCUDA="${BATS_TEST_TMPDIR:-/nonexistent}/no-libcuda"
   # Linux hosts and CI runners carry a real package database; the stub reports
   # no packages and no conffiles unless a test feeds it (tests/stubs/dpkg-query-stub).
   export _DPKG_QUERY_BIN="${REPO_ROOT}/tests/stubs/dpkg-query-stub"

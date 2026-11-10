@@ -694,6 +694,101 @@ firefox  124.0"
   ! grep -q "reboot required" "${_DOTFILES_RUN_TMPDIR}/result_apt"
 }
 
+# ── _update_record_end — apt NVIDIA driver state ─────────────────────────
+
+# Common setup: unchanged apt list, flag file path under test tmpdir.
+_nv_apt_setup() {
+  printf "curl 7.88.1-1ubuntu3\n" > "${_DOTFILES_RUN_TMPDIR}/pre_apt"
+  export MOCK_DPKG_OUTPUT="curl 7.88.1-1ubuntu3"
+  export _REBOOT_REQUIRED_PATH="${BATS_TEST_TMPDIR}/reboot-required"
+  export _REBOOT_REQUIRED_PKGS_PATH="${BATS_TEST_TMPDIR}/reboot-required.pkgs"
+}
+
+_nv_reboot_count() {
+  grep -o 'reboot required' "${_DOTFILES_RUN_TMPDIR}/result_apt" | wc -l
+}
+
+@test "_update_record_end apt mismatch with flag and pkgs joins both in one reboot note" {
+  _nv_apt_setup
+  touch "${_REBOOT_REQUIRED_PATH}"
+  printf "linux-image-6.8.0-58-generic\n" > "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'mismatch 610.57.04 615.71.09\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — reboot required (linux-image-6.8.0-58-generic; nvidia 610.57.04 loaded, 615.71.09 installed)" ]
+  [ "$(_nv_reboot_count | tr -d ' ')" -eq 1 ]
+}
+
+@test "_update_record_end apt mismatch with flag and no pkgs gives nvidia reason only" {
+  _nv_apt_setup
+  touch "${_REBOOT_REQUIRED_PATH}"
+  rm -f "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'mismatch 610.57.04 615.71.09\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — reboot required (nvidia 610.57.04 loaded, 615.71.09 installed)" ]
+  [ "$(_nv_reboot_count | tr -d ' ')" -eq 1 ]
+}
+
+@test "_update_record_end apt mismatch with no flag still reports reboot required" {
+  _nv_apt_setup
+  rm -f "${_REBOOT_REQUIRED_PATH}" "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'mismatch 610.57.04 615.71.09\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — reboot required (nvidia 610.57.04 loaded, 615.71.09 installed)" ]
+  [ "$(_nv_reboot_count | tr -d ' ')" -eq 1 ]
+}
+
+@test "_update_record_end apt not-loaded appends segment outside any reboot note" {
+  _nv_apt_setup
+  rm -f "${_REBOOT_REQUIRED_PATH}" "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'not-loaded 615.71.09\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — nvidia module not loaded (615.71.09 installed)" ]
+  ! grep -q "reboot required" "${_DOTFILES_RUN_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt cdi-failed appends unit segment" {
+  _nv_apt_setup
+  rm -f "${_REBOOT_REQUIRED_PATH}" "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'ok 615.71.09\ncdi-failed nvidia-cdi-refresh.path\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — nvidia-cdi-refresh.path failed (see -t doctor)" ]
+  ! grep -q "reboot required" "${_DOTFILES_RUN_TMPDIR}/result_apt"
+}
+
+@test "_update_record_end apt not-loaded with flag and pkgs stays outside the reboot note" {
+  _nv_apt_setup
+  touch "${_REBOOT_REQUIRED_PATH}"
+  printf "linux-image-6.8.0-58-generic\n" > "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'not-loaded 615.71.09\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — reboot required (linux-image-6.8.0-58-generic) — nvidia module not loaded (615.71.09 installed)" ]
+}
+
+@test "_update_record_end apt cdi-failed with flag and pkgs follows the reboot note" {
+  _nv_apt_setup
+  touch "${_REBOOT_REQUIRED_PATH}"
+  printf "linux-image-6.8.0-58-generic\n" > "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'ok 615.71.09\ncdi-failed nvidia-cdi-refresh.path\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes — reboot required (linux-image-6.8.0-58-generic) — nvidia-cdi-refresh.path failed (see -t doctor)" ]
+}
+
+@test "_update_record_end apt empty driver state adds nothing" {
+  _nv_apt_setup
+  rm -f "${_REBOOT_REQUIRED_PATH}" "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { :; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes" ]
+}
+
+@test "_update_record_end apt ok and cdi-unknown leave the line unchanged" {
+  _nv_apt_setup
+  rm -f "${_REBOOT_REQUIRED_PATH}" "${_REBOOT_REQUIRED_PKGS_PATH}"
+  _nvidia_driver_state() { printf 'ok 615.71.09\ncdi-unknown nvidia-cdi-refresh.path\n'; }
+  _update_record_end "apt" 0
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_apt")" = "no changes" ]
+}
+
 # ── _update_ok ───────────────────────────────────────────────────────────────
 
 @test "_update_ok writes OK status and result files" {

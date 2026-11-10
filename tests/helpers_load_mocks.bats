@@ -247,3 +247,9 @@ _guard_scan() {
     return 1
   fi
 }
+
+@test "load_mocks: _NVIDIA_LIBCUDA points under BATS_TEST_TMPDIR at a path that does not exist" {
+  load_mocks
+  [[ ${_NVIDIA_LIBCUDA} == "${BATS_TEST_TMPDIR}/"* ]]
+  [[ ! -e ${_NVIDIA_LIBCUDA} && ! -L ${_NVIDIA_LIBCUDA} ]]
+}
