@@ -36,11 +36,14 @@ PYTHON3 := $(shell command -v python3 2>/dev/null)
 LIB_TRAP_SCANNER := scripts/check-lib-exit-traps.sh
 
 # Every tool guard below skips rather than fails, so a machine without the tool
-# can still commit the change that installs it. CI installs each tool first and
-# sets REQUIRE_TOOLS=1, which turns every skip into a failure: there a skip
-# would be a silent pass. Read from the environment by the recipe shell.
-# $(1) is what is missing, $(2) what it would skip.
-REQUIRE_TOOLS_REFUSE = if [ "$${REQUIRE_TOOLS:-}" = 1 ]; then printf '%s and REQUIRE_TOOLS=1: refusing to skip %s (CI installs it before make runs; check that step)\n' "$(1)" "$(2)"; exit 1; fi
+# can still commit the change that installs it. CI provides each tool (an
+# install step, or the runner image) and sets REQUIRE_TOOLS=1, which turns
+# every skip into a failure: there a skip would be a silent pass. Read from the
+# environment by the recipe shell. $(1) is what is missing, $(2) what it would
+# skip, $(3) where CI gets the tool, so the remedy names a place that exists.
+REQUIRE_TOOLS_REFUSE = if [ "$${REQUIRE_TOOLS:-}" = 1 ]; then printf '%s and REQUIRE_TOOLS=1: refusing to skip %s (%s)\n' "$(1)" "$(2)" "$(3)"; exit 1; fi
+REQUIRE_TOOLS_FROM_UV = CI installs a pinned uv before make runs; check that step
+REQUIRE_TOOLS_FROM_IMAGE = the CI runner image provides it; check the job's runs-on image
 
 # SHELL_FILES is content-derived (every tracked file whose first line is a
 # bash/sh shebang), not pathspec-derived: a pathspec cannot express "every
@@ -249,7 +252,7 @@ endif
 # Parallelising it is backlogged, not done.
 test-python:
 ifndef PYTHON3
-	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,Python tests); \
+	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,Python tests,$(REQUIRE_TOOLS_FROM_IMAGE)); \
 	printf "python3 not found, skipping Python tests (install: brew install python@3 / apt-get install python3)\n"
 else
 	python3 -m unittest discover -s tests -p 'test_*.py'
@@ -258,7 +261,7 @@ endif
 # Reads CLAUDE.md only through `git show HEAD:CLAUDE.md`, never the working tree.
 check-claude-md-budget:
 ifndef PYTHON3
-	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,the CLAUDE.md budget check); \
+	@$(call REQUIRE_TOOLS_REFUSE,python3 not found,the CLAUDE.md budget check,$(REQUIRE_TOOLS_FROM_IMAGE)); \
 	printf "python3 not found, skipping CLAUDE.md budget check (install: brew install python@3 / apt-get install python3)\n"
 else
 	python3 scripts/claude_md_budget.py HEAD
@@ -345,7 +348,7 @@ check-requirements-install:
 # installs a pinned uv and sets REQUIRE_TOOLS=1, so a missing uv fails there.
 check-requirements-ci:
 ifeq ($(UV),)
-	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the requirements-ci drift check); \
+	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the requirements-ci drift check,$(REQUIRE_TOOLS_FROM_UV)); \
 	printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
 else
 	@./scripts/sync-requirements-ci.sh check
@@ -365,7 +368,7 @@ endif
 # satisfy. Same missing-tool guard as above, for the same reason.
 check-lock:
 ifeq ($(UV),)
-	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the uv.lock consistency check); \
+	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the uv.lock consistency check,$(REQUIRE_TOOLS_FROM_UV)); \
 	printf "uv not found, skipping uv.lock consistency check (install: brew install uv)\n"
 else
 	@$(UV) lock --check

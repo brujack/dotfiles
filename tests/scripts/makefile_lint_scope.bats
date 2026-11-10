@@ -1348,16 +1348,17 @@ _words_missing_from() {
 # skip into a failure, and every CI job that runs one of these targets sets it.
 
 # One row per guard: target, command-line override that makes the tool look
-# absent, and the noun both messages name. The lint rows also clear
-# SHELLCHECK so the run is fast; the scanner row asserts its own message.
+# absent, the noun both messages name, and the remedy the refusal must give:
+# where CI actually gets the tool. The lint rows also clear SHELLCHECK so the
+# run is fast; the scanner row asserts its own message.
 _require_tools_cases() {
   printf '%s\n' \
-    "lint|SHELLCHECK=|shellcheck not found" \
-    "lint|LIB_TRAP_SCANNER=${BATS_TEST_TMPDIR}/absent-scanner.sh|absent-scanner.sh missing" \
-    "check-lock|UV=|uv not found" \
-    "check-requirements-ci|UV=|uv not found" \
-    "test-python|PYTHON3=|python3 not found" \
-    "check-claude-md-budget|PYTHON3=|python3 not found"
+    "lint|SHELLCHECK=|shellcheck not found|CI installs the pinned shellcheck before lint; check that step" \
+    "lint|LIB_TRAP_SCANNER=${BATS_TEST_TMPDIR}/absent-scanner.sh|absent-scanner.sh missing|a tracked file; restore it" \
+    "check-lock|UV=|uv not found|CI installs a pinned uv before make runs; check that step" \
+    "check-requirements-ci|UV=|uv not found|CI installs a pinned uv before make runs; check that step" \
+    "test-python|PYTHON3=|python3 not found|the CI runner image provides it; check the job's runs-on image" \
+    "check-claude-md-budget|PYTHON3=|python3 not found|the CI runner image provides it; check the job's runs-on image"
 }
 
 _require_tools_make() {
@@ -1370,8 +1371,8 @@ _require_tools_make() {
 }
 
 @test "REQUIRE_TOOLS=1 turns every make test tool skip into a failure" {
-  local _row _target _override _noun _n=0
-  while IFS='|' read -r _target _override _noun; do
+  local _row _target _override _noun _remedy _n=0
+  while IFS='|' read -r _target _override _noun _remedy; do
     _require_tools_make 1 "${_target}" "${_override}"
     [ "$status" -ne 0 ] || { printf '%s %s: rc 0\n%s\n' "${_target}" "${_override}" "$output"; return 1; }
     [[ "${output}" == *"${_noun} and REQUIRE_TOOLS=1: refusing to skip"* ]] \
@@ -1383,11 +1384,28 @@ _require_tools_make() {
   [ "${_n}" -eq 6 ]
 }
 
+@test "REQUIRE_TOOLS=1 refusal names where CI actually gets each tool" {
+  # No CI step installs python3 (the runner image ships it), so its refusal
+  # must not send the reader to an install step, as the uv refusal rightly does.
+  local _target _override _noun _remedy _n=0
+  while IFS='|' read -r _target _override _noun _remedy; do
+    _require_tools_make 1 "${_target}" "${_override}"
+    [[ "${output}" == *"${_remedy}"* ]] \
+      || { printf '%s %s: remedy not "%s"\n%s\n' "${_target}" "${_override}" "${_remedy}" "$output"; return 1; }
+    if [[ "${_noun}" == "python3 not found" ]]; then
+      [[ "${output}" != *"CI installs"* ]] \
+        || { printf '%s: python3 refusal claims an install step\n%s\n' "${_target}" "$output"; return 1; }
+    fi
+    _n=$((_n + 1))
+  done < <(_require_tools_cases)
+  [ "${_n}" -eq 6 ]
+}
+
 @test "every make test tool guard still skips, and passes, with REQUIRE_TOOLS unset, 0 or empty" {
   # The skip is the point locally: a hard fail would lock a machine out of
   # committing the change that installs the tool.
-  local _target _override _noun _v _n=0
-  while IFS='|' read -r _target _override _noun; do
+  local _target _override _noun _remedy _v _n=0
+  while IFS='|' read -r _target _override _noun _remedy; do
     for _v in unset 0 ""; do
       _require_tools_make "${_v}" "${_target}" "${_override}"
       [ "$status" -eq 0 ] \

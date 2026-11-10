@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 #
 # NVIDIA driver state check (docs/superpowers/specs/2026-11-09-nvidia-reboot-check-design.md).
-# These cases pin the test seams the check relies on: the systemctl stub's
-# ActiveState branch (R10) and load_mocks' _NVIDIA_LIBCUDA default (R8).
+# These cases pin the test seams the check relies on (the systemctl stub's
+# ActiveState branch, R10, and load_mocks' _NVIDIA_LIBCUDA default, R8), then
+# _nvidia_userspace_version and _nvidia_driver_state themselves (R1-R4, R9).
 
 bats_require_minimum_version 1.5.0
 
@@ -119,7 +120,7 @@ no_systemctl_calls() {
 }
 
 @test "_nvidia_userspace_version: a bare version target without the prefix returns 1" {
-  # All digits, so only the libcuda.so. prefix guard can reject it.
+  # Dotted digits, so only the libcuda.so. prefix guard can reject it.
   seed_driver 610.57.04 615.71.09
   run _nvidia_userspace_version
   [ "${status}" -eq 1 ]
