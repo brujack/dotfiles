@@ -52,6 +52,7 @@ tests/setup_env/doctor_brew_links.bats
 tests/setup_env/doctor_conffile_dist.bats
 tests/setup_env/doctor_dev_tools.bats
 tests/setup_env/doctor_flatpak_gl.bats
+tests/setup_env/doctor_nvidia_driver.bats
 tests/setup_env/doctor_pyenv_shims.bats
 tests/setup_env/extracted_functions.bats
 tests/setup_env/fetched_binary.bats

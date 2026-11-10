@@ -628,6 +628,7 @@ run_doctor() {
   _doctor_check_brew_links
   _doctor_check_conffile_dist
   _doctor_check_flatpak_gl
+  _doctor_check_nvidia_driver
   _doctor_check_dpkg_state
   _doctor_check_inotify_limits
   _doctor_check_kernel_keys
@@ -1295,6 +1296,49 @@ _doctor_check_dpkg_state() {
     _failed=1
   fi
   ((_failed)) || doctor_pass "every package configured; packages-microsoft-prod conffiles present or not installed"
+}
+
+# Spec: docs/superpowers/specs/2026-11-09-nvidia-reboot-check-design.md. Reports
+# only; the CDI remedy is printed for the operator, never run. The PASS is
+# deferred until every state line is read, so it never claims a CDI state that
+# a later line contradicts.
+_doctor_check_nvidia_driver() {
+  local _state _kind _a _b _ver="" _cdi_seen=0 _cdi_failed=0
+  _state="$(_nvidia_driver_state)"
+  [[ -n "${_state}" ]] || return 0
+  printf "\nNVIDIA driver:\n"
+  while IFS=' ' read -r _kind _a _b; do
+    case "${_kind}" in
+      mismatch)
+        doctor_fail "nvidia module" "loaded ${_a} but userspace ${_b} installed; nvidia-smi, GPU containers and the CDI refresh fail until a reboot; reboot to fix"
+        ;;
+      not-loaded)
+        doctor_warn "nvidia module" "nvidia module not loaded (userspace ${_a} installed): reboot if the driver was just installed, otherwise check dkms status"
+        ;;
+      ok)
+        _ver="${_a}"
+        ;;
+      cdi-failed)
+        doctor_fail "${_a}" "unit failed"
+        _cdi_seen=1
+        _cdi_failed=1
+        ;;
+      cdi-unknown)
+        doctor_warn "${_a}" "cannot read ${_a} state"
+        _cdi_seen=1
+        ;;
+      *) ;;
+    esac
+  done <<<"${_state}"
+  if [[ ${_cdi_failed} -eq 1 ]]; then
+    printf '    sudo systemctl reset-failed nvidia-cdi-refresh.path nvidia-cdi-refresh.service && sudo systemctl start nvidia-cdi-refresh.path\n'
+  fi
+  [[ -n "${_ver}" ]] || return 0
+  if [[ ${_cdi_seen} -eq 0 ]]; then
+    doctor_pass "nvidia module ${_ver} matches userspace; CDI refresh not failed"
+  else
+    doctor_pass "nvidia module ${_ver} matches userspace"
+  fi
 }
 
 # Spec: docs/superpowers/specs/2026-10-12-flatpak-update-design.md. Reports

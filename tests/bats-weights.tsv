@@ -38,6 +38,7 @@ tests/setup_env/doctor_brew_links.bats	21.7
 tests/setup_env/doctor_conffile_dist.bats	6.4
 tests/setup_env/doctor_dev_tools.bats	6.5
 tests/setup_env/doctor_flatpak_gl.bats	7.9
+tests/setup_env/doctor_nvidia_driver.bats	8.0
 tests/setup_env/doctor_pyenv_shims.bats	9.2
 tests/setup_env/extracted_functions.bats	51.9
 tests/setup_env/fetched_binary.bats	31.6
