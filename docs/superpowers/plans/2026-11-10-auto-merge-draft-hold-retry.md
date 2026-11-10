@@ -1,5 +1,7 @@
 # Auto-merge: skip drafts, retry the policy refusal — Implementation Plan
 
+> **Status: DONE** — merged as #458 (664ee1d6), 2026-11-10.
+
 spec: docs/superpowers/specs/2026-11-10-auto-merge-draft-hold-retry-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
