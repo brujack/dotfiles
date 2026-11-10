@@ -118,6 +118,28 @@ no_systemctl_calls() {
   [ -z "${output}" ]
 }
 
+@test "_nvidia_userspace_version: a bare version target without the prefix returns 1" {
+  # All digits, so only the libcuda.so. prefix guard can reject it.
+  seed_driver 610.57.04 615.71.09
+  run _nvidia_userspace_version
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_nvidia_userspace_version: a single-component version returns 1" {
+  seed_driver 610.57.04 libcuda.so.615
+  run _nvidia_userspace_version
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
+@test "_nvidia_userspace_version: a trailing non-version suffix returns 1" {
+  seed_driver 610.57.04 libcuda.so.615.71.09.bak
+  run _nvidia_userspace_version
+  [ "${status}" -eq 1 ]
+  [ -z "${output}" ]
+}
+
 @test "_nvidia_userspace_version: a link target path is reduced to its basename" {
   seed_driver 610.57.04 /usr/lib/x86_64-linux-gnu/libcuda.so.615.71.09
   run _nvidia_userspace_version
