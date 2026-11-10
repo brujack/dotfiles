@@ -1,7 +1,8 @@
 # Plugin prune: remove records whose project directory is gone
 
 **Date:** 2026-11-10
-**Status:** Draft
+**Status:** Approved
+**Approved:** 2026-11-10, operator: "approved"
 **Backlog row:** "Claude Code writes a project-scope plugin record per project and worktree, and
 none is ever removed" (P2, bugs/security)
 
@@ -236,7 +237,7 @@ Python R13 is achievable (46 tests pass today; line 140's literal `["/p3"]` beco
 path); no R contradicts an N, though N4's "missing" was ambiguous.
 Assumption: no uncertain assumption found; the nearest (every `projectPath` is the absolute
 session directory) is confirmed on the three hosts' whole files.
-Disposition:
+Disposition: Addressed (operator "approved", 2026-11-10) — R14 and a Testing bullet extend the fixture rule to `_write_plugins_fixture`; N4 tightened. No further round: the change is test-only.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
