@@ -144,6 +144,49 @@ _nvidia_loaded_version() {
   printf '%s\n' "${_v//./-}"
 }
 
+# One level of readlink, not -f: the target's own name carries the version.
+_nvidia_userspace_version() {
+  local _l="${_NVIDIA_LIBCUDA:-/usr/lib/x86_64-linux-gnu/libcuda.so.1}" _t
+  [[ -L "${_l}" ]] || return 1
+  _t="$(readlink "${_l}")" || return 1
+  _t="${_t##*/}"
+  [[ "${_t}" == libcuda.so.* ]] || return 1
+  _t="${_t#libcuda.so.}"
+  [[ "${_t}" =~ ^[0-9]+(\.[0-9]+)+$ ]] || return 1
+  printf '%s\n' "${_t}"
+}
+
+# Prints nothing when a gate closes (not Linux, no userspace, no GPU, module
+# version unreadable); otherwise a mismatch, not-loaded or ok line, and after ok
+# a cdi-failed or cdi-unknown line per nvidia-cdi-refresh unit. Reads only.
+_nvidia_driver_state() {
+  [[ -n "${LINUX:-}" ]] || return 0
+  local _installed _loaded _unit _state
+  _installed="$(_nvidia_userspace_version)" || return 0
+  _nvidia_gpu_present || return 0
+  if _loaded="$(_nvidia_loaded_version)"; then
+    _loaded="${_loaded//-/.}"
+    if [[ "${_loaded}" != "${_installed}" ]]; then
+      printf 'mismatch %s %s\n' "${_loaded}" "${_installed}"
+      return 0
+    fi
+  elif [[ -e "${_NVIDIA_MODULE_VERSION_FILE:-/sys/module/nvidia/version}" ]]; then
+    return 0
+  else
+    printf 'not-loaded %s\n' "${_installed}"
+    return 0
+  fi
+  printf 'ok %s\n' "${_installed}"
+  for _unit in nvidia-cdi-refresh.path nvidia-cdi-refresh.service; do
+    if _state="$("${_SYSTEMCTL_BIN:-systemctl}" show -P ActiveState "${_unit}")"; then
+      [[ "${_state}" == failed ]] && printf 'cdi-failed %s\n' "${_unit}"
+    else
+      printf 'cdi-unknown %s\n' "${_unit}"
+    fi
+  done
+  return 0
+}
+
 # System installation only, by design (spec N1).
 _flatpak_nvidia_gl_refs() {
   local _list
