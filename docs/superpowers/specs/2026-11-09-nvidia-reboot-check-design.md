@@ -225,3 +225,23 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 ### Round 3 (scoped Risk lens on the round-2 revision, `7a500430`)
 
 - Risk (`7a500430`): `_nvidia_loaded_version` returns 1 for an absent, unreadable or malformed module file, and R3 mapped all three to `not-loaded`, so a loaded module with an unreadable version file would be reported as not loaded, contradicting Error handling; minor, no PASS shape was pinned for `ok` with a `cdi-failed`. Assumption: none uncertain left (link shipped by the package, `systemctl` exit codes probed, unattended path checked). Disposition: Addressed (operator, 2026-11-09) — `not-loaded` only when the module file does not exist; an existing file that fails to read or parse closes the gate (R2), with tests for both; any `cdi-failed` or `cdi-unknown` line drops the PASS's CDI claim, with a test for `ok` plus `cdi-failed`. Review stops here: the finding was mechanical, the fix adds no mechanism, and the lens had no uncertain assumption left; the next instrument is Phase 2's first red test.
+
+## Spec alignment (2026-11-10)
+
+- spec: docs/superpowers/specs/2026-11-09-nvidia-reboot-check-design.md
+- anchor: d36f276dbd311fa5e62851f41c2c8624c99aef45
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-11-10, branch feat/nvidia-driver-state at 914c828e on claude: zsh +Z -i -c ./setup_env.sh -t doctor exit 0; NVIDIA driver section [PASS] nvidia module 615.71.09 matches userspace; CDI refresh not failed; summary 44 passed, 0 failed, 1 warnings.
