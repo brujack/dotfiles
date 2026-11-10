@@ -128,6 +128,9 @@ the driver does not bind it: nouveau still owns the card until the machine resta
 `nvidia-smi` stays absent and `ollama` keeps running on CPU until then. `exec zsh` is not
 enough for this one. After the reboot, `nvidia-smi` should report the card and
 `lspci -k` should show `Kernel driver in use: nvidia`.
+The same holds for a later driver upgrade: until the reboot the old module stays loaded,
+and `nvidia-smi` and GPU containers fail. `./setup_env.sh -t doctor` and the `-t update`
+summary report that mismatch, and a failed `nvidia-cdi-refresh` unit, as a reboot or remedy.
 
 Git hooks install themselves. `-t setup_user` and `-t update` both sweep every repo under
 `~/git-repos/personal/` that carries an `install-hooks` target (in its root Makefile, or in
