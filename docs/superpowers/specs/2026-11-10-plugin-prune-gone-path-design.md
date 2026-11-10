@@ -161,6 +161,10 @@ expect `removed 7, kept 9`; then the next `-t update` removes them.
 - **N3.** No new `claude` CLI invocation.
 - **N4.** No record is removed because its `projectPath` is unreadable (any `OSError` other than `FileNotFoundError`), relative, empty, of a non-string type, or because the key is absent.
 
+## Amendments
+
+- N1 -> No change to `lib/workflows.sh` except the comment above `_claude_prune_plugin_records`, which names both removal rules. — Task 2 code review: the comment says the prune removes only records a user record covers, which the gone-path rule makes false.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `7c85d1fa` (Step 7 self-review commit, before Step 8 dispatch)
