@@ -1,5 +1,7 @@
 # Plugin prune gone-path rule Implementation Plan
 
+> **Status: DONE** (#459, merged 2026-11-10)
+
 spec: docs/superpowers/specs/2026-11-10-plugin-prune-gone-path-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
