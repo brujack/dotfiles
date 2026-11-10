@@ -4,6 +4,7 @@
 - **Repo:** dotfiles
 - **Backlog row closed:** "An nvidia userspace change without a reboot breaks GPU containers and disables CDI refresh, and nothing reports it"
 - **Measurements:** `ai-config/docs/knowledge/dotfiles-apt-upgrade-hazards.md` §4
+- **Approved:** 2026-11-09, operator: "Approved"
 
 ## Problem
 
