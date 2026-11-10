@@ -30,6 +30,24 @@ USER_TS = "2026-10-01T00:00:00.000Z"
 NEW = "2026-10-15T00:00:00.000Z"
 
 
+_LIVE_ROOT = None
+
+
+def setUpModule():
+    global _LIVE_ROOT
+    _LIVE_ROOT = tempfile.mkdtemp()
+    for name in ("p1", "p2", "p3", "p4", "p"):
+        os.mkdir(os.path.join(_LIVE_ROOT, name))
+
+
+def tearDownModule():
+    shutil.rmtree(_LIVE_ROOT, ignore_errors=True)
+
+
+def live(name):
+    return os.path.join(_LIVE_ROOT, name)
+
+
 def rec(scope, version, ts=USER_TS, **extra):
     r = {"scope": scope, "version": version, "installPath": "/x/" + version}
     if ts is not None:
@@ -45,12 +63,12 @@ def fixture():
         "plugins": {
             "a@m": [
                 rec("user", "1.0"),
-                rec("project", "1.0", projectPath="/p1"),
-                rec("project", "0.9", OLD, projectPath="/p2"),
-                rec("project", "2.0", NEW, projectPath="/p3"),
+                rec("project", "1.0", projectPath=live("p1")),
+                rec("project", "0.9", OLD, projectPath=live("p2")),
+                rec("project", "2.0", NEW, projectPath=live("p3")),
             ],
             "b@m": [rec("user", "3.0"), rec("managed", "3.0")],
-            "c@m": [rec("project", "1.0", projectPath="/p4")],
+            "c@m": [rec("project", "1.0", projectPath=live("p4"))],
         },
     }
 
@@ -84,6 +102,53 @@ class Base(unittest.TestCase):
         return P.prune(**args)
 
 
+class PathGoneTest(Base):
+    def test_key_missing_not_gone(self):
+        self.assertFalse(P.path_gone({}))
+
+    def test_empty_string_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": ""}))
+
+    def test_none_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": None}))
+
+    def test_non_string_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": 5}))
+
+    def test_relative_path_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": "rel/path"}))
+
+    def test_existing_directory_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": live("p1")}))
+
+    def test_existing_file_not_gone(self):
+        f = os.path.join(self.tmp, "afile")
+        open(f, "w").close()
+        self.assertFalse(P.path_gone({"projectPath": f}))
+
+    def test_dangling_symlink_not_gone(self):
+        link = os.path.join(self.tmp, "dangling")
+        os.symlink(os.path.join(self.tmp, "absent-target"), link)
+        self.assertFalse(P.path_gone({"projectPath": link}))
+
+    def test_absent_absolute_path_is_gone(self):
+        self.assertTrue(P.path_gone({"projectPath": os.path.join(self.tmp, "absent")}))
+
+    def test_path_under_regular_file_not_gone(self):
+        f = os.path.join(self.tmp, "afile")
+        open(f, "w").close()
+        self.assertFalse(P.path_gone({"projectPath": os.path.join(f, "x")}))
+
+    def test_nul_in_path_not_gone(self):
+        self.assertFalse(P.path_gone({"scope": "project", "projectPath": "/x\x00y"}))
+
+    def test_other_oserror_not_gone(self):
+        with mock.patch.object(
+            P.os, "lstat", side_effect=PermissionError(errno.EACCES, "denied")
+        ):
+            self.assertFalse(P.path_gone({"projectPath": "/anything"}))
+
+
 class ShouldRemoveTest(unittest.TestCase):
     def test_same_version_unparsable_ts_removed(self):
         self.assertTrue(P.should_remove(rec("project", "1", "garbage"), rec("user", "1")))
@@ -105,6 +170,22 @@ class ShouldRemoveTest(unittest.TestCase):
     def test_user_and_managed_never_removed(self):
         self.assertFalse(P.should_remove(rec("user", "1"), rec("user", "1")))
         self.assertFalse(P.should_remove(rec("managed", "1"), rec("user", "1")))
+
+    def test_gone_path_removed_without_user_record(self):
+        r = rec("project", "1", projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertTrue(P.should_remove(r, None))
+
+    def test_gone_path_removed_even_when_user_record_older(self):
+        r = rec("project", "2", NEW, projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertTrue(P.should_remove(r, rec("user", "1", OLD)))
+
+    def test_gone_path_user_scope_kept(self):
+        r = rec("user", "1", projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertFalse(P.should_remove(r, None))
+        self.assertFalse(P.should_remove(r, rec("user", "1")))
+
+    def test_existing_path_without_user_record_kept(self):
+        self.assertFalse(P.should_remove(rec("project", "1", projectPath=live("p1")), None))
 
     def test_local_scope_removable(self):
         self.assertTrue(P.should_remove(rec("local", "1"), rec("user", "1")))
@@ -137,7 +218,7 @@ class PruneTest(Base):
         self.assertEqual(after["plugins"]["b@m"], before["plugins"]["b@m"])
         a = after["plugins"]["a@m"]
         self.assertEqual(a[0], before["plugins"]["a@m"][0])
-        self.assertEqual([r["projectPath"] for r in a[1:]], ["/p3"])
+        self.assertEqual([r["projectPath"] for r in a[1:]], [live("p3")])
         self.assertEqual(after["plugins"]["c@m"], before["plugins"]["c@m"])
         self.assertEqual(len(self.backups()), 1)
         # backup holds the before-state
@@ -247,6 +328,61 @@ class PruneTest(Base):
     def test_missing_file(self):
         rc, line = self.run_prune()
         self.assertEqual((rc, line), (0, "no plugins file"))
+
+
+class EmptyKeyDropTest(Base):
+    def test_all_gone_records_drop_the_key(self):
+        gone = "/nonexistent-dotfiles-test/gone"
+        plugins = {"z@m": [rec("project", "1", projectPath=gone)]}
+        new, removed, kept = P._prune_records(plugins)
+        self.assertNotIn("z@m", new)
+        self.assertEqual((removed, kept), (1, 0))
+
+    def test_empty_list_and_non_list_copied_through(self):
+        new, removed, kept = P._prune_records({"z@m": [], "s@m": "str"})
+        self.assertEqual(new, {"z@m": [], "s@m": "str"})
+        self.assertEqual((removed, kept), (0, 0))
+
+
+class GonePathEndToEndTest(Base):
+    def data(self):
+        gone = os.path.join(self.tmp, "absent-project")
+        return {"version": 2, "plugins": {
+            "g@m": [rec("project", "1", projectPath=gone)],
+            "h@m": [rec("project", "1", projectPath=live("p1"))],
+            "u@m": [rec("user", "1")],
+        }}
+
+    def test_prune_drops_gone_key_and_backs_up(self):
+        before = self.data()
+        self.write(before)
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 1, kept 2$")
+        self.assertEqual(len(self.backups()), 1)
+        after = json.loads(self.raw())
+        self.assertEqual(sorted(after["plugins"]), ["h@m", "u@m"])
+        self.assertEqual(after["plugins"]["h@m"], before["plugins"]["h@m"])
+        self.assertEqual(after["plugins"]["u@m"], before["plugins"]["u@m"])
+
+    def test_nul_project_path_kept_file_unchanged(self):
+        # Two records (user + project with NUL path): none removed, both kept.
+        self.write({"version": 2, "plugins": {"n@m": [
+            rec("user", "1"), rec("project", "2", NEW, projectPath="/x\x00y")]}})
+        raw = self.raw()
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 0, kept 2$")
+        self.assertEqual(self.raw(), raw)
+
+    def test_dry_run_same_line_file_unchanged(self):
+        self.write(self.data())
+        raw = self.raw()
+        rc, line = self.run_prune(dry_run=True)
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 1, kept 2$")
+        self.assertEqual(self.raw(), raw)
+        self.assertEqual(self.backups(), [])
 
 
 class HardeningTest(Base):
@@ -514,7 +650,7 @@ class HardeningTest(Base):
     def test_odd_shapes_untouched(self):
         data = {"version": 2, "plugins": {
             "x@m": "a string",
-            "y@m": ["notdict", rec("user", "1"), rec("project", "1", projectPath="/p")],
+            "y@m": ["notdict", rec("user", "1"), rec("project", "1", projectPath=live("p"))],
         }}
         self.write(data)
         rc, line = self.run_prune()

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Prune redundant project/local records from Claude's installed_plugins.json.
 
-A project or local record is removed only when its plugin also has a user-scope
-record that is at least as new (see the design spec, section "Record prune").
+A project or local record is removed when either holds: its plugin also has a
+user-scope record that is at least as new (see the design spec, section "Record
+prune"), or its projectPath is an absolute path that no longer exists. A plugin
+key whose records are all removed is dropped from the map; a key that was
+already an empty list is left as is.
 Runs on Python 3.9: timestamps are parsed with an explicit format because
 datetime.fromisoformat rejects a trailing "Z" before 3.11.
 
@@ -36,9 +39,32 @@ def parse_ts(s):
         return None
 
 
+def path_gone(record):
+    """True when the record's projectPath is an absolute path that does not exist.
+
+    Any other lstat failure (permissions, not-a-directory, I/O) is not proof of
+    absence, so it counts as not gone. lstat, not stat: a dangling symlink exists.
+    """
+    p = record.get("projectPath")
+    if not _nonempty_str(p) or not os.path.isabs(p):
+        return False
+    try:
+        os.lstat(p)
+    except FileNotFoundError:
+        return True
+    except (OSError, ValueError):
+        # ValueError: embedded NUL in the path; not proof of absence either.
+        return False
+    return False
+
+
 def should_remove(record, user_record):
-    """True when a project/local record is redundant given the plugin's user record."""
-    if user_record is None or record.get("scope") not in _PRUNABLE_SCOPES:
+    """True when a project/local record is redundant or its project directory is gone."""
+    if record.get("scope") not in _PRUNABLE_SCOPES:
+        return False
+    if path_gone(record):
+        return True
+    if user_record is None:
         return False
     # Equal versions decide first: no timestamp is read.
     mine_v, user_v = record.get("version"), user_record.get("version")
@@ -73,6 +99,9 @@ def _prune_records(plugins):
             else:
                 survivors.append(r)
                 kept += 1
+        # A key the prune emptied is dropped; an input list that was already empty stays.
+        if records and not survivors:
+            continue
         new_plugins[plugin_id] = survivors
     return new_plugins, removed, kept
 

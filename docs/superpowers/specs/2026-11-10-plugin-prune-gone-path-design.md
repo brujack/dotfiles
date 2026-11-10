@@ -161,6 +161,10 @@ expect `removed 7, kept 9`; then the next `-t update` removes them.
 - **N3.** No new `claude` CLI invocation.
 - **N4.** No record is removed because its `projectPath` is unreadable (any `OSError` other than `FileNotFoundError`), relative, empty, of a non-string type, or because the key is absent.
 
+## Amendments
+
+- N1 -> No change to `lib/workflows.sh` except the comment above `_claude_prune_plugin_records`, which names both removal rules. — Task 2 code review: the comment says the prune removes only records a user record covers, which the gone-path rule makes false.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `7c85d1fa` (Step 7 self-review commit, before Step 8 dispatch)
@@ -242,3 +246,23 @@ Disposition: Addressed (operator "approved", 2026-11-10) — R14 and a Testing b
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Spec alignment (2026-11-10)
+
+- spec: docs/superpowers/specs/2026-11-10-plugin-prune-gone-path-design.md
+- anchor: 415d3bc05eb22d3e0b3d6e52518cc3e4a9911159
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: pending: run after merge on workstation (prune --dry-run against the live file, expect removed 7, kept 9)

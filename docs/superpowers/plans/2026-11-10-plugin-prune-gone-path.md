@@ -160,7 +160,7 @@ acceptance:
   - cmd: 'make check-claude-md-budget'
     exit_code: 0
 max_retries: 3
-files_touched: [docs/adr/0055-prune-claude-plugin-project-records.md, CLAUDE.md, docs/superpowers/README.md]
+files_touched: [docs/adr/0055-prune-claude-plugin-project-records.md, CLAUDE.md, docs/superpowers/README.md, lib/workflows.sh]
 depends_on: [2]
 ```
 
@@ -177,6 +177,10 @@ record. Spec: docs/superpowers/specs/2026-11-10-plugin-prune-gone-path-design.md
 - [ ] `docs/superpowers/README.md`: delete the P2 backlog row beginning "| Claude Code writes a
       project-scope plugin record per project and worktree, and none is ever removed |". Leave the
       plan index rows alone (the orchestrator updates them).
+- [ ] `lib/workflows.sh`: comment only, above `_claude_prune_plugin_records`. Replace "that a
+  user-scope record already covers" with wording naming both rules: records a user-scope record
+  already covers, and records whose project directory is gone (N1 as amended). No code line changes;
+  `git diff origin/master -- lib/workflows.sh` must show only `#` lines.
 - [ ] Gates are scoped: none of these files is read by the suite. The orchestrator runs `make test`
       once after this task. Commit.
 

@@ -89,6 +89,15 @@ record copies the current user version.
 - Stripping the redundant `true` entries from the repos is a Backlog row, to pick up only if the prune
   is removed.
 
+## Amendments
+
+- 2026-11-10: a project or local record whose projectPath is absent (os.lstat raises FileNotFoundError)
+  is removed whether or not a user record exists, and a plugin key whose list the prune empties is
+  dropped, as Claude Code's own uninstall does. A projectPath os.lstat cannot test (any other
+  OSError, or ValueError for an embedded NUL) keeps the record. Measured 2026-11-10: 7 such records
+  on workstation, all for the removed terraform_ansible-ruff worktree, none with a user record.
+  Spec: docs/superpowers/specs/2026-11-10-plugin-prune-gone-path-design.md.
+
 ## Related
 
 - Spec: [`docs/superpowers/specs/2026-11-04-claude-plugin-user-scope-design.md`](../superpowers/specs/2026-11-04-claude-plugin-user-scope-design.md)
