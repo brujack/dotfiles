@@ -116,6 +116,11 @@ install, and the operator re-accepts the install prompt in the recreated worktre
   gone. Those paths become directories created under a `TemporaryDirectory`, and every existing
   expected count and kept-record assertion stays exactly as it is (for example `removed 2,
   kept 5`). Editing an existing expected value instead would hide an R4 regression.
+- `tests/setup_env/update_claude.bats` `_write_plugins_fixture` writes a project record with
+  `"projectPath":"/x"`, and its six callers run the real prune through
+  `_claude_prune_plugin_records`. `/x` is absent, so the two "keeps a newer-dated project record"
+  tests would fail. The fixture's `projectPath` becomes a directory created under
+  `${BATS_TEST_TMPDIR}`, and every existing assertion in those six tests stays unchanged.
 
 - `path_gone`: missing key; empty string; non-string (`None`, `5`); relative path; existing
   directory; existing regular file; dangling symlink; absent path; path under a regular file
@@ -148,11 +153,12 @@ expect `removed 7, kept 9`; then the next `-t update` removes them.
 - **R11.** The backlog row "Claude Code writes a project-scope plugin record per project and worktree, and none is ever removed" is removed from `docs/superpowers/README.md`.
 - **R12.** `_prune_records` omits a plugin id from the returned map when the id's input list was non-empty and every record in it was removed; an id whose input value is `[]` or not a list is returned unchanged.
 - **R13.** Every `projectPath` in the existing shared `fixture()` and in `test_odd_shapes_untouched` of `tests/test_claude_plugin_prune.py` names a directory that exists during the test, and the assertions those tests held at `7c85d1fa` (including `removed 2, kept 5` and the kept `/p3`-equivalent record) are unchanged in value.
+- **R14.** `_write_plugins_fixture` in `tests/setup_env/update_claude.bats` writes a `projectPath` naming a directory it creates under `${BATS_TEST_TMPDIR}`, and every assertion its six calling tests held at `7c85d1fa` is unchanged, including the `grep -q '"scope": *"project"'` checks in the two "keeps a newer-dated project record" tests.
 - **V1.** After merge, on workstation, `python3 lib/claude_plugin_prune.py --dry-run --file ~/.claude/plugins/installed_plugins.json --backup-dir ~/.local/share/dotfiles/claude-plugin-backups` prints `removed 7, kept 9`, unless the file changed since 2026-11-10, in which case the counts match a read-only recount.
 - **N1.** No change to `lib/workflows.sh`.
 - **N2.** No change to the refusal conditions, backup, race guard or exit codes of ADR-0055 decision 3.
 - **N3.** No new `claude` CLI invocation.
-- **N4.** No record is removed because its path is unreadable, relative, missing or of a non-string type.
+- **N4.** No record is removed because its `projectPath` is unreadable (any `OSError` other than `FileNotFoundError`), relative, empty, of a non-string type, or because the key is absent.
 
 ## Multi-Lens Review
 
@@ -214,6 +220,23 @@ Assumption: Claude Code tolerates `plugins["<id>"] == []`. Settle by finding the
 schema in the bundle, or a throwaway `CLAUDE_CONFIG_DIR` probe with `claude plugins list`.
 Dropping empty keys removes the dependency.
 Disposition: Addressed (operator "yes", 2026-11-10) — empty key dropped (Design 3, R12), which removes the schema dependency.
+
+### Round 2 (Risk only, round-1 fixes)
+
+Reviewed at commit: `3f78425c`.
+
+Finding: R13 covers only the Python fixtures. `tests/setup_env/update_claude.bats`
+`_write_plugins_fixture` writes `"projectPath":"/x"` (absent), and its six callers run the real
+prune, so the two "keeps a newer-dated project record" tests would fail on their
+`grep -q '"scope": *"project"'` check, with the same tempting wrong fix (flip the assertion); the
+three `removed 1` tests would pass but no longer test decision 4 alone. The Testing section names
+only the Python file, so a plan would miss it. Checked and not raised: R12 cannot fire unless
+`removed>0` (dry-run, backup, validation untouched; `[]` and non-lists already pass through); the
+Python R13 is achievable (46 tests pass today; line 140's literal `["/p3"]` becomes the temp-dir
+path); no R contradicts an N, though N4's "missing" was ambiguous.
+Assumption: no uncertain assumption found; the nearest (every `projectPath` is the absolute
+session directory) is confirmed on the three hosts' whole files.
+Disposition:
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
