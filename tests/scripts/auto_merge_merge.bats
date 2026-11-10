@@ -40,6 +40,7 @@ SLEEP
   unset AUTO_MERGE_RETRY_DELAY
   REFUSED='X Pull request brujack/dotfiles#354 is not mergeable: the base branch policy prohibits the merge.'
   MODIFIED='GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)'
+  CONFLICT='X Pull request brujack/dotfiles#354 is not mergeable: the merge commit cannot be cleanly created.'
 }
 
 # _seq <exit> <message> ... : one fake-gh response line per pair.
@@ -130,4 +131,14 @@ _gh_calls() { cat "${BATS_TEST_TMPDIR}/calls" 2>/dev/null || printf 0; }
   [ "$status" -eq 1 ]
   [ "$(_gh_calls)" -eq 0 ]
   [[ "$output" == *"usage"* ]]
+}
+
+@test "a not-mergeable conflict is not retried" {
+  # shares "is not mergeable:" with the policy refusal, so only a match on the
+  # full refusal text keeps it out of the retry
+  _seq 1 "${CONFLICT}" 0 "merged"
+  run bash "${SCRIPT}" 354 abc123
+  [ "$status" -eq 1 ]
+  [ "$(_gh_calls)" -eq 1 ]
+  [[ "$output" == *"cannot be cleanly created"* ]]
 }

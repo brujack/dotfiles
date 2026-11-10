@@ -187,7 +187,7 @@ merge.
 ## Amendments
 
 - adds R11: A non-empty `AUTO_MERGE_RETRY_DELAY` that is not a non-negative integer makes the script print a usage line, make no gh call and exit 1. — Task 1 code review: `AUTO_MERGE_RETRY_DELAY=abc` made `sleep` fail and all three attempts run in 0.03 s; fail closed instead.
-- R7 -> The bats fake `gh` writes every failure message to stderr only, a fake `sleep` on `PATH` logs its argument, and the cases are exactly: merged first call (no sleep); refused then merged with `AUTO_MERGE_RETRY_DELAY=5` (sleep log `5`); refused three times with the delay unset (sleep log `30` twice, remedy line); `Head branch was modified`; refused then `Head branch was modified`; exit 1 with no output; `<pr>` alone; no arguments; logged argv; a non-numeric `AUTO_MERGE_RETRY_DELAY` (0 calls, exit 1); and the refused-three-times case asserts exactly 3 `attempt` lines. — adds the R11 case.
+- R7 -> The bats fake `gh` writes every failure message to stderr only, a fake `sleep` on `PATH` logs its argument, and the cases are exactly: merged first call (no sleep); refused then merged with `AUTO_MERGE_RETRY_DELAY=5` (sleep log `5`); refused three times with the delay unset (sleep log `30` twice, remedy line); `Head branch was modified`; refused then `Head branch was modified`; exit 1 with no output; `<pr>` alone; no arguments; logged argv; a non-numeric `AUTO_MERGE_RETRY_DELAY` (0 calls, exit 1); a `not mergeable` merge-conflict message (1 call, exit 1); and the refused-three-times case asserts exactly 3 `attempt` lines. — adds the R11 case and, after test-quality-review, a conflict case that shares `is not mergeable:` with the refusal.
 
 ## Multi-Lens Review
 

@@ -42,7 +42,7 @@ requirements: [R2, R3, R4, R5, R7, R8, R10, R11]
 acceptance:
   - cmd: bats tests/scripts/auto_merge_merge.bats
     exit_code: 0
-    stdout_match: 'ok 10 '
+    stdout_match: 'ok 11 '
   - cmd: make lint
     exit_code: 0
   - cmd: make check-bats-manifest
@@ -78,7 +78,7 @@ Last lines: `[[ "${BASH_SOURCE[0]}" != "${0}" ]] && return 0` then `auto_merge_m
 - fake `sleep`: appends `$1` to `${BATS_TEST_TMPDIR}/sleeps`, exits 0.
 - `REFUSED='X Pull request brujack/dotfiles#354 is not mergeable: the base branch policy prohibits the merge.'`; `MODIFIED='GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)'`. Always pass `354 abc123` unless the case says otherwise; `unset AUTO_MERGE_RETRY_DELAY` in setup.
 
-Exactly these ten `@test`s, in this order (R7):
+Exactly these eleven `@test`s, in this order (R7):
 
 1. merged on the first call: 1 call, status 0, no `sleeps` file.
 2. refused then merged, `AUTO_MERGE_RETRY_DELAY=5`: 2 calls, status 0, `sleeps` is `5`.
@@ -90,6 +90,7 @@ Exactly these ten `@test`s, in this order (R7):
 8. no arguments: 0 calls, status 1.
 9. logged argv is exactly `pr`,`merge`,`354`,`--squash`,`--match-head-commit`,`abc123`,`--`.
 10. `AUTO_MERGE_RETRY_DELAY=abc`: 0 calls, status 1, output contains `usage` (R11, added by amendment after Task 1 code review).
+11. `X Pull request ... is not mergeable: the merge commit cannot be cleanly created.`: 1 call, status 1 (added by test-quality-review: a match widened to `not mergeable` survived every other case).
 
 - [ ] Write the bats file; run it; all nine fail (script missing). Record the RED output.
 - [ ] Write the script; run the bats file: 9/9 ok.
