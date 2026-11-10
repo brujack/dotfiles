@@ -308,11 +308,14 @@ PY
 
 # Writes a version-2 installed_plugins.json with one plugin, a user record and
 # a project record, at ${_OVERRIDE_CLAUDE_PLUGINS_FILE}. Args: user version,
-# user lastUpdated, project version, project lastUpdated.
+# user lastUpdated, project version, project lastUpdated. The project record's
+# projectPath is a directory that exists, so the prune's gone-path rule does
+# not apply to these tests.
 _write_plugins_fixture() {
   export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR}/installed_plugins.json"
-  printf '{"version":2,"plugins":{"superpowers@claude-plugins-official":[{"scope":"user","version":"%s","lastUpdated":"%s"},{"scope":"project","projectPath":"/x","version":"%s","lastUpdated":"%s"}]}}\n' \
-    "$1" "$2" "$3" "$4" > "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
+  mkdir -p "${BATS_TEST_TMPDIR}/project" || return 1
+  printf '{"version":2,"plugins":{"superpowers@claude-plugins-official":[{"scope":"user","version":"%s","lastUpdated":"%s"},{"scope":"project","projectPath":"%s","version":"%s","lastUpdated":"%s"}]}}\n' \
+    "$1" "$2" "${BATS_TEST_TMPDIR}/project" "$3" "$4" > "${_OVERRIDE_CLAUDE_PLUGINS_FILE}"
 }
 
 @test "run_update: claude plugin update is recorded with -s user" {
