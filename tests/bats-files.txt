@@ -12,6 +12,7 @@ tests/scripts/cadence_notify.bats
 tests/scripts/check_bats_manifest.bats
 tests/scripts/check_lib_exit_traps.bats
 tests/scripts/check_requirements_install.bats
+tests/scripts/ci_auto_merge.bats
 tests/scripts/ci_download_retry.bats
 tests/scripts/ci_download_verify.bats
 tests/scripts/ci_runner_pins.bats

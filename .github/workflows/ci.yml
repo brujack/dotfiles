@@ -472,7 +472,7 @@ jobs:
 
   auto-merge:
     needs: [test, lint-macos, test-macos, powershell, secret-scan, renderings-install]
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10 # p90 11s, floor, measured 2026-08-27
     permissions:
@@ -519,6 +519,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         # Merge the PR the gate judged, at the commit it judged: by number rather
         # than by looking up the head branch, and refused if the head moved.
-        run: gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"
+        #
+        # No `--auto`: (1) enablePullRequestAutoMerge is refused for a bot token
+        # lacking `workflows` on a PR touching .github/workflows/**, and (2)
+        # `--auto` would merge a later push before its own auto-merge run re-ran
+        # the gate (terraform_ansible#238).
+        #
+        # scripts/auto-merge-merge.sh is read from the BASE commit like the gate:
+        # scripts/ lacks the `workflows` token scope, and a PR-edited copy would
+        # run with pull-requests: write. The hold step's fetch put BASE_SHA in the
+        # repo. Deleting or renaming the script silently turns the retry off.
+        run: |
+          merge="${RUNNER_TEMP}/auto-merge-merge.sh"
+          if git show "${BASE_SHA}:scripts/auto-merge-merge.sh" > "${merge}"; then
+            bash "${merge}" "${PR_NUMBER}" "${HEAD_SHA}"
+          else
+            echo "no merge script on the base commit -- retry off, single direct merge"
+            gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"
+          fi
