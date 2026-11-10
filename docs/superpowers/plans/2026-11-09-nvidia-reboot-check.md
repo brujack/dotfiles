@@ -1,5 +1,7 @@
 # NVIDIA Driver State Check Implementation Plan
 
+> **Status: DONE** (dotfiles#455, merged 4f64366e)
+
 spec: docs/superpowers/specs/2026-11-09-nvidia-reboot-check-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
