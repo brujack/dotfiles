@@ -125,11 +125,13 @@ _refresh_cooldown() {
   esac
 }
 
-# Every package uv reported (${1}) must be in the diff (${2}) or the held
-# report (${3}); a name in neither means the lock and uv disagree. Names are
-# compared exactly, never as patterns or prefixes.
+# Every package uv reported (${1}) must be in the diff (${2}), the held
+# report (${3}), or the reverted set (${4}: packages that changed in the
+# initial upgrade but were then reverted to base by the cap); a name in none
+# means the lock and uv disagree. Names are compared exactly, never as
+# patterns or prefixes.
 _refresh_cross_check() {
-  local uvlines="${1}" diff_lines="${2}" report="${3}" name missing=""
+  local uvlines="${1}" diff_lines="${2}" report="${3}" reverted="${4:-/dev/null}" name missing=""
   local -A seen=()
   while read -r _ name _; do
     seen["${name}"]=1
@@ -137,6 +139,9 @@ _refresh_cross_check() {
   while IFS=$'\t' read -r name _; do
     seen["${name}"]=1
   done < "${report}"
+  while read -r _ name _; do
+    seen["${name}"]=1
+  done < "${reverted}"
   while read -r _ name _; do
     [[ -n ${seen[${name}]+x} ]] && continue
     missing+="${missing:+, }${name}"
@@ -173,7 +178,7 @@ _refresh_downgrade_check() {
 
 # Everything that needs temp files; runs in a subshell so the trap is scoped.
 _refresh_run() {
-  local body_file="${1}" tmp log lines uvlines report held before rc
+  local body_file="${1}" tmp log lines uvlines report held before upgraded reverted rc
   tmp="$(mktemp -d)" || exit 1
   # shellcheck disable=SC2064 # expand now: ${tmp} is fixed for this subshell's life
   trap "rm -rf -- '${tmp}'" EXIT
@@ -183,6 +188,8 @@ _refresh_run() {
   uvlines="${tmp}/uvlines"
   report="${tmp}/report"
   held="${tmp}/held"
+  upgraded="${tmp}/uv.lock.upgraded"
+  reverted="${tmp}/reverted"
 
   cp uv.lock "${before}" || {
     _refresh_err "cannot read uv.lock"
@@ -209,6 +216,11 @@ _refresh_run() {
     return 0
   fi
 
+  cp uv.lock "${upgraded}" || {
+    _refresh_err "cannot copy upgraded lock"
+    return 1
+  }
+
   _refresh_cooldown "${before}" "${tmp}" "${report}" || return 1
 
   # Check the rc before the content: an empty diff from a failed helper must
@@ -219,9 +231,12 @@ _refresh_run() {
     _refresh_err "cooldown helper failed (rc ${rc})"
     return 1
   fi
+  # Packages the cap reverted to base: absent from diff(before,final) but present
+  # in uvlines because uv reported them during the initial unconstrained upgrade.
+  python3 "${_COOLDOWN_HELPER}" diff "${upgraded}" uv.lock > "${reverted}" 2>/dev/null || :
   # Before the empty-diff exit: a parser that misreads versions makes the diff
   # empty, and that is exactly what this guard exists to catch.
-  _refresh_cross_check "${uvlines}" "${lines}" "${report}" || return 1
+  _refresh_cross_check "${uvlines}" "${lines}" "${report}" "${reverted}" || return 1
   if [[ ! -s "${lines}" ]]; then
     # The cap put every version back; restore the exact base bytes (a re-lock
     # can still differ in file entries of an unchanged version).
