@@ -441,6 +441,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - Drive all three pwsh states through `_PWSH_BIN` and the timeout through `_PWSH_PROBE_TIMEOUT`; test the `timeout`-absent fallback with a scoped `PATH` and a `#!/bin/bash` stub, in both directions. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: pwsh probe seams`
 
 - `load_mocks` exports `_NVIDIA_MODULE_VERSION_FILE` to a nonexistent path (a real one exists on `claude`/`workstation`); redefine `_flatpak_available` in tests, never strip `tests/mocks` from `PATH` (exposes the real `/usr/bin/flatpak`). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: nvidia module version and flatpak mock rules`
+- `load_mocks` points `_NVIDIA_LIBCUDA` at a missing path; NVIDIA driver-state tests set it, `_NVIDIA_MODULE_VERSION_FILE`, `_OVERRIDE_NVIDIA_GPU_PRESENT` and `LINUX` to fixtures, and drive `tests/stubs/systemctl-stub` with `MOCK_SYSTEMCTL_ACTIVE_STATE_FILE`/`MOCK_SYSTEMCTL_SHOW_EXIT`. → `dotfiles-test-seams.md` § `NVIDIA driver state seams`
 - Drive `tests/mocks/flatpak` with `MOCK_FLATPAK_LIST_RUNTIME` (a file; exit 99 if missing)/`MOCK_FLATPAK_LIST_APP`/`MOCK_FLATPAK_FAIL_SUBCMD`/`MOCK_FLATPAK_FAIL_ARGS`; `tests/fixtures/flatpak/runtime-list.tsv` is captured real output, never hand-typed. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: nvidia module version and flatpak mock rules`
 
 - Drive the doctor probe timeout with a sleeping stub under `_DOCTOR_PROBE_TIMEOUT=1`, never the real 10 s default. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: doctor probe timeout seam`
