@@ -88,9 +88,10 @@ if ids:
 }
 
 # Prunes project/local records in Claude's installed_plugins.json that a
-# user-scope record already covers (lib/claude_plugin_prune.py decides). Prints
-# the program's one line. Returns 0 when it finished or had nothing to do, 2
-# when it refused or could not run (the caller WARNs). Seams:
+# user-scope record already covers or whose project directory is gone
+# (lib/claude_plugin_prune.py decides). Prints the program's one line. Returns 0
+# when it finished or had nothing to do, 2 when it refused or could not run
+# (the caller WARNs). Seams:
 # _OVERRIDE_CLAUDE_PLUGINS_FILE, _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR,
 # _CLAUDE_PRUNE_PYTHON (interpreter, default python3; lets a test reach the
 # missing-interpreter and silent-failure branches without editing PATH).
