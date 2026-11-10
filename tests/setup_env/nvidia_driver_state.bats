@@ -200,12 +200,14 @@ no_systemctl_calls() {
   [ -z "${output}" ]
 }
 
-@test "_nvidia_driver_state: LINUX unset prints nothing" {
+@test "_nvidia_driver_state: LINUX unset prints nothing and never probes the GPU" {
   seed_driver
   unset LINUX
+  _nvidia_gpu_present() { printf 'called\n' >> "${BATS_TEST_TMPDIR}/gpu-probe-calls"; return 0; }
   run _nvidia_driver_state
   [ "${status}" -eq 0 ]
   [ -z "${output}" ]
+  [ ! -s "${BATS_TEST_TMPDIR}/gpu-probe-calls" ]
 }
 
 @test "_nvidia_driver_state: ok with path unit failed adds cdi-failed for the path" {
