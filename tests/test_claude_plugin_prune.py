@@ -103,15 +103,25 @@ class Base(unittest.TestCase):
 
 
 class PathGoneTest(Base):
-    def test_missing_or_non_string_or_relative_is_not_gone(self):
+    def test_key_missing_not_gone(self):
         self.assertFalse(P.path_gone({}))
+
+    def test_empty_string_not_gone(self):
         self.assertFalse(P.path_gone({"projectPath": ""}))
+
+    def test_none_not_gone(self):
         self.assertFalse(P.path_gone({"projectPath": None}))
+
+    def test_non_string_not_gone(self):
         self.assertFalse(P.path_gone({"projectPath": 5}))
+
+    def test_relative_path_not_gone(self):
         self.assertFalse(P.path_gone({"projectPath": "rel/path"}))
 
-    def test_existing_directory_and_file_not_gone(self):
+    def test_existing_directory_not_gone(self):
         self.assertFalse(P.path_gone({"projectPath": live("p1")}))
+
+    def test_existing_file_not_gone(self):
         f = os.path.join(self.tmp, "afile")
         open(f, "w").close()
         self.assertFalse(P.path_gone({"projectPath": f}))
