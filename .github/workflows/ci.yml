@@ -29,9 +29,10 @@ jobs:
     permissions:
       contents: read
     # make test skips a missing shellcheck, uv, python3 or lib-trap scanner so a
-    # bare machine can still commit; here each is installed first, so a skip
-    # would be a silent pass. Only shard 1 runs those targets (make
-    # test-prereqs); the other legs ignore it. See REQUIRE_TOOLS_REFUSE in the
+    # bare machine can still commit; here each is present first (shellcheck and
+    # uv from an install step, python3 from the runner image, the scanner from
+    # the checkout), so a skip would be a silent pass. Only shard 1 runs those
+    # targets (make test-prereqs); the other legs ignore it. See REQUIRE_TOOLS_REFUSE in the
     # Makefile and tests/scripts/makefile_lint_scope.bats.
     env:
       REQUIRE_TOOLS: "1"
