@@ -2,7 +2,7 @@
 #
 # NVIDIA driver state check (docs/superpowers/specs/2026-11-09-nvidia-reboot-check-design.md).
 # These cases pin the test seams the check relies on: the systemctl stub's
-# ActiveState branch (R8) and load_mocks' _NVIDIA_LIBCUDA default (R10).
+# ActiveState branch (R10) and load_mocks' _NVIDIA_LIBCUDA default (R8).
 
 bats_require_minimum_version 1.5.0
 
