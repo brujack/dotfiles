@@ -158,6 +158,22 @@ class ShouldRemoveTest(unittest.TestCase):
         self.assertFalse(P.should_remove(rec("user", "1"), rec("user", "1")))
         self.assertFalse(P.should_remove(rec("managed", "1"), rec("user", "1")))
 
+    def test_gone_path_removed_without_user_record(self):
+        r = rec("project", "1", projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertTrue(P.should_remove(r, None))
+
+    def test_gone_path_removed_even_when_user_record_older(self):
+        r = rec("project", "2", NEW, projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertTrue(P.should_remove(r, rec("user", "1", OLD)))
+
+    def test_gone_path_user_scope_kept(self):
+        r = rec("user", "1", projectPath="/nonexistent-dotfiles-test/gone")
+        self.assertFalse(P.should_remove(r, None))
+        self.assertFalse(P.should_remove(r, rec("user", "1")))
+
+    def test_existing_path_without_user_record_kept(self):
+        self.assertFalse(P.should_remove(rec("project", "1", projectPath=live("p1")), None))
+
     def test_local_scope_removable(self):
         self.assertTrue(P.should_remove(rec("local", "1"), rec("user", "1")))
 

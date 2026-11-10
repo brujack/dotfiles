@@ -55,8 +55,12 @@ def path_gone(record):
 
 
 def should_remove(record, user_record):
-    """True when a project/local record is redundant given the plugin's user record."""
-    if user_record is None or record.get("scope") not in _PRUNABLE_SCOPES:
+    """True when a project/local record is redundant or its project directory is gone."""
+    if record.get("scope") not in _PRUNABLE_SCOPES:
+        return False
+    if path_gone(record):
+        return True
+    if user_record is None:
         return False
     # Equal versions decide first: no timestamp is read.
     mine_v, user_v = record.get("version"), user_record.get("version")
