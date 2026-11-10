@@ -184,6 +184,11 @@ merge.
 - **N4.** The gate keeps running from the base commit (`git show "${BASE_SHA}:scripts/auto-merge-gate.sh"`), and `scripts/auto-merge-gate.sh` is not changed.
 - **N5.** The merge step never runs the PR checkout's `scripts/auto-merge-merge.sh`.
 
+## Amendments
+
+- adds R11: A non-empty `AUTO_MERGE_RETRY_DELAY` that is not a non-negative integer makes the script print a usage line, make no gh call and exit 1. — Task 1 code review: `AUTO_MERGE_RETRY_DELAY=abc` made `sleep` fail and all three attempts run in 0.03 s; fail closed instead.
+- R7 -> The bats fake `gh` writes every failure message to stderr only, a fake `sleep` on `PATH` logs its argument, and the cases are exactly: merged first call (no sleep); refused then merged with `AUTO_MERGE_RETRY_DELAY=5` (sleep log `5`); refused three times with the delay unset (sleep log `30` twice, remedy line); `Head branch was modified`; refused then `Head branch was modified`; exit 1 with no output; `<pr>` alone; no arguments; logged argv; a non-numeric `AUTO_MERGE_RETRY_DELAY` (0 calls, exit 1); a `not mergeable` merge-conflict message (1 call, exit 1); and the refused-three-times case asserts exactly 3 `attempt` lines. — adds the R11 case and, after test-quality-review, a conflict case that shares `is not mergeable:` with the refusal.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `286e6228` (Step 7 self-review commit, before Step 8 dispatch)
@@ -255,3 +260,25 @@ cases (R5, R7); (2) fallback message and comment say the retry is off, CI-file t
 asserts the script is tracked (R6); (3) pinned to the refused-three-times case, exactly 3
 lines (R7). Assumption accepted: ai-config matches the same substring; V3 now checks the
 text. No further round: the changes are test and wording only.
+
+## Spec alignment (2026-11-10)
+
+- spec: docs/superpowers/specs/2026-11-10-auto-merge-draft-hold-retry-design.md
+- anchor: 9248f31ca19028c4478a97b54edf4d4e91b39db4
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: ai-config master 8a995ca2 adds the Backlog row: finishing-a-development-branch has no branch for a PR that ends green but unmerged.
+- V3: no evidence recorded
