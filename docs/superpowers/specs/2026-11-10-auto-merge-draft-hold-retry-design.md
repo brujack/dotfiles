@@ -94,7 +94,8 @@ New `scripts/auto-merge-merge.sh <pr> <head_sha>`:
   and `<sha>`). The reflex "Re-run failed jobs" is #294's pattern, which cannot succeed.
 - Any other failure, `Head branch was modified` included: print gh's output and exit 1
   at once.
-- A missing argument: print usage, exit 1, no gh call.
+- Fewer than two arguments: print usage, exit 1, no gh call. One argument alone must not
+  reach gh, or the merge would run with `--match-head-commit ""`.
 
 It runs as it exists on the **base** commit, like the gate. With `merge=true` and
 `pull-requests: write`, a PR-edited copy could merge a different PR the gate is holding,
@@ -117,13 +118,14 @@ merge="${RUNNER_TEMP}/auto-merge-merge.sh"
 if git show "${BASE_SHA}:scripts/auto-merge-merge.sh" > "${merge}"; then
   bash "${merge}" "${PR_NUMBER}" "${HEAD_SHA}"
 else
-  echo "no merge script on the base commit -- single direct merge"
+  echo "no merge script on the base commit -- retry off, single direct merge"
   gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"
 fi
 ```
 
 Its comment states why the merge is direct and not `--auto`, citing the two reasons above,
-and why the script is read from the base commit.
+why the script is read from the base commit, and that deleting or renaming
+`scripts/auto-merge-merge.sh` silently turns the retry off.
 
 ### 4. Out of scope
 
@@ -148,15 +150,17 @@ merge.
   exit 0, sleep log `5`); refused three times with the delay unset (3 calls, exit 1, sleep
   log `30` twice, the remedy line naming the real PR number and SHA); `Head branch was
   modified` (1 call, exit 1); refused then `Head branch was modified` (2 calls, exit 1); gh
-  exits 1 with no output (1 call, exit 1); a missing argument (0 calls, exit 1); the logged
-  argv is exactly `pr merge <pr> --squash --match-head-commit <sha>`; one
-  `attempt <n>/3 at <UTC time>` line per gh call, matching
+  exits 1 with no output (1 call, exit 1); only `<pr>` given (0 calls, exit 1); no arguments
+  (0 calls, exit 1); the logged argv is exactly
+  `pr merge <pr> --squash --match-head-commit <sha>`. The refused-three-times case also
+  asserts exactly 3 lines matching
   `^attempt [1-3]/3 at [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`.
 - A CI-file assertion, parsed per job like `tests/scripts/ci_runner_pins.bats`, that the
   `auto-merge` job's merge step reads `scripts/auto-merge-merge.sh` with
   `git show "${BASE_SHA}:scripts/auto-merge-merge.sh"`, runs it with `PR_NUMBER` and
-  `HEAD_SHA`, falls back to the single direct merge, that the job's `if:` skips drafts, and
-  that no step in the job passes `--auto`.
+  `HEAD_SHA`, falls back to the single direct merge, that the job's `if:` skips drafts, that
+  no step in the job passes `--auto`, and that `scripts/auto-merge-merge.sh` is tracked in
+  the repo.
 
 ## Requirements
 
@@ -164,15 +168,15 @@ merge.
 - **R2.** `scripts/auto-merge-merge.sh <pr> <head_sha>` runs `gh pr merge <pr> --squash --match-head-commit <head_sha>` and exits 0 when gh exits 0.
 - **R3.** The script reads gh's stdout and stderr together; when that output contains `base branch policy prohibits the merge` it retries, at most 3 gh calls in total, sleeping `AUTO_MERGE_RETRY_DELAY` seconds (default 30) between calls, and after the third refusal prints `still refused after 3 attempts: merge by hand with gh pr merge <pr> --squash --match-head-commit <sha>, or re-run all jobs, never failed-only` with the real values and exits 1.
 - **R4.** Any other gh failure, including one with no output, makes the script exit 1 after that call, printing gh's output.
-- **R5.** With fewer than two arguments the script prints a usage line, makes no gh call and exits 1.
-- **R6.** The `auto-merge` job's merge step sets `BASE_SHA` from `github.event.pull_request.base.sha`, writes `git show "${BASE_SHA}:scripts/auto-merge-merge.sh"` to a file under `RUNNER_TEMP` and runs it with `bash` and `"${PR_NUMBER}" "${HEAD_SHA}"`; when the base commit has no such file it runs the single `gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"`. It keeps `if: steps.hold.outputs.merge == 'true'`, and its comment gives the two reasons the merge is not `--auto` and why the script is read from the base commit.
-- **R7.** The bats fake `gh` writes every failure message to stderr only, a fake `sleep` on `PATH` logs its argument, and the cases are exactly: merged first call (no sleep); refused then merged with `AUTO_MERGE_RETRY_DELAY=5` (sleep log `5`); refused three times with the delay unset (sleep log `30` twice, remedy line); `Head branch was modified`; refused then `Head branch was modified`; exit 1 with no output; missing argument; logged argv; one `attempt` line per gh call.
+- **R5.** With fewer than two arguments (none, or `<pr>` alone) the script prints a usage line, makes no gh call and exits 1.
+- **R6.** The `auto-merge` job's merge step sets `BASE_SHA` from `github.event.pull_request.base.sha`, writes `git show "${BASE_SHA}:scripts/auto-merge-merge.sh"` to a file under `RUNNER_TEMP` and runs it with `bash` and `"${PR_NUMBER}" "${HEAD_SHA}"`; when the base commit has no such file it runs the single `gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"`. It keeps `if: steps.hold.outputs.merge == 'true'`, and its comment gives the two reasons the merge is not `--auto`, why the script is read from the base commit, and that removing the script turns the retry off. The fallback's message says the retry is off. The CI-file test asserts `scripts/auto-merge-merge.sh` is tracked.
+- **R7.** The bats fake `gh` writes every failure message to stderr only, a fake `sleep` on `PATH` logs its argument, and the cases are exactly: merged first call (no sleep); refused then merged with `AUTO_MERGE_RETRY_DELAY=5` (sleep log `5`); refused three times with the delay unset (sleep log `30` twice, remedy line); `Head branch was modified`; refused then `Head branch was modified`; exit 1 with no output; `<pr>` alone; no arguments; logged argv; and the refused-three-times case asserts exactly 3 `attempt` lines.
 - **R8.** `tests/bats-files.txt` lists `tests/scripts/auto_merge_merge.bats`.
 - **R9.** `CLAUDE.md`'s `auto-merge` bullet says the job skips drafts, retries only the policy refusal, and runs the merge script from the base commit; the backlog row "Auto-merge refused #294 with every required check green" is removed.
 - **R10.** Before each gh call the script prints `attempt <n>/3 at <UTC time>`, the time in `date -u +%Y-%m-%dT%H:%M:%SZ` form.
 - **V1.** The first draft PR opened after the merge shows `auto-merge` as skipped, and its ready run merges through the base-commit script (its log shows an `attempt 1/3` line).
 - **V2.** An ai-config backlog row records that `finishing-a-development-branch` has no branch for a PR that ends green but unmerged.
-- **V3.** On each of the next policy refusals, read the `attempt` timestamps and record time-to-success in the Backlog; if the next 2-3 timing refusals still fail after 60 s, propose deleting the retry.
+- **V3.** On each of the next policy refusals, read the `attempt` timestamps and record time-to-success in the Backlog, and check the log's refusal text still contains `base branch policy prohibits the merge`; if the next 2-3 timing refusals still fail after 60 s, propose deleting the retry.
 - **N1.** No `--auto` flag anywhere in `ci.yml`, and `allow_auto_merge` stays false.
 - **N2.** No change to which jobs `auto-merge` needs, nor to branch protection's required checks.
 - **N3.** No retry of any gh error other than `base branch policy prohibits the merge`.
@@ -226,3 +230,27 @@ Disposition: (1) Addressed — #414 restated as timing. (2) Addressed — remedy
 Finding: (1) The retry rescues only timing cases; drop any wording that implies a failed-only re-run (#294) is fixed. (2) The trust argument is weaker than stated: with `pull-requests: write` and `merge=true`, a PR-edited `scripts/auto-merge-merge.sh` could merge a different, held PR, or drop `--match-head-commit`. Not an escalation for anyone with push access (same-repo authors already run PR code with `contents: write` in `test` and `powershell`), but it breaks the base-commit isolation the gate relies on. Cheap symmetry: run the merge script from `git show "${BASE_SHA}:scripts/auto-merge-merge.sh"` too, falling back to a single direct merge when the base has none. (3) The job `if:` reads the event payload: re-running a draft-era run now skips `auto-merge` for good (re-run the `ready_for_review` run instead); converting to draft mid-run fails once as today; `cancel-in-progress` keeps the newest payload. No hazard.
 Assumption: the timing refusal clears in seconds; settle it by recording time-to-success on the next refusals, and delete the retry if the next 2-3 still fail after 60 s.
 Disposition: Addressed (Operator "yes", 2026-11-10.) — (1) Problem no longer implies #294 is fixed; (2) merge script read from the base commit with a single-merge fallback (Design 2, 3; R6, N5); assumption recorded as V3. Re-review scoped to Risk on the rewritten Design 2 and 3.
+
+### Round 3 (Risk only, Design 2 and 3)
+
+Reviewed at commit: `8f37fa52`.
+
+Finding: No design flaw. (1) R5 versus R7: the missing-argument case did not say how many
+arguments it passes; a script checking only `$1` passes a zero-argument test and, given
+`<pr>` alone, would merge with `--match-head-commit ""`. (2) The fallback cannot tell an
+absent file from another `git show` failure; after the hold step's fetch absence is the
+only realistic cause and the fallback is today's merge, so it admits nothing new. But a
+later PR deleting or renaming the script turns the retry off silently, and the CI-file
+assertion still passes. (3) "One `attempt` line per gh call" named no case. Confirmed:
+the base commit is present in the merge step (the hold step's
+`git fetch --depth=1 origin "${BASE_SHA}"`); #354 refused at 15:48 and 16:42 (both
+jobs `run_attempt` 2 on the second), merged by `brujack` at 16:45:28Z; no R contradicts
+an N; a PR changing the script is merged by the base copy, as intended.
+Assumption: gh's refusal text stays `base branch policy prohibits the merge` on
+`ubuntu-latest`; if reworded, the retry never fires and every fake-gh case still passes.
+Confirm against the next real refusal's log.
+Disposition: Addressed (operator "yes", 2026-11-10) — (1) `<pr>`-alone and no-argument
+cases (R5, R7); (2) fallback message and comment say the retry is off, CI-file test
+asserts the script is tracked (R6); (3) pinned to the refused-three-times case, exactly 3
+lines (R7). Assumption accepted: ai-config matches the same substring; V3 now checks the
+text. No further round: the changes are test and wording only.
