@@ -124,3 +124,29 @@ A failed-only re-run that strands required checks (#294, #408, #414) is not hand
 - **N2.** No change to which jobs `auto-merge` needs, nor to branch protection's required checks.
 - **N3.** No retry of any gh error other than `base branch policy prohibits the merge`.
 - **N4.** The gate keeps running from the base commit (`git show "${BASE_SHA}:scripts/auto-merge-gate.sh"`).
+
+## Multi-Lens Review
+
+Reviewed at commit: `286e6228` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building, small. The retry changes an outcome (merged vs not) and passes the reads-it test. The draft verdict changes no merge outcome: `auto-merge` is not a required context, so a red draft run only colours the check. A job-level `!github.event.pull_request.draft` (as ai-config's `ci.yml` does) gives the same result without the jq schema change or R1's new way for the gate to go red. The "#294 was also `UNSTABLE`" aside does not explain its refusal: `UNSTABLE` from a non-required check does not block; the stranded required checks do. Also raised the stderr gap (see Risk) and a missing gh-exit-1-with-empty-output case.
+Assumption: the policy refusal clears within about 60 s. Orchestrator measured after the round: ai-config's identical 3 x 30 s retry, last 400 PR runs (2026-06-13 to 2026-11-09), refused in 2 jobs. Run 41102075051 (2026-10-30) was refused at 18:01:42Z and 18:02:13Z and merged on attempt 3. Run 39279301026 (2026-10-19) was refused three times (16:30:45Z to 16:31:47Z) and failed; dotfiles #354 was refused the same day at 16:42Z, so that day looks like a longer GitHub-side delay. One of two cleared inside the window.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) A held-green draft leaves the agent stuck: `finishing-a-development-branch` says "once all checks pass and the PR auto-merges" with no branch for "all green, PR still open"; the bot hold already has the gap and drafts are more frequent. Cheap fix: surface the hold on the checks page; better: the skill checks `gh pr view <n> --json state,isDraft` after the watch (an ai-config backlog row). (2) gh writes the refusal to stderr; if the fake `gh` writes to stdout and the script captures stdout only, every case passes and the retry never fires in CI. The fake must emit on stderr and the script must capture `2>&1`; add a gh-exit-1-with-empty-output case. (3) Cosmetic: `ready_for_review` re-runs the whole workflow, not the job.
+Assumption: same as Goal-Fit (refusal clears within 60 s); see the measurement there.
+Disposition:
+
+### Risk
+
+Finding: (1) Load-bearing: the stderr gap above; confirmed from run 39279309044 attempt 2 and run 32680501470, where the refusal is the step's error output. R5/R6 must say the match covers stderr. (2) Of the 4 policy refusals only #241 and #354 are timing; #294 and #414 were stranded failed-only re-runs that a retry cannot fix (it waits 60 s, then fails as today). (3) Section 2's trust reason is wrong in its stated mechanism: `ci.yml` is guarded by the `workflows` token scope and `scripts/` is not. No new surface in effect, because the merge runs only after the base-commit gate writes `merge=true`; the prose should say that. (4) No new failure from head movement or the draft hold. (5) Add cases: gh exit 1 with empty output (1 call, exit 1); refused then `Head branch was modified` (2 calls, exit 1), proving N3 mid-loop.
+Assumption: same as Goal-Fit; see the measurement there.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
