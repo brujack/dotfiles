@@ -73,6 +73,7 @@ tests/setup_env/mocks_fail_knobs.bats
 tests/setup_env/mocks_gpg.bats
 tests/setup_env/mocks_pyenv.bats
 tests/setup_env/mocks_sudo.bats
+tests/setup_env/nvidia_driver_state.bats
 tests/setup_env/plugin_node_paths.bats
 tests/setup_env/profiles.bats
 tests/setup_env/pyenv_rehash_hook.bats

@@ -3,6 +3,19 @@ printf "systemctl %s\n" "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
 if [[ $1 == daemon-reload ]]; then
   exit "${MOCK_SYSTEMCTL_RELOAD_EXIT:-0}"
 fi
+if [[ $1 == show && $2 == -P && $3 == ActiveState ]]; then
+  _state=inactive
+  if [[ -n ${MOCK_SYSTEMCTL_ACTIVE_STATE_FILE:-} && -r ${MOCK_SYSTEMCTL_ACTIVE_STATE_FILE} ]]; then
+    while IFS=$'\t' read -r _unit _val; do
+      if [[ ${_unit} == "$4" ]]; then
+        _state="${_val}"
+        break
+      fi
+    done < "${MOCK_SYSTEMCTL_ACTIVE_STATE_FILE}"
+  fi
+  printf '%s\n' "${_state}"
+  exit "${MOCK_SYSTEMCTL_SHOW_EXIT:-0}"
+fi
 if [[ $1 == show ]]; then
   printf '%s\n' "${MOCK_TMP_FRAGMENT-${_TMP_STOCK_UNIT}}"
 fi
