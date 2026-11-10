@@ -64,16 +64,24 @@ record is kept (fail closed).
 with or without a user record and whatever its version or timestamps. Otherwise ADR-0055
 decision 4 applies unchanged.
 
-### 3. What does not change
+### 3. Empty record lists
 
-- `_prune_records`, the refusal conditions, the backup, the race guard, `--dry-run` and the
-  exit codes.
+The gone-path rule is the first that can remove a plugin's last record: a plugin with no user
+record and only gone-path records ends with an empty list. `_prune_records` then omits that
+plugin's key from the new map, as Claude Code 2.1.322 does when its own uninstall empties a list
+(`length===0) delete e.plugins[n]`). An id whose list was already empty in the input, or whose
+value is not a list, is copied through unchanged; neither occurs in any live file or backup on
+`claude` or workstation (measured 2026-11-10).
+
+### 4. What does not change
+
+- The refusal conditions, the backup, the race guard, `--dry-run` and the exit codes.
 - The stdout line keeps its form, `pruned at <UTC>: removed <n>, kept <m>`; gone-path removals
   count in `removed`. The shell wrapper `_claude_prune_plugin_records` only prints the line, so
   it needs no change.
 - No `claude` CLI call is added. The file edit is the only route (ADR-0055 decision 2).
 
-### 4. Accepted risk
+### 5. Accepted risk
 
 A directory that is absent now but comes back later (an unmounted volume, a re-cloned repo)
 loses its records. For a plugin with a user record, the next session there re-mints the record
@@ -84,7 +92,12 @@ directory (`/home/bruce/...`), none on a removable volume. `installed_plugins.js
 machine-local and untracked by ai-config (`git ls-files .claude/plugins` is empty), so a path
 from another host cannot appear in it.
 
-### 5. Documentation
+Worktree names are reused: `<repo>-<branch-slug>` recurs with the branch name (the next ruff bump
+recreates `terraform_ansible-ruff`). A prune in the gap drops records for plugins with no user
+install, and the operator re-accepts the install prompt in the recreated worktree. Accepted
+(operator, 2026-11-10).
+
+### 6. Documentation
 
 - ADR-0055 gains an `## Amendments` section with one dated entry stating the gone-path rule and
   the 2026-11-10 workstation measurement.
@@ -98,6 +111,12 @@ from another host cannot appear in it.
 `tests/test_claude_plugin_prune.py` (unittest), with `projectPath` values built under a
 `tempfile.TemporaryDirectory`:
 
+- The existing shared `fixture()` uses `projectPath` values `/p1`..`/p4` (and `/p` in
+  `test_odd_shapes_untouched`), none of which exists, so under the new rule every one would be
+  gone. Those paths become directories created under a `TemporaryDirectory`, and every existing
+  expected count and kept-record assertion stays exactly as it is (for example `removed 2,
+  kept 5`). Editing an existing expected value instead would hide an R4 regression.
+
 - `path_gone`: missing key; empty string; non-string (`None`, `5`); relative path; existing
   directory; existing regular file; dangling symlink; absent path; path under a regular file
   (`NotADirectoryError`); `os.lstat` patched to raise `PermissionError`.
@@ -106,7 +125,9 @@ from another host cannot appear in it.
   gives `False`; present path and no user record gives `False` (today's behaviour).
 - `prune` end to end on a fixture file holding one gone-path record without a user record, one
   present-path record without a user record and one user record: the line reads `removed 1,
-kept 2`, a backup exists, and the rewritten file holds exactly the two kept records.
+  kept 2`, a backup exists, the rewritten file holds exactly the two kept records, and the
+  gone-path plugin's id is absent from `plugins` (no `[]` key).
+- `_prune_records` on an input whose id already maps to `[]`: the key is kept with `[]`.
 - `--dry-run` on the same fixture: the same line and the file byte-identical afterwards.
 
 Verification on workstation after merge: run the prune with `--dry-run` against the live file,
@@ -121,10 +142,12 @@ expect `removed 7, kept 9`; then the next `-t update` removes them.
 - **R5.** The prune's stdout line keeps the form `pruned at <UTC>: removed <n>, kept <m>`, and gone-path removals are counted in `<n>`.
 - **R6.** `tests/test_claude_plugin_prune.py` covers `path_gone` for: key missing, empty string, `None`, `5`, a relative path, an existing directory, an existing regular file, a dangling symlink, an absent path, a path under a regular file, and `os.lstat` raising `PermissionError`.
 - **R7.** `tests/test_claude_plugin_prune.py` covers `should_remove` for: gone path with no user record (`True`); gone path with a user record of a different version and older `lastUpdated` (`True`); gone path with `scope` `user` (`False`); present path with no user record (`False`).
-- **R8.** `tests/test_claude_plugin_prune.py` runs `prune` on a fixture with one gone-path record lacking a user record, one present-path record lacking a user record and one user record, and asserts the line ends `removed 1, kept 2`, a backup file exists, and the rewritten `plugins` map holds exactly the two kept records; the same fixture under `dry_run=True` leaves the file byte-identical.
+- **R8.** `tests/test_claude_plugin_prune.py` runs `prune` on a fixture with one gone-path record lacking a user record (its plugin having no other record), one present-path record lacking a user record and one user record, and asserts the line ends `removed 1, kept 2`, a backup file exists, the rewritten `plugins` map holds exactly the two kept records, and the gone-path plugin's id is not a key of `plugins`; the same fixture under `dry_run=True` leaves the file byte-identical.
 - **R9.** `docs/adr/0055-prune-claude-plugin-project-records.md` has an `## Amendments` section with an entry dated 2026-11-10 stating that a `project` or `local` record whose absolute `projectPath` is absent (`FileNotFoundError` from `os.lstat`) is removed whether or not a user record exists.
 - **R10.** The `CLAUDE.md` bullet beginning "`-t update` updates Claude plugins with `-s user`" says the prune also removes records whose project directory is gone.
 - **R11.** The backlog row "Claude Code writes a project-scope plugin record per project and worktree, and none is ever removed" is removed from `docs/superpowers/README.md`.
+- **R12.** `_prune_records` omits a plugin id from the returned map when the id's input list was non-empty and every record in it was removed; an id whose input value is `[]` or not a list is returned unchanged.
+- **R13.** Every `projectPath` in the existing shared `fixture()` and in `test_odd_shapes_untouched` of `tests/test_claude_plugin_prune.py` names a directory that exists during the test, and the assertions those tests held at `7c85d1fa` (including `removed 2, kept 5` and the kept `/p3`-equivalent record) are unchanged in value.
 - **V1.** After merge, on workstation, `python3 lib/claude_plugin_prune.py --dry-run --file ~/.claude/plugins/installed_plugins.json --backup-dir ~/.local/share/dotfiles/claude-plugin-backups` prints `removed 7, kept 9`, unless the file changed since 2026-11-10, in which case the counts match a read-only recount.
 - **N1.** No change to `lib/workflows.sh`.
 - **N2.** No change to the refusal conditions, backup, race guard or exit codes of ADR-0055 decision 3.
@@ -151,7 +174,7 @@ raised: `lstat` fail-closed semantics, remount risk (all paths under `/home/bruc
 No empty-list key exists today in the live files or any backup on `claude` or workstation.
 Assumption: a `"plugin@mkt": []` key is harmless to Claude Code. Settle by reading `Lt` and the
 updater in the binary, or a scratch-`HOME` probe; deleting the empty key removes the question.
-Disposition:
+Disposition: Addressed (operator "yes", 2026-11-10) — empty lists drop their key (Design 3, R12); R8 asserts the id is absent; section 3's "does not change" claim corrected (now section 4). Assumption made moot by dropping the key.
 
 ### Ergonomics
 
@@ -173,7 +196,7 @@ prompts there. The main terraform_ansible checkout holds none of these records, 
 are `false` in its tracked settings, suggesting an explicit per-worktree install rather than an
 automatic mint. Settle by the workstation reflog for repeated `ruff` worktrees and the
 2026-11-09 session transcript for an install call.
-Disposition:
+Disposition: Addressed (operator "yes", 2026-11-10) — existing fixture paths become real directories with every expected value unchanged (Testing, R13). Worktree-reuse assumption accepted as a risk (Design 5).
 
 ### Risk
 
@@ -190,7 +213,7 @@ dangling symlink present, re-created-worktree loss (re-prompts from tracked sett
 Assumption: Claude Code tolerates `plugins["<id>"] == []`. Settle by finding the plugins-file
 schema in the bundle, or a throwaway `CLAUDE_CONFIG_DIR` probe with `claude plugins list`.
 Dropping empty keys removes the dependency.
-Disposition:
+Disposition: Addressed (operator "yes", 2026-11-10) — empty key dropped (Design 3, R12), which removes the schema dependency.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
