@@ -317,6 +317,51 @@ class PruneTest(Base):
         self.assertEqual((rc, line), (0, "no plugins file"))
 
 
+class EmptyKeyDropTest(Base):
+    def test_all_gone_records_drop_the_key(self):
+        gone = "/nonexistent-dotfiles-test/gone"
+        plugins = {"z@m": [rec("project", "1", projectPath=gone)]}
+        new, removed, kept = P._prune_records(plugins)
+        self.assertNotIn("z@m", new)
+        self.assertEqual((removed, kept), (1, 0))
+
+    def test_empty_list_and_non_list_copied_through(self):
+        new, removed, kept = P._prune_records({"z@m": [], "s@m": "str"})
+        self.assertEqual(new, {"z@m": [], "s@m": "str"})
+        self.assertEqual((removed, kept), (0, 0))
+
+
+class GonePathEndToEndTest(Base):
+    def data(self):
+        gone = os.path.join(self.tmp, "absent-project")
+        return {"version": 2, "plugins": {
+            "g@m": [rec("project", "1", projectPath=gone)],
+            "h@m": [rec("project", "1", projectPath=live("p1"))],
+            "u@m": [rec("user", "1")],
+        }}
+
+    def test_prune_drops_gone_key_and_backs_up(self):
+        before = self.data()
+        self.write(before)
+        rc, line = self.run_prune()
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 1, kept 2$")
+        self.assertEqual(len(self.backups()), 1)
+        after = json.loads(self.raw())
+        self.assertEqual(sorted(after["plugins"]), ["h@m", "u@m"])
+        self.assertEqual(after["plugins"]["h@m"], before["plugins"]["h@m"])
+        self.assertEqual(after["plugins"]["u@m"], before["plugins"]["u@m"])
+
+    def test_dry_run_same_line_file_unchanged(self):
+        self.write(self.data())
+        raw = self.raw()
+        rc, line = self.run_prune(dry_run=True)
+        self.assertEqual(rc, 0)
+        self.assertRegex(line, r": removed 1, kept 2$")
+        self.assertEqual(self.raw(), raw)
+        self.assertEqual(self.backups(), [])
+
+
 class HardeningTest(Base):
     def assert_refused_clean(self, rc, line, orig, bdir_before=None):
         self.assertEqual(rc, 3)

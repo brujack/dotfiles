@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Prune redundant project/local records from Claude's installed_plugins.json.
 
-A project or local record is removed only when its plugin also has a user-scope
-record that is at least as new (see the design spec, section "Record prune").
+A project or local record is removed when either holds: its plugin also has a
+user-scope record that is at least as new (see the design spec, section "Record
+prune"), or its projectPath is an absolute path that no longer exists. A plugin
+key whose records are all removed is dropped from the map; a key that was
+already an empty list is left as is.
 Runs on Python 3.9: timestamps are parsed with an explicit format because
 datetime.fromisoformat rejects a trailing "Z" before 3.11.
 
@@ -95,6 +98,9 @@ def _prune_records(plugins):
             else:
                 survivors.append(r)
                 kept += 1
+        # A key the prune emptied is dropped; an input list that was already empty stays.
+        if records and not survivors:
+            continue
         new_plugins[plugin_id] = survivors
     return new_plugins, removed, kept
 
