@@ -51,12 +51,13 @@ plain() {
   [ "${_DOCTOR_PASS}" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
   [[ "${output}" != *systemctl* ]]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
 @test "not-loaded: exact WARN text, no systemctl remedy" {
   stub_state 'not-loaded 580.82.07\n'
   run_check
-  [ "$(plain)" = "$(printf '\nNVIDIA driver:\n  [WARN] nvidia module: nvidia module not loaded (userspace 580.82.07 installed): reboot if the driver was just installed, otherwise check dkms status')" ]
+  [ "$(plain)" = "$(printf '\nNVIDIA driver:\n  [WARN] nvidia module not loaded (userspace 580.82.07 installed): reboot if the driver was just installed, otherwise check dkms status')" ]
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
@@ -77,6 +78,7 @@ plain() {
   run_check
   [ "$(plain)" = "$(printf '\nNVIDIA driver:\n  [FAIL] nvidia-cdi-refresh.service: unit failed\n%s\n  [PASS] nvidia module 580.82.07 matches userspace' "${REMEDY}")" ]
   [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
 }
@@ -88,12 +90,13 @@ plain() {
   [ "$(grep -c '\[FAIL\]' <<<"${output}")" -eq 2 ]
   [[ "${output}" == *"${REMEDY}"* ]]
   [ "${_DOCTOR_FAIL}" -eq 2 ]
+  [ "${_DOCTOR_FAILED}" -eq 1 ]
 }
 
 @test "ok plus cdi-unknown: WARN and short PASS" {
   stub_state 'ok 580.82.07\ncdi-unknown nvidia-cdi-refresh.path\n'
   run_check
-  [ "$(plain)" = "$(printf '\nNVIDIA driver:\n  [WARN] nvidia-cdi-refresh.path: cannot read nvidia-cdi-refresh.path state\n  [PASS] nvidia module 580.82.07 matches userspace')" ]
+  [ "$(plain)" = "$(printf '\nNVIDIA driver:\n  [WARN] nvidia-cdi-refresh.path: cannot read state\n  [PASS] nvidia module 580.82.07 matches userspace')" ]
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]

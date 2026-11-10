@@ -1313,7 +1313,7 @@ _doctor_check_nvidia_driver() {
         doctor_fail "nvidia module" "loaded ${_a} but userspace ${_b} installed; nvidia-smi, GPU containers and the CDI refresh fail until a reboot; reboot to fix"
         ;;
       not-loaded)
-        doctor_warn "nvidia module" "nvidia module not loaded (userspace ${_a} installed): reboot if the driver was just installed, otherwise check dkms status"
+        doctor_warn "nvidia module not loaded (userspace ${_a} installed)" "reboot if the driver was just installed, otherwise check dkms status"
         ;;
       ok)
         _ver="${_a}"
@@ -1324,7 +1324,7 @@ _doctor_check_nvidia_driver() {
         _cdi_failed=1
         ;;
       cdi-unknown)
-        doctor_warn "${_a}" "cannot read ${_a} state"
+        doctor_warn "${_a}" "cannot read state"
         _cdi_seen=1
         ;;
       *) ;;
