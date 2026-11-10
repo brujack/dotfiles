@@ -295,6 +295,22 @@ PY
   [ ! -e "${BODY}" ]
 }
 
+@test "a transitive package reverted to base by the cap is not flagged as a disagreement" {
+  # fresh (direct dep, fresh upload) is held at 1.0; dep (transitive) was
+  # upgraded to 2.0 by the initial run but falls back to 1.0 as a side-effect
+  # of the cap. uv reported dep as changed, but diff(base, final) is empty for
+  # it (final == base). The fix detects dep via diff(upgraded, final).
+  _lock "${FIXTURE}/uv.lock" "fresh,1.0,${OLD}" "dep,1.0,${OLD}"
+  _lock "${LOCKS}/1.lock" "fresh,2.0,${FRESH}" "dep,2.0,${OLD}"
+  _lock "${LOCKS}/2.lock" "fresh,1.0,${OLD}" "dep,1.0,${OLD}"
+  cp "${LOCKS}/2.lock" "${LOCKS}/3.lock"
+  export STUB_UV_LINES=$'Updated fresh v1.0 -> v2.0\nUpdated dep v1.0 -> v2.0'
+  run_script
+  [ "${status}" -eq 0 ]
+  [ "${lines[-1]}" = "no changes" ]
+  [[ "${stderr}" != *"disagrees with uv"* ]]
+}
+
 @test "a package held all the way back is in the report and not in the change list" {
   _lock "${FIXTURE}/uv.lock" "acme,1.0,${OLD}" "other,5.0,${OLD}"
   _lock "${LOCKS}/1.lock" "acme,2.0,${FRESH}" "other,6.0,${OLD}"
