@@ -102,6 +102,40 @@ class Base(unittest.TestCase):
         return P.prune(**args)
 
 
+class PathGoneTest(Base):
+    def test_missing_or_non_string_or_relative_is_not_gone(self):
+        self.assertFalse(P.path_gone({}))
+        self.assertFalse(P.path_gone({"projectPath": ""}))
+        self.assertFalse(P.path_gone({"projectPath": None}))
+        self.assertFalse(P.path_gone({"projectPath": 5}))
+        self.assertFalse(P.path_gone({"projectPath": "rel/path"}))
+
+    def test_existing_directory_and_file_not_gone(self):
+        self.assertFalse(P.path_gone({"projectPath": live("p1")}))
+        f = os.path.join(self.tmp, "afile")
+        open(f, "w").close()
+        self.assertFalse(P.path_gone({"projectPath": f}))
+
+    def test_dangling_symlink_not_gone(self):
+        link = os.path.join(self.tmp, "dangling")
+        os.symlink(os.path.join(self.tmp, "absent-target"), link)
+        self.assertFalse(P.path_gone({"projectPath": link}))
+
+    def test_absent_absolute_path_is_gone(self):
+        self.assertTrue(P.path_gone({"projectPath": os.path.join(self.tmp, "absent")}))
+
+    def test_path_under_regular_file_not_gone(self):
+        f = os.path.join(self.tmp, "afile")
+        open(f, "w").close()
+        self.assertFalse(P.path_gone({"projectPath": os.path.join(f, "x")}))
+
+    def test_other_oserror_not_gone(self):
+        with mock.patch.object(
+            P.os, "lstat", side_effect=PermissionError(errno.EACCES, "denied")
+        ):
+            self.assertFalse(P.path_gone({"projectPath": "/anything"}))
+
+
 class ShouldRemoveTest(unittest.TestCase):
     def test_same_version_unparsable_ts_removed(self):
         self.assertTrue(P.should_remove(rec("project", "1", "garbage"), rec("user", "1")))

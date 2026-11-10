@@ -36,6 +36,24 @@ def parse_ts(s):
         return None
 
 
+def path_gone(record):
+    """True when the record's projectPath is an absolute path that does not exist.
+
+    Any other lstat failure (permissions, not-a-directory, I/O) is not proof of
+    absence, so it counts as not gone. lstat, not stat: a dangling symlink exists.
+    """
+    p = record.get("projectPath")
+    if not _nonempty_str(p) or not os.path.isabs(p):
+        return False
+    try:
+        os.lstat(p)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
 def should_remove(record, user_record):
     """True when a project/local record is redundant given the plugin's user record."""
     if user_record is None or record.get("scope") not in _PRUNABLE_SCOPES:
