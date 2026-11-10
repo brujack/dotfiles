@@ -123,3 +123,11 @@ _gh_calls() { cat "${BATS_TEST_TMPDIR}/calls" 2>/dev/null || printf 0; }
   [ "$status" -eq 0 ]
   [ "$(cat "${BATS_TEST_TMPDIR}/argv")" = "$(printf 'pr\nmerge\n354\n--squash\n--match-head-commit\nabc123\n--')" ]
 }
+
+@test "a non-numeric retry delay prints usage and makes no gh call" {
+  _seq 0 "merged"
+  AUTO_MERGE_RETRY_DELAY=abc run bash "${SCRIPT}" 354 abc123
+  [ "$status" -eq 1 ]
+  [ "$(_gh_calls)" -eq 0 ]
+  [[ "$output" == *"usage"* ]]
+}
