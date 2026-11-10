@@ -166,3 +166,25 @@ Disposition: Addressed (operator "Yes", 2026-11-10) — (1) stderr capture (R3, 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (all three lenses, revised design)
+
+Reviewed at commit: `d5dbcd78`. Lenses were told the round-1 section is history.
+
+#### Goal-Fit
+
+Finding: Worth building; every mechanism passes the reads-it test. (1) #354 is not a timing refusal: attempt 1 was also refused (15:48:44Z, 9 s after `test-macos`) and attempt 2, a full re-run, at 16:42:24Z, so it persisted at least 54 min. ai-config run 39279301026 is the same branch (`feat/python-hold`, ai-config#316); the operator merged ai-config#316 at 16:45:23Z and dotfiles#354 at 16:45:28Z. One persistent event on two repos, cause unknown, so "one of two cleared inside 60 s" is really one of one timing case. (2) Every test case runs with `AUTO_MERGE_RETRY_DELAY=0`, so a script that never sleeps passes all of them; add a case with a PATH-mocked `sleep` that logs its argument (unset delay: `30`, twice). (3) If the cause stays unknown, print a timestamp on every attempt so future refusals settle the window.
+Assumption: the refusal is mostly a short propagation delay. Orchestrator check: the persistent event is not the workflows-permission refusal, since #354 touched no `.github/workflows/` file while #241 and #414 did and still merged by `github-actions`.
+Disposition:
+
+#### Ergonomics
+
+Finding: (1) #414 is misclassified: attempt 2 re-ran every job (all carry `run_attempt` 2) and was refused 9 s after `test-macos`, as was attempt 1, so #414 is a timing refusal; #294 alone was failed-only. (2) After the third refusal the script gives no remedy, and the reflex ("Re-run failed jobs") is #294's pattern, which can never succeed. Print one line naming the fixes: merge by hand with `gh pr merge <pr> --squash --match-head-commit <sha>`, or re-run all jobs, never failed-only; assert it in bats. (3) The draft skip removes the red signal a draft gives today.
+Assumption: an agent finishing a draft runs `gh pr ready` before `gh pr checks --watch`. Orchestrator check: `finishing-a-development-branch` says to update an existing draft's body "before `gh pr ready`", so finishing a draft marks it ready first; the skipped run is replaced by the `ready_for_review` run.
+Disposition:
+
+#### Risk
+
+Finding: (1) The retry rescues only timing cases; drop any wording that implies a failed-only re-run (#294) is fixed. (2) The trust argument is weaker than stated: with `pull-requests: write` and `merge=true`, a PR-edited `scripts/auto-merge-merge.sh` could merge a different, held PR, or drop `--match-head-commit`. Not an escalation for anyone with push access (same-repo authors already run PR code with `contents: write` in `test` and `powershell`), but it breaks the base-commit isolation the gate relies on. Cheap symmetry: run the merge script from `git show "${BASE_SHA}:scripts/auto-merge-merge.sh"` too, falling back to a single direct merge when the base has none. (3) The job `if:` reads the event payload: re-running a draft-era run now skips `auto-merge` for good (re-run the `ready_for_review` run instead); converting to draft mid-run fails once as today; `cancel-in-progress` keeps the newest payload. No hazard.
+Assumption: the timing refusal clears in seconds; settle it by recording time-to-success on the next refusals, and delete the retry if the next 2-3 still fail after 60 s.
+Disposition:
