@@ -30,6 +30,24 @@ USER_TS = "2026-10-01T00:00:00.000Z"
 NEW = "2026-10-15T00:00:00.000Z"
 
 
+_LIVE_ROOT = None
+
+
+def setUpModule():
+    global _LIVE_ROOT
+    _LIVE_ROOT = tempfile.mkdtemp()
+    for name in ("p1", "p2", "p3", "p4", "p"):
+        os.mkdir(os.path.join(_LIVE_ROOT, name))
+
+
+def tearDownModule():
+    shutil.rmtree(_LIVE_ROOT, ignore_errors=True)
+
+
+def live(name):
+    return os.path.join(_LIVE_ROOT, name)
+
+
 def rec(scope, version, ts=USER_TS, **extra):
     r = {"scope": scope, "version": version, "installPath": "/x/" + version}
     if ts is not None:
@@ -45,12 +63,12 @@ def fixture():
         "plugins": {
             "a@m": [
                 rec("user", "1.0"),
-                rec("project", "1.0", projectPath="/p1"),
-                rec("project", "0.9", OLD, projectPath="/p2"),
-                rec("project", "2.0", NEW, projectPath="/p3"),
+                rec("project", "1.0", projectPath=live("p1")),
+                rec("project", "0.9", OLD, projectPath=live("p2")),
+                rec("project", "2.0", NEW, projectPath=live("p3")),
             ],
             "b@m": [rec("user", "3.0"), rec("managed", "3.0")],
-            "c@m": [rec("project", "1.0", projectPath="/p4")],
+            "c@m": [rec("project", "1.0", projectPath=live("p4"))],
         },
     }
 
@@ -137,7 +155,7 @@ class PruneTest(Base):
         self.assertEqual(after["plugins"]["b@m"], before["plugins"]["b@m"])
         a = after["plugins"]["a@m"]
         self.assertEqual(a[0], before["plugins"]["a@m"][0])
-        self.assertEqual([r["projectPath"] for r in a[1:]], ["/p3"])
+        self.assertEqual([r["projectPath"] for r in a[1:]], [live("p3")])
         self.assertEqual(after["plugins"]["c@m"], before["plugins"]["c@m"])
         self.assertEqual(len(self.backups()), 1)
         # backup holds the before-state
@@ -514,7 +532,7 @@ class HardeningTest(Base):
     def test_odd_shapes_untouched(self):
         data = {"version": 2, "plugins": {
             "x@m": "a string",
-            "y@m": ["notdict", rec("user", "1"), rec("project", "1", projectPath="/p")],
+            "y@m": ["notdict", rec("user", "1"), rec("project", "1", projectPath=live("p"))],
         }}
         self.write(data)
         rc, line = self.run_prune()
