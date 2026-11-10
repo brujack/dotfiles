@@ -5,6 +5,7 @@ tests/makefile_parallel_target.bats
 tests/makefile_scope.bats
 tests/makefile_shard_list.bats
 tests/scripts/auto_merge_gate.bats
+tests/scripts/auto_merge_merge.bats
 tests/scripts/bash_tracer.bats
 tests/scripts/bats_shard.bats
 tests/scripts/cadence_notify.bats
