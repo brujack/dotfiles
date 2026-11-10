@@ -130,3 +130,68 @@ expect `removed 7, kept 9`; then the next `-t update` removes them.
 - **N2.** No change to the refusal conditions, backup, race guard or exit codes of ADR-0055 decision 3.
 - **N3.** No new `claude` CLI invocation.
 - **N4.** No record is removed because its path is unreadable, relative, missing or of a non-string type.
+
+## Multi-Lens Review
+
+Reviewed at commit: `7c85d1fa` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The gone-path rule is the first that can empty a plugin's record list, and the spec
+does not say what happens to the key. `_prune_records` assigns `new_plugins[plugin_id] =
+survivors` unconditionally, so V1 would leave 7 `"<id>": []` keys on workstation. Claude Code
+2.1.322 never writes that shape: its uninstall path runs `length===0) delete e.plugins[n]`. Some
+readers do not filter on length (the updater iterates `Object.keys(plugins)`; the same-name
+collision check `Lt` scans `Object.keys` unfiltered), so an empty key may not be inert. Fix: drop
+the key when survivors is empty; R8 must assert the id is absent, since "holds exactly the two
+kept records" passes with `[]` present; section 3's "`_prune_records` does not change" is false.
+Worth building: one hand edit clears today's 7, but every removed worktree whose plugins lack a
+user install recurs. Reads-it test passes (output is the file Claude Code reads). Checked and not
+raised: `lstat` fail-closed semantics, remount risk (all paths under `/home/bruce`), doc edits.
+No empty-list key exists today in the live files or any backup on `claude` or workstation.
+Assumption: a `"plugin@mkt": []` key is harmless to Claude Code. Settle by reading `Lt` and the
+updater in the binary, or a scratch-`HOME` probe; deleting the empty key removes the question.
+Disposition:
+
+### Ergonomics
+
+Finding: The rule silently changes the meaning of the existing tests. The shared `fixture()` in
+`tests/test_claude_plugin_prune.py` (lines 41-55) uses absolute `projectPath` values `/p1`..`/p4`,
+none of which exists, so under R1 all are gone: line 338's `removed 2, kept 5` becomes
+`removed 4, kept 3`, line 140's kept `/p3` (newer than the user record) is removed, and `c@m`
+`/p4` (no user record) is removed; lines 133, 210, 489 and 566 move with it.
+`test_odd_shapes_untouched` (`/p`) stays at `removed 1, kept 2` but no longer exercises the old
+rule alone. The easy wrong fix is editing the expected counts, which hides an R4 regression. The
+spec needs: existing fixture paths become directories that exist, expected counts unchanged.
+Verdict balance fine (always-False fails R7 case 1 and R8; always-True fails the present-path
+cases). Checked and not raised: wrapper output, dangling-symlink choice, PermissionError,
+automount hang (paths under `/home`), V1 arithmetic.
+Assumption: a gone `projectPath` is dead for good. Worktrees follow `<repo>-<branch-slug>`, so a
+recurring branch name (the next ruff bump) recreates `terraform_ansible-ruff`; a prune in the gap
+drops the records of the 7 plugins with no user install, and the operator re-accepts install
+prompts there. The main terraform_ansible checkout holds none of these records, and 3 of the 7
+are `false` in its tracked settings, suggesting an explicit per-worktree install rather than an
+automatic mint. Settle by the workstation reflog for repeated `ruff` worktrees and the
+2026-11-09 session transcript for an install call.
+Disposition:
+
+### Risk
+
+Finding: No load-bearing risk. The newly admitted delete removes only `installed_plugins.json`
+records whose `projectPath` is absent; it touches no cache or data directory (the only data dir
+among the 7 on workstation, `plugins/data/context7-claude-plugins-official`, is empty). No
+realistic false-gone input: `docker inspect` on `claude` and workstation shows no container
+bind-mounting `~/.claude`. One smaller new failure point the spec does not name: the empty
+`"<id>": []` key (same as Goal-Fit). Claude Code's writer deletes an emptied key; sampled readers
+guard with `?.length`, but the schema was not found, and a non-empty constraint would make the
+file unreadable ("installed_plugins.json could not be read"), losing every plugin. Fix: drop the
+empty key. Checked and not raised: verdict balance, PermissionError and macOS TCC EPERM kept,
+dangling symlink present, re-created-worktree loss (re-prompts from tracked settings; accepted).
+Assumption: Claude Code tolerates `plugins["<id>"] == []`. Settle by finding the plugins-file
+schema in the bundle, or a throwaway `CLAUDE_CONFIG_DIR` probe with `claude plugins list`.
+Dropping empty keys removes the dependency.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
