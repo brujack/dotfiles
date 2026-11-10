@@ -26,6 +26,30 @@ _merge_step() {
   '
 }
 
+# _merge_run_block: print the body of the merge step's `run: |` block with its
+# common indentation (10 spaces) stripped, up to the first less-indented line.
+_merge_run_block() {
+  _merge_step | awk '
+    in_run && substr($0, 1, 10) == "          " { print substr($0, 11); next }
+    in_run { exit }
+    /^        run: \|$/ { in_run = 1 }
+  '
+}
+
+# _expected_run_block: the run block, exactly. A substring check per line would
+# let an inverted `if`, or a merge moved past `fi`, pass.
+_expected_run_block() {
+  cat <<'BLOCK'
+merge="${RUNNER_TEMP}/auto-merge-merge.sh"
+if git show "${BASE_SHA}:scripts/auto-merge-merge.sh" > "${merge}"; then
+  bash "${merge}" "${PR_NUMBER}" "${HEAD_SHA}"
+else
+  echo "no merge script on the base commit -- retry off, single direct merge"
+  gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"
+fi
+BLOCK
+}
+
 @test "auto-merge job skips drafts" {
   run _job auto-merge
   [ "$status" -eq 0 ]
@@ -43,21 +67,22 @@ _merge_step() {
 }
 
 @test "merge step runs the script read from the base commit, never the checkout" {
-  run _merge_step
+  run _merge_run_block
   [ "$status" -eq 0 ]
-  [[ "$output" == *'git show "${BASE_SHA}:scripts/auto-merge-merge.sh"'* ]]
-  [[ "$output" == *'bash "${merge}" "${PR_NUMBER}" "${HEAD_SHA}"'* ]]
-  # every other mention of the script path must be the git show line
+  [ "$output" = "$(_expected_run_block)" ]
+  # no other line of the step may name the script: only the git show line
   local stray
-  stray="$(printf '%s\n' "$output" | awk '/scripts\/auto-merge-merge\.sh/ && !/git show/' | wc -l)"
+  stray="$(_merge_step | awk '/scripts\/auto-merge-merge\.sh/ && !/git show/' | wc -l)"
   [ "${stray}" -eq 0 ]
 }
 
 @test "fallback is one direct merge pinned to the head commit" {
-  run _merge_step
+  run _merge_run_block
   [ "$status" -eq 0 ]
-  [[ "$output" == *"retry off"* ]]
-  [[ "$output" == *'gh pr merge "${PR_NUMBER}" --squash --match-head-commit "${HEAD_SHA}"'* ]]
+  [ "$output" = "$(_expected_run_block)" ]
+  local merges
+  merges="$(_merge_step | awk '/gh pr merge/' | wc -l)"
+  [ "${merges}" -eq 1 ]
 }
 
 @test "no --auto anywhere in the auto-merge job" {
