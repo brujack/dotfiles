@@ -70,12 +70,15 @@ Premise checks, run 2026-11-09 against `60433c07`:
    readers call. Prints nothing and returns 0 unless, checked in this order, `LINUX` is set,
    `_nvidia_userspace_version` succeeds and `_nvidia_gpu_present` succeeds. The libcuda
    link comes before `lspci` so that a host or test with no userspace never runs `lspci`.
-   Otherwise its first line is always exactly one version line, so a host whose gates pass
-   is never silent:
+   A fourth gate follows: when the module version file
+   (`${_NVIDIA_MODULE_VERSION_FILE:-/sys/module/nvidia/version}`) exists but
+   `_nvidia_loaded_version` fails (unreadable, or not a dotted version), it prints nothing,
+   since "could not read a version" is not "no module". Otherwise its first line is always
+   exactly one version line, so a host whose gates pass is never silent:
 
    - `mismatch <loaded> <installed>` when `_nvidia_loaded_version` succeeds and its value
      with dashes turned back to dots differs from the userspace version;
-   - `not-loaded <installed>` when `_nvidia_loaded_version` fails;
+   - `not-loaded <installed>` when the module version file does not exist;
    - `ok <version>` when the two versions are equal.
 
    Only after `ok` does it read the units, printing for each of `nvidia-cdi-refresh.path` and
@@ -106,9 +109,10 @@ Premise checks, run 2026-11-09 against `60433c07`:
      rather than watching, hence the `start`. The remedy is printed, never run.
    - `cdi-unknown`: `doctor_warn` "cannot read <unit> state".
    - `ok <v>` with no `cdi-failed` and no `cdi-unknown` line:
-     `doctor_pass "nvidia module <v> matches userspace; CDI refresh not failed"`. With only
-     `cdi-unknown` lines: `doctor_pass "nvidia module <v> matches userspace"`, beside their
-     WARNs, so the PASS never states a unit state it did not read.
+     `doctor_pass "nvidia module <v> matches userspace; CDI refresh not failed"`. With any
+     `cdi-failed` or `cdi-unknown` line: `doctor_pass "nvidia module <v> matches userspace"`,
+     beside that line's FAIL or WARN, so the PASS never states a unit state it did not read
+     or that is failed.
 
 4. **`-t update` apt line** (`lib/update_summary.sh`, `apt` case). A `mismatch` becomes the
    reason `nvidia <loaded> loaded, <installed> installed` inside the line's single reboot
@@ -144,7 +148,9 @@ prints `MOCK_SYSTEMCTL_ACTIVE_STATE_FILE`'s line for that unit (`<unit><TAB><sta
 already does for `_NVIDIA_MODULE_VERSION_FILE`, so no test reads `claude`'s real driver.
 
 Cases for `_nvidia_driver_state`: versions match (exactly `ok 615.71.09`); mismatch; module
-absent; no libcuda link; a regular file instead of a link; a malformed suffix; no GPU;
+file absent (`not-loaded`); module file malformed and module file unreadable (each
+empty output, with a valid link); no libcuda link; a regular file instead of a link; a
+malformed suffix; no GPU;
 `LINUX` unset; path unit failed; service unit failed; both failed; unit missing (`inactive`,
 output exactly `ok <v>`); `systemctl` exit non-zero with the unit listed as `failed` in the
 state file (output `cdi-unknown`, never `cdi-failed`). Every case asserts the exact output.
@@ -160,6 +166,7 @@ asserts the output is empty and no call was recorded.
 Doctor and update-summary tests assert the exact rendered text for one mismatch, one
 not-loaded (no "reboot required" on the update line), one cdi-failed (remedy printed once
 for two failed units), one cdi-unknown (WARN plus the PASS without "CDI refresh not
+failed"), one `ok` with one cdi-failed (FAIL plus the PASS without "CDI refresh not
 failed") and the full PASS line, plus the no-GPU case producing no section and no summary
 segment. Update-summary cases cover
 the three reboot-note shapes: apt flag with `.pkgs`, apt flag without, and no apt flag, each
@@ -168,8 +175,8 @@ with a mismatch, asserting "reboot required" appears exactly once.
 ## Requirements
 
 - **R1.** `_nvidia_userspace_version` prints the version suffix of the `libcuda.so.1` link target (read through `_NVIDIA_LIBCUDA`, default `/usr/lib/x86_64-linux-gnu/libcuda.so.1`) when it matches `^[0-9]+(\.[0-9]+)+$`, and returns 1 printing nothing when the path is not a symlink or the suffix does not match.
-- **R2.** `_nvidia_driver_state` prints nothing unless, checked in this order, `LINUX` is set, `_nvidia_userspace_version` succeeds and `_nvidia_gpu_present` succeeds; it does not call `_nvidia_gpu_present` when `_nvidia_userspace_version` fails.
-- **R3.** When its gates pass, `_nvidia_driver_state`'s first line is exactly one of `mismatch <loaded> <installed>` (the loaded module version, dashes turned to dots, differs from the userspace version), `not-loaded <installed>` (`_nvidia_loaded_version` fails) or `ok <version>` (the two are equal).
+- **R2.** `_nvidia_driver_state` prints nothing unless, checked in this order, `LINUX` is set, `_nvidia_userspace_version` succeeds and `_nvidia_gpu_present` succeeds; it does not call `_nvidia_gpu_present` when `_nvidia_userspace_version` fails; and it also prints nothing when the module version file (`_NVIDIA_MODULE_VERSION_FILE`) exists but `_nvidia_loaded_version` fails.
+- **R3.** When its gates pass, `_nvidia_driver_state`'s first line is exactly one of `mismatch <loaded> <installed>` (the loaded module version, dashes turned to dots, differs from the userspace version), `not-loaded <installed>` (the module version file does not exist) or `ok <version>` (the two are equal).
 - **R4.** Only after `ok`, `_nvidia_driver_state` reads `nvidia-cdi-refresh.path` then `nvidia-cdi-refresh.service` with one `systemctl show -P ActiveState <unit>` call each through `_SYSTEMCTL_BIN`, printing `cdi-failed <unit>` when the state is `failed` and `cdi-unknown <unit>` when the call exits non-zero; after `mismatch` or `not-loaded` it makes no `systemctl` call.
 - **R5.** `run_doctor` calls `_doctor_check_nvidia_driver` directly after `_doctor_check_flatpak_gl`; it prints no section on empty output, FAILs on `mismatch` and `cdi-failed`, WARNs on `not-loaded` (naming `dkms status` and not asserting a reboot fixes it) and on `cdi-unknown`, and PASSes on `ok`, with the PASS text claiming "CDI refresh not failed" only when no `cdi-failed` or `cdi-unknown` line was printed.
 - **R6.** On any `cdi-failed` finding doctor prints the remedy `sudo systemctl reset-failed nvidia-cdi-refresh.path nvidia-cdi-refresh.service && sudo systemctl start nvidia-cdi-refresh.path` exactly once, and prints no `systemctl` remedy for a `mismatch` or `not-loaded` finding.
@@ -213,3 +220,7 @@ N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
 - Goal-fit (`f3369e22`): a healthy host and a failed gate both printed nothing and returned 0, so doctor could not tell when to print its PASS, and a no-op `_nvidia_driver_state` passed all 8 empty-output cases (present since `571c53c9`; round 1 missed it). Assumption (driver changes bypass `-t update`, so the update line adds little): refuted by the orchestrator; the 2026-10-08 615 switch on `claude` was nala `full-upgrade` at 11:56:17 then `autoremove` at 11:56:19, the `-t update` apt step. Disposition: Addressed (operator, 2026-11-09) — a host whose gates pass always prints one version line, `ok <version>` on a match; the gate cases seed a mismatch so each tests its own gate.
 - Ergonomics (`f3369e22`): `not-loaded` asserted a reboot fixes it, but a failed DKMS build for a new kernel gives the same state, caused by the reboot, so every `-t update` would print "reboot required" indefinitely; the update-line `cdi-failed` segment had no pointer to an action. Assumption (`not-loaded` is always transient): unseen and plausible; DKMS shows `nvidia/615.71.09 installed` for kernels 7.0.0-42 and 7.0.0-43 on both hosts, and the workstation has no failed `make.log`. Disposition: Addressed (operator, 2026-11-09) — `not-loaded` wording is neutral and names `dkms status`, and sits outside the reboot note; `cdi-failed` segments end `(see -t doctor)`.
 - Risk (`f3369e22`): the PASS claimed "CDI refresh not failed" after a unit read had exited non-zero and been skipped; the non-zero-exit test could not discriminate unless its fixture listed the unit as `failed`. Assumption (the `libcuda.so.1` link flips at unpack, not by a deferred step): settled; `dpkg -S` shows `libnvidia-compute-615` ships the link. Disposition: Addressed (operator, 2026-11-09) — a failed read prints `cdi-unknown <unit>`, a doctor WARN, and the PASS drops its CDI claim; the test lists the unit as `failed` while the stub errors.
+
+### Round 3 (scoped Risk lens on the round-2 revision, `7a500430`)
+
+- Risk (`7a500430`): `_nvidia_loaded_version` returns 1 for an absent, unreadable or malformed module file, and R3 mapped all three to `not-loaded`, so a loaded module with an unreadable version file would be reported as not loaded, contradicting Error handling; minor, no PASS shape was pinned for `ok` with a `cdi-failed`. Assumption: none uncertain left (link shipped by the package, `systemctl` exit codes probed, unattended path checked). Disposition: Addressed (operator, 2026-11-09) — `not-loaded` only when the module file does not exist; an existing file that fails to read or parse closes the gate (R2), with tests for both; any `cdi-failed` or `cdi-unknown` line drops the PASS's CDI claim, with a test for `ok` plus `cdi-failed`. Review stops here: the finding was mechanical, the fix adds no mechanism, and the lens had no uncertain assumption left; the next instrument is Phase 2's first red test.
