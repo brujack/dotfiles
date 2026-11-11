@@ -1,5 +1,7 @@
 # Pre-push signal-case bound removal Implementation Plan
 
+> **Status: DONE** (#461, merged 2026-11-11)
+
 spec: docs/superpowers/specs/2026-11-11-pre-push-signal-case-bound-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
