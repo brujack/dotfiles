@@ -80,3 +80,60 @@ TERM case (fails at `_assert_temp_gone`); revert. `make test` exits 0.
 - **V2.** CI on the PR is green, and both `dirty-tree: interrupt` cases report `ok` in the macOS shard that runs `tests/scripts/pre_push.bats`.
 - **N1.** No change to `scripts/pre-push`.
 - **N2.** No `@test` block in `tests/scripts/pre_push.bats` is added or removed, and no helper other than `_signal_case` changes.
+
+## Multi-Lens Review
+
+Reviewed at commit: `6d12ca85` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; deletion is the simplest path. But the premise "the bound catches
+nothing" is false: mutation M4 (`sleep 9;` prepended to the hook's EXIT-trap cleanup) passes
+with the bound removed (both cases `ok`, 23 s) and fails at the `SECONDS` line with it kept.
+The bound is the only check that an interrupted push returns promptly; no requirement asks
+for that (2026-10-25 R4 requires only that cleanup finish before the hook exits). It never
+caught an infinite hang, since it is read only after `run` returns. Reword the Problem
+section and R2 to "detects only a slow-but-correct interrupted exit, which no requirement
+forbids". A hook replaced by `exit 0` fails the remaining assertions, so they are not vacuous.
+Assumption: the macOS overrun was runner load stretching a normal ~3 s case, not the hook
+waiting out the mock's `sleep 10`; the attempt-1 log and artifact are gone. Settle by timing
+the case on macOS under load.
+Disposition:
+
+### Ergonomics
+
+Finding: No blocking issue; premise reproduced (M2 3/3 at `_assert_temp_gone`; `exit 0`
+hook fails at the status line; `exit 143` hook fails at `tree_lock`). Notes: (1) the M2 guard
+is a 1 s race between the `git` shim's sleep and bats' assertion latency, so a loaded runner
+can miss a no-wait hook (a silent pass, never a red on a correct hook); the comment should
+say it is timing-based. (2) R2 partly duplicates the existing "Slow the cleanup's worktree
+removal ..." comment; merge them. V2 proves only that nothing broke, since attempt 2 of the
+failing SHA already passed. Hang exposure is unchanged: the mock's `sleep 10` bounds only a
+surviving `make`; any other hang runs to the job's `timeout-minutes: 30`.
+Assumption: as Goal-Fit (load, not a macOS-only wait on the mock's `sleep 10`).
+Disposition:
+
+### Risk
+
+Finding: Premise false, as Goal-Fit: a bounded retry loop added to the EXIT trap
+(`for _i in 1..6; do [[ -e "${_tree}.lock" ]] && break; sleep 1; done`) fails both cases at
+line 1651 with the bound and passes both with it removed (17.5 s). Practical weight low: a
+Ctrl-C or TaskStop waits extra seconds, nothing is lost. The "Rejected: widen" reasoning
+rests on the same false premise, since a 30 s bound would still catch a cleanup looping for
+tens of seconds. Untouched pre-existing gap: no test sends a pid-only TERM.
+Assumption: `_assert_temp_gone` reliably catches M2 on a loaded macOS runner; its detection
+is a 1 s race. Settle by running bound-removed plus M2 about 20 times under load.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Orchestrator measurement after the lenses
+
+On the Studio (macOS, 20 cores), archive of `6d12ca85` with the bound replaced by a line
+logging `SECONDS`, TERM case only: idle, 10 runs, elapsed 2 s x5 and 3 s x5, 0 failures;
+under 40 busy `yes` processes (load average about 58), 10 runs, elapsed 2 s x2 and 3 s x8,
+0 failures. No run approached the mock's 10 s. Population: one fast Mac, CPU load only; the
+CI runner is a 3-vCPU VM with I/O contention, so this supports but does not prove the load
+explanation.
