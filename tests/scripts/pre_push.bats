@@ -1626,8 +1626,13 @@ _signal_case() {
   _dirty_fixture
   _dirty_edit "echo 2"
   export MAKE_MOCK_SIGNAL="${_sig}"
-  # Slow the cleanup's worktree removal so a hook shell that exits without
-  # waiting for the subshell's cleanup is caught, not raced.
+  # Slow the cleanup's worktree removal by 1 s so a hook shell that exits
+  # without waiting for the subshell's cleanup returns while the temporary
+  # checkout still exists; _assert_temp_gone then fails. The check relies on
+  # bats reaching _assert_temp_gone within that 1 s, so a miss is a silent
+  # pass, never a failure of a correct hook. There is no wall-clock bound:
+  # it detected only a slow-but-correct interrupted exit, which no
+  # requirement forbids, and it failed correct hooks on loaded macOS runners.
   local _real_git _shim="${BATS_TEST_TMPDIR}/slowgit"
   _real_git="$(PATH="${CLEAN_PATH}" command -v git)"
   mkdir -p "${_shim}"
@@ -1645,10 +1650,8 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 cd '${REPO_DIR}' || exit 1
 exec bash '${REPO_ROOT}/scripts/pre-push' > '${BATS_TEST_TMPDIR}/hook.out' 2>&1 <<< 'refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}'
 WRAP
-  SECONDS=0
   run _in_new_session "${_wrapper}"
   [ "$output" = "${_want}" ]  # stdout of the hook goes to a file: bats waits on a pipe the cleanup would hold open
-  [ "${SECONDS}" -lt 8 ]
   grep -q '^tree_lock ' "${MOCK_CALLS_FILE}"
   grep -q '^tree_listed .*pre-push-' "${MOCK_CALLS_FILE}"
   _assert_temp_gone

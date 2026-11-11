@@ -171,3 +171,24 @@ hook returning, so M2 is still caught. Measured after the review on the Studio, 
 busy `yes` processes (load average about 58), 0 passes in 20, so M2 was caught every time.
 Population: one fast Mac, CPU load only.
 Disposition: Addressed (operator "Yes", 2026-11-11) — R2 rewrites the comment in place, drops "not raced", states a miss is a silent pass. No further round: wording only.
+
+## Spec alignment (2026-11-11)
+
+- spec: docs/superpowers/specs/2026-11-11-pre-push-signal-case-bound-design.md
+- anchor: 87f37a18dc4034f12e57eba0e1d48a8e8984c5d8
+- in scope: R1, R2, R3, R4
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-11-11, implementer Task 1 Step 4 and orchestrator Studio run: with the bound removed, `trap 'exit 143' TERM` replaced by `: no-trap` makes `dirty-tree: interrupt (TERM)` fail at `_assert_temp_gone` (pre_push.bats line 1371); Studio 20/20 caught idle and under load; scripts/pre-push reverted, `git diff --stat scripts/pre-push` empty.
+- V2: Pending: recorded after CI on the PR.
