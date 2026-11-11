@@ -62,11 +62,11 @@ is the mock's own `sleep 10` after `kill`, not this assertion. It stays.
 
 ## Design
 
-Delete `SECONDS=0` and `[ "${SECONDS}" -lt 8 ]` from `_signal_case`. Extend the existing
+Delete `SECONDS=0` and `[ "${SECONDS}" -lt 8 ]` from `_signal_case`. Rewrite the existing
 comment above the `git` shim ("Slow the cleanup's worktree removal so a hook shell that
-exits without waiting ... is caught, not raced") rather than adding a second one: it names
+exits without waiting ... is caught, not raced") in place rather than adding a second one, dropping "not raced": it names
 `_assert_temp_gone` as the check that catches that hook, says the check relies on the 1 s
-delay, and says there is no wall-clock bound because it detected only a slow-but-correct
+delay and that a miss is a silent pass, and says there is no wall-clock bound because it detected only a slow-but-correct
 interrupted exit, which no requirement forbids. Remove the backlog row.
 
 No change to `scripts/pre-push`, to the `make` mock, or to any other case.
@@ -87,7 +87,7 @@ TERM case (fails at `_assert_temp_gone`); revert. `make test` exits 0.
 ## Requirements
 
 - **R1.** `_signal_case` in `tests/scripts/pre_push.bats` contains neither `SECONDS=0` nor `[ "${SECONDS}" -lt 8 ]`, and `tests/scripts/pre_push.bats` contains no `SECONDS` assertion in any `dirty-tree: interrupt` case.
-- **R2.** The existing comment in `_signal_case` beginning "Slow the cleanup's worktree removal" is extended, with no second comment added, to name `_assert_temp_gone` as the check that catches a hook exiting before its cleanup finishes, to say that check relies on the shim's 1 s delay, and to say there is no wall-clock bound because it detected only a slow-but-correct interrupted exit.
+- **R2.** The existing comment in `_signal_case` beginning "Slow the cleanup's worktree removal" is rewritten in place, with no second comment added: it no longer says "not raced"; it names `_assert_temp_gone` as the check that catches a hook exiting before its cleanup finishes; it says that check relies on the shim's 1 s delay and that a miss is a silent pass, never a failure of a correct hook; and it says there is no wall-clock bound because it detected only a slow-but-correct interrupted exit.
 - **R3.** The `make` mock's `sleep 10` after `kill -"${MAKE_MOCK_SIGNAL}" 0` is unchanged.
 - **R4.** The Backlog row of `docs/superpowers/README.md` beginning "`dirty-tree: interrupt (TERM)` fails its 8 s wall-clock bound" is removed.
 - **V1.** With the bound removed, replacing `trap 'exit 143' TERM` in `scripts/pre-push` with a no-op makes `dirty-tree: interrupt (TERM)` fail at `_assert_temp_gone`; reverted afterwards.
@@ -151,3 +151,21 @@ under 40 busy `yes` processes (load average about 58), 10 runs, elapsed 2 s x2 a
 0 failures. No run approached the mock's 10 s. Population: one fast Mac, CPU load only; the
 CI runner is a 3-vCPU VM with I/O contention, so this supports but does not prove the load
 explanation.
+
+### Round 2 (Risk only, changed sections)
+
+Reviewed at commit: `f72663b2`.
+
+Finding: R2 said "extend" the comment that reads "is caught, not raced", while the
+Measurements section now says `_assert_temp_gone` is itself a 1 s race; an implementer could
+meet R2 and ship "not raced" beside it, and "relies on the 1 s delay" could read as a
+guarantee. Proposed fix (applied above, pending disposition): R2 rewrites the comment in
+place, drops "not raced", and states a miss is a silent pass. Confirmed true: line numbers,
+the 1 s figure (first remove plus `rm -rf`), the 2026-10-25 R4 wording, M4's 23 s; no R
+contradicts an N; no new design decision.
+Assumption: on a loaded macOS runner bats reaches `_assert_temp_gone` within 1 s of the
+hook returning, so M2 is still caught. Measured after the review on the Studio, archive of
+`f72663b2` with the bound removed and M2 applied, TERM case: 10 runs idle and 10 under 40
+busy `yes` processes (load average about 58), 0 passes in 20, so M2 was caught every time.
+Population: one fast Mac, CPU load only.
+Disposition:
