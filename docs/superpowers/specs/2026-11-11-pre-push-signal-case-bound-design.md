@@ -4,6 +4,8 @@ Backlog row: "`dirty-tree: interrupt (TERM)` fails its 8 s wall-clock bound on t
 runner". Recurred 2026-11-10 on dotfiles#460 (run 42945438847, attempt 1, `test-macos-shard
 (3)`, `not ok 310`, the hook's status correct at `143`); attempt 2 of the same SHA passed.
 
+- **Approved:** 2026-11-11, operator: "Yes"
+
 ## Problem
 
 `_signal_case` in `tests/scripts/pre_push.bats` (used by `dirty-tree: interrupt (TERM)` and
@@ -168,4 +170,4 @@ hook returning, so M2 is still caught. Measured after the review on the Studio, 
 `f72663b2` with the bound removed and M2 applied, TERM case: 10 runs idle and 10 under 40
 busy `yes` processes (load average about 58), 0 passes in 20, so M2 was caught every time.
 Population: one fast Mac, CPU load only.
-Disposition:
+Disposition: Addressed (operator "Yes", 2026-11-11) — R2 rewrites the comment in place, drops "not raced", states a miss is a silent pass. No further round: wording only.
