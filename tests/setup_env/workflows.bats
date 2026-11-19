@@ -4640,11 +4640,14 @@ _pinned_uv_installer_calls() {
   export HAS_DEVTOOLS=1
   export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
   export MOCK_UV_PINNED_INSTALL_EXIT=1
+  export MOCK_UV_PINNED_INSTALL_STDERR="pinned-uv-fail-marker"
   local _rc=0
   run_update || _rc=$?
   [ "$(_pinned_uv_installer_calls)" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "FAIL" ]
   [ "${_rc}" -eq 1 ]
+  # The installer's stderr reaches err_pinned-uv, the FAIL detail's source.
+  grep -qF "pinned-uv-fail-marker" "${_DOTFILES_RUN_TMPDIR}/err_pinned-uv"
 }
 
 @test "run_update: pinned-uv skips under --brew-only" {

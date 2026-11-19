@@ -76,6 +76,15 @@ _make_stub() {
   [[ "${output}" == "${_p}" ]]
 }
 
+# The make recipes forward PINNED_UV_BIN="${PINNED_UV_BIN}", so an unset value
+# arrives as an empty one: it must fall back to the default, not be a path.
+@test "resolve_pinned_uv: an empty PINNED_UV_BIN falls back to the default path" {
+  local _p="${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv"
+  _make_stub "${_p}" "uv 0.13.0 (x)"
+  PINNED_UV_BIN="" run -0 resolve_pinned_uv
+  [[ "${output}" == "${_p}" ]]
+}
+
 @test "resolve_pinned_uv: never consults PATH" {
   local _bin="${BATS_TEST_TMPDIR}/pathbin"
   _make_stub "${_bin}/uv" "uv 0.13.0"
@@ -207,6 +216,14 @@ SHIM
   [[ "${output}" == "uv 0.13.0 (test)" ]]
   grep -qF "uv-x86_64-unknown-linux-gnu.tar.gz" "${_CURL_LOG}"
   [ ! -e "${_PINNED_DIR}/uvx" ]
+}
+
+@test "install_uv_pinned: under bats _UV_PINNED_URL replaces the release URL" {
+  _install_fixture_setup
+  _UV_PINNED_URL="https://example.invalid/override.tar.gz" \
+    _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -0 install_uv_pinned
+  grep -qF "https://example.invalid/override.tar.gz" "${_CURL_LOG}"
+  ! grep -qF "github.com/astral-sh/uv" "${_CURL_LOG}"
 }
 
 @test "install_uv_pinned: Darwin arm64 uses the aarch64-apple-darwin asset" {
