@@ -49,6 +49,7 @@ _make_stub() {
   export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
   _make_stub "${PINNED_UV_BIN}" "uv 0.13.01"
   run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"reports uv 0.13.01"* ]]
   [[ -z "${output}" ]]
 }
 
@@ -78,7 +79,8 @@ _make_stub() {
 @test "resolve_pinned_uv: never consults PATH" {
   local _bin="${BATS_TEST_TMPDIR}/pathbin"
   _make_stub "${_bin}/uv" "uv 0.13.0"
-  PATH="${_bin}:${PATH}" run -2 resolve_pinned_uv
+  PATH="${_bin}:${PATH}" run -2 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"not found at ${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv"* ]]
 }
 
 @test "_uv_pinned_version_regex: prints the anchored escaped pattern" {
@@ -101,4 +103,60 @@ _make_stub() {
   [[ -z "${output}" ]]
   run -1 --separate-stderr _uv_pinned_asset Darwin x86_64
   [[ -z "${output}" ]]
+}
+
+@test "_uv_pinned_version_regex: derives the pattern from UV_VER" {
+  # shellcheck disable=SC2034 # read by _uv_pinned_version_regex in lib/helpers.sh
+  UV_VER="1.2.3"
+  run -0 _uv_pinned_version_regex
+  [[ "${output}" == '^uv 1\.2\.3( |$)' ]]
+}
+
+@test "resolve_pinned_uv: follows UV_VER, accepting its version and rejecting 0.13.0" {
+  # shellcheck disable=SC2034 # read by resolve_pinned_uv in lib/helpers.sh
+  UV_VER="1.2.3"
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  _make_stub "${PINNED_UV_BIN}" "uv 1.2.3"
+  run -0 resolve_pinned_uv
+  _make_stub "${PINNED_UV_BIN}" "uv 0.13.0"
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"reports uv 0.13.0, expected uv 1.2.3"* ]]
+}
+
+@test "resolve_pinned_uv: a directory at the path is not executable" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/adir"
+  mkdir -p "${PINNED_UV_BIN}"
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"pinned uv at ${PINNED_UV_BIN} is not executable"* ]]
+}
+
+@test "resolve_pinned_uv: a stub printing nothing reports (no output)" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  printf '#!/usr/bin/env bash\n' > "${PINNED_UV_BIN}"
+  chmod +x "${PINNED_UV_BIN}"
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"reports (no output), expected uv 0.13.0"* ]]
+}
+
+@test "resolve_pinned_uv: right version but non-zero exit is a mismatch" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  printf '#!/usr/bin/env bash\nprintf "uv 0.13.0\\n"\nexit 3\n' > "${PINNED_UV_BIN}"
+  chmod +x "${PINNED_UV_BIN}"
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"reports uv 0.13.0, expected uv 0.13.0"* ]]
+}
+
+@test "resolve_pinned_uv: rejects uv 0.13.0.1" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  _make_stub "${PINNED_UV_BIN}" "uv 0.13.0.1"
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"reports uv 0.13.0.1"* ]]
+}
+
+@test "resolve_pinned_uv: unset UV_VER returns 1" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  _make_stub "${PINNED_UV_BIN}" "uv 0.13.0"
+  unset UV_VER
+  run -1 --separate-stderr resolve_pinned_uv
+  [[ "${stderr}" == *"UV_VER is not set; source lib/constants.sh"* ]]
 }

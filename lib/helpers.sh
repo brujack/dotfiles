@@ -2259,9 +2259,10 @@ _uv_pinned_asset() {
 # ~/.local/share/dotfiles/pinned/uv-<UV_VER>/uv) on stdout only when it is
 # executable and reports exactly UV_VER. PATH is never consulted: the point is
 # a known build, not whichever uv is first. Messages go to stderr.
-# rc 0 ok; 1 UV_VER unset, not executable or wrong version; 2 absent.
+# rc 0 ok; 1 UV_VER unset, not an executable file, non-zero exit or wrong
+# version; 2 absent.
 resolve_pinned_uv() {
-  local _path _first _re
+  local _path _first _out _rc _re
   if [[ -z "${UV_VER:-}" ]]; then
     log_error "UV_VER is not set; source lib/constants.sh"
     return 1
@@ -2271,14 +2272,17 @@ resolve_pinned_uv() {
     log_error "pinned uv not found at ${_path}; run make install-pinned-uv"
     return 2
   fi
-  if [[ ! -x "${_path}" ]]; then
+  if [[ ! -f "${_path}" || ! -x "${_path}" ]]; then
     log_error "pinned uv at ${_path} is not executable"
     return 1
   fi
-  _first="$("${_path}" --version 2>/dev/null </dev/null | head -n 1)"
   _re="$(_uv_pinned_version_regex)" || return 1
-  if [[ ! "${_first}" =~ ${_re} ]]; then
-    log_error "pinned uv at ${_path} reports ${_first}, expected uv ${UV_VER}"
+  # A non-zero exit is a mismatch even when the first line looks right.
+  _out="$("${_path}" --version 2>/dev/null </dev/null)"
+  _rc=$?
+  _first="${_out%%$'\n'*}"
+  if [[ "${_rc}" -ne 0 || ! "${_first}" =~ ${_re} ]]; then
+    log_error "pinned uv at ${_path} reports ${_first:-(no output)}, expected uv ${UV_VER}"
     return 1
   fi
   printf '%s\n' "${_path}"
