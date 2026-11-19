@@ -36,6 +36,7 @@ jobs:
     # Makefile and tests/scripts/makefile_lint_scope.bats.
     env:
       REQUIRE_TOOLS: "1"
+      PINNED_UV_BIN: /usr/local/bin/uv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -234,6 +235,7 @@ jobs:
     # must not skip.
     env:
       REQUIRE_TOOLS: "1"
+      PINNED_UV_BIN: /usr/local/bin/uv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
