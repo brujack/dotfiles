@@ -69,6 +69,7 @@ All measured on 2026-11-19.
 | `nc -z -w 1 <unreachable>`                                                                       | Studio (macOS nc)                    | rc 1 after **4 s**. `-w` does not bound the connect on macOS                                                                                    |
 | `nc -z -G 1 -w 1 <unreachable>`                                                                  | Studio                               | rc 1 after 1.03 s                                                                                                                               |
 | `nc -z -G 1 -w 1 192.168.51.17 22`                                                               | Studio                               | rc 0                                                                                                                                            |
+| `ssh-keyscan -T 1 -t ed25519 <ip> \| ssh-keygen -lf -` | Studio | `192.168.51.17` gives claude's fingerprint in 0.04 s; unreachable gives nothing in 1.04 s |
 | LAN addresses                                                                                    | DNS                                  | `claude` 192.168.51.17, `workstation` 192.168.51.12                                                                                             |
 
 Scope of these measurements:
@@ -102,13 +103,23 @@ Scope of these measurements:
 
 ### 2. `bin/home-lan-probe` (new script)
 
-`home-lan-probe <ip>` exits 0 when TCP port 22 at `<ip>` answers within about 1 s, and 1
-otherwise.
+`home-lan-probe <ip> <fingerprint>` exits 0 only when the ssh server at `<ip>` presents an
+ed25519 host key whose SHA256 fingerprint equals `<fingerprint>`, and 1 otherwise.
 
-- On macOS it runs `nc -z -G 1 -w 1 <ip> 22`; elsewhere `nc -z -w 1 <ip> 22`. The platform
-  comes from `uname -s`.
-- A missing `nc` exits 1, so the client falls back to the Cloudflare route rather than
-  reporting an error.
+- It runs `ssh-keyscan -T 1 -t ed25519 <ip>`, pipes the result through `ssh-keygen -lf -`,
+  and compares the fingerprint field.
+- **Why identity, not reachability:** the laptop travels to networks with unknown address
+  space. A foreign network that also uses `192.168.51.0/24`, with any ssh server at `.17`,
+  would pass a TCP probe and send the laptop direct, where the host-key check refuses the
+  connection. A fingerprint mismatch instead fails the probe, so the laptop falls back to
+  Cloudflare.
+- `ssh-keyscan` behaves the same on macOS and Linux, so no platform switch is needed.
+  Measured from the Studio on 2026-11-19: `192.168.51.17` returned `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY` in 0.04 s, and an
+  unreachable address returned nothing in 1.04 s.
+- A missing `ssh-keyscan`, no output, or any mismatch exits 1.
+- Pinned fingerprints (ed25519, measured 2026-11-19): `claude` `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY`, `workstation`
+  `SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o`. A host-key rotation must update them, and the `.ssh/config` lines and the
+  `home-ssh` table carry the same values (a test asserts equality).
 
 ### 3. ssh routing (`.ssh/config`)
 
@@ -117,9 +128,9 @@ default is direct.** The Cloudflare chain applies only when the probe exists and
 reports that the client is off the LAN:
 
 ```
-Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"
+Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY"
   ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca
-Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"
+Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o"
   ProxyJump home-secure.conecrazy.ca
 Host claude workstation
   HostName %h.home.conecrazy.ca
@@ -173,7 +184,7 @@ test.
 
 **Behaviour:**
 
-- **On the LAN** (`home-lan-probe` succeeds for the target's IP): `exec ssh -t <host> <cmd>`.
+- **On the LAN** (`home-lan-probe` succeeds for the target's IP and fingerprint): `exec ssh -t <host> <cmd>`.
 - **Off the LAN:** loop, for at most 300 s in total:
   1. If `ssh -O check "${HOP[@]}"` succeeds, `exec ssh -t <host> <cmd>`.
   2. If `mkdir ~/.ssh/cm-hop.lock` succeeds, this process owns the lock:
@@ -190,8 +201,9 @@ test.
   and execs ssh anyway.
 - A waiter that sees the lock vanish with no live master (a cancelled or failed prompt)
   takes the lock on its next pass and prompts in its own tab.
-- The probe IPs per host (`claude` 192.168.51.17, `workstation` 192.168.51.12) must equal
-  the ones in the `.ssh/config` `Match` lines; a test asserts this.
+- The probe IP and fingerprint per host (`claude` 192.168.51.17 `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY`, `workstation`
+  192.168.51.12 `SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o`) must equal the ones in the `.ssh/config` `Match` lines; a test
+  asserts this.
 
 ### 4. Per-host session list (`config/repo-sessions.sh`)
 
@@ -300,9 +312,10 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
   - `--detached` does nothing when `has-session` succeeds
   - `--all` walks the host's list, continues past one failing dir and exits 1
   - empty, absolute, `..` and missing dirs each exit 2 without calling tmux
-- **bats `home-lan-probe`**: `nc` mocked by PATH, platform via the `uname -s` seam. The
-  macOS argv carries `-G 1 -w 1`, Linux carries `-w 1`. Exit codes pass through, and a
-  missing `nc` exits 1.
+- **bats `home-lan-probe`**: `ssh-keyscan` mocked by PATH. A matching fingerprint exits 0. A
+  different one, empty keyscan output, and a missing `ssh-keyscan` each exit 1. One case
+  pins that the real `ssh-keygen -lf -` parses the mock's output, so the fingerprint field
+  is not assumed.
 - **ssh routing**: real `ssh -G -F .ssh/config` with `HOME` pointed at a fixture holding a
   stub `~/.local/bin/home-lan-probe`.
   - Probe exit 0: `claude` resolves to `hostname claude.home.conecrazy.ca` with no
@@ -333,7 +346,7 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
   - A lock older than 5 minutes is removed (set its mtime with `touch -t`).
   - A waiter whose lock vanishes without a master takes the lock and runs `-fNM`.
   - The 300 s timeout path, with the clock seam shortened, prints its message and execs.
-  - Its probe IP table equals the IPs in `.ssh/config`'s `Match` lines.
+  - Its probe IP and fingerprint table equals the pairs in `.ssh/config`'s `Match` lines.
   - A guard asserts that no `Host` pattern ending `-home-tmux` remains.
 - **Warp**: every file under `.warp/launch_configurations/` parses as YAML. In each config,
   the set of `repo-session` arguments equals the union of the `REPO_SESSIONS` lists, so the
@@ -359,8 +372,8 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R2.** `bin/repo-session --detached <dir>` adds `-d`, and exits 0 without creating a session when `tmux has-session -t "=<name>"` succeeds.
 - **R3.** `bin/repo-session --detached --all` runs once per dir in this host's `REPO_SESSIONS` entry, continues past a failing dir, and exits 1 if any dir failed, else 0.
 - **R4.** `bin/repo-session` exits 2, naming the argument, without calling tmux, for a `<dir>` that is empty, absolute, contains a `..` component, or is not a directory under `${HOME}/git-repos/personal`.
-- **R5.** `bin/home-lan-probe <ip>` runs `nc -z -G 1 -w 1 <ip> 22` when `uname -s` is `Darwin` and `nc -z -w 1 <ip> 22` otherwise, exits with nc's status, and exits 1 when `nc` is not found.
-- **R6.** On macOS only, `.ssh/config` routes `claude` and `workstation` through Cloudflare (`claude`: `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`; `workstation`: `ProxyJump home-secure.conecrazy.ca`) when `$HOME/.local/bin/home-lan-probe` is executable and fails for `192.168.51.17` (`claude`) or `192.168.51.12` (`workstation`). Every such `Match ... exec` begins with `[ "$(uname -s)" = Darwin ]`. These blocks precede a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca` and no `ProxyJump`.
+- **R5.** `bin/home-lan-probe <ip> <fingerprint>` exits 0 only when `ssh-keyscan -T 1 -t ed25519 <ip>` piped through `ssh-keygen -lf -` yields a SHA256 fingerprint equal to `<fingerprint>`; mismatch, empty output or a missing `ssh-keyscan` exits 1.
+- **R6.** On macOS only, `.ssh/config` routes `claude` and `workstation` through Cloudflare (`claude`: `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`; `workstation`: `ProxyJump home-secure.conecrazy.ca`) when `$HOME/.local/bin/home-lan-probe` is executable and fails for `192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY` (`claude`) or `192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o` (`workstation`). Every such `Match ... exec` begins with `[ "$(uname -s)" = Darwin ]`. These blocks precede a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca` and no `ProxyJump`.
 - **R7.** With `HOME` pointing at a fixture and `uname`/`hostname` mocked on `PATH`: on Darwin with a probe exiting 1, `ssh -G claude` resolves `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolves `proxyjump home-secure.conecrazy.ca`. On Darwin with the probe exiting 0 or absent, and on Linux whatever the probe returns, both give `hostname <host>.home.conecrazy.ca` and no `proxyjump`.
 - **R8.** On macOS only (a `Match host workstation.home.conecrazy.ca,workstation exec "[ \"$(uname -s)\" = Darwin ]"` block), `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C`, `ControlPersist 10m` and `ServerAliveInterval 30`; on Linux `ssh -G workstation` resolves `controlmaster false`.
 - **R9.** `.ssh/config` contains no `Host` pattern ending in `-home-tmux` and no `RemoteCommand`.
@@ -371,7 +384,7 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `~/.local/bin/home-ssh <host> .local/bin/repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists, and no `exec` line contains `repo-session` without the `.local/bin/` prefix. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
 - **R15.** The `lib/launch_agents.sh` comment reads "the Studio is always up" and no longer says "the Studio is the tmux host".
 - **R16.** `.ssh/config` gives the aliases `claude` and `workstation` `User bruce` and `IdentityFile ~/.ssh/home`.
-- **R17.** `bin/home-ssh <host> <cmd...>` uses one array `HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)` for both `ssh -O check "${HOP[@]}"` and `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`, and `home-ssh --print-hop-argv` prints it one element per line. It execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or the check succeeds.
+- **R17.** `bin/home-ssh <host> <cmd...>` uses one array `HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)` for both `ssh -O check "${HOP[@]}"` and `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`, and `home-ssh --print-hop-argv` prints it one element per line. It execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP and fingerprint (`claude` 192.168.51.17 `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY`, `workstation` 192.168.51.12 `SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o`) or the check succeeds.
 - **R18.** Off the LAN without a live master, the `home-ssh` caller that creates `~/.ssh/cm-hop.lock` with `mkdir` traps EXIT, INT, TERM and HUP to remove it, runs the `-fNM` master, and removes the lock whether `-fNM` succeeds or fails before exec'ing. A caller that finds the lock prints `home-ssh: waiting for the workstation password in another tab` once, removes a lock older than 5 minutes (`find ~/.ssh/cm-hop.lock -maxdepth 0 -mmin +5`), retries once a second, takes the lock itself if it vanishes with no master, and after 300 s prints `home-ssh: no shared connection after 300 s; connecting directly` and execs.
 - **R19.** For the argv `home-ssh --print-hop-argv` prints, `ssh -G` resolves the same `controlpath` as `ssh -G -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` and a different one from `ssh -G workstation.home.conecrazy.ca`.
 - **V1.** After a reboot of `claude` with the unit installed, `tmux ls` lists all six sessions, each pane running `claude`.
