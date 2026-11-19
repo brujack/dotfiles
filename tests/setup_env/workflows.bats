@@ -36,6 +36,9 @@ setup() {
   # Same trap for HAS_RUST: the rust section now SKIPs without it, so a test that
   # inherits it from a developer profile passes there and fails on CI.
   unset HAS_RUST
+  # Same trap for HAS_DEVTOOLS: a full run_update reaches the pinned-uv section,
+  # which on a devtools profile would run the real install_uv_pinned (network).
+  unset HAS_DEVTOOLS
   # PYENV_ROOT is exported for real by this developer session's own pyenv
   # shell integration (/Users/bruce/.pyenv), and run_update's new
   # pyenv-shims section resolves _OVERRIDE_PYENV_ROOT, then PYENV_ROOT,
