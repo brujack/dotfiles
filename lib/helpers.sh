@@ -505,6 +505,23 @@ install_bats() {
   fi
 }
 
+# install_uv_pinned
+# Installs the pinned uv for the current platform. Dispatches on `uname -s`
+# (not MACOS/LINUX) because `make install-pinned-uv` runs it without detect_env.
+# Callers gate on HAS_DEVTOOLS; this function does not. An unsupported OS warns
+# and returns 0, matching the per-platform workers' "no pin" behaviour.
+install_uv_pinned() {
+  local _os="${_OVERRIDE_PLATFORM:-$(uname -s)}"
+  case "${_os}" in
+    Darwin) install_uv_pinned_macos ;;
+    Linux) _install_ubuntu_uv_pinned ;;
+    *)
+      log_warn "no pinned uv installer for ${_os}; skipping"
+      return 0
+      ;;
+  esac
+}
+
 # Which shell the ACCOUNT is set to, not which shell is currently running.
 # `${SHELL}` is the invoking shell's environment variable, so a provision run
 # started from zsh reads "already zsh" while the passwd entry still says

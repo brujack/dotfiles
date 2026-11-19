@@ -238,3 +238,23 @@ install_macos_packages() {
   printf "Setting up macOS defaults\n"
   "${HOME}"/scripts/.osx.sh
 }
+
+# Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/
+# (the path resolve_pinned_uv reads). Only Darwin arm64 is pinned; any other
+# arch warns and returns 0. _RELEASE_BIN_DIR is a command prefix only, so it
+# never leaks into the caller's shell. _UV_PINNED_URL/_UV_PINNED_SHA256 are
+# test seams, as in _install_ubuntu_uv_pinned (lib/linux_ubuntu.sh).
+install_uv_pinned_macos() {
+  local _asset _sha
+  # read fails on EOF, which is what an unpinned platform's empty stdout gives.
+  if ! read -r _asset _sha < <(_uv_pinned_asset Darwin "${_UNAME_M}"); then
+    log_warn "no pinned uv for Darwin ${_UNAME_M}; skipping"
+    return 0
+  fi
+  local _url="${_UV_PINNED_URL:-https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz}"
+  # One line, prefix first: tests/setup_env/release_binary.bats derives its
+  # "wrapper call sites end in || log_warn" set from indented direct calls, and
+  # this worker is reached only through install_uv_pinned, whose call sites are
+  # advisory and pinned in tests/setup_env/pinned_uv.bats.
+  _RELEASE_BIN_DIR="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_UV_PINNED_SHA256:-${_sha}}" targz "$(_uv_pinned_version_regex)"
+}

@@ -160,3 +160,158 @@ _make_stub() {
   run -1 --separate-stderr resolve_pinned_uv
   [[ "${stderr}" == *"UV_VER is not set; source lib/constants.sh"* ]]
 }
+
+# ── installers (install_uv_pinned and its platform workers) ──────────────────
+#
+# curl is a per-test shim that logs its argv and copies a real uv-shaped
+# .tar.gz to the -o target; sha256sum, tar and install stay real. HOME and
+# _RELEASE_TMP_ROOT live under BATS_TEST_TMPDIR so nothing touches the real home.
+
+# _install_fixture_setup: builds the archive, sets _UV_PINNED_SHA256 and puts
+# the logging curl shim on PATH. Sets _CURL_LOG and _PINNED_DIR.
+_install_fixture_setup() {
+  local _payload="${BATS_TEST_TMPDIR}/payload/pkg" _tar="${BATS_TEST_TMPDIR}/uv-fixture.tar.gz"
+  mkdir -p "${_payload}"
+  printf '#!/usr/bin/env bash\nprintf "uv 0.13.0 (test)\\n"\n' > "${_payload}/uv"
+  printf '#!/usr/bin/env bash\nprintf "uvx 0.13.0 (test)\\n"\n' > "${_payload}/uvx"
+  chmod +x "${_payload}/uv" "${_payload}/uvx"
+  (cd "${BATS_TEST_TMPDIR}/payload" && tar -czf "${_tar}" pkg)
+  export _UV_PINNED_SHA256
+  _UV_PINNED_SHA256="$(sha256sum "${_tar}" | awk '{print $1}')"
+  _CURL_LOG="${BATS_TEST_TMPDIR}/curl.log"
+  : > "${_CURL_LOG}"
+  local _shim="${BATS_TEST_TMPDIR}/curl-shim"
+  mkdir -p "${_shim}"
+  cat > "${_shim}/curl" << SHIM
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${_CURL_LOG}"
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then out="\$2"; shift 2; continue; fi
+  shift
+done
+cp "${_tar}" "\${out}"
+SHIM
+  chmod +x "${_shim}/curl"
+  export PATH="${_shim}:${PATH}"
+  export _RELEASE_TMP_ROOT="${BATS_TEST_TMPDIR}/tmp-root"
+  mkdir -p "${_RELEASE_TMP_ROOT}"
+  _PINNED_DIR="${HOME}/.local/share/dotfiles/pinned/uv-0.13.0"
+}
+
+@test "install_uv_pinned: Linux x86_64 installs the versioned pinned uv" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -0 install_uv_pinned
+  [ -x "${_PINNED_DIR}/uv" ]
+  run "${_PINNED_DIR}/uv" --version
+  [[ "${output}" == "uv 0.13.0 (test)" ]]
+  grep -qF "uv-x86_64-unknown-linux-gnu.tar.gz" "${_CURL_LOG}"
+  [ ! -e "${_PINNED_DIR}/uvx" ]
+}
+
+@test "install_uv_pinned: Darwin arm64 uses the aarch64-apple-darwin asset" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=Darwin _UNAME_M=arm64 run -0 install_uv_pinned
+  [ -x "${_PINNED_DIR}/uv" ]
+  grep -qF "uv-aarch64-apple-darwin.tar.gz" "${_CURL_LOG}"
+}
+
+@test "install_uv_pinned: Linux aarch64 warns, installs nothing and makes no curl call" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=aarch64 run -0 install_uv_pinned
+  [[ "${output}" == *"no pinned uv for Linux aarch64; skipping"* ]]
+  [ ! -s "${_CURL_LOG}" ]
+  [ ! -e "${_PINNED_DIR}" ]
+}
+
+@test "install_uv_pinned: Darwin x86_64 warns, installs nothing and makes no curl call" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=Darwin _UNAME_M=x86_64 run -0 install_uv_pinned
+  [[ "${output}" == *"no pinned uv for Darwin x86_64; skipping"* ]]
+  [ ! -s "${_CURL_LOG}" ]
+  [ ! -e "${_PINNED_DIR}" ]
+}
+
+@test "install_uv_pinned: an unsupported OS warns and returns 0 without a curl call" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=FreeBSD _UNAME_M=x86_64 run -0 install_uv_pinned
+  [[ "${output}" == *"FreeBSD"* ]]
+  [ ! -s "${_CURL_LOG}" ]
+}
+
+@test "install_uv_pinned: a second run with the pinned version present makes no curl call" {
+  _install_fixture_setup
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -0 install_uv_pinned
+  : > "${_CURL_LOG}"
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -0 install_uv_pinned
+  [[ "${output}" == *"uv 0.13.0 already installed"* ]]
+  [ ! -s "${_CURL_LOG}" ]
+}
+
+@test "install_uv_pinned: a checksum mismatch returns 1 and installs nothing" {
+  _install_fixture_setup
+  export _UV_PINNED_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -1 install_uv_pinned
+  [ ! -e "${_PINNED_DIR}/uv" ]
+}
+
+@test "install_uv_pinned: leaves _RELEASE_BIN_DIR unset in the caller's shell" {
+  _install_fixture_setup
+  unset _RELEASE_BIN_DIR
+  # shellcheck disable=SC2218 # the real function is sourced by load_setup_env; later tests redefine it as a stub
+  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 install_uv_pinned
+  [[ -z ${_RELEASE_BIN_DIR+x} ]]
+  [ -x "${_PINNED_DIR}/uv" ]
+}
+
+# ── call sites ───────────────────────────────────────────────────────────────
+
+_stub_misc_steps() {
+  _install_ubuntu_shellcheck() { :; }
+  _install_ubuntu_tflint() { :; }
+  _install_ubuntu_tfsec() { :; }
+  _install_ubuntu_tfenv() { :; }
+  check_and_install_nala() { :; }
+  sudo() { :; }
+  install_uv_pinned() { printf 'UV_PINNED_CALLED\n'; }
+}
+
+@test "_install_ubuntu_misc: does not call install_uv_pinned without HAS_DEVTOOLS" {
+  _stub_misc_steps
+  unset HAS_DEVTOOLS
+  run -0 _install_ubuntu_misc
+  [[ "${output}" != *"UV_PINNED_CALLED"* ]]
+}
+
+@test "_install_ubuntu_misc: calls install_uv_pinned with HAS_DEVTOOLS and survives its failure" {
+  _stub_misc_steps
+  _install_ubuntu_uv_pinned() { :; }
+  export HAS_DEVTOOLS=1
+  _install_fetched_binary() { :; }
+  run -0 _install_ubuntu_misc
+  [[ "${output}" == *"UV_PINNED_CALLED"* ]]
+  install_uv_pinned() { return 1; }
+  run -0 _install_ubuntu_misc
+  [[ "${output}" == *"pinned uv install failed; skipping"* ]]
+}
+
+@test "run_brew_install: calls install_uv_pinned on macOS with HAS_DEVTOOLS, not without" {
+  export MACOS=1
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brewfile" PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}" DOTFILES=d
+  quiet_which() { return 0; }
+  brew_update() { return 0; }
+  brew_tap_if_missing() { return 0; }
+  install_macos_casks() { return 0; }
+  brew() { :; }
+  install_uv_pinned() { printf 'UV_PINNED_CALLED\n'; }
+  export HAS_DEVTOOLS=1
+  run -0 run_brew_install
+  [[ "${output}" == *"UV_PINNED_CALLED"* ]]
+  unset HAS_DEVTOOLS
+  run -0 run_brew_install
+  [[ "${output}" != *"UV_PINNED_CALLED"* ]]
+  install_uv_pinned() { return 1; }
+  export HAS_DEVTOOLS=1
+  run -0 run_brew_install
+  [[ "${output}" == *"pinned uv install failed; skipping"* ]]
+}

@@ -743,6 +743,9 @@ run_brew_install() {
   brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
     install_macos_casks || return 1
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
+      install_uv_pinned || log_warn "pinned uv install failed; skipping"
+    fi
   fi
   brew cleanup
 }
