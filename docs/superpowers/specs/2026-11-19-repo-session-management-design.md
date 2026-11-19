@@ -142,20 +142,38 @@ Host claude workstation
 because seven tabs opened at once off the LAN would each find no `ControlPath` socket and
 each prompt for the workstation password.
 
-- **On the LAN** (`home-lan-probe` for `<host>` succeeds): `exec ssh -t <host> <cmd>`.
-- **Off the LAN:**
-  - If `ssh -O check workstation.home.conecrazy.ca` reports a live master, it execs
-    `ssh -t <host> <cmd>` directly.
-  - Otherwise the first tab takes the lock `mkdir ~/.ssh/cm-hop.lock` (atomic, and portable
-    to macOS, which has no `flock`). It runs
-    `ssh -fNM -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` (the password
-    prompt appears in that tab), removes the lock, then execs `ssh -t <host> <cmd>`.
-  - Every other tab polls `ssh -O check` once a second for up to 120 s, then execs
-    `ssh -t <host> <cmd>`. On timeout it prints a message and execs anyway, so ssh prompts
-    in that tab.
-  - A lock directory older than 120 s is treated as stale and removed.
-- The probe IPs per host come from the same table the `.ssh/config` `Match` lines use:
-  `claude` 192.168.51.17, `workstation` 192.168.51.12.
+**One hop argv.** The master and its check both use one array,
+`HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)`. That is the exact form
+OpenSSH uses for the inner hop of an off-LAN `ssh claude` (`exec ssh -J home-secure.conecrazy.ca ... -W ... workstation.home.conecrazy.ca`, measured in Step 8 round 2).
+`%C` hashes `%l%h%p%r%j`, so all three resolve to one socket. A LAN-direct `ssh workstation`
+has an empty `%j`, so its socket is different, and a LAN master left behind after the laptop
+moves can never satisfy the off-LAN check. Round 2 measured the first version, whose check
+omitted `-J`: it hashed to a different socket, on OpenSSH 10.2p1 and 10.5p1.
+
+`home-ssh --print-hop-argv` prints `HOP` one element per line. It exists for the controlpath
+test.
+
+**Behaviour:**
+
+- **On the LAN** (`home-lan-probe` succeeds for the target's IP): `exec ssh -t <host> <cmd>`.
+- **Off the LAN:** loop, for at most 300 s in total:
+  1. If `ssh -O check "${HOP[@]}"` succeeds, `exec ssh -t <host> <cmd>`.
+  2. If `mkdir ~/.ssh/cm-hop.lock` succeeds, this process owns the lock:
+     - Install `trap` on EXIT, INT, TERM and HUP that removes the lock.
+     - Run `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`. The password prompt appears in
+       this tab.
+     - Remove the lock on success or failure, then `exec ssh -t <host> <cmd>`. On failure,
+       ssh prompts again in this tab.
+  3. Otherwise, the first time, print
+     `home-ssh: waiting for the workstation password in another tab`. Then remove the lock
+     if `find ~/.ssh/cm-hop.lock -maxdepth 0 -mmin +5` reports it older than 5 minutes
+     (BSD and GNU `find` both support this), sleep 1 s, and repeat.
+- After 300 s it prints `home-ssh: no shared connection after 300 s; connecting directly`
+  and execs ssh anyway.
+- A waiter that sees the lock vanish with no live master (a cancelled or failed prompt)
+  takes the lock on its next pass and prompts in its own tab.
+- The probe IPs per host (`claude` 192.168.51.17, `workstation` 192.168.51.12) must equal
+  the ones in the `.ssh/config` `Match` lines; a test asserts this.
 
 ### 4. Per-host session list (`config/repo-sessions.sh`)
 
@@ -179,7 +197,8 @@ Description=Create repo tmux sessions (repo-session --all)
 Type=oneshot
 RemainAfterExit=yes
 KillMode=process
-ExecStartPre=-/bin/sh -c 'i=0; while [ "$i" -lt 60 ] && ! nc -z -w 1 api.anthropic.com 443; do i=$((i+1)); sleep 1; done'
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/timeout 60 /bin/sh -c 'until nc -z -w 1 api.anthropic.com 443; do sleep 1; done'
 ExecStart=-%h/.local/bin/repo-session --detached --all
 
 [Install]
@@ -197,6 +216,11 @@ WantedBy=default.target
 - **`ExecStartPre=-` waits up to 60 s for `api.anthropic.com:443`.** A user unit cannot
   order itself after the system's `network-online.target`. The `-` makes a timeout
   non-fatal, and the panes still fall back to `exec zsh`.
+  - The wait is bounded by `timeout 60`, not by a pass count. With a slow resolver, each
+    `nc` pass can take seconds.
+  - `TimeoutStartSec=180` sits above the 60 s wait plus `ExecStart`. The user manager's
+    default is 90 s, and a start timeout fails the unit before `ExecStart` runs (measured
+    with a transient unit in Step 8 round 2).
 
 ### 6. Install (`setup_env.sh -t setup_user`)
 
@@ -266,16 +290,26 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
     `proxyjump` line.
   - Probe exit 1: `claude` carries
     `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`.
-  - **Probe absent** (no stub file): no `proxyjump` line. This is the failure-direction
-    guard.
+  - **Probe absent** (no stub file): `hostname <host>.home.conecrazy.ca` and no
+    `proxyjump` line. This is the failure-direction guard. The `hostname` pin stops it
+    passing on empty `ssh -G` output.
+  - **ControlPath:** for the argv printed by `home-ssh --print-hop-argv`, `ssh -G` gives
+    the same `controlpath` as for `-J home-secure.conecrazy.ca workstation.home.conecrazy.ca`,
+    and a different one from `ssh -G workstation.home.conecrazy.ca` (LAN direct).
   - The same three cases for `workstation`.
 - **bats `home-ssh`** (`ssh` and `home-lan-probe` mocked):
   - LAN: one `ssh -t` call, no `-O check`.
   - Off-LAN with a live master: no `-fNM`.
-  - Off-LAN with none: the first caller runs `-fNM` and removes the lock. A second caller
-    started while the lock exists waits, and makes no `-fNM` call.
-  - A stale lock older than 120 s is removed.
-  - The timeout path prints its message and still execs ssh.
+  - Off-LAN with none: the first caller runs `-fNM -o ControlPersist=10m` with the `HOP`
+    argv, and removes the lock.
+  - A caller that finds the lock prints the waiting message, makes no `-fNM` call while the
+    lock exists, and execs once the mocked check succeeds.
+  - The owner's lock is removed when it is killed with TERM, and when `-fNM` exits
+    non-zero.
+  - A lock older than 5 minutes is removed (set its mtime with `touch -t`).
+  - A waiter whose lock vanishes without a master takes the lock and runs `-fNM`.
+  - The 300 s timeout path, with the clock seam shortened, prints its message and execs.
+  - Its probe IP table equals the IPs in `.ssh/config`'s `Match` lines.
   - A guard asserts that no `Host` pattern ending `-home-tmux` remains.
 - **Warp**: every file under `.warp/launch_configurations/` parses as YAML. In each config,
   the set of `repo-session` arguments equals the union of the `REPO_SESSIONS` lists, so the
@@ -307,18 +341,22 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R8.** `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C`, `ControlPersist 10m` and `ServerAliveInterval 30` for `workstation.home.conecrazy.ca` and `workstation`.
 - **R9.** `.ssh/config` contains no `Host` pattern ending in `-home-tmux` and no `RemoteCommand`.
 - **R10.** `config/repo-sessions.sh` maps `claude` to `etch-cli etch-config dotfiles ai-config ai-devops math` and `workstation` to `terraform_ansible/ansible`.
-- **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `KillMode=process`, an `ExecStartPre=-` that waits at most 60 s for `nc -z -w 1 api.anthropic.com 443`, `ExecStart=-%h/.local/bin/repo-session --detached --all` and `WantedBy=default.target`.
+- **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `KillMode=process`, `TimeoutStartSec=180`, an `ExecStartPre=-/usr/bin/timeout 60 /bin/sh -c 'until nc -z -w 1 api.anthropic.com 443; do sleep 1; done'`, `ExecStart=-%h/.local/bin/repo-session --detached --all` and `WantedBy=default.target`.
 - **R12.** `setup_user` links `repo-session`, `home-lan-probe` and `home-ssh` into `~/.local/bin` on every machine. On a Linux host with a `REPO_SESSIONS` entry, it also links the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`.
 - **R13.** On a host with a `REPO_SESSIONS` entry, doctor FAILs `repo-sessions` with remedy `sudo loginctl enable-linger "$USER"` when Linger is off, and with remedy `./setup_env.sh -t setup_user` when the unit is not enabled. It passes otherwise, and is silent on a host without an entry.
 - **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `~/.local/bin/home-ssh <host> .local/bin/repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists, and no `exec` line contains `repo-session` without the `.local/bin/` prefix. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
 - **R15.** The `lib/launch_agents.sh` comment reads "the Studio is always up" and no longer says "the Studio is the tmux host".
 - **R16.** `.ssh/config` gives the aliases `claude` and `workstation` `User bruce` and `IdentityFile ~/.ssh/home`.
-- **R17.** `bin/home-ssh <host> <cmd...>` execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or `ssh -O check workstation.home.conecrazy.ca` succeeds. Otherwise, a caller that creates `~/.ssh/cm-hop.lock` with `mkdir` runs `ssh -fNM -J home-secure.conecrazy.ca workstation.home.conecrazy.ca`, removes the lock and execs. A caller that finds the lock polls `ssh -O check` once a second for at most 120 s and then execs, printing a message on timeout. A lock older than 120 s is removed.
+- **R17.** `bin/home-ssh <host> <cmd...>` uses one array `HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)` for both `ssh -O check "${HOP[@]}"` and `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`, and `home-ssh --print-hop-argv` prints it one element per line. It execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or the check succeeds.
+- **R18.** Off the LAN without a live master, the `home-ssh` caller that creates `~/.ssh/cm-hop.lock` with `mkdir` traps EXIT, INT, TERM and HUP to remove it, runs the `-fNM` master, and removes the lock whether `-fNM` succeeds or fails before exec'ing. A caller that finds the lock prints `home-ssh: waiting for the workstation password in another tab` once, removes a lock older than 5 minutes (`find ~/.ssh/cm-hop.lock -maxdepth 0 -mmin +5`), retries once a second, takes the lock itself if it vanishes with no master, and after 300 s prints `home-ssh: no shared connection after 300 s; connecting directly` and execs.
+- **R19.** For the argv `home-ssh --print-hop-argv` prints, `ssh -G` resolves the same `controlpath` as `ssh -G -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` and a different one from `ssh -G workstation.home.conecrazy.ca`.
 - **V1.** After a reboot of `claude` with the unit installed, `tmux ls` lists all six sessions, each pane running `claude`.
 - **V2.** From the laptop off the home LAN, a second session tab within 10 minutes of the first does not prompt for the workstation password.
 - **V3.** From the Studio, `ssh -G claude` shows no `proxyjump`; from reception, it shows the Cloudflare chain.
 - **V4.** From the laptop off the home LAN, opening `laptop.yaml` with no `~/.ssh/cm-*` socket prompts for the workstation password exactly once, and all seven tabs attach.
 - **V5.** The master `home-ssh` starts and the jump connection inside `ssh claude` use the same `~/.ssh/cm-%C` socket (`ls ~/.ssh/cm-*` shows one socket for the hop).
+- **V6.** Off the LAN, after the last tab closes, `ssh -O check -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` still succeeds at 9 minutes and fails by 11 minutes (master lifetime is `ControlPersist 10m`).
+- **V7.** Timing of a fresh `laptop.yaml` open off the LAN: tabs 2-7 attach within 10 s of the password being entered in tab 1.
 - **N1.** No session is created, killed or restarted by `setup_user` or by installing the unit; existing sessions are left alone.
 - **N2.** No launch config runs `setup_env.sh -t update` automatically.
 - **N3.** No `claude --continue` or `--resume` in any session start.
@@ -352,3 +390,11 @@ Disposition: Addressed (operator, 2026-11-19) — (1) routing inverted, default 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2 (reviewed at `e88dd010`)
+
+Goal-Fit — Finding: `home-ssh`'s `ssh -O check workstation.home.conecrazy.ca` omits `-J`, so `%C` (`%l%h%p%r%j`) differs from the master's; tabs 2-7 stall 120 s, later tabs re-prompt (measured, OpenSSH 10.2p1). Core worth building. Assumption: reception runs `setup_user` (settled by operator: yes). Disposition: Addressed (operator, 2026-11-19) — one `HOP` argv for check and master, real `ssh -G` controlpath test (component 3b, R17, R19).
+
+Ergonomics — Finding: same ControlPath mismatch (measured on 10.2p1 and Studio 10.5p1); prompt tab unpredictable; Ctrl-C leaks the lock; master lifetime unspecified; absent-probe test passes on empty output. Assumption: Warp launches tab commands concurrently (V7 measures). Disposition: Addressed (operator, 2026-11-19, fix home-ssh now rather than descope) — trap on EXIT/INT/TERM/HUP and on `-fNM` failure, waiter message, `-o ControlPersist=10m` plus V6, `hostname` pinned in the absent-probe case (R18, V6).
+
+Risk — Finding: (1) same ControlPath mismatch, plus a LAN master could satisfy the old check after a move; (2) user manager `DefaultTimeoutStartUSec=1min 30s` fails the unit before `ExecStart` when a count-bounded wait runs long (measured with a transient unit); `KillMode=process` alone confirmed to keep tmux alive on failure and `stop`. Minor: stale-lock check unspecified per platform, probe IPs duplicated. Assumption: `nc` fails fast at boot when it fails. Disposition: Addressed (operator, 2026-11-19) — `-J` in the check separates LAN and off-LAN sockets (R19); `TimeoutStartSec=180` with a `timeout 60` wall-clock wait (R11); portable `find -mmin +5` (R18); IP-table equality test.
