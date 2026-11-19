@@ -548,3 +548,53 @@ _shim_fail() {
   [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/gitleaks/gitleaks/releases/tags/v1.2.3" ]
   [ "$(_val GITLEAKS_SHA256_FOR_VER)" = "1.2.3" ]
 }
+
+@test "uv: both release-asset digests and _FOR_VER are written to the right variables" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 0 ]
+  [ "$(_val UV_SHA256_LINUX_AMD64)" = "${DA}" ]
+  [ "$(_val UV_SHA256_DARWIN_ARM64)" = "${DB}" ]
+  [ "$(_val UV_SHA256_FOR_VER)" = "1.2.3" ]
+  [[ "$output" == *"querying https://github.com/astral-sh/uv/releases/download/1.2.3/uv-x86_64-unknown-linux-gnu.tar.gz"* ]]
+  [[ "$output" == *"querying https://github.com/astral-sh/uv/releases/download/1.2.3/uv-aarch64-apple-darwin.tar.gz"* ]]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/astral-sh/uv/releases/tags/1.2.3" ]
+}
+
+@test "uv: there is no Linux arm64 pin to refresh" {
+  [ -z "$(_val UV_SHA256_LINUX_ARM64)" ]
+  run grep -c 'UV_SHA256_LINUX_ARM64' "${C}"
+  [ "$output" = "0" ]
+}
+
+@test "uv: a changed digest at an unchanged version is refused and writes nothing" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER="1.2.3"/' \
+    -e "s/^UV_SHA256_DARWIN_ARM64=.*/UV_SHA256_DARWIN_ARM64=\"${OLD}\"/" "${C}"
+  _snapshot
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:$(_val UV_SHA256_LINUX_AMD64)" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"uv: darwin-arm64 asset changed at unchanged version 1.2.3: pin ${OLD}, API ${DB}"* ]]
+  _unchanged
+}
+
+@test "default selects a stale uv when the other tools are current" {
+  sed -i.bak -E -e 's/^(KIND|YQ|SHELLCHECK|GITLEAKS)_SHA256_FOR_VER=.*/\1_SHA256_FOR_VER="1.2.3"/' \
+    -e 's/^(KIND|YQ|SHELLCHECK|GITLEAKS)_VER=.*/\1_VER="1.2.3"/' \
+    -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}"
+  [ "$status" -eq 0 ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/astral-sh/uv/releases/tags/1.2.3" ]
+  [ "$(_val UV_SHA256_FOR_VER)" = "1.2.3" ]
+}
+
+@test "uv is accepted as a tool and named in the usage line" {
+  run "${SCRIPT}" --constants "${C}" --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"kind|yq|shellcheck|gitleaks|uv"* ]]
+}
