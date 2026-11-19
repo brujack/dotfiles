@@ -72,12 +72,15 @@ setup() {
       alias \"\${_a}\" > /dev/null && print -r -- \"present: \${_a}\"
     done
     whence -w tssh > /dev/null && print -r -- 'present: tssh'
+    # Positive control: 2_functions.zsh loaded, so a missing tssh is not a failed source.
+    whence -w sshu > /dev/null || print -r -- 'not loaded: sshu'
     true
   "
   [ "$status" -eq 0 ]
   [ "${lines[0]}" = "prox-1='ssh root@prox-1.home.conecrazy.ca'" ]
   [ "${lines[1]}" = "prox-2='ssh root@prox-2.home.conecrazy.ca'" ]
   [[ "$output" != *"present:"* ]]
+  [[ "$output" != *"not loaded:"* ]]
   [ "${#lines[@]}" -eq 2 ]
 }
 
