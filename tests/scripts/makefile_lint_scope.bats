@@ -1387,7 +1387,7 @@ _require_tools_make() {
 
 @test "REQUIRE_TOOLS=1 refusal names where CI actually gets each tool" {
   # No CI step installs python3 (the runner image ships it), so its refusal
-  # must not send the reader to an install step, as the uv refusal rightly does.
+  # must not send the reader to an install step, as shellcheck's refusal rightly does.
   local _target _override _noun _remedy _n=0
   while IFS='|' read -r _target _override _noun _remedy; do
     _require_tools_make 1 "${_target}" "${_override}"
