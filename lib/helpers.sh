@@ -522,6 +522,29 @@ install_uv_pinned() {
   esac
 }
 
+# _install_uv_pinned_for <Linux|Darwin>
+# Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/ (the
+# path resolve_pinned_uv reads) via _install_pinned_release_binary. A platform
+# with no pin warns and returns 0. _RELEASE_BIN_DIR is a command prefix only, so
+# it never leaks into the caller's shell. _UV_PINNED_URL/_UV_PINNED_SHA256 are
+# honoured only under bats (the _HASHICORP_SOURCE_DIR precedent): an ambient
+# export must never replace the in-repo digest on a real download.
+_install_uv_pinned_for() {
+  local _os="$1" _asset _sha
+  # read fails on EOF, which is what an unpinned platform's empty stdout gives.
+  if ! read -r _asset _sha < <(_uv_pinned_asset "${_os}" "${_UNAME_M}"); then
+    log_warn "no pinned uv for ${_os} ${_UNAME_M}; skipping"
+    return 0
+  fi
+  local _url="https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz"
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    _url="${_UV_PINNED_URL:-${_url}}"
+    _sha="${_UV_PINNED_SHA256:-${_sha}}"
+  fi
+  local _dir="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}"
+  _RELEASE_BIN_DIR="${_dir}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)"
+}
+
 # Which shell the ACCOUNT is set to, not which shell is currently running.
 # `${SHELL}` is the invoking shell's environment variable, so a provision run
 # started from zsh reads "already zsh" while the passwd entry still says

@@ -255,13 +255,20 @@ SHIM
   [ ! -e "${_PINNED_DIR}/uv" ]
 }
 
-@test "install_uv_pinned: leaves _RELEASE_BIN_DIR unset in the caller's shell" {
-  _install_fixture_setup
-  unset _RELEASE_BIN_DIR
-  # shellcheck disable=SC2218 # the real function is sourced by load_setup_env; later tests redefine it as a stub
-  _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 install_uv_pinned
-  [[ -z ${_RELEASE_BIN_DIR+x} ]]
-  [ -x "${_PINNED_DIR}/uv" ]
+# Both platforms run the shared body; each is driven so a gate or leak in it is
+# caught whichever entry point is mutated.
+@test "install_uv_pinned: leaves _RELEASE_BIN_DIR unset in the caller's shell on Linux and Darwin" {
+  local _pair _os _m
+  for _pair in Linux:x86_64 Darwin:arm64; do
+    _os="${_pair%%:*}" _m="${_pair##*:}"
+    _install_fixture_setup
+    unset _RELEASE_BIN_DIR
+    rm -rf "${HOME}/.local"
+    # shellcheck disable=SC2218 # the real function is sourced by load_setup_env; later tests redefine it as a stub
+    _OVERRIDE_PLATFORM="${_os}" _UNAME_M="${_m}" install_uv_pinned
+    [[ -z ${_RELEASE_BIN_DIR+x} ]]
+    [ -x "${_PINNED_DIR}/uv" ]
+  done
 }
 
 # ── call sites ───────────────────────────────────────────────────────────────
@@ -315,7 +322,7 @@ _stub_misc_steps() {
   [[ "${output}" == *"pinned uv install failed; skipping"* ]]
 }
 
-@test "install_macos_packages: calls install_uv_pinned_macos with HAS_DEVTOOLS, not without, and survives its failure" {
+@test "install_macos_packages: calls install_uv_pinned with HAS_DEVTOOLS, not without, and survives its failure" {
   export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brewfile" PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}" DOTFILES=d
   mkdir -p "${BATS_TEST_TMPDIR}/fakebin" "${HOME}/scripts"
   printf '#!/usr/bin/env bash\nexit 0\n' > "${BATS_TEST_TMPDIR}/fakebin/brew"
@@ -326,26 +333,30 @@ _stub_misc_steps() {
   brew_tap_if_missing() { return 0; }
   install_macos_casks() { return 0; }
   sudo() { :; }
-  install_uv_pinned_macos() { printf 'UV_PINNED_CALLED\n'; }
+  install_uv_pinned() { printf 'UV_PINNED_CALLED\n'; }
   export HAS_DEVTOOLS=1
   run -0 install_macos_packages
   [[ "${output}" == *"UV_PINNED_CALLED"* ]]
   unset HAS_DEVTOOLS
   run -0 install_macos_packages
   [[ "${output}" != *"UV_PINNED_CALLED"* ]]
-  install_uv_pinned_macos() { return 1; }
+  install_uv_pinned() { return 1; }
   export HAS_DEVTOOLS=1
   run -0 install_macos_packages
   [[ "${output}" == *"pinned uv install failed; skipping"* ]]
 }
 
-@test "install_uv_pinned: the URL and digest overrides are ignored outside bats" {
-  _install_fixture_setup
-  export _UV_PINNED_SHA256="${_UV_PINNED_SHA256}" _UV_PINNED_URL="https://example.invalid/evil.tar.gz"
-  # Empty BATS_TEST_TMPDIR for the call only; the override digest matches the
-  # fixture, so only the in-repo constants digest can refuse it.
-  BATS_TEST_TMPDIR='' _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -1 install_uv_pinned
-  grep -qF "https://github.com/astral-sh/uv/releases/download/0.13.0/uv-x86_64-unknown-linux-gnu.tar.gz" "${_CURL_LOG}"
-  run ! grep -qF "evil.tar.gz" "${_CURL_LOG}"
-  [ ! -e "${_PINNED_DIR}/uv" ]
+@test "install_uv_pinned: the URL and digest overrides are ignored outside bats on Linux and Darwin" {
+  local _row _os _m _asset
+  for _row in Linux:x86_64:uv-x86_64-unknown-linux-gnu Darwin:arm64:uv-aarch64-apple-darwin; do
+    IFS=: read -r _os _m _asset <<< "${_row}"
+    _install_fixture_setup
+    export _UV_PINNED_SHA256="${_UV_PINNED_SHA256}" _UV_PINNED_URL="https://example.invalid/evil.tar.gz"
+    # Empty BATS_TEST_TMPDIR for the call only; the override digest matches the
+    # fixture, so only the in-repo constants digest can refuse it.
+    BATS_TEST_TMPDIR='' _OVERRIDE_PLATFORM="${_os}" _UNAME_M="${_m}" run -1 install_uv_pinned
+    grep -qF "https://github.com/astral-sh/uv/releases/download/0.13.0/${_asset}.tar.gz" "${_CURL_LOG}"
+    run ! grep -qF "evil.tar.gz" "${_CURL_LOG}"
+    [ ! -e "${_PINNED_DIR}/uv" ]
+  done
 }

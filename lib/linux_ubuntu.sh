@@ -2212,27 +2212,9 @@ _install_ubuntu_shellcheck() {
     "${_SHELLCHECK_SHA256:-${_sha}}" tarxz "^version: ${SHELLCHECK_VER//./\\.}$"
 }
 
-# Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/
-# (the path resolve_pinned_uv reads). _RELEASE_BIN_DIR is set as a command
-# prefix only, so it never leaks into the caller's shell. Only Linux x86_64 is
-# pinned; any other arch warns and returns 0. _UV_PINNED_URL/_UV_PINNED_SHA256
-# are test seams, like _SHELLCHECK_URL above.
+# Linux entry for the shared pinned uv installer (_install_uv_pinned_for, lib/helpers.sh).
 _install_ubuntu_uv_pinned() {
-  local _asset _sha
-  # read fails on EOF, which is what an unpinned platform's empty stdout gives.
-  if ! read -r _asset _sha < <(_uv_pinned_asset Linux "${_UNAME_M}"); then
-    log_warn "no pinned uv for Linux ${_UNAME_M}; skipping"
-    return 0
-  fi
-  local _url="https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz"
-  # Overrides are honoured only under bats (the _HASHICORP_SOURCE_DIR precedent):
-  # an ambient export must never replace the in-repo digest on a real download.
-  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
-    _url="${_UV_PINNED_URL:-${_url}}"
-    _sha="${_UV_PINNED_SHA256:-${_sha}}"
-  fi
-  local _dir="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}"
-  _RELEASE_BIN_DIR="${_dir}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)"
+  _install_uv_pinned_for Linux
 }
 
 _install_ubuntu_tflint() {
@@ -2407,7 +2389,7 @@ _install_ubuntu_misc() {
     fi
   fi
 
-  # Each is self-gated on HAS_DEVTOOLS and advisory, as the dotnet install above.
+  # The shellcheck, tflint, tfsec and tfenv installs self-gate on HAS_DEVTOOLS; the uv install is gated by this caller. All are advisory.
   _install_ubuntu_shellcheck || log_warn "shellcheck install failed; skipping"
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     _install_ubuntu_uv_pinned || log_warn "pinned uv install failed; skipping"
