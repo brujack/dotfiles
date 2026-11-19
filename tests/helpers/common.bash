@@ -55,6 +55,12 @@ load_mocks() {
   # and a suite that never calls load_mocks at all (e.g.
   # tests/setup_env/git_sync.bats) gets no protection from this seam.
   export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
+  # run_update's pinned-uv section runs install_uv_pinned on any HAS_DEVTOOLS
+  # profile, which a developer shell exports and CI does not. Without this
+  # default a full run_update test would download uv for real on a dev box
+  # (tdd.md E2). Tests of the production path empty BATS_TEST_TMPDIR for the
+  # call and stub the function.
+  export _UV_PINNED_INSTALLER="${REPO_ROOT}/tests/stubs/uv-pinned-install-stub"
   # update_rust looks for Homebrew's keg-only rustup ahead of PATH, and the
   # real kegs exist on provisioned machines (/opt/homebrew on a mac,
   # /home/linuxbrew on claude), so without this default an update_rust test

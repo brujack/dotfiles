@@ -1529,7 +1529,14 @@ run_update() {
       _update_skip "pinned-uv" "no pinned uv for ${_uv_os} ${_UNAME_M}"
     else
       _update_record_start "pinned-uv"
-      install_uv_pinned 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pinned-uv"
+      # Test seam (precedent: _CARGO_BIN, same BATS gate as the uv URL and
+      # digest seams): honoured only under bats, so a production environment
+      # variable can never swap the installer.
+      local _uv_installer="install_uv_pinned"
+      if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_UV_PINNED_INSTALLER:-} ]]; then
+        _uv_installer="${_UV_PINNED_INSTALLER}"
+      fi
+      "${_uv_installer}" 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pinned-uv"
       local _pinned_uv_rc="${PIPESTATUS[0]}"
       _update_record_end "pinned-uv" "${_pinned_uv_rc}"
     fi

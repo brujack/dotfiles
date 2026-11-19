@@ -36,9 +36,6 @@ setup() {
   # Same trap for HAS_RUST: the rust section now SKIPs without it, so a test that
   # inherits it from a developer profile passes there and fails on CI.
   unset HAS_RUST
-  # Same trap for HAS_DEVTOOLS: a full run_update reaches the pinned-uv section,
-  # which on a devtools profile would run the real install_uv_pinned (network).
-  unset HAS_DEVTOOLS
   # PYENV_ROOT is exported for real by this developer session's own pyenv
   # shell integration (/Users/bruce/.pyenv), and run_update's new
   # pyenv-shims section resolves _OVERRIDE_PYENV_ROOT, then PYENV_ROOT,
@@ -4595,17 +4592,18 @@ _flagless_pin_capabilities() {
 
 # ── run_update: pinned-uv section ─────────────────────────────────────────────
 
-# A full run (no flag) with every pinned-uv input controlled by the caller.
-# The recording stub proves whether the installer was reached.
+# A full run (no flag). The installer is load_mocks' uv-pinned-install-stub,
+# driven by MOCK_UV_PINNED_INSTALL_EXIT and recorded in MOCK_CALLS_FILE.
 _pinned_uv_full_run() {
   export MACOS=1
   unset LINUX UBUNTU
   unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
-  export _PINNED_UV_MARKER="${BATS_TEST_TMPDIR}/pinned-uv.ran"
-  rm -f "${_PINNED_UV_MARKER}"
-  # shellcheck disable=SC2329 # invoked by run_update's pinned-uv section
-  install_uv_pinned() { touch "${_PINNED_UV_MARKER}"; return "${_PINNED_UV_STUB_RC:-0}"; }
+  : > "${MOCK_CALLS_FILE}"
+}
+
+_pinned_uv_installer_calls() {
+  grep -c '^uv-pinned-install$' "${MOCK_CALLS_FILE}" || true
 }
 
 @test "run_update: pinned-uv skips without HAS_DEVTOOLS" {
@@ -4614,7 +4612,7 @@ _pinned_uv_full_run() {
   run_update || true
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "HAS_DEVTOOLS not set" ]
-  [ ! -e "${_PINNED_UV_MARKER}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
 }
 
 @test "run_update: pinned-uv skips on a platform with no pin" {
@@ -4624,16 +4622,16 @@ _pinned_uv_full_run() {
   run_update || true
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "no pinned uv for Linux aarch64" ]
-  [ ! -e "${_PINNED_UV_MARKER}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
 }
 
 @test "run_update: pinned-uv records OK when the installer returns 0" {
   _pinned_uv_full_run
   export HAS_DEVTOOLS=1
   export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
-  export _PINNED_UV_STUB_RC=0
+  export MOCK_UV_PINNED_INSTALL_EXIT=0
   run_update || true
-  [ -e "${_PINNED_UV_MARKER}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "OK" ]
 }
 
@@ -4641,10 +4639,10 @@ _pinned_uv_full_run() {
   _pinned_uv_full_run
   export HAS_DEVTOOLS=1
   export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
-  export _PINNED_UV_STUB_RC=1
+  export MOCK_UV_PINNED_INSTALL_EXIT=1
   local _rc=0
   run_update || _rc=$?
-  [ -e "${_PINNED_UV_MARKER}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 1 ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "FAIL" ]
   [ "${_rc}" -eq 1 ]
 }
@@ -4657,7 +4655,21 @@ _pinned_uv_full_run() {
   run_update || true
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
   [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "flag not set" ]
-  [ ! -e "${_PINNED_UV_MARKER}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
+}
+
+@test "run_update: pinned-uv ignores _UV_PINNED_INSTALLER outside bats" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  local _fn_marker="${BATS_TEST_TMPDIR}/real-installer.ran"
+  # shellcheck disable=SC2329 # invoked by run_update's pinned-uv section
+  install_uv_pinned() { touch "${_fn_marker}"; }
+  local _saved="${BATS_TEST_TMPDIR}"
+  BATS_TEST_TMPDIR="" run_update || true
+  BATS_TEST_TMPDIR="${_saved}"
+  [ -e "${_fn_marker}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
 }
 
 @test "_UPDATE_SECTION_ORDER lists pinned-uv immediately after cargo-tools" {

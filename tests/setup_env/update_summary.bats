@@ -1128,10 +1128,10 @@ _nv_reboot_count() {
   [[ "${_joined}" == *"git-hooks aws rust"* ]]
 }
 
-@test "_UPDATE_SECTION_ORDER includes cargo-tools immediately after rust" {
+@test "_UPDATE_SECTION_ORDER includes cargo-tools immediately after rust, then pinned-uv" {
   local _joined
   _joined="${_UPDATE_SECTION_ORDER[*]}"
-  [[ "${_joined}" == *"rust cargo-tools oh-my-zsh"* ]]
+  [[ "${_joined}" == *"rust cargo-tools pinned-uv oh-my-zsh"* ]]
 }
 
 @test "_UPDATE_SECTION_ORDER includes zsh-autosuggestions immediately after oh-my-zsh" {
