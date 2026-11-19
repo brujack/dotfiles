@@ -1,5 +1,8 @@
 # Pinned uv for the requirements renderings and the lock check
 
+
+- **Approved:** 2026-11-19
+
 ## Problem
 
 `make check-requirements-ci` renders the five `requirements-ci*.txt` files from `uv.lock`
@@ -315,4 +318,4 @@ Reviewed at commit: `d995b328` (changed sections only)
 
 Finding: `make install-pinned-uv` did not source `lib/helpers.sh` (or `lib/macos.sh` on Darwin); fail-closed contradicts the skip and refuse loops in `makefile_lint_scope.bats` (counts 18 and 6) and its `command -v uv` inert guard; the direct-target test had no network seam; the `make lint` no-call test lacked a positive control. CI wiring (three jobs) confirmed correct; no R contradicts an N.
 Assumption: a brew-locked new marker-bearing dependency passes 0.13.0's `lock --check`. Checked with `wmi`: rc 0, five OK.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19): all four folded into the spec at `a7e4143d`.
