@@ -41,6 +41,8 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      PINNED_UV_BIN: /usr/local/bin/uv
     steps:
       # A dispatch can name any ref; the refresh must be master plus a lock-only
       # change, so refuse anything else before touching the tree.

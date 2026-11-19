@@ -456,21 +456,33 @@ PY
   [ "${_n}" -ge 2 ]
 }
 
-@test "check fails when uv cannot be resolved, distinctly from drift" {
-  # cmd_check's third failure path: _render itself fails. Asserts the uv
-  # message rather than merely non-zero, because MISSING and DRIFT also
-  # exit non-zero and would satisfy a bare status check.
-  export UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
-  run "${SCRIPT}" check
+# Asserts the failure is a resolution failure, not drift or a missing file:
+# those also exit non-zero and would satisfy a bare status check.
+_assert_resolution_failure() {
+  local _msg="$1"
   [ "${status}" -ne 0 ]
-  if [[ "${output}" != *"UV_BIN is set to"* ]]; then
-    printf "did not fail on uv resolution: %s\n" "${output}" >&2
+  if [[ "${output}" != *"${_msg}"* ]]; then
+    printf "did not fail on uv resolution (wanted %s): %s\n" "${_msg}" "${output}" >&2
     return 1
   fi
   if [[ "${output}" == *"DRIFT"* || "${output}" == *"MISSING"* ]]; then
     printf "reported drift/missing when the real cause was uv resolution\n" >&2
     return 1
   fi
+}
+
+@test "check fails when the pinned uv is absent, distinctly from drift" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/no-such-uv"
+  run "${SCRIPT}" check
+  _assert_resolution_failure "pinned uv not found"
+}
+
+@test "check fails when the pinned uv is not executable, distinctly from drift" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/not-exec-uv"
+  printf '#!/usr/bin/env bash\n' > "${PINNED_UV_BIN}"
+  chmod -x "${PINNED_UV_BIN}"
+  run "${SCRIPT}" check
+  _assert_resolution_failure "is not executable"
 }
 
 @test "check treats an empty rendering as drift, not as a match" {
@@ -487,9 +499,10 @@ PY
 # still write some stdout before it dies.
 _failing_uv() {
   local _stub="${BATS_TEST_TMPDIR}/failing-uv"
-  printf '#!/usr/bin/env bash\nprintf "partial==1.0\\n"\nprintf "uv: export failed\\n" >&2\nexit 2\n' > "${_stub}"
+  # Answers --version as the pinned uv so resolution passes and only the export fails.
+  printf '#!/usr/bin/env bash\n[[ "$1" == --version ]] && { printf "uv 0.13.0 (stub)\\n"; exit 0; }\nprintf "partial==1.0\\n"\nprintf "uv: export failed\\n" >&2\nexit 2\n' > "${_stub}"
   chmod +x "${_stub}"
-  export UV_BIN="${_stub}"
+  export PINNED_UV_BIN="${_stub}"
 }
 
 @test "sync fails and leaves the rendering untouched when uv export fails" {
@@ -511,4 +524,56 @@ _failing_uv() {
   [ "${status}" -ne 0 ]
   [[ "${output}" == *"FAILED to render group test-lint"* ]]
   [[ "${output}" != *"OK: "*"requirements-ci.txt matches"* ]]
+}
+
+# A stub uv that answers --version as the pinned release and, for `export`,
+# cats the committed rendering of the requested group. With a second argument
+# it rewrites the runtime group's pywinpty marker to the pre-fix form, so its
+# output differs from the committed file in exactly one line.
+_stub_uv() {
+  local _path="$1" _drift="${2:-}" _body
+  _body='[[ "$1" == --version ]] && { printf "uv 0.13.0 (stub)\n"; exit 0; }
+_g=""
+while [[ $# -gt 0 ]]; do
+  [[ "$1" == --only-group ]] && _g="$2"
+  shift
+done
+case "${_g}" in
+  test-lint)   _f=requirements-ci.txt ;;
+  runtime)     _f=requirements-runtime-ci.txt ;;
+  ci-test)     _f=requirements-ci-test.txt ;;
+  ci-mutation) _f=requirements-ci-mutation.txt ;;
+  ci-audit)    _f=requirements-ci-audit.txt ;;
+  *) exit 3 ;;
+esac
+'
+  if [[ -n "${_drift}" ]]; then
+    _body+="sed \"s/os_name == 'nt' and sys_platform != 'linux' /os_name == 'nt' /\" \"${REPO_ROOT}/\${_f}\""
+  else
+    _body+="cat \"${REPO_ROOT}/\${_f}\""
+  fi
+  printf '#!/usr/bin/env bash\n%s\n' "${_body}" > "${_path}"
+  chmod +x "${_path}"
+}
+
+@test "check reads the pinned uv, not PATH" {
+  mkdir -p "${BATS_TEST_TMPDIR}/pathbin"
+  _stub_uv "${BATS_TEST_TMPDIR}/pathbin/uv" drift
+  _stub_uv "${BATS_TEST_TMPDIR}/pinned-uv"
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/pinned-uv"
+  PATH="${BATS_TEST_TMPDIR}/pathbin:${PATH}" run "${SCRIPT}" check
+  [ "${status}" -eq 0 ]
+  [ "$(grep -c '^OK: ' <<< "${output}")" -eq 5 ]
+}
+
+@test "check fails on drift when the pinned uv is the drifting one" {
+  # Swap control: same stubs, roles reversed. Proves the test above passes
+  # because the pinned uv was read, not because the stubs agree.
+  mkdir -p "${BATS_TEST_TMPDIR}/pathbin"
+  _stub_uv "${BATS_TEST_TMPDIR}/pathbin/uv"
+  _stub_uv "${BATS_TEST_TMPDIR}/pinned-uv" drift
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/pinned-uv"
+  PATH="${BATS_TEST_TMPDIR}/pathbin:${PATH}" run "${SCRIPT}" check
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"DRIFT: "*"requirements-runtime-ci.txt"* ]]
 }

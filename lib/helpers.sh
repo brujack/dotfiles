@@ -505,6 +505,46 @@ install_bats() {
   fi
 }
 
+# install_uv_pinned
+# Installs the pinned uv for the current platform. Dispatches on `uname -s`
+# (not MACOS/LINUX) because `make install-pinned-uv` runs it without detect_env.
+# Callers gate on HAS_DEVTOOLS; this function does not. An unsupported OS warns
+# and returns 0, matching the per-platform workers' "no pin" behaviour.
+install_uv_pinned() {
+  local _os="${_OVERRIDE_PLATFORM:-$(uname -s)}"
+  case "${_os}" in
+    Darwin) install_uv_pinned_macos ;;
+    Linux) _install_ubuntu_uv_pinned ;;
+    *)
+      log_warn "no pinned uv installer for ${_os}; skipping"
+      return 0
+      ;;
+  esac
+}
+
+# _install_uv_pinned_for <Linux|Darwin>
+# Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/ (the
+# path resolve_pinned_uv reads) via _install_pinned_release_binary. A platform
+# with no pin warns and returns 0. _RELEASE_BIN_DIR is a command prefix only, so
+# it never leaks into the caller's shell. _UV_PINNED_URL/_UV_PINNED_SHA256 are
+# honoured only under bats (the _HASHICORP_SOURCE_DIR precedent): an ambient
+# export must never replace the in-repo digest on a real download.
+_install_uv_pinned_for() {
+  local _os="$1" _asset _sha
+  # read fails on EOF, which is what an unpinned platform's empty stdout gives.
+  if ! read -r _asset _sha < <(_uv_pinned_asset "${_os}" "${_UNAME_M}"); then
+    log_warn "no pinned uv for ${_os} ${_UNAME_M}; skipping"
+    return 0
+  fi
+  local _url="https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz"
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    _url="${_UV_PINNED_URL:-${_url}}"
+    _sha="${_UV_PINNED_SHA256:-${_sha}}"
+  fi
+  local _dir="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}"
+  _RELEASE_BIN_DIR="${_dir}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)"
+}
+
 # Which shell the ACCOUNT is set to, not which shell is currently running.
 # `${SHELL}` is the invoking shell's environment variable, so a provision run
 # started from zsh reads "already zsh" while the passwd entry still says
@@ -2231,4 +2271,61 @@ setup_credential_directories() {
     chmod 700 "${HOME}"/.azure_creds
     log_info "Created ${HOME}/.azure_creds"
   fi
+}
+
+# _uv_pinned_version_regex
+# Prints the ERE a `uv --version` first line must match: anchored, dots
+# escaped, and ended by a space or end of line so 0.13.0 never accepts
+# 0.13.01 or 0.13.0.1. rc 1 when UV_VER is empty.
+_uv_pinned_version_regex() {
+  [[ -n "${UV_VER:-}" ]] || return 1
+  printf '^uv %s( |$)\n' "${UV_VER//./\\.}"
+}
+
+# _uv_pinned_asset <uname -s> <uname -m>
+# Prints "<release asset name> <sha256>" for the pinned uv on that platform.
+# rc 1, nothing on stdout, for a platform with no pin (only Linux x86_64 and
+# Darwin arm64 are pinned).
+_uv_pinned_asset() {
+  case "${1}/${2}" in
+    Linux/x86_64) printf '%s %s\n' "uv-x86_64-unknown-linux-gnu" "${UV_SHA256_LINUX_AMD64}" ;;
+    Darwin/arm64) printf '%s %s\n' "uv-aarch64-apple-darwin" "${UV_SHA256_DARWIN_ARM64}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# resolve_pinned_uv
+# Prints the path of the pinned uv (PINNED_UV_BIN override, else
+# ~/.local/share/dotfiles/pinned/uv-<UV_VER>/uv) on stdout only when it is
+# executable and reports exactly UV_VER. PATH is never consulted: the point is
+# a known build, not whichever uv is first. Messages go to stderr.
+# rc 0 ok; 1 UV_VER unset, not an executable file, non-zero exit or wrong
+# version; 2 absent.
+resolve_pinned_uv() {
+  local _path _first _out _rc _re
+  if [[ -z "${UV_VER:-}" ]]; then
+    log_error "UV_VER is not set; source lib/constants.sh"
+    return 1
+  fi
+  _path="${PINNED_UV_BIN:-${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}/uv}"
+  if [[ ! -e "${_path}" ]]; then
+    log_error "pinned uv not found at ${_path}; run make install-pinned-uv"
+    return 2
+  fi
+  if [[ ! -f "${_path}" || ! -x "${_path}" ]]; then
+    log_error "pinned uv at ${_path} is not executable"
+    return 1
+  fi
+  _re="$(_uv_pinned_version_regex)" || return 1
+  # A non-zero exit is a mismatch even when the first line looks right.
+  _out="$("${_path}" --version 2>/dev/null </dev/null)"
+  _rc=$?
+  _first="${_out%%$'\n'*}"
+  if [[ "${_rc}" -ne 0 || ! "${_first}" =~ ${_re} ]]; then
+    local _exit_note=""
+    [[ "${_rc}" -ne 0 ]] && _exit_note=" (exit ${_rc})"
+    log_error "pinned uv at ${_path} reports ${_first:-(no output)}${_exit_note}, expected uv ${UV_VER}"
+    return 1
+  fi
+  printf '%s\n' "${_path}"
 }

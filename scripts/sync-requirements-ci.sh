@@ -49,6 +49,9 @@ _RENDERINGS=(
 )
 readonly _RENDERINGS
 
+# constants.sh first: resolve_pinned_uv reads UV_VER from it.
+# shellcheck source=lib/constants.sh
+source "${REPO_ROOT}/lib/constants.sh"
 # shellcheck source=lib/helpers.sh
 source "${REPO_ROOT}/lib/helpers.sh"
 readonly HEADER="# Generated from uv.lock — do not edit.
@@ -60,7 +63,7 @@ readonly HEADER="# Generated from uv.lock — do not edit.
 # status 0, and `check` re-rendering the same failure then called it a match.
 _render() {
   local _group="$1" _uv _raw
-  _uv="$(resolve_uv)" || return 1
+  _uv="$(resolve_pinned_uv)" || return 1
   _raw="$(cd "${REPO_ROOT}" && "${_uv}" export --frozen --only-group "${_group}" \
     --format requirements-txt 2>/dev/null)" || return 1
   printf "%s\n" "${HEADER}"

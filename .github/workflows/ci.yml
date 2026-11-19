@@ -28,14 +28,16 @@ jobs:
     timeout-minutes: 30 # provisional; re-size to ~3x p90 after five green runs
     permissions:
       contents: read
-    # make test skips a missing shellcheck, uv, python3 or lib-trap scanner so a
-    # bare machine can still commit; here each is present first (shellcheck and
-    # uv from an install step, python3 from the runner image, the scanner from
-    # the checkout), so a skip would be a silent pass. Only shard 1 runs those
+    # make test skips a missing shellcheck, python3 or lib-trap scanner so a
+    # bare machine can still commit; here each is present first (shellcheck from
+    # an install step, python3 from the runner image, the scanner from the
+    # checkout), so a skip would be a silent pass. The pinned-uv checks never
+    # skip; PINNED_UV_BIN points them at the uv the install step writes. Only shard 1 runs those
     # targets (make test-prereqs); the other legs ignore it. See REQUIRE_TOOLS_REFUSE in the
     # Makefile and tests/scripts/makefile_lint_scope.bats.
     env:
       REQUIRE_TOOLS: "1"
+      PINNED_UV_BIN: /usr/local/bin/uv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -234,6 +236,7 @@ jobs:
     # must not skip.
     env:
       REQUIRE_TOOLS: "1"
+      PINNED_UV_BIN: /usr/local/bin/uv
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

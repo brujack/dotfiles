@@ -29,7 +29,6 @@ BATS := $(shell command -v bats 2>/dev/null)
 # test saw (update_signals.bats on PR #340).
 BATS_FLAGS := --print-output-on-failure
 SHELLCHECK := $(shell command -v shellcheck 2>/dev/null)
-UV := $(shell command -v uv 2>/dev/null)
 PYTHON3 := $(shell command -v python3 2>/dev/null)
 # A make variable, not a literal, so a test can name a missing path and reach
 # the skip and refusal branches without touching the tracked file.
@@ -42,7 +41,6 @@ LIB_TRAP_SCANNER := scripts/check-lib-exit-traps.sh
 # environment by the recipe shell. $(1) is what is missing, $(2) what it would
 # skip, $(3) where CI gets the tool, so the remedy names a place that exists.
 REQUIRE_TOOLS_REFUSE = if [ "$${REQUIRE_TOOLS:-}" = 1 ]; then printf '%s and REQUIRE_TOOLS=1: refusing to skip %s (%s)\n' "$(1)" "$(2)" "$(3)"; exit 1; fi
-REQUIRE_TOOLS_FROM_UV = CI installs a pinned uv before make runs; check that step
 REQUIRE_TOOLS_FROM_IMAGE = the CI runner image provides it; check the job's runs-on image
 
 # SHELL_FILES is content-derived (every tracked file whose first line is a
@@ -127,7 +125,7 @@ BATS_PARALLEL_RAN := $(filter-out $(BATS_SERIAL_FILES),$(BATS_RAN_FILES))
 # One-shot fix leads; the durable fix (full provisioning re-run) follows.
 BATS_MISSING := bats not found. Install: brew install bats-core (macOS) or sudo apt-get install bats (Linux). Durable fix: ./setup_env.sh -t setup_user (full provisioning re-run)
 
-.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget check-bats-manifest test-bats test-prereqs
+.PHONY: test test-python test-unit lint bash-coverage install-hooks ledger-symlink help changelog validate-plan check-claude-md-budget check-bats-manifest test-bats test-prereqs install-pinned-uv
 
 help:
 	@printf "Available targets:\n"
@@ -140,6 +138,7 @@ help:
 	@printf "  make sync-requirements-ci  Render the five CI requirements files from uv.lock\n"
 	@printf "  make check-requirements-ci Fail if any rendering has drifted from uv.lock\n"
 	@printf "  make check-requirements-install Install the consumed renderings on the required Python (network)\n"
+	@printf "  make install-pinned-uv Install the pinned uv under ~/.local/share/dotfiles/pinned (no HAS_DEVTOOLS gate)\n"
 	@printf "  make help              Show this help\n"
 
 # shellcheck is single-threaded, so both passes fan the file list out through
@@ -343,16 +342,14 @@ sync-requirements-ci:
 check-requirements-install:
 	@./scripts/check-requirements-install.sh
 
-# Guarded like lint's shellcheck: a gate that hard-fails on a missing tool locks
-# the machine out of committing the very change that would install it. CI
-# installs a pinned uv and sets REQUIRE_TOOLS=1, so a missing uv fails there.
+# Fails closed: the pinned uv (lib/helpers.sh resolve_pinned_uv: PINNED_UV_BIN,
+# else ~/.local/share/dotfiles/pinned/uv-<UV_VER>/uv, never PATH) is resolved
+# inside the recipe, so an absent, non-executable or wrong-version uv fails
+# with or without REQUIRE_TOOLS, and `make lint` never needs uv. Remedy:
+# `make install-pinned-uv`. env -u strips a leaked GIT_* (ci-016).
+PINNED_UV_RESOLVE = source lib/constants.sh; source lib/helpers.sh; uv="$$(resolve_pinned_uv)" || exit 1
 check-requirements-ci:
-ifeq ($(UV),)
-	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the requirements-ci drift check,$(REQUIRE_TOOLS_FROM_UV)); \
-	printf "uv not found, skipping requirements-ci drift check (install: brew install uv)\n"
-else
-	@./scripts/sync-requirements-ci.sh check
-endif
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE bash -c '$(PINNED_UV_RESOLVE); ./scripts/sync-requirements-ci.sh check'
 
 # check-requirements-ci compares each RENDERING against uv.lock -- it runs
 # `uv export --frozen`, which reads the lock, so an unchanged lock renders
@@ -365,14 +362,16 @@ endif
 # This matters ahead of enabling Renovate's pep621 manager: a bump whose
 # updateArtifacts step fails produces exactly that state, and without this
 # target it would go green through CI and land a manifest the lock cannot
-# satisfy. Same missing-tool guard as above, for the same reason.
+# satisfy. Same fail-closed pinned-uv resolution as above, for the same reason.
 check-lock:
-ifeq ($(UV),)
-	@$(call REQUIRE_TOOLS_REFUSE,uv not found,the uv.lock consistency check,$(REQUIRE_TOOLS_FROM_UV)); \
-	printf "uv not found, skipping uv.lock consistency check (install: brew install uv)\n"
-else
-	@$(UV) lock --check
-endif
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE bash -c '$(PINNED_UV_RESOLVE); "$$uv" lock --check'
+
+# Installs the pinned uv that check-lock and check-requirements-ci require.
+# install_uv_pinned dispatches on uname -s itself (no detect_env, so no
+# HAS_DEVTOOLS gate); the Linux worker lives in lib/linux_ubuntu.sh, always
+# sourced, and the Darwin worker in lib/macos.sh, sourced only on Darwin.
+install-pinned-uv:
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE bash -c 'source lib/constants.sh; source lib/helpers.sh; source lib/linux_ubuntu.sh; if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then source lib/macos.sh; fi; install_uv_pinned'
 
 # Introspection: `make print-VARNAME` prints a Makefile variable's resolved
 # value, for tests that need to assert against the Makefile's own derivation

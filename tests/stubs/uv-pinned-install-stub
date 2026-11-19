@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Stand-in for install_uv_pinned, reached only through _UV_PINNED_INSTALLER
+# (load_mocks points the seam here, so no test downloads uv for real).
+#   MOCK_CALLS_FILE               if set, "uv-pinned-install" is appended to it
+#   MOCK_UV_PINNED_INSTALL_STDERR if set, printed on stderr (the section's
+#                                 err_pinned-uv capture must hold it)
+#   MOCK_UV_PINNED_INSTALL_EXIT   exit status (default 0)
+if [[ -n ${MOCK_CALLS_FILE:-} ]]; then
+  printf 'uv-pinned-install\n' >> "${MOCK_CALLS_FILE}"
+fi
+if [[ -n ${MOCK_UV_PINNED_INSTALL_STDERR:-} ]]; then
+  printf '%s\n' "${MOCK_UV_PINNED_INSTALL_STDERR}" >&2
+fi
+exit "${MOCK_UV_PINNED_INSTALL_EXIT:-0}"
