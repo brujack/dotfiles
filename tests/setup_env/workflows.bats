@@ -4589,3 +4589,75 @@ _flagless_pin_capabilities() {
   run run_update
   _assert_flagless_run_reaches_every_section
 }
+
+# ── run_update: pinned-uv section ─────────────────────────────────────────────
+
+# A full run (no flag) with every pinned-uv input controlled by the caller.
+# The recording stub proves whether the installer was reached.
+_pinned_uv_full_run() {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  export _PINNED_UV_MARKER="${BATS_TEST_TMPDIR}/pinned-uv.ran"
+  rm -f "${_PINNED_UV_MARKER}"
+  # shellcheck disable=SC2329 # invoked by run_update's pinned-uv section
+  install_uv_pinned() { touch "${_PINNED_UV_MARKER}"; return "${_PINNED_UV_STUB_RC:-0}"; }
+}
+
+@test "run_update: pinned-uv skips without HAS_DEVTOOLS" {
+  _pinned_uv_full_run
+  unset HAS_DEVTOOLS
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "HAS_DEVTOOLS not set" ]
+  [ ! -e "${_PINNED_UV_MARKER}" ]
+}
+
+@test "run_update: pinned-uv skips on a platform with no pin" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=aarch64
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "no pinned uv for Linux aarch64" ]
+  [ ! -e "${_PINNED_UV_MARKER}" ]
+}
+
+@test "run_update: pinned-uv records OK when the installer returns 0" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  export _PINNED_UV_STUB_RC=0
+  run_update || true
+  [ -e "${_PINNED_UV_MARKER}" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "OK" ]
+}
+
+@test "run_update: pinned-uv records FAIL and run_update exits 1 when the installer returns 1" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  export _PINNED_UV_STUB_RC=1
+  local _rc=0
+  run_update || _rc=$?
+  [ -e "${_PINNED_UV_MARKER}" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "FAIL" ]
+  [ "${_rc}" -eq 1 ]
+}
+
+@test "run_update: pinned-uv skips under --brew-only" {
+  _pinned_uv_full_run
+  export UPDATE_BREW=1
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "flag not set" ]
+  [ ! -e "${_PINNED_UV_MARKER}" ]
+}
+
+@test "_UPDATE_SECTION_ORDER lists pinned-uv immediately after cargo-tools" {
+  local _joined=" ${_UPDATE_SECTION_ORDER[*]} "
+  [[ "${_joined}" == *" cargo-tools pinned-uv "* ]]
+}
