@@ -120,41 +120,64 @@ ed25519 host key whose SHA256 fingerprint equals `<fingerprint>`, and 1 otherwis
 - `ssh-keyscan` behaves the same on macOS and Linux. Measured from the Studio on
   2026-11-19: `192.168.51.17` returned `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY` in 0.04 s, and an unreachable address
   returned nothing in 1.04 s.
-- A missing `ssh-keyscan`, no output, or any mismatch exits 1.
+- A missing `ssh-keyscan`, no output, or any mismatch exits 1. On empty input
+  `ssh-keygen -lf -` exits 255 (measured), so the probe maps every non-match to 1.
+- Seam: `_SSH_KEYSCAN_BIN` (default `ssh-keyscan`). `ssh-keyscan` lives in `/usr/bin` on
+  both platforms, so a `PATH` mock cannot reach the absent case without also removing the
+  toolchain.
 - Pinned fingerprints (ed25519, measured 2026-11-19): `claude` `SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY`, `workstation`
   `SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o`. A host-key rotation must update the `.ssh/config` `Match` lines.
 
 ### 3. ssh routing (`.ssh/config`)
 
-The bare names `claude` and `workstation` become routing aliases. **The default is
-direct.** The Cloudflare chain applies only on macOS, when the probe exists and reports
-that the client is off the LAN:
+On macOS, the bare names `claude` and `workstation` become routing aliases. On Linux, no
+block applies and both names resolve exactly as today. **The default is direct.** The
+Cloudflare chain applies only when the probe exists and reports that the client is off the
+LAN:
 
 ```
 Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY"
   ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca
 Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o"
   ProxyJump home-secure.conecrazy.ca
-Host claude workstation
-  HostName %h.home.conecrazy.ca
+Match host claude exec "[ \"$(uname -s)\" = Darwin ]"
+  HostName 192.168.51.17
+  HostKeyAlias claude
+  User bruce
+  IdentityFile ~/.ssh/home
+Match host workstation exec "[ \"$(uname -s)\" = Darwin ]"
+  HostName 192.168.51.12
+  HostKeyAlias workstation
   User bruce
   IdentityFile ~/.ssh/home
 ```
 
-- **Linux hosts.** Every `exec` starts with the `uname -s` test, so on `claude` and
-  `workstation` no probe runs and both names go direct.
+- **Linux hosts are untouched.** Every block is gated on the `uname -s` test, so on
+  `claude` and `workstation` no option changes and no probe runs. `ssh workstation` keeps
+  resolving through DNS and the existing `known_hosts` entry (N6).
+- **Host keys.** Host-key lookup follows `HostName`. Every machine's `known_hosts` holds
+  these hosts under the bare names `claude` and `workstation`, and none under
+  `*.home.conecrazy.ca` (measured with `ssh-keygen -F` on `claude`, `workstation` and the
+  Studio, Step 8 round 4). A `HostName` of the FQDN made BatchMode connects fail with
+  `Host key verification failed`. The literal `HostKeyAlias` keeps the existing entries in
+  use on both routes. `HostKeyAlias %n` is not token-expanded on 10.2p1 (measured), so the
+  alias is spelled per host.
+- **No DNS dependency.** `HostName` is the IP the probe just verified, so a client that
+  reaches `192.168.51.0/24` without the home resolver (custom DNS, DoH, a private-network
+  route) still connects. Neither name has a public DNS record (measured with `dig` against
+  `1.1.1.1` and `8.8.8.8`).
 - **Work Macs** are off the home LAN (`192.168.10.0/24`), so the probe fails and they get
   the Cloudflare chain.
-- **Failure direction.** A missing, non-executable or failing probe means direct. That is
-  how bare `ssh workstation` behaves today, so a host where `setup_user` has not yet run
-  (the config is live on `git pull`, because `~/.ssh/config` is a symlink) keeps working.
-  On a work Mac in that state the direct route fails, until `setup_user` runs there.
+- **Failure direction.** A missing, non-executable or failing probe means direct, which is a
+  plain connect to the LAN IP. On a work Mac in that state the direct route fails, until
+  `setup_user` runs there.
 - **`$HOME`, not `%d`.** `%d` comes from the passwd entry and ignores `HOME`, which makes the
   routing untestable. `Match exec` runs through `sh -c`, so `$HOME` expands there. Both were
   measured in Step 8.
-- `ProxyJump` is set only in the off-LAN `Match` blocks, which precede the
-  `Host claude workstation` block. `User` and `IdentityFile` sit on the alias block,
-  because Host patterns match the alias, not the HostName.
+- The fingerprint argument survives ssh_config parsing intact (`+`, `/`, `=`; base64 has no
+  `%`): a stub probe recorded the exact argv on 10.2p1 and 10.5p1 (Step 8 round 4).
+- `ProxyJump` is set only in the off-LAN `Match` blocks, which come first. The
+  first-obtained value wins, so the Darwin blocks below them cannot add a jump on the LAN.
 - No ControlMaster is configured. The workstation password appears only after a Cloudflare
   re-login (see Decisions).
 - The `*-home-tmux` aliases and their `RemoteCommand` block are deleted. The plain `*-home`
@@ -226,7 +249,10 @@ On a host with a `REPO_SESSIONS` entry, `-t doctor` reports `repo-sessions` as:
 - FAIL when Linger is off, with remedy `sudo loginctl enable-linger "$USER"`.
 - FAIL when the unit is not enabled, with remedy `./setup_env.sh -t setup_user`.
 - FAIL when `systemctl --user is-failed repo-sessions.service` reports `failed`, with remedy
-  `journalctl --user -u repo-sessions`.
+  `systemctl --user restart repo-sessions.service`. The `failed` state otherwise stays
+  latched until the next boot. A restart re-runs `--all` idempotently, keeps the existing
+  sessions under `KillMode=process`, and clears the state only if every dir succeeds
+  (measured with a transient unit, Step 8 round 4).
 - WARN, naming each one, for every listed dir whose session is missing
   (`tmux has-session -t "=<name>"` fails), with remedy `repo-session --detached --all`.
 - PASS otherwise.
@@ -265,22 +291,25 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
   - `--all` walks the host's list, continues past one failing dir and exits 1; exits 0 when
     all succeed
   - empty, absolute, `..` and missing dirs each exit 2 without calling tmux
-- **bats `home-lan-probe`**: `ssh-keyscan` mocked by PATH. A matching fingerprint exits 0.
+- **bats `home-lan-probe`**: `ssh-keyscan` replaced through `_SSH_KEYSCAN_BIN` (no real
+  network call in any case). A matching fingerprint exits 0.
   A different one, empty keyscan output, and a missing `ssh-keyscan` each exit 1. One case
   pins that the real `ssh-keygen -lf -` parses the mock's output, so the fingerprint field
   is not assumed.
 - **ssh routing**: real `ssh -G -F .ssh/config`, with `HOME` pointed at a fixture holding a
   stub `~/.local/bin/home-lan-probe`, and `uname` mocked on `PATH` (`Match exec` runs
   through `sh -c`, so a `PATH` stub reaches it):
-  - Darwin, probe exit 1: `claude` resolves `hostname claude.home.conecrazy.ca` and
+  - Darwin, probe exit 1: `claude` resolves `hostname 192.168.51.17`,
+    `hostkeyalias claude` and
     `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`; `workstation`
-    resolves `proxyjump home-secure.conecrazy.ca`.
-  - Darwin, probe exit 0; Darwin, probe absent; Linux, probe exit 1: both names resolve
-    `hostname <host>.home.conecrazy.ca` and no `proxyjump`. The `hostname` pin stops these
-    passing on empty `ssh -G` output.
-  - The probe stub records its arguments. On Darwin they are exactly
-    `192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY` for `claude` and `192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o` for `workstation`. On Linux
-    the stub is never called.
+    resolves `hostname 192.168.51.12`, `hostkeyalias workstation` and
+    `proxyjump home-secure.conecrazy.ca`.
+  - Darwin, probe exit 0, and Darwin, probe absent: the same `hostname` and `hostkeyalias`
+    lines and no `proxyjump`.
+  - Linux, probe exit 1: both names resolve `hostname claude` / `hostname workstation`
+    (unchanged), no `hostkeyalias`, no `proxyjump`, and the stub is never called.
+  - On Darwin the stub records exactly `192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY` for `claude` and
+    `192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o` for `workstation`.
   - No `Host` pattern ending `-home-tmux` and no `RemoteCommand` remain, and `controlmaster`
     resolves `false` for both names.
 - **Warp**: every file under `.warp/launch_configurations/` parses as YAML. In each config,
@@ -297,8 +326,9 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
   - the unit is enabled, not started
   - a second run makes no `sudo` call and no state-changing `enable`
   - macOS gets only `home-lan-probe`; a Linux host without a list gets nothing
-- **Doctor**: Linger off, unit not enabled, unit failed, one session missing (WARN naming
-  it), all OK, and a host not in the list.
+- **Doctor**: Linger off, unit not enabled, unit failed with all sessions present (remedy
+  names `systemctl --user restart repo-sessions.service`), one session missing and two
+  sessions missing (each named in the WARN), all OK, and a host not in the list.
 
 ## Requirements
 
@@ -306,15 +336,15 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R2.** `bin/repo-session --detached <dir>` adds `-d`, and exits 0 without creating a session when `tmux has-session -t "=<name>"` succeeds.
 - **R3.** `bin/repo-session --detached --all` runs once per dir in this host's `REPO_SESSIONS` entry, continues past a failing dir, and exits 1 if any dir failed, else 0.
 - **R4.** `bin/repo-session` exits 2, naming the argument, without calling tmux, for a `<dir>` that is empty, absolute, contains a `..` component, or is not a directory under `${HOME}/git-repos/personal`.
-- **R5.** `bin/home-lan-probe <ip> <fingerprint>` exits 0 only when `ssh-keyscan -T 1 -t ed25519 <ip>` piped through `ssh-keygen -lf -` yields a SHA256 fingerprint equal to `<fingerprint>`; mismatch, empty output or a missing `ssh-keyscan` exits 1.
-- **R6.** `.ssh/config` has `Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY"` setting `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`, and `Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o"` setting `ProxyJump home-secure.conecrazy.ca`, both before a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca`, `User bruce`, `IdentityFile ~/.ssh/home` and no `ProxyJump`.
-- **R7.** With `HOME` at a fixture and `uname` mocked on `PATH`: on Darwin with a probe exiting 1, `ssh -G claude` resolves `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolves `proxyjump home-secure.conecrazy.ca`; on Darwin with the probe exiting 0 or absent, and on Linux, both resolve `hostname <host>.home.conecrazy.ca` and no `proxyjump`, and on Linux the probe is never invoked.
+- **R5.** `bin/home-lan-probe <ip> <fingerprint>` exits 0 only when `${_SSH_KEYSCAN_BIN:-ssh-keyscan} -T 1 -t ed25519 <ip>` piped through `ssh-keygen -lf -` yields a SHA256 fingerprint equal to `<fingerprint>`; mismatch, empty output or a missing `ssh-keyscan` exits 1.
+- **R6.** `.ssh/config` carries, in this order: `Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17 SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY"` setting `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`; `Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12 SHA256:ZVFVKdcncNrEMmWrb/4gDdgn6NP0lgpQm1vxyFe1y/o"` setting `ProxyJump home-secure.conecrazy.ca`; then `Match host claude exec "[ \"$(uname -s)\" = Darwin ]"` setting `HostName 192.168.51.17`, `HostKeyAlias claude`, `User bruce`, `IdentityFile ~/.ssh/home`, and the same for `workstation` with `HostName 192.168.51.12` and `HostKeyAlias workstation`. No `Host claude` or `Host workstation` block exists.
+- **R7.** With `HOME` at a fixture and `uname` mocked on `PATH`: on Darwin, `ssh -G claude` resolves `hostname 192.168.51.17` and `hostkeyalias claude`, and `ssh -G workstation` resolves `hostname 192.168.51.12` and `hostkeyalias workstation`; with a probe exiting 1 they add `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `proxyjump home-secure.conecrazy.ca` respectively, and with the probe exiting 0 or absent no `proxyjump`. On Linux both resolve `hostname claude` / `hostname workstation` with no `hostkeyalias` and no `proxyjump`, and the probe is never invoked.
 - **R8.** `.ssh/config` configures no `ControlMaster`, `ControlPath` or `ControlPersist` for `claude`, `workstation` or `workstation.home.conecrazy.ca` (`ssh -G` resolves `controlmaster false`).
 - **R9.** `.ssh/config` contains no `Host` pattern ending in `-home-tmux` and no `RemoteCommand`.
 - **R10.** `config/repo-sessions.sh` maps `claude` to `etch-cli etch-config dotfiles ai-config ai-devops math` and `workstation` to `terraform_ansible/ansible`.
 - **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `KillMode=process`, `TimeoutStartSec=180`, `ExecStartPre=-/usr/bin/timeout 60 /bin/sh -c 'until nc -z -w 1 api.anthropic.com 443; do sleep 1; done'`, `ExecStart=%h/.local/bin/repo-session --detached --all` (no `-` prefix) and `WantedBy=default.target`.
 - **R12.** `setup_user` links `home-lan-probe` into `~/.local/bin` on macOS only. On a Linux host with a `REPO_SESSIONS` entry it links `repo-session` into `~/.local/bin` and the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`. Other hosts get none of these.
-- **R13.** On a host with a `REPO_SESSIONS` entry, doctor FAILs `repo-sessions` with remedy `sudo loginctl enable-linger "$USER"` when Linger is off, with remedy `./setup_env.sh -t setup_user` when the unit is not enabled, and with remedy `journalctl --user -u repo-sessions` when the unit is `failed`; it WARNs naming each listed dir whose `tmux has-session -t "=<name>"` fails, with remedy `repo-session --detached --all`; it passes otherwise, and is silent on a host without an entry.
+- **R13.** On a host with a `REPO_SESSIONS` entry, doctor FAILs `repo-sessions` with remedy `sudo loginctl enable-linger "$USER"` when Linger is off, with remedy `./setup_env.sh -t setup_user` when the unit is not enabled, and with remedy `systemctl --user restart repo-sessions.service` when the unit is `failed`; it WARNs naming each listed dir whose `tmux has-session -t "=<name>"` fails, with remedy `repo-session --detached --all`; it passes otherwise, and is silent on a host without an entry.
 - **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `ssh -t <host> .local/bin/repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists, and no `exec` line contains `repo-session` without the `.local/bin/` prefix. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
 - **R15.** The `lib/launch_agents.sh` comment reads "the Studio is always up" and no longer says "the Studio is the tmux host".
 - **V1.** After a reboot of `claude` with the unit installed and no ssh login, all six sessions appear in claude.ai's Remote Control session list, and `tmux list-panes -a -F '#{session_name} #{pane_current_command}'` shows `claude` in each.
@@ -325,7 +355,7 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **N3.** No `claude --continue` or `--resume` in any session start.
 - **N4.** No change to the `*-home` aliases' existing ProxyJump routes.
 - **N5.** No change to how any host other than `claude` and `workstation` is reached: in particular the work Macs' direct ssh to each other (`*.centrepointe.genexxelearning.ca`) is untouched.
-- **N6.** No probe or route change on `claude` or `workstation`: every ssh connection from them is plain.
+- **N6.** No `.ssh/config` option takes effect on `claude` or `workstation`, and no probe runs there: every ssh connection from them resolves exactly as before this change.
 - **N7.** No connection-sharing wrapper or ControlMaster for the off-LAN route; the workstation password is a once-per-Cloudflare-renewal event.
 
 ## Multi-Lens Review
@@ -370,4 +400,8 @@ Ergonomics — Finding: `home-ssh`'s lock cascades into several simultaneous pro
 
 Risk — Finding: (1) `ExecStart=-` is redundant (`KillMode=process` alone kept the child alive with the unit `failed`, measured) and hides a fully failed boot from doctor; (2) `home-ssh`'s trap is inert under `exec` and deferred TERM (measured in bash); (3) R19's first half was a tautology. Routing, quoting and `controlmaster false` on Linux confirmed on 10.2p1 and 10.5p1. Assumption: as Goal-Fit. Disposition: Addressed (operator, 2026-11-19) — no `-` on `ExecStart` (R11) plus doctor `is-failed` (R13); (2) and (3) removed with `home-ssh`.
 
-Identity probe (operator, 2026-11-19, after round 3 dispatch): the laptop travels to networks with unknown address space, so `home-lan-probe` checks the host-key fingerprint, not TCP reachability (component 2, R5). Not yet lens-reviewed.
+Identity probe (operator, 2026-11-19, after round 3 dispatch): the laptop travels to networks with unknown address space, so `home-lan-probe` checks the host-key fingerprint, not TCP reachability (component 2, R5). Reviewed in round 4.
+
+### Round 4, scoped Risk (reviewed at `f31c33cb`; components 2, 3, 5, 7, R5-R8, R11-R13, V1-V3, N6-N7)
+
+Risk — Finding: `HostName %h.home.conecrazy.ca` breaks every non-interactive ssh to `workstation`/`claude` because host-key lookup follows HostName and no machine has `known_hosts` entries under the FQDNs (measured: BatchMode `ssh workstation` from `claude` rc 255); contradicts N6. Secondary: doctor's `is-failed` FAIL stays latched with a remedy that clears nothing; the probe's missing-`ssh-keyscan` case needs a seam. Confirmed: fingerprint argv survives ssh_config parsing on 10.2p1 and 10.5p1; `ssh-keyscan`/`ssh-keygen -lf` field 2 on both platforms; doctor reaches the unit's tmux socket; no-`-` `ExecStart` interacts safely with `restart`. Assumption: the laptop resolves `claude.home.conecrazy.ca` whenever the probe passes. Disposition: Addressed (operator, 2026-11-19) — whole alias block macOS-only, `HostName` is the probed IP plus a literal `HostKeyAlias` (removes the DNS assumption; verified with `ssh -G` across Darwin probe 1/0/absent and Linux), doctor remedy `systemctl --user restart repo-sessions.service`, `_SSH_KEYSCAN_BIN` seam, two more doctor cases (component 3, R5-R7, R13, N6).
