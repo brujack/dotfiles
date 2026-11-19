@@ -563,10 +563,26 @@ _shim_fail() {
   [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/astral-sh/uv/releases/tags/1.2.3" ]
 }
 
-@test "uv: there is no Linux arm64 pin to refresh" {
-  [ -z "$(_val UV_SHA256_LINUX_ARM64)" ]
-  run grep -c 'UV_SHA256_LINUX_ARM64' "${C}"
-  [ "$output" = "0" ]
+@test "uv: a refresh writes no Linux arm64 pin" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 0 ]
+  run ! grep -q 'UV_SHA256_LINUX_ARM64' "${C}"
+}
+
+@test "a tool whose asset URL cannot be built names the tool and the arch" {
+  local _t="${BATS_TEST_TMPDIR}/clone"
+  mkdir -p "${_t}/scripts" "${_t}/lib"
+  cp "${SCRIPT}" "${_t}/scripts/"
+  cp "${REPO_ROOT}"/lib/* "${_t}/lib/"
+  # Turn the real definition into one that fails; an appended override would sit after the file's sourcing guard.
+  sed -i.bak 's/^_release_asset_url() {$/_release_asset_url() { return 1/' "${_t}/lib/linux_ubuntu.sh"
+  [ "$(grep -c '^_release_asset_url() { return 1$' "${_t}/lib/linux_ubuntu.sh")" -eq 1 ]
+  run "${_t}/scripts/refresh-sha256-pins.sh" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: amd64: no release asset URL"* ]]
 }
 
 @test "uv: a changed digest at an unchanged version is refused and writes nothing" {

@@ -141,16 +141,13 @@ SHELLCHECK_SHA256_ARM64="12b331c1d2db6b9eb13cfca64306b1b157a86eb69db83023e261eaa
 SHELLCHECK_SHA256_FOR_VER="0.11.0"
 # uv is pinned by release asset, not by an amd64/arm64 pair: Linux x86_64 and macOS arm64 are
 # the only platforms with a pin (no Linux arm64 pin).
-# read by lib/helpers.sh:_uv_pinned_asset and resolve_pinned_uv, scripts/refresh-sha256-pins.sh
-# and tests/scripts/ci_uv_pin.bats
+# read by scripts/refresh-sha256-pins.sh and tests/scripts/refresh_sha256_pins.bats
 UV_VER="0.13.0"
-# read by lib/helpers.sh:_uv_pinned_asset and resolve_pinned_uv, scripts/refresh-sha256-pins.sh
-# and tests/scripts/ci_uv_pin.bats
+# read by scripts/refresh-sha256-pins.sh and tests/scripts/refresh_sha256_pins.bats
 UV_SHA256_LINUX_AMD64="1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
-# read by lib/helpers.sh:_uv_pinned_asset and resolve_pinned_uv, scripts/refresh-sha256-pins.sh
-# and tests/scripts/ci_uv_pin.bats
+# read by scripts/refresh-sha256-pins.sh and tests/scripts/refresh_sha256_pins.bats
 UV_SHA256_DARWIN_ARM64="a9c1b29002cf3c83f07fa9cd8a887a3be0107d90e23189721221e7257db8e3d6"
-# read by scripts/refresh-sha256-pins.sh and tests/scripts/ci_uv_pin.bats
+# read by scripts/refresh-sha256-pins.sh and tests/scripts/refresh_sha256_pins.bats
 UV_SHA256_FOR_VER="0.13.0"
 # read by lib/linux_ubuntu.sh:_install_ubuntu_tflint, which also builds the
 # anchored skip-check version regex from this same value (^TFLint version <ver>$)

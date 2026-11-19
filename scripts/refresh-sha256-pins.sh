@@ -54,7 +54,10 @@ _pin_slots() {
     return 0
   fi
   for _arch in amd64 arm64; do
-    _url="$(_release_asset_url "${_tool}" "${_arch}")" || return 1
+    _url="$(_release_asset_url "${_tool}" "${_arch}")" || {
+      printf "%s: %s: no release asset URL\n" "${_tool}" "${_arch}" >&2
+      return 1
+    }
     _var="$(_release_asset_sha "${_tool}" "${_arch}" | cut -d' ' -f1)"
     printf '%s|%s|%s\n' "${_arch}" "${_var}" "${_url}"
   done
@@ -104,7 +107,6 @@ _resolve_pins() {
   _TMP_FILES+=("${_body}")
 
   _slots="$(_pin_slots "${_tool}")" || {
-    printf "%s: no release asset URL\n" "${_tool}" >&2
     rm -f "${_body}"
     return 1
   }
@@ -119,9 +121,9 @@ _resolve_pins() {
     fi
     _o2="${BASH_REMATCH[1]}" _r2="${BASH_REMATCH[2]}" _t2="${BASH_REMATCH[3]}" _a2="${BASH_REMATCH[4]}"
     if [[ -z "${_first}" ]]; then
-      _first=1 _owner="${_o2}" _repo="${_r2}" _tag="${_t2}"
+      _first="${_arch}" _owner="${_o2}" _repo="${_r2}" _tag="${_t2}"
     elif [[ "${_o2}/${_r2}/${_t2}" != "${_owner}/${_repo}/${_tag}" ]]; then
-      printf "%s: %s and the amd64 asset are not in the same release\n" "${_tool}" "${_arch}" >&2
+      printf "%s: %s and the %s asset are not in the same release\n" "${_tool}" "${_arch}" "${_first}" >&2
       rm -f "${_body}"
       return 1
     fi
@@ -174,8 +176,11 @@ _validate_tool() {
     printf "%s: %s is empty in %s\n" "${_tool}" "${_ver_var}" "${_file}" >&2
     return 1
   fi
-  local -a _pin_vars=("${_up}_SHA256_AMD64" "${_up}_SHA256_ARM64" "${_up}_SHA256_FOR_VER")
-  [[ "${_tool}" != uv ]] || _pin_vars=(UV_SHA256_LINUX_AMD64 UV_SHA256_DARWIN_ARM64 UV_SHA256_FOR_VER)
+  local -a _pin_vars=()
+  local _slots
+  _slots="$(_pin_slots "${_tool}")" || return 1
+  mapfile -t _pin_vars < <(cut -d'|' -f2 <<<"${_slots}")
+  _pin_vars+=("${_up}_SHA256_FOR_VER")
   for _v in "${_pin_vars[@]}"; do
     if ! grep -q "^${_v}=" "${_file}"; then
       printf "%s: %s line missing in %s; add it, then re-run\n" "${_tool}" "${_v}" "${_file}" >&2
