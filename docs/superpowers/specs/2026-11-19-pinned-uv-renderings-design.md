@@ -235,19 +235,19 @@ Reviewed at commit: `82309809` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Worth building; the premise was reproduced (pinned 0.13.0 gives five OK, brew 0.13.9 gives the `pywinpty` DRIFT). Two gaps. (1) Each `UV_VER` bump leaves the single install slot at the old version, so rc 1 blocks every push until `-t developer` runs, and `-t update` never reaches the installer. (2) `UV_SHA256_LINUX_ARM64` has no consumer: no devtools Linux profile is arm64.
 Assumption: That only the uv version, not local uv config, makes renderings differ. Checked 2026-11-19: under `env -i` with an empty `HOME`, brew 0.13.9 still gives the same single DRIFT, and 0.13.0 gives five OK.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19): versioned install path `pinned/uv-${UV_VER}/uv`, absent version is rc 2 with remedy `-t update`, new `pinned-uv` update section; `UV_SHA256_LINUX_ARM64` dropped.
 
 ### Ergonomics
 
 Finding: A single unversioned slot treated as fatal on mismatch (rc 1) makes every bump block pushes on every machine. Concurrent sessions on `claude` straddling a bump cannot both pass, and the named remedy is a full `-t developer`. Five past bumps (#226, #306, #331, #414, #445). Proposed: versioned path, absent version as rc 2, installer in `-t update`.
 Assumption: That `UV_VER` bumps stay operator-initiated (no Renovate custom manager, no refresh workflow change). Settled by `grep -n customManagers renovate.json` and operator intent.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19): versioned path lets both sides of a bump coexist; the bump remedy is a routine `-t update`. `renovate.json` has no `customManagers` (grep rc 1).
 
 ### Risk
 
 Finding: (1) R9/R12 silently removed the `UV_BIN` and Makefile `UV=` seams that `tests/setup_env/requirements_ci.bats:463,492` and `tests/scripts/makefile_lint_scope.bats:1300,1358-1359` drive. (2) The resolver needs `UV_VER`, but `scripts/sync-requirements-ci.sh` sources only `lib/helpers.sh`. (3) The Makefile three-way rc was unspecified; a parse-time `$(shell)` would run `uv --version` on every make parse. (4) Moving the installer to `lib/helpers.sh` is churn: `setup_env.sh:48` already sources `lib/linux_ubuntu.sh` on every platform. mkdir is safe for existing callers; refresh path fails closed; no R contradicts an N.
 Assumption: That pinned 0.13.0 accepts a `uv.lock` written by brew's newer uv. Checked 2026-11-19 (one machine, one constraint change `ruff==0.17.4` to `0.17.3`): pinned `lock --check` rc 0, `sync` then `check` five OK.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19): seams migrate to `PINNED_UV_BIN` with the four test sites named; script sources `lib/constants.sh` and empty `UV_VER` returns its own rc 1; resolver runs in-recipe only; installer stays in `lib/linux_ubuntu.sh`.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
