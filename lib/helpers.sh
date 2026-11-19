@@ -2282,7 +2282,9 @@ resolve_pinned_uv() {
   _rc=$?
   _first="${_out%%$'\n'*}"
   if [[ "${_rc}" -ne 0 || ! "${_first}" =~ ${_re} ]]; then
-    log_error "pinned uv at ${_path} reports ${_first:-(no output)}, expected uv ${UV_VER}"
+    local _exit_note=""
+    [[ "${_rc}" -ne 0 ]] && _exit_note=" (exit ${_rc})"
+    log_error "pinned uv at ${_path} reports ${_first:-(no output)}${_exit_note}, expected uv ${UV_VER}"
     return 1
   fi
   printf '%s\n' "${_path}"

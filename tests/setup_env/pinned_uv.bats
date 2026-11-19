@@ -143,7 +143,7 @@ _make_stub() {
   printf '#!/usr/bin/env bash\nprintf "uv 0.13.0\\n"\nexit 3\n' > "${PINNED_UV_BIN}"
   chmod +x "${PINNED_UV_BIN}"
   run -1 --separate-stderr resolve_pinned_uv
-  [[ "${stderr}" == *"reports uv 0.13.0, expected uv 0.13.0"* ]]
+  [[ "${stderr}" == *"reports uv 0.13.0 (exit 3), expected uv 0.13.0"* ]]
 }
 
 @test "resolve_pinned_uv: rejects uv 0.13.0.1" {
