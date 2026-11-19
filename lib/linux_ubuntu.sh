@@ -1332,28 +1332,6 @@ _install_ubuntu_cloud_tools() {
   local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
   local _ring _list
   if [[ -n ${HAS_DEVTOOLS} ]]; then
-    printf "Installing teleport\\n"
-    _ring="${_keyrings}/teleport-pubkey.gpg"
-    _install_apt_keyring "https://deb.releases.teleport.dev/teleport-pubkey.asc" "${_ring}" armored || {
-      log_warn "cloud_tools: teleport: keyring install failed"
-      _cloud_rc=1
-    }
-    # Advisory cleanup of a stale source: a failure here is not a failed install.
-    sudo rm -f "${_sources}/archive_uri-https_deb_releases_teleport_dev_-noble.list" 2> /dev/null || true
-    _write_apt_source_list cloud_tools teleport "${_ring}" "${_sources}/teleport.list" \
-      "deb [signed-by=${_ring}] https://deb.releases.teleport.dev/ stable main" || _cloud_rc=1
-    # base owns the update warning; a failed refresh must not mask the install result.
-    sudo -H apt update || :
-    sudo -H DEBIAN_FRONTEND=noninteractive apt install "${APT_CONFFILE_OPTS[@]}" teleport -y || {
-      log_warn "cloud_tools: teleport: install failed"
-      _cloud_rc=1
-    }
-    if [[ -x $(command -v tsh) ]]; then
-      printf "Teleport is installed\\n"
-    fi
-  fi
-
-  if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing cloudflared\\n"
     local _cf_codename
     _cf_codename="$(lsb_release -cs)"

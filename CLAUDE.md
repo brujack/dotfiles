@@ -504,7 +504,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 - Prefer `HAS_*` vars from `config/profiles.sh` over raw hostname patterns in new code. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Gate GPU provisioning on `_nvidia_gpu_present` (PCI `10de:` in `lspci -nn`), never a `HAS_*` capability; no `lspci` means skip. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - After driver/toolkit install run `nvidia-ctk runtime configure --runtime=docker`; restart docker only if `daemon.json` changed (live GitHub runners). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
-- Create credential dirs (`.aws`, `.tf_creds`, `.tsh`) with `chmod 700`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
+- Create credential dirs (`.aws`, `.tf_creds`) with `chmod 700`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Ansible venv packages live only in `pyproject.toml` `[dependency-groups]`; change a version there then run `uv lock`; installs use `uv sync --frozen`. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - After a venv recreate run `brew uninstall ruff` once (ruff is venv-managed, not brew). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
 - Keep application installs in alphabetical order. → `dotfiles-conventions.md` § `CLAUDE.md relocation: Key Conventions platform, update-section and install-function rules`
@@ -559,7 +559,7 @@ Invoke `caveman:caveman-commit` skill to generate the commit message before runn
 
 ## Local-Only State
 
-- Never commit machine-local paths: `~/.aws/`, `~/.tf_creds/`, `~/.azure_creds/`, `~/.gcloud_creds/`, `~/.tsh/`, `~/.ssh/` private keys (only `config` and `teleport.cfg` are tracked), `~/.claude/projects/<path>/` (session history and memory drafts; canonical memory is `ai-config/.claude/memory/<repo>-<topic>.md` and a leftover draft fails ai-config `make test`), and `config/local.sh` (git-ignored; copy from `config/local.sh.example`). → `dotfiles-conventions.md` § `CLAUDE.md budget: Local-only state paths`
+- Never commit machine-local paths: `~/.aws/`, `~/.tf_creds/`, `~/.azure_creds/`, `~/.gcloud_creds/`, `~/.ssh/` private keys (only `config` is tracked), `~/.claude/projects/<path>/` (session history and memory drafts; canonical memory is `ai-config/.claude/memory/<repo>-<topic>.md` and a leftover draft fails ai-config `make test`), and `config/local.sh` (git-ignored; copy from `config/local.sh.example`). → `dotfiles-conventions.md` § `CLAUDE.md budget: Local-only state paths`
 
 The `secret-scan` CI job (`gitleaks`) scans recent commits for credential patterns. If it fires on a legitimate file, add an allowlist entry to `.gitleaks.toml`.
 

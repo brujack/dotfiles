@@ -320,7 +320,7 @@ _apt_not_upgraded() {
 # any of those and the matching arm changes with it.
 _apt_signer_remedy() {
   case "$1" in
-    download.docker.com | pkgs.k8s.io | prod-cdn.packages.k8s.io | deb.releases.teleport.dev | pkg.cloudflareclient.com | download.virtualbox.org | cli.github.com)
+    download.docker.com | pkgs.k8s.io | prod-cdn.packages.k8s.io | pkg.cloudflareclient.com | download.virtualbox.org | cli.github.com)
       printf '%s\n' "re-run ./setup_env.sh -t developer (it re-fetches this key); if this line persists after that run, the publisher's own key is at fault, so refresh it by hand"
       ;;
     nvidia.github.io)

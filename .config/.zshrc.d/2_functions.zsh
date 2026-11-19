@@ -43,14 +43,6 @@ function rssh () {
   cd ${HOME} || return
 }
 
-function tssh() {
-  if [ $# -eq 0 ]; then
-    echo "No arguments supplied. Please provide the hostname/ip to ssh to"
-    return 1
-  fi
-  tsh ssh bruce@$1
-}
-
 function sh() {
   if [ $# -eq 0 ]; then
     echo "No arguments supplied. Please provide the hostname/ip to ssh to"

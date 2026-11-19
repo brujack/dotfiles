@@ -3950,18 +3950,15 @@ _cloud_env() {
   refute_grep "apt install google-cloud-sdk" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_cloud_tools: HAS_DEVTOOLS installs teleport" {
-  export HAS_DEVTOOLS=1
+@test "_install_ubuntu_cloud_tools: HAS_DEVTOOLS installs no teleport package, keyring or source" {
+  _cloud_env
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_cloud_tools: no HAS_DEVTOOLS skips teleport" {
-  unset HAS_DEVTOOLS
-  run _install_ubuntu_cloud_tools
-  [ "$status" -eq 0 ]
-  run ! grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
+  # Positive control: the HAS_DEVTOOLS arm ran.
+  grep -q "apt-get install.*cloudflare-warp" "${MOCK_CALLS_FILE}"
+  refute_grep "teleport" "${MOCK_CALLS_FILE}"
+  [ ! -e "${_APT_SOURCES_DIR}/teleport.list" ]
+  [ ! -e "${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" ]
 }
 
 @test "_install_ubuntu_cloud_tools: on RESOLUTE uses noble for cloudflare repo" {
@@ -3979,22 +3976,20 @@ _cloud_env() {
   _cloud_env
   run _install_ubuntu_cloud_tools
   [ "$status" -eq 0 ]
-  grep -q "signed-by=${_APT_KEYRINGS_DIR}/teleport-pubkey.gpg" "${_APT_SOURCES_DIR}/teleport.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloudflare-warp-archive-keyring.gpg" "${_APT_SOURCES_DIR}/cloudflare-client.list"
   grep -q "signed-by=${_APT_KEYRINGS_DIR}/cloud.google.gpg" "${_APT_SOURCES_DIR}/google-cloud-sdk.list"
 }
 
-@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with no keyring returns 1, writes no list, and the siblings still run" {
+@test "_install_ubuntu_cloud_tools: a failed cloudflared keyring fetch with no keyring returns 1, writes no list, and gcloud still runs" {
   _cloud_env
-  export MOCK_CURL_FAIL_URL="deb.releases.teleport.dev"
+  export MOCK_CURL_FAIL_URL="pkg.cloudflareclient.com"
   run --separate-stderr _install_ubuntu_cloud_tools
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"cloud_tools: teleport: keyring"* ]]
-  [[ "$stderr" == *"cloud_tools: teleport: source write skipped (no keyring)"* ]]
-  [ ! -e "${_APT_SOURCES_DIR}/teleport.list" ]
-  # Positive controls: the fetch was attempted and the siblings completed.
-  grep -q "curl .*deb.releases.teleport.dev" "${MOCK_CALLS_FILE}"
-  [ -s "${_APT_SOURCES_DIR}/cloudflare-client.list" ]
+  [[ "$stderr" == *"cloud_tools: cloudflared: keyring"* ]]
+  [[ "$stderr" == *"cloud_tools: cloudflared: source write skipped (no keyring)"* ]]
+  [ ! -e "${_APT_SOURCES_DIR}/cloudflare-client.list" ]
+  # Positive controls: the fetch was attempted and the sibling completed.
+  grep -q "curl .*pkg.cloudflareclient.com" "${MOCK_CALLS_FILE}"
   [ -s "${_APT_SOURCES_DIR}/google-cloud-sdk.list" ]
 }
 
@@ -4015,15 +4010,6 @@ _cloud_env() {
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"cloud_tools: gcloud: google-cloud-cli install failed"* ]]
   grep -q "apt install google-cloud-cli-app-engine-go" "${MOCK_CALLS_FILE}"
-}
-
-@test "_install_ubuntu_cloud_tools: a failed teleport apt install returns 1" {
-  _cloud_env
-  export SHIM_APT_FAIL_PKGS="teleport"
-  run --separate-stderr _install_ubuntu_cloud_tools
-  [ "$status" -eq 1 ]
-  [[ "$stderr" == *"cloud_tools: teleport: install failed"* ]]
-  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_cloud_tools: a failed google-cloud-cli-app-engine-go install returns 1" {
@@ -4047,10 +4033,6 @@ _cloud_tee_failure() {
   [ "$(grep -c 'source list write failed' <<< "${stderr}")" -eq 1 ]
 }
 
-@test "_install_ubuntu_cloud_tools: a failed teleport source list write returns 1" {
-  _cloud_tee_failure "teleport.list" teleport
-}
-
 @test "_install_ubuntu_cloud_tools: a failed cloudflared source list write returns 1" {
   _cloud_tee_failure "cloudflare-client.list" cloudflared
 }
@@ -4071,10 +4053,6 @@ _cloud_keyring_failure() {
   [ "$(cat "${_ring}")" = "old" ]
   # The prior keyring still backs the source list, so only the keyring failed.
   [[ "$stderr" != *"source write skipped"* ]]
-}
-
-@test "_install_ubuntu_cloud_tools: a failed teleport keyring fetch with a prior keyring returns 1 and keeps it" {
-  _cloud_keyring_failure teleport-pubkey.gpg deb.releases.teleport.dev teleport
 }
 
 @test "_install_ubuntu_cloud_tools: a failed cloudflared keyring fetch with a prior keyring returns 1 and keeps it" {
@@ -5650,7 +5628,6 @@ SHIM
   grep -qF "vagrant=${VAGRANT_VER}-*" "${MOCK_CALLS_FILE}"
   grep -qF -- " ${KIND_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
   grep -qF -- " ${YQ_URL_EXPECTED}" "${MOCK_CALLS_FILE}"
-  grep -q "apt install teleport" "${MOCK_CALLS_FILE}"
   grep -q "apt-get install.* cloudflare-warp" "${MOCK_CALLS_FILE}"
   grep -q "apt install google-cloud-cli" "${MOCK_CALLS_FILE}"
   grep -q "apt install ${VIRTUALBOX_VER}" "${MOCK_CALLS_FILE}"

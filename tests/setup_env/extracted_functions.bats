@@ -49,7 +49,6 @@ _make_fake_dotfiles() {
   touch "${FAKE_DOTFILES_SRC}/.zprofile"
   touch "${FAKE_DOTFILES_SRC}/.zshenv"
   touch "${FAKE_DOTFILES_SRC}/.ssh/config"
-  touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
   # .cursor/ and .claude/ items sourced from AI_CONFIG_DIR (ai-config repo)
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.claude/projects"
   mkdir -p "${FAKE_AI_CONFIG_SRC}/.cursor/User/snippets"
@@ -119,6 +118,20 @@ _make_fake_dotfiles() {
   [ "$status" -eq 0 ]
   [[ -L "${FAKE_HOME}/.warp/settings.toml" ]]
   [[ "$(readlink "${FAKE_HOME}/.warp/settings.toml")" == "${FAKE_DOTFILES_SRC}/.warp/settings.toml" ]]
+}
+
+@test "setup_dotfile_symlinks neither links teleport.cfg nor creates ~/.tsh" {
+  _make_fake_dotfiles
+  # A stale source copy must still not be linked: the link is gone, not conditional.
+  touch "${FAKE_DOTFILES_SRC}/.ssh/teleport.cfg"
+  export MACOS=1
+  unset LINUX
+  run setup_dotfile_symlinks
+  [ "$status" -eq 0 ]
+  # Positive control: the run reached the dotfile links.
+  [[ -L "${FAKE_HOME}/.gitignore_global" ]]
+  [[ ! -e "${FAKE_HOME}/.ssh/teleport.cfg" && ! -L "${FAKE_HOME}/.ssh/teleport.cfg" ]]
+  [[ ! -e "${FAKE_HOME}/.tsh" ]]
 }
 
 @test "setup_dotfile_symlinks links .gitignore_global" {

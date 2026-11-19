@@ -111,7 +111,6 @@ brew "sqlite"
 brew "starship"                              # [HAS_DEVTOOLS]
 brew "syft"                                  # [HAS_DEVTOOLS]
 brew "teamookla/speedtest/speedtest"         # [HAS_DEVTOOLS]
-brew "teleport"                              # [HAS_DEVTOOLS]
 brew "opentofu"                              # [HAS_DEVTOOLS]
 brew "terraform_landscape"                   # [HAS_DEVTOOLS]
 brew "tfenv"                                 # [HAS_DEVTOOLS]

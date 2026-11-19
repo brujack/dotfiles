@@ -582,11 +582,18 @@ _remedy_one_line() {
   local _h _docker
   _remedy_one_line download.docker.com
   _docker="${output}"
-  for _h in pkgs.k8s.io prod-cdn.packages.k8s.io deb.releases.teleport.dev pkg.cloudflareclient.com download.virtualbox.org cli.github.com; do
+  for _h in pkgs.k8s.io prod-cdn.packages.k8s.io pkg.cloudflareclient.com download.virtualbox.org cli.github.com; do
     _remedy_one_line "${_h}"
     [[ "$output" == *"-t developer"* ]]
     [ "$output" == "${_docker}" ]
   done
+}
+
+@test "_apt_signer_remedy: the retired teleport host gets no re-fetch remedy" {
+  # -t developer no longer fetches the teleport key, so re-running it cannot fix one.
+  _remedy_one_line deb.releases.teleport.dev
+  [[ "$output" != *"-t developer"* ]]
+  [[ "$output" == *"no remedy for this host"* ]]
 }
 
 @test "_apt_signer_remedy: nvidia.github.io names the keyring file to remove" {
