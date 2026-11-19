@@ -2075,6 +2075,13 @@ _install_ubuntu_gui_tools() {
 #
 # sha256sum is never mocked, mirroring _install_rustup_rs above: mocking it
 # would make every mismatch case vacuous.
+#
+# Kinds: raw (the download is the binary), zip (member named <name> at the
+# archive root), tarxz and targz (whole archive extracted, then the file named
+# <name> found at any depth; siblings such as uvx are never installed).
+# The target directory is created as the invoking user before the writability
+# test, so a user-owned directory (e.g. ~/.local/bin) never needs sudo; for an
+# existing /usr/local/bin the mkdir -p is a no-op.
 _install_pinned_release_binary() {
   local _name="$1" _version="$2" _url="$3" _sha256="$4" _kind="$5" _version_regex="$6"
   local _dir="${_RELEASE_BIN_DIR:-/usr/local/bin}"
@@ -2131,13 +2138,15 @@ _install_pinned_release_binary() {
       fi
       _extracted="${_tmp}/${_name}"
       ;;
-    tarxz)
+    tarxz | targz)
       # Extract the whole archive and then locate the binary by name, rather
       # than naming a member path: shellcheck ships its binary one level down
       # (shellcheck-v0.11.0/shellcheck) and that prefix carries the version, so
       # a hardcoded member path would need editing on every bump. The artifact
       # itself is ${_name}.download, which `-name "${_name}"` cannot match.
-      if ! tar -xJf "${_artifact}" -C "${_tmp}"; then
+      local _tar_flag=-xJf
+      [[ "${_kind}" == targz ]] && _tar_flag=-xzf
+      if ! tar "${_tar_flag}" "${_artifact}" -C "${_tmp}"; then
         log_error "${_name} tar extraction failed"
         rm -rf "${_tmp}"
         return 1
@@ -2162,6 +2171,11 @@ _install_pinned_release_binary() {
   # Stage beside the destination and rename over it, as _install_fetched_binary
   # does: install(1) unlinks its target before copying, so a copy that failed
   # straight onto it left the tool missing. A failure now leaves the old binary.
+  if ! mkdir -p "${_dir}"; then
+    log_error "${_name}: cannot create ${_dir}"
+    rm -rf "${_tmp}"
+    return 1
+  fi
   local -a _as=()
   [[ -w "${_dir}" ]] || _as=(sudo)
   if ! { "${_as[@]}" install -m 0755 "${_extracted}" "${_dir}/${_name}.new" \
