@@ -76,8 +76,9 @@ _make_stub() {
   [[ "${output}" == "${_p}" ]]
 }
 
-# The make recipes forward PINNED_UV_BIN="${PINNED_UV_BIN}", so an unset value
-# arrives as an empty one: it must fall back to the default, not be a path.
+# An empty PINNED_UV_BIN is a real input: this file's make helper forwards
+# PINNED_UV_BIN="${PINNED_UV_BIN}" through env -i, so an unset value arrives
+# empty there. It must fall back to the default, not be taken as a path.
 @test "resolve_pinned_uv: an empty PINNED_UV_BIN falls back to the default path" {
   local _p="${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv"
   _make_stub "${_p}" "uv 0.13.0 (x)"
