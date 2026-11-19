@@ -192,6 +192,7 @@ Uses **BATS** (Bash Automated Testing System), installed natively:
 `--no-deps` is required — the state being restored is one the resolver refuses.
 
 - `UV_BIN` (`resolve_uv`, `lib/helpers.sh`) is the operator override and the only seam that reaches the "not executable" branch; `UV_FALLBACK_PATHS` holds prefix candidates so a test can reach the genuine not-found branch (env-settable as a scalar).
+- The renderings and `check-lock` use only the pinned uv (`resolve_pinned_uv`, seam `PINNED_UV_BIN`; `_UV_PINNED_*` only under bats); absent fails closed: `make install-pinned-uv`. → `dotfiles-test-seams.md` § `pinned uv seam`
 - `REQUIREMENTS_CI_TARGET` (`scripts/sync-requirements-ci.sh`) points the drift check at a fixture so a crashed test cannot leave a modified tracked `requirements-ci.txt`. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
 
 - `make sync-requirements-ci` renders the five CI requirements files from `uv.lock`; `make check-requirements-ci` fails on any stale one and is a `make test` prerequisite; `make check-requirements-install` (network, not in `make test`; CI job `renderings-install`) installs the three files ai-config and state-ledger CI pull live from master, in each consumer's shape, on the `requires-python` minor. They are five deliberately separate files, never collapse them. → `dotfiles-bats-test-infrastructure.md` § `Testing: requirements CI renderings and venv rollback`
