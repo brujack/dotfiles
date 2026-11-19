@@ -120,8 +120,9 @@ is one file of about 50 MB, and pruning them is not part of this change.
   itself, outside the installer: no `HAS_DEVTOOLS`, or an unsupported platform/arch, is
   `_update_skip` with the reason, so it never records OK for an install that did not happen.
   Installer rc 0 is OK and rc 1 is FAIL.
-- **Direct:** `make install-pinned-uv` sources the checkout's own `lib/constants.sh` and
-  `lib/linux_ubuntu.sh` and calls the platform installer, ignoring `HAS_DEVTOOLS`, since an
+- **Direct:** `make install-pinned-uv` sources the checkout's own `lib/constants.sh`,
+  `lib/helpers.sh` (which defines `_sha256_pin_ok`, `_sha256_check` and `log_error`, all
+  called by the installer) and `lib/linux_ubuntu.sh`, plus `lib/macos.sh` on Darwin, and calls the platform installer, ignoring `HAS_DEVTOOLS`, since an
   explicit request outranks the capability gate. It is the remedy the resolver names, and
   the one a `UV_VER` bump author runs from the bump branch's worktree. A full `-t update`
   runs from the main checkout at master, installs master's `UV_VER`, and also does a real
@@ -164,8 +165,12 @@ so the dependency fails loudly rather than as a version mismatch.
   skip let the pre-push hook pass without running the check, and the remedy is one command.
   These two targets therefore no longer use `REQUIRE_TOOLS_REFUSE`. The
   `UV := $(shell command -v uv)` variable and the `ifeq ($(UV),)` branches go. The tests that
-  pin them (`tests/scripts/makefile_lint_scope.bats:1300` and the `REQUIRE_TOOLS` table at
-  `:1358-1359`, which overrides `UV=`) move to `PINNED_UV_BIN`.
+  pin them change, not merely move: in `tests/scripts/makefile_lint_scope.bats` the
+  skip loop (`_n -eq 18`) and the refuse loop (`_n -eq 6`) assert the old skip and
+  `REQUIRE_TOOLS_REFUSE` text for these two targets, so their uv rows are deleted and the
+  counts become 12 and 4. The "`REQUIRE_TOOLS=1` is inert when every tool is present" case
+  (~:1421) guards on `command -v uv`; it guards on `resolve_pinned_uv` instead. The
+  `:1300` `ifeq ($(UV),)` assertion goes with the branch it pins.
 - Cost, accepted: on every machine the first push after this merges fails until
   `make install-pinned-uv` runs once, including machines without `HAS_DEVTOOLS`. The failure
   names the command.
@@ -178,6 +183,10 @@ Measured 2026-11-19 (one machine, one constraint change): a `uv.lock` written by
 0.13.9 after changing `ruff==0.17.4` to `0.17.3` passes the pinned 0.13.0's `lock --check`
 (rc 0), and `sync` then `check` under 0.13.0 report all five OK. So the everyday workflow,
 "edit `pyproject.toml`, run `uv lock`" with brew's `uv`, stays green under the pinned check.
+
+Measured again 2026-11-19 with a genuinely new marker-bearing dependency (`wmi==1.5.1 ;
+sys_platform == 'win32'`, 269 to 270 packages resolved) locked by brew 0.13.9: pinned
+`lock --check` rc 0, and `sync` then `check` five OK.
 
 Accepted risk: a future brew `uv` may write a lock (`uv.lock` is `version = 1`,
 `revision = 5` today) that 0.13.0 rejects. That does not break this design specifically,
@@ -215,14 +224,18 @@ TDD, one behaviour at a time.
   records a skip and does not call the installer; installer rc 1 records FAIL; with the pinned
   version already present, the installer makes no `curl` call.
 - **Direct target:** `make install-pinned-uv` calls the installer with `HAS_DEVTOOLS` unset,
-  and afterwards the shell's `_RELEASE_BIN_DIR` is still unset.
+  and afterwards the shell's `_RELEASE_BIN_DIR` is still unset. The test puts `tests/mocks/curl`
+  on `PATH` with `MOCK_CURL_STDOUT` set to a fixture archive whose real digest is the pin under
+  test, and points `HOME` and `_RELEASE_TMP_ROOT` at `BATS_TEST_TMPDIR`, so it makes no
+  network call (N5).
 - **Consumers (positive control):** with a stub `uv` on `PATH` that renders the 0.13.9
   marker, and a `PINNED_UV_BIN` stub that renders the committed content, `check` reports
   all OK. Swap the two and it reports `DRIFT`. The swap proves the check reads the pinned
   binary, not `PATH`.
 - **Makefile:** rc 2 and rc 1 each fail with the resolver's message, with and without
   `REQUIRE_TOOLS=1`;
-  `make lint` does not invoke the resolver (a recording `PINNED_UV_BIN` stub sees no call).
+  `make lint` does not invoke the resolver (a recording `PINNED_UV_BIN` stub sees no call),
+  with the positive control that the same stub records a call under `make check-lock`.
 - **CI pin equality:** the per-job parser finds three `UV_VER` occurrences (a count of 0
   fails, it does not pass), and a deliberately mismatched fixture workflow fails.
 
@@ -245,7 +258,7 @@ TDD, one behaviour at a time.
 - **R15.** Every workflow job with an `Install uv (pinned)` step (`test-shard`, `test-macos-shard`, and the job in `uv-lock-refresh.yml`) sets `PINNED_UV_BIN: /usr/local/bin/uv` in its job `env:`.
 - **R16.** A bats test parses `.github/workflows/ci.yml` and `uv-lock-refresh.yml` per job, finds exactly three `UV_VER` values, asserts each equals `lib/constants.sh`'s `UV_VER` and each `UV_SHA256` equals the constant for its job's asset, and fails on zero matches.
 - **R17.** A bats test runs `scripts/sync-requirements-ci.sh check` with a `PATH` stub `uv` that renders a differing marker and a `PINNED_UV_BIN` stub that renders the committed content and expects all OK; with the two stubs swapped it expects `DRIFT`.
-- **R18.** `make install-pinned-uv` sources the checkout's `lib/constants.sh` and calls the platform installer regardless of `HAS_DEVTOOLS`.
+- **R18.** `make install-pinned-uv` sources the checkout's `lib/constants.sh`, `lib/helpers.sh` and `lib/linux_ubuntu.sh`, plus `lib/macos.sh` on Darwin, and calls the platform installer regardless of `HAS_DEVTOOLS`.
 - **R19.** The uv installer call passes `_RELEASE_BIN_DIR` as a command prefix, and no code assigns `_RELEASE_BIN_DIR` in the calling shell.
 - **R20.** The backlog row "`uv` ships unpinned and no check in this repo can see it drift" is closed, citing this spec.
 - **V1.** On `claude`, after `make install-pinned-uv`, `~/.local/share/dotfiles/pinned/uv-0.13.0/uv --version` prints `uv 0.13.0`, and `make test` prints `OK: requirements-runtime-ci.txt matches uv.lock` and exits 0 with brew `uv` 0.13.9 still first on `PATH`.
@@ -295,3 +308,11 @@ Disposition: Addressed (operator, 2026-11-19): `make install-pinned-uv` is the r
 
 Risk — Finding: no rc-to-status mapping for `pinned-uv`, and an in-installer gate would record OK for no install; V1 was satisfiable by a skip; section 6 misstated the refresh failure path; `_RELEASE_BIN_DIR` could leak. Assumption: same lock-revision risk.
 Disposition: Addressed (operator, 2026-11-19): section-level skip, rc 1 FAIL, full runs only; V1 asserts the OK line; section 6 corrected; R19 makes `_RELEASE_BIN_DIR` a prefix.
+
+### Round 3 (scoped Risk re-review)
+
+Reviewed at commit: `d995b328` (changed sections only)
+
+Finding: `make install-pinned-uv` did not source `lib/helpers.sh` (or `lib/macos.sh` on Darwin); fail-closed contradicts the skip and refuse loops in `makefile_lint_scope.bats` (counts 18 and 6) and its `command -v uv` inert guard; the direct-target test had no network seam; the `make lint` no-call test lacked a positive control. CI wiring (three jobs) confirmed correct; no R contradicts an N.
+Assumption: a brew-locked new marker-bearing dependency passes 0.13.0's `lock --check`. Checked with `wmi`: rc 0, five OK.
+Disposition:
