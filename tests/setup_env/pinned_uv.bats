@@ -360,3 +360,94 @@ _stub_misc_steps() {
     [ ! -e "${_PINNED_DIR}/uv" ]
   done
 }
+
+# ── make targets: fail-closed uv checks and install-pinned-uv ───────────────
+#
+# Every stdout-capturing make here carries --no-print-directory (the MAKEFLAGS
+# partition in tests/scripts/makefile_lint_scope.bats), and the GIT_* strip keeps
+# a worktree push from leaking GIT_DIR into the recipe.
+
+_make_target() {
+  # $1 = REQUIRE_TOOLS value or "unset"; rest = make arguments.
+  local _req=(REQUIRE_TOOLS="$1")
+  [[ "$1" == unset ]] && _req=(-u REQUIRE_TOOLS)
+  shift
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u JOBS \
+    "${_req[@]}" HOME="${HOME}" PINNED_UV_BIN="${PINNED_UV_BIN}" \
+    make --no-print-directory -C "${REPO_ROOT}" "$@"
+}
+
+@test "make check-lock and check-requirements-ci: an absent pinned uv fails closed with or without REQUIRE_TOOLS" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/nonexistent/uv"
+  local _t _r
+  for _t in check-lock check-requirements-ci; do
+    for _r in unset 0 1; do
+      _make_target "${_r}" "${_t}"
+      [ "${status}" -ne 0 ] || { printf '%s REQUIRE_TOOLS=%s: rc 0\n%s\n' "${_t}" "${_r}" "${output}"; return 1; }
+      [[ "${output}" == *"pinned uv not found at ${PINNED_UV_BIN}; run make install-pinned-uv"* ]] \
+        || { printf '%s REQUIRE_TOOLS=%s: wrong message\n%s\n' "${_t}" "${_r}" "${output}"; return 1; }
+      [[ "${output}" != *"skipping"* ]]
+    done
+  done
+}
+
+@test "make check-lock and check-requirements-ci: a wrong-version pinned uv fails closed with or without REQUIRE_TOOLS" {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  _make_stub "${PINNED_UV_BIN}" "uv 0.13.9"
+  local _t _r
+  for _t in check-lock check-requirements-ci; do
+    for _r in unset 0 1; do
+      _make_target "${_r}" "${_t}"
+      [ "${status}" -ne 0 ] || { printf '%s REQUIRE_TOOLS=%s: rc 0\n%s\n' "${_t}" "${_r}" "${output}"; return 1; }
+      [[ "${output}" == *"reports uv 0.13.9, expected uv 0.13.0"* ]] \
+        || { printf '%s REQUIRE_TOOLS=%s: wrong message\n%s\n' "${_t}" "${_r}" "${output}"; return 1; }
+    done
+  done
+}
+
+# _recording_uv: a PINNED_UV_BIN stub that logs every argv to _UV_CALLS.
+_recording_uv() {
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/uv"
+  _UV_CALLS="${BATS_TEST_TMPDIR}/uv-calls.log"
+  : > "${_UV_CALLS}"
+  cat > "${PINNED_UV_BIN}" << STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "${_UV_CALLS}"
+case "\$1" in --version) printf 'uv 0.13.0\n' ;; esac
+STUB
+  chmod +x "${PINNED_UV_BIN}"
+}
+
+@test "make lint makes no call to the pinned uv; make check-lock does (positive control)" {
+  _recording_uv
+  _make_target unset lint SHELLCHECK=
+  [ "${status}" -eq 0 ] || { printf '%s\n' "${output}"; return 1; }
+  [ ! -s "${_UV_CALLS}" ]
+  _make_target unset check-lock
+  [ "${status}" -eq 0 ] || { printf '%s\n' "${output}"; return 1; }
+  [ "$(command grep -c '^lock --check$' "${_UV_CALLS}")" -eq 1 ]
+}
+
+@test "make install-pinned-uv: installs without HAS_DEVTOOLS" {
+  _install_fixture_setup
+  unset HAS_DEVTOOLS
+  # _UNAME_M is assigned from uname -m by lib/constants.sh, so an exported value
+  # does not survive sourcing: pick the platform pair this host's arch pins.
+  local _os
+  case "$(uname -m)" in
+    x86_64) _os=Linux ;;
+    arm64) _os=Darwin ;;
+    *) skip "no pinned uv for $(uname -m)" ;;
+  esac
+  export PINNED_UV_BIN="${BATS_TEST_TMPDIR}/unused/uv"
+  run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u JOBS -u HAS_DEVTOOLS \
+    HOME="${HOME}" BATS_TEST_TMPDIR="${BATS_TEST_TMPDIR}" \
+    _RELEASE_TMP_ROOT="${_RELEASE_TMP_ROOT}" _UV_PINNED_SHA256="${_UV_PINNED_SHA256}" \
+    _OVERRIDE_PLATFORM="${_os}" PATH="${PATH}" \
+    make --no-print-directory -C "${REPO_ROOT}" install-pinned-uv
+  [ "${status}" -eq 0 ] || { printf '%s\n' "${output}"; return 1; }
+  [ -x "${_PINNED_DIR}/uv" ]
+  [ -x "${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv" ]
+}

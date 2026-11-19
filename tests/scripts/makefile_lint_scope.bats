@@ -1295,9 +1295,10 @@ _words_missing_from() {
   # relationships; only one of them had a gate before this.
   grep -qE '^test:.*check-lock' "${REPO_ROOT}/Makefile"
   grep -qE '^check-lock:' "${REPO_ROOT}/Makefile"
-  # and it must be guarded, like lint's shellcheck, or a machine without uv
-  # cannot commit the change that installs uv
-  grep -A2 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'ifeq ($(UV),)'
+  # and it must resolve the pinned uv inside its recipe (fail closed), never
+  # via a parse-time PATH lookup
+  grep -A8 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'resolve_pinned_uv'
+  ! command grep -q 'ifeq ($(UV),)' "${REPO_ROOT}/Makefile"
 }
 
 @test "lint skip hint names setup_env.sh -t developer on non-Darwin" {
@@ -1339,8 +1340,9 @@ _words_missing_from() {
 
 # --- REQUIRE_TOOLS: CI may not skip ----------------------------------------
 # Every tool guard in make test (shellcheck and the lib-trap scanner in lint,
-# uv in check-lock and check-requirements-ci, python3 in test-python and
-# check-claude-md-budget) skips rather than fails, so a machine without the
+# python3 in test-python and
+# check-claude-md-budget) skips rather than fails (uv is not among them: the
+# pinned-uv checks fail closed regardless, see tests/setup_env/pinned_uv.bats), so a machine without the
 # tool can still commit the change that installs it. CI installs each of them
 # before make runs, but its make test ran through the same skips: had an
 # install step been removed, moved or failed to land on PATH, CI would have
@@ -1355,8 +1357,6 @@ _require_tools_cases() {
   printf '%s\n' \
     "lint|SHELLCHECK=|shellcheck not found|CI installs the pinned shellcheck before lint; check that step" \
     "lint|LIB_TRAP_SCANNER=${BATS_TEST_TMPDIR}/absent-scanner.sh|absent-scanner.sh missing|a tracked file; restore it" \
-    "check-lock|UV=|uv not found|CI installs a pinned uv before make runs; check that step" \
-    "check-requirements-ci|UV=|uv not found|CI installs a pinned uv before make runs; check that step" \
     "test-python|PYTHON3=|python3 not found|the CI runner image provides it; check the job's runs-on image" \
     "check-claude-md-budget|PYTHON3=|python3 not found|the CI runner image provides it; check the job's runs-on image"
 }
@@ -1381,7 +1381,7 @@ _require_tools_make() {
       || { printf '%s %s: skipped anyway\n%s\n' "${_target}" "${_override}" "$output"; return 1; }
     _n=$((_n + 1))
   done < <(_require_tools_cases)
-  [ "${_n}" -eq 6 ]
+  [ "${_n}" -eq 4 ]
 }
 
 @test "REQUIRE_TOOLS=1 refusal names where CI actually gets each tool" {
@@ -1398,7 +1398,7 @@ _require_tools_make() {
     fi
     _n=$((_n + 1))
   done < <(_require_tools_cases)
-  [ "${_n}" -eq 6 ]
+  [ "${_n}" -eq 4 ]
 }
 
 @test "every make test tool guard still skips, and passes, with REQUIRE_TOOLS unset, 0 or empty" {
@@ -1415,12 +1415,13 @@ _require_tools_make() {
       _n=$((_n + 1))
     done
   done < <(_require_tools_cases)
-  [ "${_n}" -eq 18 ]
+  [ "${_n}" -eq 12 ]
 }
 
 @test "REQUIRE_TOOLS=1 is inert when every tool is present" {
   command -v shellcheck >/dev/null || skip "no shellcheck on this host"
-  command -v uv >/dev/null || skip "no uv on this host"
+  bash -c 'cd "$1" && source lib/constants.sh; source lib/helpers.sh; resolve_pinned_uv' _ "${REPO_ROOT}" >/dev/null 2>&1 \
+    || skip "no pinned uv on this host"
   command -v python3 >/dev/null || skip "no python3 on this host"
   run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
     REQUIRE_TOOLS=1 \
