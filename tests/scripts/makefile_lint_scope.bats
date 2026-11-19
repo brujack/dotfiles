@@ -1298,6 +1298,7 @@ _words_missing_from() {
   # and it must resolve the pinned uv inside its recipe (fail closed), never
   # via a parse-time PATH lookup
   grep -A2 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'PINNED_UV_RESOLVE'
+  grep -A2 '^check-requirements-ci:' "${REPO_ROOT}/Makefile" | grep -q 'PINNED_UV_RESOLVE'
   grep -qE '^PINNED_UV_RESOLVE = .*resolve_pinned_uv' "${REPO_ROOT}/Makefile"
   ! command grep -q 'ifeq ($(UV),)' "${REPO_ROOT}/Makefile"
 }
@@ -1341,10 +1342,9 @@ _words_missing_from() {
 
 # --- REQUIRE_TOOLS: CI may not skip ----------------------------------------
 # Every tool guard in make test (shellcheck and the lib-trap scanner in lint,
-# python3 in test-python and
-# check-claude-md-budget) skips rather than fails (uv is not among them: the
-# pinned-uv checks fail closed regardless, see tests/setup_env/pinned_uv.bats), so a machine without the
-# tool can still commit the change that installs it. CI installs each of them
+# python3 in test-python and check-claude-md-budget) skips rather than fails
+# (uv is not among them: the pinned-uv checks fail closed regardless, see
+# tests/setup_env/pinned_uv.bats), so a machine without the tool can still commit the change that installs it. CI installs each of them
 # before make runs, but its make test ran through the same skips: had an
 # install step been removed, moved or failed to land on PATH, CI would have
 # reported green having run none of those checks. REQUIRE_TOOLS=1 turns every

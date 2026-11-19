@@ -368,10 +368,10 @@ check-lock:
 
 # Installs the pinned uv that check-lock and check-requirements-ci require.
 # install_uv_pinned dispatches on uname -s itself (no detect_env, so no
-# HAS_DEVTOOLS gate); the Darwin worker lives in lib/macos.sh and the Linux one
-# in lib/linux_ubuntu.sh, so both are sourced.
+# HAS_DEVTOOLS gate); the Linux worker lives in lib/linux_ubuntu.sh, always
+# sourced, and the Darwin worker in lib/macos.sh, sourced only on Darwin.
 install-pinned-uv:
-	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE bash -c 'source lib/constants.sh; source lib/helpers.sh; source lib/linux_ubuntu.sh; source lib/macos.sh; install_uv_pinned'
+	@env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE bash -c 'source lib/constants.sh; source lib/helpers.sh; source lib/linux_ubuntu.sh; if [ "$${_OVERRIDE_PLATFORM:-$$(uname -s)}" = Darwin ]; then source lib/macos.sh; fi; install_uv_pinned'
 
 # Introspection: `make print-VARNAME` prints a Makefile variable's resolved
 # value, for tests that need to assert against the Makefile's own derivation

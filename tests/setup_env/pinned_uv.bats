@@ -451,3 +451,12 @@ STUB
   [ -x "${_PINNED_DIR}/uv" ]
   [ -x "${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv" ]
 }
+
+@test "make install-pinned-uv: sources lib/macos.sh only on Darwin" {
+  # The recipe shell text is the unit: dropping the Darwin condition fails this.
+  local _recipe
+  _recipe="$(env -u MAKEFLAGS make --no-print-directory -C "${REPO_ROOT}" -n install-pinned-uv)"
+  [[ "${_recipe}" == *'${_OVERRIDE_PLATFORM:-$(uname -s)}" = Darwin ]; then source lib/macos.sh; fi'* ]]
+  [[ "${_recipe}" != *'; source lib/macos.sh;'* ]]
+  [[ "${_recipe}" == *"source lib/linux_ubuntu.sh"* ]]
+}
