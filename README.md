@@ -449,7 +449,12 @@ make install-hooks # install pre-commit hook (runs lint + ggshield before each c
 make sync-requirements-ci  # render the five requirements-ci*.txt files from uv.lock's groups
 make check-requirements-ci # fail if any of the five renderings has drifted from uv.lock
 make check-requirements-install # install the three consumed renderings on the required Python (network; CI job renderings-install)
+make install-pinned-uv     # install the pinned uv the renderings and check-lock use (ADR-0058)
 ```
+
+The renderings and `check-lock` run only the pinned uv at
+`~/.local/share/dotfiles/pinned/uv-<UV_VER>/uv`, never the uv on `PATH`, and fail when it is
+missing or the wrong version; `make install-pinned-uv` fixes that.
 
 `.github/workflows/uv-lock-refresh.yml` runs `uv lock --upgrade` and `make sync-requirements-ci` every Monday and proposes the result as the `chore/uv-lock-refresh` PR, which is merged by hand.
 
