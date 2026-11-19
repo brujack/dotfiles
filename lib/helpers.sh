@@ -2232,3 +2232,54 @@ setup_credential_directories() {
     log_info "Created ${HOME}/.azure_creds"
   fi
 }
+
+# _uv_pinned_version_regex
+# Prints the ERE a `uv --version` first line must match: anchored, dots
+# escaped, and ended by a space or end of line so 0.13.0 never accepts
+# 0.13.01 or 0.13.0.1. rc 1 when UV_VER is empty.
+_uv_pinned_version_regex() {
+  [[ -n "${UV_VER:-}" ]] || return 1
+  printf '^uv %s( |$)\n' "${UV_VER//./\\.}"
+}
+
+# _uv_pinned_asset <uname -s> <uname -m>
+# Prints "<release asset name> <sha256>" for the pinned uv on that platform.
+# rc 1, nothing on stdout, for a platform with no pin (only Linux x86_64 and
+# Darwin arm64 are pinned).
+_uv_pinned_asset() {
+  case "${1}/${2}" in
+    Linux/x86_64) printf '%s %s\n' "uv-x86_64-unknown-linux-gnu" "${UV_SHA256_LINUX_AMD64}" ;;
+    Darwin/arm64) printf '%s %s\n' "uv-aarch64-apple-darwin" "${UV_SHA256_DARWIN_ARM64}" ;;
+    *) return 1 ;;
+  esac
+}
+
+# resolve_pinned_uv
+# Prints the path of the pinned uv (PINNED_UV_BIN override, else
+# ~/.local/share/dotfiles/pinned/uv-<UV_VER>/uv) on stdout only when it is
+# executable and reports exactly UV_VER. PATH is never consulted: the point is
+# a known build, not whichever uv is first. Messages go to stderr.
+# rc 0 ok; 1 UV_VER unset, not executable or wrong version; 2 absent.
+resolve_pinned_uv() {
+  local _path _first _re
+  if [[ -z "${UV_VER:-}" ]]; then
+    log_error "UV_VER is not set; source lib/constants.sh"
+    return 1
+  fi
+  _path="${PINNED_UV_BIN:-${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}/uv}"
+  if [[ ! -e "${_path}" ]]; then
+    log_error "pinned uv not found at ${_path}; run make install-pinned-uv"
+    return 2
+  fi
+  if [[ ! -x "${_path}" ]]; then
+    log_error "pinned uv at ${_path} is not executable"
+    return 1
+  fi
+  _first="$("${_path}" --version 2>/dev/null </dev/null | head -n 1)"
+  _re="$(_uv_pinned_version_regex)" || return 1
+  if [[ ! "${_first}" =~ ${_re} ]]; then
+    log_error "pinned uv at ${_path} reports ${_first}, expected uv ${UV_VER}"
+    return 1
+  fi
+  printf '%s\n' "${_path}"
+}
