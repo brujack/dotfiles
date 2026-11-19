@@ -311,7 +311,12 @@ _stub_misc_steps() {
 @test "_install_ubuntu_misc: calls _install_ubuntu_uv_pinned with HAS_DEVTOOLS and survives its failure" {
   _stub_misc_steps
   export HAS_DEVTOOLS=1
+  # The other HAS_DEVTOOLS steps must succeed here, or their host-dependent rc
+  # (opentofu's source write returns 1 on a runner with no keyring) masks
+  # whether a failing uv install leaks into _install_ubuntu_misc's rc.
   _install_fetched_binary() { :; }
+  _install_apt_keyring() { :; }
+  _write_apt_source_list() { :; }
   run -0 _install_ubuntu_misc
   [[ "${output}" == *"UV_PINNED_CALLED"* ]]
   _install_ubuntu_uv_pinned() { return 1; }
