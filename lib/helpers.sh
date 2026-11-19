@@ -864,7 +864,7 @@ _doctor_check_dev_tools() {
 }
 _doctor_check_cred_dirs() {
   printf "\nCredential directories:\n"
-  local -a _dirs=("${HOME}/.aws" "${HOME}/.tf_creds" "${HOME}/.ssh" "${HOME}/.tsh")
+  local -a _dirs=("${HOME}/.aws" "${HOME}/.tf_creds" "${HOME}/.ssh")
   local _label _perms
 
   local _dir
@@ -2182,13 +2182,6 @@ setup_dotfile_symlinks() {
     fi
   fi
 
-  safe_link "${PERSONAL_GITREPOS}/${DOTFILES}/.ssh/teleport.cfg" "${HOME}/.ssh/teleport.cfg"
-
-  log_info "Creating ${HOME}/.tsh"
-  if mkdir -p "${HOME}"/.tsh; then
-    chmod 700 "${HOME}"/.tsh
-    log_info "Created ${HOME}/.tsh"
-  fi
   # 1 when an ai-config subdir could not be listed; run_setup_user then skips the later steps.
   return "${_links_failed}"
 }

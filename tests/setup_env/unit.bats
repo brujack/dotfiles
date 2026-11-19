@@ -1777,9 +1777,9 @@ EOF
 @test "_doctor_check_cred_dirs real: fails when all credential dirs are missing" {
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export HOME="${TMPDIR_TEST}"
-  # No dirs created — all four dirs are absent
+  # No dirs created — all three dirs are absent
   _doctor_check_cred_dirs
-  [ "${_DOCTOR_FAIL}" -ge 4 ]
+  [ "${_DOCTOR_FAIL}" -eq 3 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
 }
 
@@ -1787,10 +1787,11 @@ EOF
   if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export HOME="${TMPDIR_TEST}"
-  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
-  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
+  # No ~/.tsh: Teleport is retired, so its absence must not fail doctor.
+  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh"
+  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh"
   _doctor_check_cred_dirs
-  [ "${_DOCTOR_PASS}" -eq 4 ]
+  [ "${_DOCTOR_PASS}" -eq 3 ]
   [ "${_DOCTOR_FAILED}" -eq 0 ]
 }
 
@@ -1798,12 +1799,12 @@ EOF
   if [[ "$(uname -s)" == "Darwin" ]]; then export MACOS=1; else unset MACOS; fi
   _DOCTOR_FAIL=0; _DOCTOR_FAILED=0; _DOCTOR_PASS=0; _DOCTOR_WARN=0
   export HOME="${TMPDIR_TEST}"
-  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh" "${TMPDIR_TEST}/.tsh"
-  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.tsh"
+  mkdir -p "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds" "${TMPDIR_TEST}/.ssh"
+  chmod 700 "${TMPDIR_TEST}/.aws" "${TMPDIR_TEST}/.tf_creds"
   chmod 755 "${TMPDIR_TEST}/.ssh"
   _doctor_check_cred_dirs
-  [ "${_DOCTOR_FAIL}" -ge 1 ]
-  [ "${_DOCTOR_PASS}" -ge 3 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_PASS}" -eq 2 ]
 }
 
 # ── _doctor_check_hooks_path ──────────────────────────────────────────────────

@@ -21,12 +21,6 @@ actions:
     path: "{{ user.home_dir }}/.tf_creds"
     mode: "700"
 
-  - action: directory.create
-    path: "{{ user.home_dir }}/.tsh"
-  - action: file.chmod
-    path: "{{ user.home_dir }}/.tsh"
-    mode: "700"
-
   # ── support directories ─────────────────────────────────────────────────
   - action: directory.create
     path: "{{ user.home_dir }}/.config/etch"
@@ -82,10 +76,6 @@ actions:
   - action: file.link
     source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.ssh/config"
     target: "{{ user.home_dir }}/.ssh/config"
-
-  - action: file.link
-    source: "{{ user.home_dir }}/git-repos/personal/dotfiles/.ssh/teleport.cfg"
-    target: "{{ user.home_dir }}/.ssh/teleport.cfg"
 
   - action: file.link
     source: "{{ user.home_dir }}/git-repos/personal/dotfiles/profile.ps1"

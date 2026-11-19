@@ -1,7 +1,6 @@
 # aliases for home
-alias prox-0='tsh ssh root@prox-0'
-alias prox-1='tsh ssh root@prox-1'
-alias prox-2='tsh ssh root@prox-2'
+alias prox-1='ssh root@prox-1.home.conecrazy.ca'
+alias prox-2='ssh root@prox-2.home.conecrazy.ca'
 
 # command aliases
 alias au='sudo apt-get update'
@@ -31,13 +30,7 @@ alias kcv='kubectl config view'
 alias kcc='kubectl config current-context'
 alias kcu='kubectl config use-context $@'
 alias lzd='lazydocker'
-alias tlogin='tsh login --proxy=teleport.home.conecrazy.ca --user=teleport-admin --insecure'
-alias talogin='export ANSIBLE_SSH_ARGS="-F ${HOME}/.ssh/teleport.cfg" && export ANSIBLE_SCP_IF_SSH=False && export ANSIBLE_HOST_KEY_CHECKING=False && tsh login --proxy=teleport.home.conecrazy.ca --user=teleport-admin --insecure'
-alias tlogout='tsh logout'
-alias tstatus='tsh status'
-alias tlist='tsh ls'
-# tssh and sh are functions defined above
-alias ts='tssh $@'
+# sh and sshu are functions defined above
 alias ss='sh $@'
 alias ssu='sshu $@'
 
