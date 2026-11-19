@@ -41,6 +41,17 @@ The off-LAN route is Cloudflare, then the bastion, then a password hop on `works
 - `claude` and `workstation` are always at home. From a client on the home LAN, `claude` is
   never proxied through `workstation`. From a client off the LAN, `claude` is reached as
   today: Cloudflare, then the bastion, then `workstation`, then `claude`.
+- Every ssh connection made from `claude` or `workstation` is a plain ssh connection. No
+  probe, no `Match exec`, no ControlMaster and no `home-ssh` is involved on the Linux
+  hosts.
+- Reception and two other work Macs (`office`, `home`) live in a different namespace
+  (`*.centrepointe.genexxelearning.ca`, e.g. `office.centrepointe.genexxelearning.ca`), and
+  reception ssh's directly to the other two. All three are managed by this repo, so they
+  receive the same `.ssh/config` and Mac scripts. Their routing to each other is untouched.
+  The three work Macs (`hostname -s` in `reception`, `reception-1`, `office`, `office-1`,
+  `home-1`, the wired and wireless names in `config/profiles.sh`) reach `claude`/`workstation`
+  only through Cloudflare. That is chosen by hostname rather than by the probe, because the
+  work LAN's addressing is not known to differ from `192.168.51.0/24`.
 
 ## Measurements behind the design
 
@@ -101,20 +112,32 @@ otherwise.
 
 ### 3. ssh routing (`.ssh/config`)
 
-The bare names `claude` and `workstation` become routing aliases on every machine. **The
+The bare names `claude` and `workstation` become routing aliases on every Mac. **The
 default is direct.** The Cloudflare chain applies only when the probe exists and positively
 reports that the client is off the LAN:
 
 ```
-Match host claude exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"
+Match host claude,workstation exec "[ \"$(uname -s)\" = Darwin ] && case $(hostname -s) in reception|reception-1|office|office-1|home-1) true;; *) false;; esac"
+  ProxyJump PER_HOST_CHAIN
+Match host claude exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"
   ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca
-Match host workstation exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"
+Match host workstation exec "[ \"$(uname -s)\" = Darwin ] && test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"
   ProxyJump home-secure.conecrazy.ca
 Host claude workstation
   HostName %h.home.conecrazy.ca
   User bruce
   IdentityFile ~/.ssh/home
 ```
+
+The work-Mac block is written as two blocks in the real file, one per host, because the
+chain differs (`claude`: `home-secure.conecrazy.ca,workstation.home.conecrazy.ca`;
+`workstation`: `home-secure.conecrazy.ca`). `PER_HOST_CHAIN` above is shorthand for that,
+not literal config.
+
+- **Linux hosts.** Every `exec` starts with the `uname -s` test, so on `claude` and
+  `workstation` no probe runs and both names go direct. That makes them plain ssh.
+- **The work Macs** match by `hostname -s` and always get the Cloudflare chain, whatever
+  network they are on.
 
 - **Failure direction.** A missing, non-executable or failing probe means direct. That is
   how bare `ssh workstation` behaves today, so a host where `setup_user` has not yet run
@@ -128,7 +151,9 @@ Host claude workstation
   only in the off-LAN `Match`, so no later block can add a jump on the LAN.
 - `User` and `IdentityFile` sit on the alias block, because Host patterns match the alias,
   not the HostName.
-- The workstation password hop, `Host workstation.home.conecrazy.ca workstation`, gets:
+- The workstation password hop gets the following, in a
+  `Match host workstation.home.conecrazy.ca,workstation exec "[ \"$(uname -s)\" = Darwin ]"`
+  block, so the Linux hosts never multiplex:
   - `ControlMaster auto`
   - `ControlPath ~/.ssh/cm-%C`
   - `ControlPersist 10m`
@@ -155,6 +180,8 @@ test.
 
 **Behaviour:**
 
+- **On a work Mac** (`hostname -s` in `reception`, `reception-1`, `office`, `office-1`,
+  `home-1`): skip the probe and treat the client as off the LAN.
 - **On the LAN** (`home-lan-probe` succeeds for the target's IP): `exec ssh -t <host> <cmd>`.
 - **Off the LAN:** loop, for at most 300 s in total:
   1. If `ssh -O check "${HOP[@]}"` succeeds, `exec ssh -t <host> <cmd>`.
@@ -224,7 +251,8 @@ WantedBy=default.target
 
 ### 6. Install (`setup_env.sh -t setup_user`)
 
-On every machine, link `bin/repo-session`, `bin/home-lan-probe` and `bin/home-ssh` into `~/.local/bin` with
+On a Linux host with a `REPO_SESSIONS` entry, link `bin/repo-session` into `~/.local/bin`.
+On macOS, link `bin/home-lan-probe` and `bin/home-ssh` into `~/.local/bin`. All links use
 `safe_link`.
 
 On a Linux host with a `REPO_SESSIONS` entry, also:
@@ -297,6 +325,12 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
     the same `controlpath` as for `-J home-secure.conecrazy.ca workstation.home.conecrazy.ca`,
     and a different one from `ssh -G workstation.home.conecrazy.ca` (LAN direct).
   - The same three cases for `workstation`.
+  - `uname` and `hostname` are mocked on `PATH` (`Match exec` runs through `sh -c`, so a
+    `PATH` stub reaches it). On `Linux` with the probe stub exiting 1, both names go direct
+    (N6). On `Darwin` with each work hostname (`reception`, `reception-1`, `office`,
+    `office-1`, `home-1`) and the probe stub exiting 0, both names get the Cloudflare chain.
+  - On `Linux`, `ssh -G workstation` resolves `controlmaster false`. On `Darwin` it resolves
+    `controlmaster auto`.
 - **bats `home-ssh`** (`ssh` and `home-lan-probe` mocked):
   - LAN: one `ssh -t` call, no `-O check`.
   - Off-LAN with a live master: no `-fNM`.
@@ -336,18 +370,18 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R3.** `bin/repo-session --detached --all` runs once per dir in this host's `REPO_SESSIONS` entry, continues past a failing dir, and exits 1 if any dir failed, else 0.
 - **R4.** `bin/repo-session` exits 2, naming the argument, without calling tmux, for a `<dir>` that is empty, absolute, contains a `..` component, or is not a directory under `${HOME}/git-repos/personal`.
 - **R5.** `bin/home-lan-probe <ip>` runs `nc -z -G 1 -w 1 <ip> 22` when `uname -s` is `Darwin` and `nc -z -w 1 <ip> 22` otherwise, exits with nc's status, and exits 1 when `nc` is not found.
-- **R6.** `.ssh/config` has `Match host claude exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"` setting `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`, and `Match host workstation exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"` setting `ProxyJump home-secure.conecrazy.ca`, both placed before a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca` and no `ProxyJump`.
-- **R7.** With `HOME` pointing at a fixture, a probe exiting 1 makes `ssh -G claude` resolve `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolve `proxyjump home-secure.conecrazy.ca`; a probe exiting 0, and an absent probe, both give `hostname <host>.home.conecrazy.ca` with no `proxyjump`.
-- **R8.** `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C`, `ControlPersist 10m` and `ServerAliveInterval 30` for `workstation.home.conecrazy.ca` and `workstation`.
+- **R6.** On macOS only, `.ssh/config` routes `claude` and `workstation` through Cloudflare (`claude`: `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`; `workstation`: `ProxyJump home-secure.conecrazy.ca`) when `hostname -s` is one of `reception`, `reception-1`, `office`, `office-1`, `home-1`, or when `$HOME/.local/bin/home-lan-probe` is executable and fails for `192.168.51.17` (`claude`) or `192.168.51.12` (`workstation`). Every such `Match ... exec` begins with `[ "$(uname -s)" = Darwin ]`. These blocks precede a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca` and no `ProxyJump`.
+- **R7.** With `HOME` pointing at a fixture and `uname`/`hostname` mocked on `PATH`: on Darwin with a probe exiting 1, or with a work hostname (each of `reception`, `reception-1`, `office`, `office-1`, `home-1`), `ssh -G claude` resolves `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolves `proxyjump home-secure.conecrazy.ca`. On Darwin with the probe exiting 0 or absent, and on Linux whatever the probe returns, both give `hostname <host>.home.conecrazy.ca` and no `proxyjump`.
+- **R8.** On macOS only (a `Match host workstation.home.conecrazy.ca,workstation exec "[ \"$(uname -s)\" = Darwin ]"` block), `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C`, `ControlPersist 10m` and `ServerAliveInterval 30`; on Linux `ssh -G workstation` resolves `controlmaster false`.
 - **R9.** `.ssh/config` contains no `Host` pattern ending in `-home-tmux` and no `RemoteCommand`.
 - **R10.** `config/repo-sessions.sh` maps `claude` to `etch-cli etch-config dotfiles ai-config ai-devops math` and `workstation` to `terraform_ansible/ansible`.
 - **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `KillMode=process`, `TimeoutStartSec=180`, an `ExecStartPre=-/usr/bin/timeout 60 /bin/sh -c 'until nc -z -w 1 api.anthropic.com 443; do sleep 1; done'`, `ExecStart=-%h/.local/bin/repo-session --detached --all` and `WantedBy=default.target`.
-- **R12.** `setup_user` links `repo-session`, `home-lan-probe` and `home-ssh` into `~/.local/bin` on every machine. On a Linux host with a `REPO_SESSIONS` entry, it also links the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`.
+- **R12.** `setup_user` links `home-lan-probe` and `home-ssh` into `~/.local/bin` on macOS only, and `repo-session` only on a Linux host with a `REPO_SESSIONS` entry. On such a host it also links the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`.
 - **R13.** On a host with a `REPO_SESSIONS` entry, doctor FAILs `repo-sessions` with remedy `sudo loginctl enable-linger "$USER"` when Linger is off, and with remedy `./setup_env.sh -t setup_user` when the unit is not enabled. It passes otherwise, and is silent on a host without an entry.
 - **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `~/.local/bin/home-ssh <host> .local/bin/repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists, and no `exec` line contains `repo-session` without the `.local/bin/` prefix. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
 - **R15.** The `lib/launch_agents.sh` comment reads "the Studio is always up" and no longer says "the Studio is the tmux host".
 - **R16.** `.ssh/config` gives the aliases `claude` and `workstation` `User bruce` and `IdentityFile ~/.ssh/home`.
-- **R17.** `bin/home-ssh <host> <cmd...>` uses one array `HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)` for both `ssh -O check "${HOP[@]}"` and `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`, and `home-ssh --print-hop-argv` prints it one element per line. It execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or the check succeeds.
+- **R17.** `bin/home-ssh <host> <cmd...>` uses one array `HOP=(-J home-secure.conecrazy.ca workstation.home.conecrazy.ca)` for both `ssh -O check "${HOP[@]}"` and `ssh -fNM -o ControlPersist=10m "${HOP[@]}"`, and `home-ssh --print-hop-argv` prints it one element per line. On a work hostname (`reception`, `reception-1`, `office`, `office-1`, `home-1`) it skips the probe and takes the off-LAN path. Elsewhere it execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or the check succeeds.
 - **R18.** Off the LAN without a live master, the `home-ssh` caller that creates `~/.ssh/cm-hop.lock` with `mkdir` traps EXIT, INT, TERM and HUP to remove it, runs the `-fNM` master, and removes the lock whether `-fNM` succeeds or fails before exec'ing. A caller that finds the lock prints `home-ssh: waiting for the workstation password in another tab` once, removes a lock older than 5 minutes (`find ~/.ssh/cm-hop.lock -maxdepth 0 -mmin +5`), retries once a second, takes the lock itself if it vanishes with no master, and after 300 s prints `home-ssh: no shared connection after 300 s; connecting directly` and execs.
 - **R19.** For the argv `home-ssh --print-hop-argv` prints, `ssh -G` resolves the same `controlpath` as `ssh -G -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` and a different one from `ssh -G workstation.home.conecrazy.ca`.
 - **V1.** After a reboot of `claude` with the unit installed, `tmux ls` lists all six sessions, each pane running `claude`.
@@ -361,6 +395,8 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **N2.** No launch config runs `setup_env.sh -t update` automatically.
 - **N3.** No `claude --continue` or `--resume` in any session start.
 - **N4.** No change to the `*-home` aliases' existing ProxyJump routes.
+- **N5.** No change to how any host other than `claude` and `workstation` is reached: in particular the work Macs' direct ssh to each other (`*.centrepointe.genexxelearning.ca`) is untouched.
+- **N6.** No probe, `Match exec` side effect, ControlMaster or `home-ssh` on `claude` or `workstation`: every ssh connection from them is plain.
 </content>
 
 </invoke>
