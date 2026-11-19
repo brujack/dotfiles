@@ -266,3 +266,29 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 </content>
 
 </invoke>
+
+## Multi-Lens Review
+
+Reviewed at commit: `4dbd3f71` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: Worth building; core (`repo-session`, unit, linger) solves a confirmed problem (both hosts rebooted 2026-11-17 ~11:55, all seven sessions recreated by hand 12:03-12:05; `Linger=no`). Load-bearing defect: every Warp tab runs `ssh -t <host> repo-session <dir>` under non-interactive zsh, whose PATH lacks `~/.local/bin` (measured `ssh workstation 'echo $PATH'`), so all tabs fail `command not found`; no planned check runs a tab.
+Assumption: `claude --remote-control` started by a `default.target` user unit before the network is up keeps retrying rather than exiting; if it exits, every reboot leaves bare shells. Settle with `unshare -rn` offline start, or `tmux list-panes -a -F '#{session_name} #{pane_current_command}'` after one reboot.
+Disposition:
+
+### Ergonomics
+
+Finding: (1) Same `command not found` PATH defect. (2) The launch configs fire 7 ssh connections at once; off-LAN all go through `workstation.home.conecrazy.ca`, and simultaneous first connections all miss the not-yet-bound `ControlPath` socket, so ControlMaster likely does not prevent up to 7 password prompts; V2 tests only the sequential case. Minor: no `ServerAliveInterval` on the R8 block, so a dead master after a network move can hang new tabs.
+Assumption: Warp starts a launch config's tabs concurrently enough that the first master has not bound its socket before the others check. Settle off-LAN on the laptop with a 3-tab config and empty `~/.ssh/cm-*`: count password prompts / sockets.
+Disposition:
+
+### Risk
+
+Finding: (1) Failure direction: a missing or failing probe falls through to the Cloudflare chain, whose `cloudflared` exists only on macs, so on `claude`/`workstation` bare `ssh workstation` (direct today) breaks; the window is guaranteed because `.ssh/config` is live on `git pull` before `setup_user` installs the probe; `lib/legacy_rsync.sh:34` (`bruce@workstation:`, Studio `-t update`) is also affected. Fix: a missing/erroring probe must mean direct. (2) `Type=oneshot` + R3's exit 1 on a partial failure: systemd marks the unit failed and kills its whole cgroup, including the tmux server holding the sessions that succeeded (measured with `systemd-run`); a later `stop`/`restart` also kills every session. (3) Same PATH defect. (4) Routing tests cannot work: `%d` comes from the passwd entry, not `$HOME` (measured); `$HOME` in the exec string is expanded by the `sh -c` that runs it (measured).
+Assumption: same as Goal-Fit (claude at boot without network).
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
