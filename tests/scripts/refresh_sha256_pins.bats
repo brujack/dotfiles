@@ -576,7 +576,12 @@ _shim_fail() {
   local _t="${BATS_TEST_TMPDIR}/clone"
   mkdir -p "${_t}/scripts" "${_t}/lib"
   cp "${SCRIPT}" "${_t}/scripts/"
-  cp "${REPO_ROOT}"/lib/* "${_t}/lib/"
+  # Copy only tracked lib files: a glob also matches the untracked
+  # lib/__pycache__ that the suite's Python tests create, and cp refuses it.
+  local _f
+  while IFS= read -r _f; do
+    cp "${REPO_ROOT}/${_f}" "${_t}/lib/" || return 1
+  done < <(git -C "${REPO_ROOT}" ls-files 'lib/*')
   # Turn the real definition into one that fails; an appended override would sit after the file's sourcing guard.
   sed -i.bak 's/^_release_asset_url() {$/_release_asset_url() { return 1/' "${_t}/lib/linux_ubuntu.sh"
   [ "$(grep -c '^_release_asset_url() { return 1$' "${_t}/lib/linux_ubuntu.sh")" -eq 1 ]
