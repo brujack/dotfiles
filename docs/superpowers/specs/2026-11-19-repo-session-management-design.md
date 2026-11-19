@@ -101,34 +101,61 @@ otherwise.
 
 ### 3. ssh routing (`.ssh/config`)
 
-The bare names `claude` and `workstation` become auto-routing aliases on every machine:
+The bare names `claude` and `workstation` become routing aliases on every machine. **The
+default is direct.** The Cloudflare chain applies only when the probe exists and positively
+reports that the client is off the LAN:
 
 ```
-Match host claude exec "%d/.local/bin/home-lan-probe 192.168.51.17"
-  HostName claude.home.conecrazy.ca
-  ProxyJump none
-Match host workstation exec "%d/.local/bin/home-lan-probe 192.168.51.12"
-  HostName workstation.home.conecrazy.ca
-  ProxyJump none
-Host claude
-  HostName claude.home.conecrazy.ca
+Match host claude exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"
   ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca
-Host workstation
-  HostName workstation.home.conecrazy.ca
+Match host workstation exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"
   ProxyJump home-secure.conecrazy.ca
+Host claude workstation
+  HostName %h.home.conecrazy.ca
+  User bruce
+  IdentityFile ~/.ssh/home
 ```
 
-- `%d` is the local home directory, so the probe resolves without an interactive PATH.
-- `ProxyJump none` is load-bearing (see Measurements).
-- The `Match` blocks sit before every `Host` block that sets `HostName` or `ProxyJump`
-  for these names.
-- `User bruce` and `IdentityFile ~/.ssh/home` come from a `Host claude workstation` block,
-  because Host patterns match the alias, not the HostName.
-- The workstation password hop gets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C` and
-  `ControlPersist 10m`, so the password is typed once per 10 minutes rather than once per
-  tab. It goes on `Host workstation.home.conecrazy.ca` and the `workstation` aliases.
+- **Failure direction.** A missing, non-executable or failing probe means direct. That is
+  how bare `ssh workstation` behaves today, so a host where `setup_user` has not yet run
+  (the config is live on `git pull`, because `~/.ssh/config` is a symlink) keeps working.
+  This covers `claude` and `workstation` themselves, and `lib/legacy_rsync.sh`'s
+  `bruce@workstation:` from the Studio.
+- **`$HOME`, not `%d`.** `%d` comes from the passwd entry and ignores `HOME`, which makes the
+  routing untestable. `Match exec` runs through `sh -c`, so `$HOME` expands there. Both were
+  measured in Step 8.
+- The `Match` blocks sit before the `Host claude workstation` block. `ProxyJump` is set
+  only in the off-LAN `Match`, so no later block can add a jump on the LAN.
+- `User` and `IdentityFile` sit on the alias block, because Host patterns match the alias,
+  not the HostName.
+- The workstation password hop, `Host workstation.home.conecrazy.ca workstation`, gets:
+  - `ControlMaster auto`
+  - `ControlPath ~/.ssh/cm-%C`
+  - `ControlPersist 10m`
+  - `ServerAliveInterval 30`, so a master left dead by a network move is detected
 - The `*-home-tmux` aliases and their `RemoteCommand` block are deleted. The plain `*-home`
   aliases stay, as an explicit force-Cloudflare route.
+
+### 3b. `bin/home-ssh` (new script, client side)
+
+`home-ssh <host> <remote command...>` is what every Warp session tab runs. It exists
+because seven tabs opened at once off the LAN would each find no `ControlPath` socket and
+each prompt for the workstation password.
+
+- **On the LAN** (`home-lan-probe` for `<host>` succeeds): `exec ssh -t <host> <cmd>`.
+- **Off the LAN:**
+  - If `ssh -O check workstation.home.conecrazy.ca` reports a live master, it execs
+    `ssh -t <host> <cmd>` directly.
+  - Otherwise the first tab takes the lock `mkdir ~/.ssh/cm-hop.lock` (atomic, and portable
+    to macOS, which has no `flock`). It runs
+    `ssh -fNM -J home-secure.conecrazy.ca workstation.home.conecrazy.ca` (the password
+    prompt appears in that tab), removes the lock, then execs `ssh -t <host> <cmd>`.
+  - Every other tab polls `ssh -O check` once a second for up to 120 s, then execs
+    `ssh -t <host> <cmd>`. On timeout it prints a message and execs anyway, so ssh prompts
+    in that tab.
+  - A lock directory older than 120 s is treated as stale and removed.
+- The probe IPs per host come from the same table the `.ssh/config` `Match` lines use:
+  `claude` 192.168.51.17, `workstation` 192.168.51.12.
 
 ### 4. Per-host session list (`config/repo-sessions.sh`)
 
@@ -151,18 +178,29 @@ Description=Create repo tmux sessions (repo-session --all)
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/.local/bin/repo-session --detached --all
+KillMode=process
+ExecStartPre=-/bin/sh -c 'i=0; while [ "$i" -lt 60 ] && ! nc -z -w 1 api.anthropic.com 443; do i=$((i+1)); sleep 1; done'
+ExecStart=-%h/.local/bin/repo-session --detached --all
 
 [Install]
 WantedBy=default.target
 ```
 
-`RemainAfterExit=yes` keeps the unit active, so systemd never stops it, and its default
-`KillMode=control-group` never kills the tmux server it started.
+- **The tmux server must outlive the unit in every state.** Under the default
+  `KillMode=control-group`, a oneshot whose `ExecStart` exits non-zero goes to `failed`, and
+  systemd kills its whole cgroup. That cgroup includes the tmux server holding the sessions
+  that succeeded, as measured with `systemd-run` in Step 8. A later `stop` does the same.
+  - `ExecStart=-` makes a partial failure leave the unit active, not failed.
+    `repo-session` still reports each failed dir on stderr, so it lands in the journal.
+  - `KillMode=process` limits a `stop` or `restart` to the main process, which has already
+    exited, so it never reaches tmux.
+- **`ExecStartPre=-` waits up to 60 s for `api.anthropic.com:443`.** A user unit cannot
+  order itself after the system's `network-online.target`. The `-` makes a timeout
+  non-fatal, and the panes still fall back to `exec zsh`.
 
 ### 6. Install (`setup_env.sh -t setup_user`)
 
-On every machine, link `bin/repo-session` and `bin/home-lan-probe` into `~/.local/bin` with
+On every machine, link `bin/repo-session`, `bin/home-lan-probe` and `bin/home-ssh` into `~/.local/bin` with
 `safe_link`.
 
 On a Linux host with a `REPO_SESSIONS` entry, also:
@@ -194,8 +232,12 @@ A host without an entry is not checked.
   - `update-studio`: local, cwd `~/git-repos/personal/dotfiles`.
   - `update-laptop`, `update-workstation`, `update-claude`: `ssh -t <host>` to a shell.
     They do not run the update; that stays manual.
-  - Then the seven session tabs: `ssh -t claude repo-session <dir>` for each `claude` dir,
-    and `ssh -t workstation repo-session terraform_ansible/ansible`.
+  - Then the seven session tabs:
+    `~/.local/bin/home-ssh claude .local/bin/repo-session <dir>` for each `claude` dir, and
+    `~/.local/bin/home-ssh workstation .local/bin/repo-session terraform_ansible/ansible`.
+    The remote path is spelled out because a remote ssh command runs non-interactive zsh,
+    whose PATH lacks `~/.local/bin` (measured on `workstation`, Step 8). It is relative
+    because ssh starts the command in `$HOME`.
 - `laptop.yaml`: `update-laptop` (local), then the same seven session tabs.
 - `reception.yaml`: the seven session tabs only. Reception is a work Mac that this repo
   does not update.
@@ -224,13 +266,28 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
     `proxyjump` line.
   - Probe exit 1: `claude` carries
     `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`.
-  - The same two cases for `workstation`.
+  - **Probe absent** (no stub file): no `proxyjump` line. This is the failure-direction
+    guard.
+  - The same three cases for `workstation`.
+- **bats `home-ssh`** (`ssh` and `home-lan-probe` mocked):
+  - LAN: one `ssh -t` call, no `-O check`.
+  - Off-LAN with a live master: no `-fNM`.
+  - Off-LAN with none: the first caller runs `-fNM` and removes the lock. A second caller
+    started while the lock exists waits, and makes no `-fNM` call.
+  - A stale lock older than 120 s is removed.
+  - The timeout path prints its message and still execs ssh.
   - A guard asserts that no `Host` pattern ending `-home-tmux` remains.
 - **Warp**: every file under `.warp/launch_configurations/` parses as YAML. In each config,
   the set of `repo-session` arguments equals the union of the `REPO_SESSIONS` lists, so the
-  tabs cannot drift from the list.
+  tabs cannot drift from the list. No `exec` line contains a bare `repo-session` (one not
+  preceded by `.local/bin/`). Every session tab's command starts with
+  `~/.local/bin/home-ssh `.
+- **Remote PATH**: `ssh workstation 'command -v repo-session'` is not relied on. A test
+  runs a session tab's remote command under `env -i HOME="$HOME" PATH=/usr/bin:/bin zsh -c`
+  from `$HOME` against a fixture `~/.local/bin/repo-session`, and asserts it resolves.
 - **Unit**: `systemd-analyze --user verify` passes on the unit where `systemd-analyze` is
-  available; the test is skipped, with a message, where it is not.
+  available; the test is skipped, with a message, where it is not. A test asserts that the
+  unit carries `KillMode=process` and an `ExecStart=-` prefix.
 - **Installer** (seams):
   - linger is enabled only when `Linger=no`
   - the unit is enabled, not started
@@ -245,20 +302,23 @@ always up" becomes "the Studio is always up". The single-runner rationale is unc
 - **R3.** `bin/repo-session --detached --all` runs once per dir in this host's `REPO_SESSIONS` entry, continues past a failing dir, and exits 1 if any dir failed, else 0.
 - **R4.** `bin/repo-session` exits 2, naming the argument, without calling tmux, for a `<dir>` that is empty, absolute, contains a `..` component, or is not a directory under `${HOME}/git-repos/personal`.
 - **R5.** `bin/home-lan-probe <ip>` runs `nc -z -G 1 -w 1 <ip> 22` when `uname -s` is `Darwin` and `nc -z -w 1 <ip> 22` otherwise, exits with nc's status, and exits 1 when `nc` is not found.
-- **R6.** `.ssh/config` has `Match host claude exec "%d/.local/bin/home-lan-probe 192.168.51.17"` and `Match host workstation exec "%d/.local/bin/home-lan-probe 192.168.51.12"` blocks, each setting `HostName <host>.home.conecrazy.ca` and `ProxyJump none`, placed before any `Host` block that sets `HostName` or `ProxyJump` for those names.
-- **R7.** When the probe fails, `ssh -G claude` resolves `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolves `proxyjump home-secure.conecrazy.ca`.
-- **R8.** `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C` and `ControlPersist 10m` for `workstation.home.conecrazy.ca`.
+- **R6.** `.ssh/config` has `Match host claude exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.17"` setting `ProxyJump home-secure.conecrazy.ca,workstation.home.conecrazy.ca`, and `Match host workstation exec "test -x $HOME/.local/bin/home-lan-probe && ! $HOME/.local/bin/home-lan-probe 192.168.51.12"` setting `ProxyJump home-secure.conecrazy.ca`, both placed before a `Host claude workstation` block that sets `HostName %h.home.conecrazy.ca` and no `ProxyJump`.
+- **R7.** With `HOME` pointing at a fixture, a probe exiting 1 makes `ssh -G claude` resolve `proxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca` and `ssh -G workstation` resolve `proxyjump home-secure.conecrazy.ca`; a probe exiting 0, and an absent probe, both give `hostname <host>.home.conecrazy.ca` with no `proxyjump`.
+- **R8.** `.ssh/config` sets `ControlMaster auto`, `ControlPath ~/.ssh/cm-%C`, `ControlPersist 10m` and `ServerAliveInterval 30` for `workstation.home.conecrazy.ca` and `workstation`.
 - **R9.** `.ssh/config` contains no `Host` pattern ending in `-home-tmux` and no `RemoteCommand`.
 - **R10.** `config/repo-sessions.sh` maps `claude` to `etch-cli etch-config dotfiles ai-config ai-devops math` and `workstation` to `terraform_ansible/ansible`.
-- **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `ExecStart=%h/.local/bin/repo-session --detached --all` and `WantedBy=default.target`.
-- **R12.** `setup_user` links `repo-session` and `home-lan-probe` into `~/.local/bin` on every machine. On a Linux host with a `REPO_SESSIONS` entry, it also links the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`.
+- **R11.** A tracked `repo-sessions.service` user unit has `Type=oneshot`, `RemainAfterExit=yes`, `KillMode=process`, an `ExecStartPre=-` that waits at most 60 s for `nc -z -w 1 api.anthropic.com 443`, `ExecStart=-%h/.local/bin/repo-session --detached --all` and `WantedBy=default.target`.
+- **R12.** `setup_user` links `repo-session`, `home-lan-probe` and `home-ssh` into `~/.local/bin` on every machine. On a Linux host with a `REPO_SESSIONS` entry, it also links the unit into `~/.config/systemd/user/`, runs `systemctl --user daemon-reload` and `systemctl --user enable repo-sessions.service` (never `start`), and runs `sudo loginctl enable-linger "${USER}"` only when Linger is `no`.
 - **R13.** On a host with a `REPO_SESSIONS` entry, doctor FAILs `repo-sessions` with remedy `sudo loginctl enable-linger "$USER"` when Linger is off, and with remedy `./setup_env.sh -t setup_user` when the unit is not enabled. It passes otherwise, and is silent on a host without an entry.
-- **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `ssh -t <host> repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
+- **R14.** `.warp/launch_configurations/` holds `studio.yaml`, `laptop.yaml` and `reception.yaml` and no `launch_config.yaml`. In each, the session tabs run `~/.local/bin/home-ssh <host> .local/bin/repo-session <dir>` for exactly the union of the `REPO_SESSIONS` lists, and no `exec` line contains `repo-session` without the `.local/bin/` prefix. `studio.yaml` adds tabs `update-studio` (local), `update-laptop`, `update-workstation` and `update-claude` (`ssh -t <host>`), `laptop.yaml` adds `update-laptop` (local), and `reception.yaml` adds none.
 - **R15.** The `lib/launch_agents.sh` comment reads "the Studio is always up" and no longer says "the Studio is the tmux host".
 - **R16.** `.ssh/config` gives the aliases `claude` and `workstation` `User bruce` and `IdentityFile ~/.ssh/home`.
+- **R17.** `bin/home-ssh <host> <cmd...>` execs `ssh -t <host> <cmd...>` directly when `home-lan-probe` succeeds for `<host>`'s IP (`claude` 192.168.51.17, `workstation` 192.168.51.12) or `ssh -O check workstation.home.conecrazy.ca` succeeds. Otherwise, a caller that creates `~/.ssh/cm-hop.lock` with `mkdir` runs `ssh -fNM -J home-secure.conecrazy.ca workstation.home.conecrazy.ca`, removes the lock and execs. A caller that finds the lock polls `ssh -O check` once a second for at most 120 s and then execs, printing a message on timeout. A lock older than 120 s is removed.
 - **V1.** After a reboot of `claude` with the unit installed, `tmux ls` lists all six sessions, each pane running `claude`.
 - **V2.** From the laptop off the home LAN, a second session tab within 10 minutes of the first does not prompt for the workstation password.
 - **V3.** From the Studio, `ssh -G claude` shows no `proxyjump`; from reception, it shows the Cloudflare chain.
+- **V4.** From the laptop off the home LAN, opening `laptop.yaml` with no `~/.ssh/cm-*` socket prompts for the workstation password exactly once, and all seven tabs attach.
+- **V5.** The master `home-ssh` starts and the jump connection inside `ssh claude` use the same `~/.ssh/cm-%C` socket (`ls ~/.ssh/cm-*` shows one socket for the hop).
 - **N1.** No session is created, killed or restarted by `setup_user` or by installing the unit; existing sessions are left alone.
 - **N2.** No launch config runs `setup_env.sh -t update` automatically.
 - **N3.** No `claude --continue` or `--resume` in any session start.
@@ -275,19 +335,19 @@ Reviewed at commit: `4dbd3f71` (Step 7 self-review commit, before Step 8 dispatc
 
 Finding: Worth building; core (`repo-session`, unit, linger) solves a confirmed problem (both hosts rebooted 2026-11-17 ~11:55, all seven sessions recreated by hand 12:03-12:05; `Linger=no`). Load-bearing defect: every Warp tab runs `ssh -t <host> repo-session <dir>` under non-interactive zsh, whose PATH lacks `~/.local/bin` (measured `ssh workstation 'echo $PATH'`), so all tabs fail `command not found`; no planned check runs a tab.
 Assumption: `claude --remote-control` started by a `default.target` user unit before the network is up keeps retrying rather than exiting; if it exits, every reboot leaves bare shells. Settle with `unshare -rn` offline start, or `tmux list-panes -a -F '#{session_name} #{pane_current_command}'` after one reboot.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19) — tabs run `.local/bin/repo-session` via `home-ssh` (component 3b, R14) with a bare-name guard and a non-interactive PATH test; boot network handled by a bounded `ExecStartPre=-` wait (R11) plus V1.
 
 ### Ergonomics
 
 Finding: (1) Same `command not found` PATH defect. (2) The launch configs fire 7 ssh connections at once; off-LAN all go through `workstation.home.conecrazy.ca`, and simultaneous first connections all miss the not-yet-bound `ControlPath` socket, so ControlMaster likely does not prevent up to 7 password prompts; V2 tests only the sequential case. Minor: no `ServerAliveInterval` on the R8 block, so a dead master after a network move can hang new tabs.
 Assumption: Warp starts a launch config's tabs concurrently enough that the first master has not bound its socket before the others check. Settle off-LAN on the laptop with a 3-tab config and empty `~/.ssh/cm-*`: count password prompts / sockets.
-Disposition:
+Disposition: Addressed (operator, 2026-11-19) — PATH as Goal-Fit; the simultaneous-tab race is fixed now, per operator choice over measure-first, by `home-ssh`'s single-master lock (component 3b, R17, V4, V5); `ServerAliveInterval 30` added (R8).
 
 ### Risk
 
 Finding: (1) Failure direction: a missing or failing probe falls through to the Cloudflare chain, whose `cloudflared` exists only on macs, so on `claude`/`workstation` bare `ssh workstation` (direct today) breaks; the window is guaranteed because `.ssh/config` is live on `git pull` before `setup_user` installs the probe; `lib/legacy_rsync.sh:34` (`bruce@workstation:`, Studio `-t update`) is also affected. Fix: a missing/erroring probe must mean direct. (2) `Type=oneshot` + R3's exit 1 on a partial failure: systemd marks the unit failed and kills its whole cgroup, including the tmux server holding the sessions that succeeded (measured with `systemd-run`); a later `stop`/`restart` also kills every session. (3) Same PATH defect. (4) Routing tests cannot work: `%d` comes from the passwd entry, not `$HOME` (measured); `$HOME` in the exec string is expanded by the `sh -c` that runs it (measured).
 Assumption: same as Goal-Fit (claude at boot without network).
-Disposition:
+Disposition: Addressed (operator, 2026-11-19) — (1) routing inverted, default direct, Cloudflare only on a positive off-LAN probe, absent-probe case tested (R6, R7); (2) `ExecStart=-` plus `KillMode=process` (R11); (3) as Goal-Fit; (4) `$HOME` in the exec string (R6).
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
