@@ -319,3 +319,31 @@ Reviewed at commit: `d995b328` (changed sections only)
 Finding: `make install-pinned-uv` did not source `lib/helpers.sh` (or `lib/macos.sh` on Darwin); fail-closed contradicts the skip and refuse loops in `makefile_lint_scope.bats` (counts 18 and 6) and its `command -v uv` inert guard; the direct-target test had no network seam; the `make lint` no-call test lacked a positive control. CI wiring (three jobs) confirmed correct; no R contradicts an N.
 Assumption: a brew-locked new marker-bearing dependency passes 0.13.0's `lock --check`. Checked with `wmi`: rc 0, five OK.
 Disposition: Addressed (operator, 2026-11-19): all four folded into the spec at `a7e4143d`.
+
+## Amendments
+
+- finding R6 (2026-11-19, reviewer both): DIFFERS — _install_ubuntu_uv_pinned -> _install_uv_pinned_for Linux selects the asset by `_uv_pinned_asset Linux "${_UNAME_M}"` matching `Linux/x86_64` (lib/helpers.sh:248,284), not by `_LINUX_ARCH` being amd64 as the requirement states; path, asset, digest and warn-and-return-0 otherwise match.
+- R6 -> On Linux with `HAS_DEVTOOLS` set, `_install_ubuntu_uv_pinned` installs `uv` into `${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}/` from `uv-x86_64-unknown-linux-gnu.tar.gz` with `UV_SHA256_LINUX_AMD64` when `_uv_pinned_asset Linux "${_UNAME_M}"` resolves (`_UNAME_M` is `x86_64`), and on any other machine type it logs a warning and returns 0. — `_LINUX_ARCH` is derived from `_UNAME_M` in lib/constants.sh, and one asset table keyed on `uname -s`/`uname -m` serves both platforms and the make target, where only lib/constants.sh is sourced.
+
+## Spec alignment (2026-11-19)
+
+- spec: docs/superpowers/specs/2026-11-19-pinned-uv-renderings-design.md
+- anchor: 9d6cd530ef31600a2a3dfcbff1e12fbf402ba5e8
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R6 | both | DIFFERS | _install_ubuntu_uv_pinned -> _install_uv_pinned_for Linux selects the asset by `_uv_pinned_asset Linux "${_UNAME_M}"` matching `Linux/x86_64` (lib/helpers.sh:248,284), not by `_LINUX_ARCH` being amd64 as the requirement states; path, asset, digest and warn-and-return-0 otherwise match. | - R6 -> On Linux with `HAS_DEVTOOLS` set, `_install_ubuntu_uv_pinned` installs `uv` into `${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}/` from `uv-x86_64-unknown-linux-gnu.tar.gz` with `UV_SHA256_LINUX_AMD64` when `_uv_pinned_asset Linux "${_UNAME_M}"` resolves (`_UNAME_M` is `x86_64`), and on any other machine type it logs a warning and returns 0. — `_LINUX_ARCH` is derived from `_UNAME_M` in lib/constants.sh, and one asset table keyed on `uname -s`/`uname -m` serves both platforms and the make target, where only lib/constants.sh is sourced. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
