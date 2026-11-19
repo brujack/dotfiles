@@ -824,7 +824,9 @@ EOF
   # survives past a wrapper that does not call the helper and gets attributed
   # the next match -- including _install_pinned_release_binary's own definition
   # line. Requiring an INDENTED call excludes that definition, which sits at
-  # column 0.
+  # column 0. Consequence: a one-line wrapper (`name() { helper ...; }`) is
+  # never derived, because its call shares the header line that resets fn, so
+  # keep every wrapper multi-line or this guard silently stops pinning it.
   done < <(awk '/^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{/ { fn=$1; sub(/\(\).*/, "", fn); next }
                 /^[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*(_install_pinned_release_binary|_install_uv_pinned_for)[[:space:]]/ {
                   if (fn ~ /^_install_ubuntu_/) { print fn; fn="" } }' "${_src}")
