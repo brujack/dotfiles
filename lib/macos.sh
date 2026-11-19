@@ -227,6 +227,9 @@ install_macos_packages() {
     printf "Installing other brew stuff...\n"
     brew_tap_if_missing homebrew/bundle || return 1
     install_macos_casks || return 1
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
+      install_uv_pinned_macos || log_warn "pinned uv install failed; skipping"
+    fi
 
     printf "Cleaning Homebrew up...\n"
     brew cleanup
@@ -251,10 +254,13 @@ install_uv_pinned_macos() {
     log_warn "no pinned uv for Darwin ${_UNAME_M}; skipping"
     return 0
   fi
-  local _url="${_UV_PINNED_URL:-https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz}"
-  # One line, prefix first: tests/setup_env/release_binary.bats derives its
-  # "wrapper call sites end in || log_warn" set from indented direct calls, and
-  # this worker is reached only through install_uv_pinned, whose call sites are
-  # advisory and pinned in tests/setup_env/pinned_uv.bats.
-  _RELEASE_BIN_DIR="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_UV_PINNED_SHA256:-${_sha}}" targz "$(_uv_pinned_version_regex)"
+  local _url="https://github.com/astral-sh/uv/releases/download/${UV_VER}/${_asset}.tar.gz"
+  # Overrides are honoured only under bats (the _HASHICORP_SOURCE_DIR precedent):
+  # an ambient export must never replace the in-repo digest on a real download.
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    _url="${_UV_PINNED_URL:-${_url}}"
+    _sha="${_UV_PINNED_SHA256:-${_sha}}"
+  fi
+  local _dir="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}"
+  _RELEASE_BIN_DIR="${_dir}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)"
 }

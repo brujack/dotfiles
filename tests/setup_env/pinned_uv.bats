@@ -273,24 +273,23 @@ _stub_misc_steps() {
   _install_ubuntu_tfenv() { :; }
   check_and_install_nala() { :; }
   sudo() { :; }
-  install_uv_pinned() { printf 'UV_PINNED_CALLED\n'; }
+  _install_ubuntu_uv_pinned() { printf 'UV_PINNED_CALLED\n'; }
 }
 
-@test "_install_ubuntu_misc: does not call install_uv_pinned without HAS_DEVTOOLS" {
+@test "_install_ubuntu_misc: does not call _install_ubuntu_uv_pinned without HAS_DEVTOOLS" {
   _stub_misc_steps
   unset HAS_DEVTOOLS
   run -0 _install_ubuntu_misc
   [[ "${output}" != *"UV_PINNED_CALLED"* ]]
 }
 
-@test "_install_ubuntu_misc: calls install_uv_pinned with HAS_DEVTOOLS and survives its failure" {
+@test "_install_ubuntu_misc: calls _install_ubuntu_uv_pinned with HAS_DEVTOOLS and survives its failure" {
   _stub_misc_steps
-  _install_ubuntu_uv_pinned() { :; }
   export HAS_DEVTOOLS=1
   _install_fetched_binary() { :; }
   run -0 _install_ubuntu_misc
   [[ "${output}" == *"UV_PINNED_CALLED"* ]]
-  install_uv_pinned() { return 1; }
+  _install_ubuntu_uv_pinned() { return 1; }
   run -0 _install_ubuntu_misc
   [[ "${output}" == *"pinned uv install failed; skipping"* ]]
 }
@@ -314,4 +313,39 @@ _stub_misc_steps() {
   export HAS_DEVTOOLS=1
   run -0 run_brew_install
   [[ "${output}" == *"pinned uv install failed; skipping"* ]]
+}
+
+@test "install_macos_packages: calls install_uv_pinned_macos with HAS_DEVTOOLS, not without, and survives its failure" {
+  export BREWFILE_LOC="${BATS_TEST_TMPDIR}/brewfile" PERSONAL_GITREPOS="${BATS_TEST_TMPDIR}" DOTFILES=d
+  mkdir -p "${BATS_TEST_TMPDIR}/fakebin" "${HOME}/scripts"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${BATS_TEST_TMPDIR}/fakebin/brew"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${HOME}/scripts/.osx.sh"
+  chmod +x "${BATS_TEST_TMPDIR}/fakebin/brew" "${HOME}/scripts/.osx.sh"
+  export PATH="${BATS_TEST_TMPDIR}/fakebin:${PATH}"
+  brew_update() { return 0; }
+  brew_tap_if_missing() { return 0; }
+  install_macos_casks() { return 0; }
+  sudo() { :; }
+  install_uv_pinned_macos() { printf 'UV_PINNED_CALLED\n'; }
+  export HAS_DEVTOOLS=1
+  run -0 install_macos_packages
+  [[ "${output}" == *"UV_PINNED_CALLED"* ]]
+  unset HAS_DEVTOOLS
+  run -0 install_macos_packages
+  [[ "${output}" != *"UV_PINNED_CALLED"* ]]
+  install_uv_pinned_macos() { return 1; }
+  export HAS_DEVTOOLS=1
+  run -0 install_macos_packages
+  [[ "${output}" == *"pinned uv install failed; skipping"* ]]
+}
+
+@test "install_uv_pinned: the URL and digest overrides are ignored outside bats" {
+  _install_fixture_setup
+  export _UV_PINNED_SHA256="${_UV_PINNED_SHA256}" _UV_PINNED_URL="https://example.invalid/evil.tar.gz"
+  # Empty BATS_TEST_TMPDIR for the call only; the override digest matches the
+  # fixture, so only the in-repo constants digest can refuse it.
+  BATS_TEST_TMPDIR='' _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64 run -1 install_uv_pinned
+  grep -qF "https://github.com/astral-sh/uv/releases/download/0.13.0/uv-x86_64-unknown-linux-gnu.tar.gz" "${_CURL_LOG}"
+  run ! grep -qF "evil.tar.gz" "${_CURL_LOG}"
+  [ ! -e "${_PINNED_DIR}/uv" ]
 }

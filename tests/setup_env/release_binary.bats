@@ -826,7 +826,7 @@ EOF
   # line. Requiring an INDENTED call excludes that definition, which sits at
   # column 0.
   done < <(awk '/^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{/ { fn=$1; sub(/\(\).*/, "", fn); next }
-                /^[[:space:]]+_install_pinned_release_binary[[:space:]]/ {
+                /^[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*_install_pinned_release_binary[[:space:]]/ {
                   if (fn ~ /^_install_ubuntu_/) { print fn; fn="" } }' "${_src}")
   # Refuse to report a pass having checked nothing -- the same guard make lint
   # puts on its own derived file list.
@@ -837,7 +837,7 @@ EOF
   fi
   for _name in "${_wrappers[@]}"; do
     local _line _content
-    _line="$(grep -n "^  ${_name} || " "${_src}" | cut -d: -f1)"
+    _line="$(grep -n "^[[:space:]]\+${_name} || " "${_src}" | cut -d: -f1)"
     if [ -z "${_line}" ]; then
       printf "no '%s || ...' call site found in %s\n" "${_name}" "${_src}" >&2
       return 1
