@@ -548,3 +548,74 @@ _shim_fail() {
   [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/gitleaks/gitleaks/releases/tags/v1.2.3" ]
   [ "$(_val GITLEAKS_SHA256_FOR_VER)" = "1.2.3" ]
 }
+
+@test "uv: both release-asset digests and _FOR_VER are written to the right variables" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 0 ]
+  [ "$(_val UV_SHA256_LINUX_AMD64)" = "${DA}" ]
+  [ "$(_val UV_SHA256_DARWIN_ARM64)" = "${DB}" ]
+  [ "$(_val UV_SHA256_FOR_VER)" = "1.2.3" ]
+  [[ "$output" == *"querying https://github.com/astral-sh/uv/releases/download/1.2.3/uv-x86_64-unknown-linux-gnu.tar.gz"* ]]
+  [[ "$output" == *"querying https://github.com/astral-sh/uv/releases/download/1.2.3/uv-aarch64-apple-darwin.tar.gz"* ]]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/astral-sh/uv/releases/tags/1.2.3" ]
+}
+
+@test "uv: a refresh writes no Linux arm64 pin" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 0 ]
+  run ! grep -q 'UV_SHA256_LINUX_ARM64' "${C}"
+}
+
+@test "a tool whose asset URL cannot be built names the tool and the arch" {
+  local _t="${BATS_TEST_TMPDIR}/clone"
+  mkdir -p "${_t}/scripts" "${_t}/lib"
+  cp "${SCRIPT}" "${_t}/scripts/"
+  # Copy only tracked lib files: a glob also matches the untracked
+  # lib/__pycache__ that the suite's Python tests create, and cp refuses it.
+  local _f
+  while IFS= read -r _f; do
+    cp "${REPO_ROOT}/${_f}" "${_t}/lib/" || return 1
+  done < <(git -C "${REPO_ROOT}" ls-files 'lib/*')
+  # Turn the real definition into one that fails; an appended override would sit after the file's sourcing guard.
+  sed -i.bak 's/^_release_asset_url() {$/_release_asset_url() { return 1/' "${_t}/lib/linux_ubuntu.sh"
+  [ "$(grep -c '^_release_asset_url() { return 1$' "${_t}/lib/linux_ubuntu.sh")" -eq 1 ]
+  run "${_t}/scripts/refresh-sha256-pins.sh" --constants "${C}" kind
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"kind: amd64: no release asset URL"* ]]
+}
+
+@test "uv: a changed digest at an unchanged version is refused and writes nothing" {
+  sed -i.bak -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER="1.2.3"/' \
+    -e "s/^UV_SHA256_DARWIN_ARM64=.*/UV_SHA256_DARWIN_ARM64=\"${OLD}\"/" "${C}"
+  _snapshot
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:$(_val UV_SHA256_LINUX_AMD64)" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}" uv
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"uv: darwin-arm64 asset changed at unchanged version 1.2.3: pin ${OLD}, API ${DB}"* ]]
+  _unchanged
+}
+
+@test "default selects a stale uv when the other tools are current" {
+  sed -i.bak -E -e 's/^(KIND|YQ|SHELLCHECK|GITLEAKS)_SHA256_FOR_VER=.*/\1_SHA256_FOR_VER="1.2.3"/' \
+    -e 's/^(KIND|YQ|SHELLCHECK|GITLEAKS)_VER=.*/\1_VER="1.2.3"/' \
+    -e 's/^UV_VER=.*/UV_VER="1.2.3"/' -e 's/^UV_SHA256_FOR_VER=.*/UV_SHA256_FOR_VER=""/' "${C}"
+  _release_json uv-x86_64-unknown-linux-gnu.tar.gz "sha256:${DA}" uv-aarch64-apple-darwin.tar.gz "sha256:${DB}"
+  _listen
+  run "${SCRIPT}" --constants "${C}"
+  [ "$status" -eq 0 ]
+  [ "$(<"${HTTP_LISTENER_PATHS}")" = "/repos/astral-sh/uv/releases/tags/1.2.3" ]
+  [ "$(_val UV_SHA256_FOR_VER)" = "1.2.3" ]
+}
+
+@test "uv is accepted as a tool and named in the usage line" {
+  run "${SCRIPT}" --constants "${C}" --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"kind|yq|shellcheck|gitleaks|uv"* ]]
+}

@@ -227,6 +227,9 @@ install_macos_packages() {
     printf "Installing other brew stuff...\n"
     brew_tap_if_missing homebrew/bundle || return 1
     install_macos_casks || return 1
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
+      install_uv_pinned || log_warn "pinned uv install failed; skipping"
+    fi
 
     printf "Cleaning Homebrew up...\n"
     brew cleanup
@@ -237,4 +240,9 @@ install_macos_packages() {
 
   printf "Setting up macOS defaults\n"
   "${HOME}"/scripts/.osx.sh
+}
+
+# macOS entry for the shared pinned uv installer (_install_uv_pinned_for, lib/helpers.sh).
+install_uv_pinned_macos() {
+  _install_uv_pinned_for Darwin
 }

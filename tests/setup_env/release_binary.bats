@@ -216,6 +216,76 @@ EOF
   [[ "$output" != *"install into"* ]]
 }
 
+# Builds a real uv-shaped .tar.gz (pkg/uv and pkg/uvx) and a curl shim serving
+# it; sets _TARGZ_SHA and _TARGZ_SHIM. tar and gzip are not mocked.
+_build_targz_fixture() {
+  local _payload_dir="${BATS_TEST_TMPDIR}/targz-payload/pkg"
+  local _fixture_tar="${BATS_TEST_TMPDIR}/uv.tar.gz"
+  mkdir -p "${_payload_dir}"
+  printf '#!/usr/bin/env bash\nprintf "uv 9.9.9\\n"\n' > "${_payload_dir}/uv"
+  printf '#!/usr/bin/env bash\nprintf "uvx 9.9.9\\n"\n' > "${_payload_dir}/uvx"
+  chmod +x "${_payload_dir}/uv" "${_payload_dir}/uvx"
+  (cd "${BATS_TEST_TMPDIR}/targz-payload" && tar -czf "${_fixture_tar}" pkg)
+  _TARGZ_SHA="$(sha256sum "${_fixture_tar}" | awk '{print $1}')"
+  _TARGZ_SHIM="${BATS_TEST_TMPDIR}/targz-curl-shim"
+  mkdir -p "${_TARGZ_SHIM}"
+  cat > "${_TARGZ_SHIM}/curl" << SHIM
+#!/usr/bin/env bash
+out=""
+while [[ \$# -gt 0 ]]; do
+  if [[ "\$1" == "-o" ]]; then out="\$2"; shift 2; continue; fi
+  shift
+done
+cp "${_fixture_tar}" "\${out}"
+exit 0
+SHIM
+  chmod +x "${_TARGZ_SHIM}/curl"
+}
+
+@test "_install_pinned_release_binary: targz installs uv and not uvx" {
+  _build_targz_fixture
+  PATH="${_TARGZ_SHIM}:${PATH}" run _install_pinned_release_binary uv 9.9.9 \
+    "https://example.invalid/uv.tar.gz" \
+    "${_TARGZ_SHA}" targz '^uv 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  [ -x "${_RELEASE_BIN_DIR}/uv" ]
+  run "${_RELEASE_BIN_DIR}/uv"
+  [[ "$output" == "uv 9.9.9" ]]
+  [ ! -e "${_RELEASE_BIN_DIR}/uvx" ]
+}
+
+@test "_install_pinned_release_binary: a missing target directory is created without sudo" {
+  _build_targz_fixture
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/fresh/nested/bin"
+  local _sudo_shim="${BATS_TEST_TMPDIR}/sudo-shim-mkdir"
+  mkdir -p "${_sudo_shim}"
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "%s"\nexit 0\n' "${MOCK_CALLS_FILE}" > "${_sudo_shim}/sudo"
+  chmod +x "${_sudo_shim}/sudo"
+  : > "${MOCK_CALLS_FILE}"
+  PATH="${_sudo_shim}:${_TARGZ_SHIM}:${PATH}" run _install_pinned_release_binary uv 9.9.9 \
+    "https://example.invalid/uv.tar.gz" \
+    "${_TARGZ_SHA}" targz '^uv 9\.9\.9$'
+  [ "$status" -eq 0 ]
+  [ -x "${_RELEASE_BIN_DIR}/uv" ]
+  run ! grep -q '^sudo' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_pinned_release_binary: an uncreatable target directory returns 1 naming it and cleans up" {
+  _build_targz_fixture
+  local _tmp_root="${BATS_TEST_TMPDIR}/release-tmp-root-mkdir"
+  mkdir -p "${_tmp_root}"
+  export _RELEASE_TMP_ROOT="${_tmp_root}"
+  # A regular file in the path makes mkdir -p fail for any user, root included.
+  : > "${BATS_TEST_TMPDIR}/not-a-dir"
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR}/not-a-dir/bin"
+  PATH="${_TARGZ_SHIM}:${PATH}" run _install_pinned_release_binary uv 9.9.9 \
+    "https://example.invalid/uv.tar.gz" \
+    "${_TARGZ_SHA}" targz '^uv 9\.9\.9$'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"uv: cannot create ${_RELEASE_BIN_DIR}"* ]]
+  [ -z "$(ls -A "${_tmp_root}")" ]
+}
+
 @test "_install_pinned_release_binary: skips when the installed binary already prints the pinned version line" {
   printf '#!/usr/bin/env bash\nprintf "footool version 9.9.9\\n"\n' > "${_RELEASE_BIN_DIR}/footool"
   chmod +x "${_RELEASE_BIN_DIR}/footool"
@@ -754,9 +824,11 @@ EOF
   # survives past a wrapper that does not call the helper and gets attributed
   # the next match -- including _install_pinned_release_binary's own definition
   # line. Requiring an INDENTED call excludes that definition, which sits at
-  # column 0.
+  # column 0. Consequence: a one-line wrapper (`name() { helper ...; }`) is
+  # never derived, because its call shares the header line that resets fn, so
+  # keep every wrapper multi-line or this guard silently stops pinning it.
   done < <(awk '/^[A-Za-z_][A-Za-z0-9_]*\(\)[[:space:]]*\{/ { fn=$1; sub(/\(\).*/, "", fn); next }
-                /^[[:space:]]+_install_pinned_release_binary[[:space:]]/ {
+                /^[[:space:]]+([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]+[[:space:]]+)*(_install_pinned_release_binary|_install_uv_pinned_for)[[:space:]]/ {
                   if (fn ~ /^_install_ubuntu_/) { print fn; fn="" } }' "${_src}")
   # Refuse to report a pass having checked nothing -- the same guard make lint
   # puts on its own derived file list.
@@ -767,7 +839,11 @@ EOF
   fi
   for _name in "${_wrappers[@]}"; do
     local _line _content
-    _line="$(grep -n "^  ${_name} || " "${_src}" | cut -d: -f1)"
+    _line="$(grep -n "^[[:space:]]\+${_name} || " "${_src}" | cut -d: -f1)"
+    if [[ "${_line}" == *$'\n'* ]]; then
+      printf "more than one '%s || ...' call site in %s: %s\n" "${_name}" "${_src}" "${_line//$'\n'/ }" >&2
+      return 1
+    fi
     if [ -z "${_line}" ]; then
       printf "no '%s || ...' call site found in %s\n" "${_name}" "${_src}" >&2
       return 1

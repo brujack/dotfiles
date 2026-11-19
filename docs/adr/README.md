@@ -61,3 +61,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0055](0055-prune-claude-plugin-project-records.md) | Prune Claude plugin project records after user-scope updates | 2026-11-05 | Accepted |
 | [0056](0056-weekly-uv-lock-refresh-workflow.md) | Weekly uv.lock refresh as a bot PR from a split-trust workflow | 2026-11-08 | Accepted |
 | [0057](0057-uv-lock-refresh-release-cooldown.md) | Per-package 14-day release cooldown in the weekly uv.lock refresh | 2026-11-09 | Accepted |
+| [0058](0058-pinned-uv-for-renderings-and-lock-check.md) | Pin uv for the requirements renderings and the lock check | 2026-11-19 | Accepted |

@@ -4589,3 +4589,98 @@ _flagless_pin_capabilities() {
   run run_update
   _assert_flagless_run_reaches_every_section
 }
+
+# ── run_update: pinned-uv section ─────────────────────────────────────────────
+
+# A full run (no flag). The installer is load_mocks' uv-pinned-install-stub,
+# driven by MOCK_UV_PINNED_INSTALL_EXIT and recorded in MOCK_CALLS_FILE.
+_pinned_uv_full_run() {
+  export MACOS=1
+  unset LINUX UBUNTU
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_CLAUDE UPDATE_PKGS
+  export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
+  : > "${MOCK_CALLS_FILE}"
+}
+
+_pinned_uv_installer_calls() {
+  grep -c '^uv-pinned-install$' "${MOCK_CALLS_FILE}" || true
+}
+
+@test "run_update: pinned-uv skips without HAS_DEVTOOLS" {
+  _pinned_uv_full_run
+  unset HAS_DEVTOOLS
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "HAS_DEVTOOLS not set" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
+}
+
+@test "run_update: pinned-uv skips on a platform with no pin" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=aarch64
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "no pinned uv for Linux aarch64" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
+}
+
+@test "run_update: pinned-uv records OK when the installer returns 0" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  export MOCK_UV_PINNED_INSTALL_EXIT=0
+  run_update || true
+  [ "$(_pinned_uv_installer_calls)" -eq 1 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "OK" ]
+}
+
+@test "run_update: pinned-uv records FAIL and run_update exits 1 when the installer returns 1" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  export MOCK_UV_PINNED_INSTALL_EXIT=1
+  export MOCK_UV_PINNED_INSTALL_STDERR="pinned-uv-fail-marker"
+  local _rc=0
+  run_update || _rc=$?
+  [ "$(_pinned_uv_installer_calls)" -eq 1 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "FAIL" ]
+  [ "${_rc}" -eq 1 ]
+  # The installer's stderr reaches err_pinned-uv, the FAIL detail's source.
+  grep -qF "pinned-uv-fail-marker" "${_DOTFILES_RUN_TMPDIR}/err_pinned-uv"
+}
+
+@test "run_update: pinned-uv skips under --brew-only" {
+  _pinned_uv_full_run
+  export UPDATE_BREW=1
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_pinned-uv")" = "SKIP" ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/result_pinned-uv")" = "flag not set" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
+}
+
+@test "run_update: pinned-uv ignores _UV_PINNED_INSTALLER outside bats" {
+  _pinned_uv_full_run
+  export HAS_DEVTOOLS=1
+  export _OVERRIDE_PLATFORM=Linux _UNAME_M=x86_64
+  local _fn_marker="${BATS_TEST_TMPDIR}/real-installer.ran"
+  # shellcheck disable=SC2329 # invoked by run_update's pinned-uv section
+  install_uv_pinned() { touch "${_fn_marker}"; }
+  local _saved="${BATS_TEST_TMPDIR}"
+  # Emptying BATS_TEST_TMPDIR disables EVERY bats-gated seam for this run
+  # (_TERRAFORM_SKILL_REPO, _TFENV_REPO_URL, _FETCHED_*, the hashicorp seams),
+  # not only the uv one. Safe only because _pinned_uv_full_run mocks the rest of
+  # run_update; if a section this run reaches gains a bats-gated seam, stub it.
+  # The exit status is irrelevant here: only which installer ran is asserted.
+  BATS_TEST_TMPDIR="" run_update || true
+  BATS_TEST_TMPDIR="${_saved}"
+  [ -e "${_fn_marker}" ]
+  [ "$(_pinned_uv_installer_calls)" -eq 0 ]
+}
+
+@test "_UPDATE_SECTION_ORDER lists pinned-uv immediately after cargo-tools" {
+  local _joined=" ${_UPDATE_SECTION_ORDER[*]} "
+  [[ "${_joined}" == *" cargo-tools pinned-uv "* ]]
+}

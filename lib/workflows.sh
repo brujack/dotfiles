@@ -743,6 +743,9 @@ run_brew_install() {
   brew_tap_if_missing homebrew/bundle || return 1
   if [[ -n ${MACOS} ]]; then
     install_macos_casks || return 1
+    if [[ -n ${HAS_DEVTOOLS} ]]; then
+      install_uv_pinned || log_warn "pinned uv install failed; skipping"
+    fi
   fi
   brew cleanup
 }
@@ -1512,6 +1515,33 @@ run_update() {
     fi
   else
     _update_skip "cargo-tools" "flag not set"
+  fi
+
+  # ── pinned-uv ──────────────────────────────────────────────────────────────
+  # Full runs only: the pinned uv is the toolchain the requirements renderings
+  # are built with, so it is refreshed with everything else, never by a
+  # narrow flag such as --brew-only.
+  if [[ ${_run_all} -eq 1 ]]; then
+    local _uv_os="${_OVERRIDE_PLATFORM:-$(uname -s)}"
+    if [[ -z ${HAS_DEVTOOLS:-} ]]; then
+      _update_skip "pinned-uv" "HAS_DEVTOOLS not set"
+    elif ! _uv_pinned_asset "${_uv_os}" "${_UNAME_M}" > /dev/null; then
+      _update_skip "pinned-uv" "no pinned uv for ${_uv_os} ${_UNAME_M}"
+    else
+      _update_record_start "pinned-uv"
+      # Test seam (precedent: _CARGO_BIN, same BATS gate as the uv URL and
+      # digest seams): honoured only under bats, so a production environment
+      # variable can never swap the installer.
+      local _uv_installer="install_uv_pinned"
+      if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_UV_PINNED_INSTALLER:-} ]]; then
+        _uv_installer="${_UV_PINNED_INSTALLER}"
+      fi
+      "${_uv_installer}" 2>&1 | tee "${_DOTFILES_RUN_TMPDIR}/err_pinned-uv"
+      local _pinned_uv_rc="${PIPESTATUS[0]}"
+      _update_record_end "pinned-uv" "${_pinned_uv_rc}"
+    fi
+  else
+    _update_skip "pinned-uv" "flag not set"
   fi
 
   # ── gems ──────────────────────────────────────────────────────────────────

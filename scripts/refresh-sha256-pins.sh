@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Refresh the sha256 pins of kind, yq, shellcheck and gitleaks in lib/constants.sh from the
+# Refresh the sha256 pins of kind, yq, shellcheck, gitleaks and uv in lib/constants.sh from the
 # digest field of the GitHub releases API, so no release asset is downloaded.
 #
 # Usage: refresh-sha256-pins.sh [--constants <file>] [--accept-changed] [tool...]
@@ -24,7 +24,7 @@ _cleanup_tmp() {
 }
 
 _usage() {
-  printf "usage: %s [--constants <file>] [--accept-changed] [kind|yq|shellcheck|gitleaks ...]\n" "$(basename "$0")" >&2
+  printf "usage: %s [--constants <file>] [--accept-changed] [kind|yq|shellcheck|gitleaks|uv ...]\n" "$(basename "$0")" >&2
 }
 
 # Print the API's digest for asset <name> from release JSON file <body>, or nothing.
@@ -40,6 +40,27 @@ try:
 except Exception:
     pass
 ' "$1" "$2"
+}
+
+# _pin_slots <tool> -- print one "label|PIN_VARIABLE|asset-url" line per pin of <tool>.
+# kind, yq, shellcheck and gitleaks pin an amd64/arm64 pair and take both from the
+# lib/linux_ubuntu.sh helpers. uv pins two release assets (Linux x86_64, macOS arm64)
+# and has no such pair, so its mapping lives here, not in _release_asset_sha's arch table.
+_pin_slots() {
+  local _tool="$1" _arch _url _var
+  if [[ "${_tool}" == uv ]]; then
+    printf 'linux-amd64|UV_SHA256_LINUX_AMD64|https://github.com/astral-sh/uv/releases/download/%s/uv-x86_64-unknown-linux-gnu.tar.gz\n' "${UV_VER}"
+    printf 'darwin-arm64|UV_SHA256_DARWIN_ARM64|https://github.com/astral-sh/uv/releases/download/%s/uv-aarch64-apple-darwin.tar.gz\n' "${UV_VER}"
+    return 0
+  fi
+  for _arch in amd64 arm64; do
+    _url="$(_release_asset_url "${_tool}" "${_arch}")" || {
+      printf "%s: %s: no release asset URL\n" "${_tool}" "${_arch}" >&2
+      return 1
+    }
+    _var="$(_release_asset_sha "${_tool}" "${_arch}" | cut -d' ' -f1)"
+    printf '%s|%s|%s\n' "${_arch}" "${_var}" "${_url}"
+  done
 }
 
 # _fetch_release <tool> <api-url> <body-file> -- one GET of the release JSON.
@@ -72,7 +93,7 @@ _fetch_release() {
 # every pin and _FOR_VER whose value differs. rc 1 on any failure.
 _resolve_pins() {
   local _tool="$1" _up="${1^^}" _ver_var _ver _for_var _for _arch _url _var _old
-  local _owner _repo _tag _asset _api _body _raw _hex _first="" _o2 _r2 _t2 _a2
+  local _owner _repo _tag _asset _api _body _raw _hex _first="" _o2 _r2 _t2 _a2 _slots
   local _re='^https://github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/([^/]+)$'
   local -a _assets=() _news=() _arches=() _vars=()
   _ver_var="${_up}_VER"
@@ -85,12 +106,11 @@ _resolve_pins() {
   }
   _TMP_FILES+=("${_body}")
 
-  for _arch in amd64 arm64; do
-    _url="$(_release_asset_url "${_tool}" "${_arch}")" || {
-      printf "%s: %s: no release asset URL\n" "${_tool}" "${_arch}" >&2
-      rm -f "${_body}"
-      return 1
-    }
+  _slots="$(_pin_slots "${_tool}")" || {
+    rm -f "${_body}"
+    return 1
+  }
+  while IFS='|' read -r _arch _var _url; do
     if [[ -n "${BATS_TEST_TMPDIR:-}" && -n "${_REFRESH_ASSET_URL:-}" ]]; then
       _url="${_REFRESH_ASSET_URL}"
     fi
@@ -101,17 +121,17 @@ _resolve_pins() {
     fi
     _o2="${BASH_REMATCH[1]}" _r2="${BASH_REMATCH[2]}" _t2="${BASH_REMATCH[3]}" _a2="${BASH_REMATCH[4]}"
     if [[ -z "${_first}" ]]; then
-      _first=1 _owner="${_o2}" _repo="${_r2}" _tag="${_t2}"
+      _first="${_arch}" _owner="${_o2}" _repo="${_r2}" _tag="${_t2}"
     elif [[ "${_o2}/${_r2}/${_t2}" != "${_owner}/${_repo}/${_tag}" ]]; then
-      printf "%s: %s and the amd64 asset are not in the same release\n" "${_tool}" "${_arch}" >&2
+      printf "%s: %s and the %s asset are not in the same release\n" "${_tool}" "${_arch}" "${_first}" >&2
       rm -f "${_body}"
       return 1
     fi
     printf "querying %s\n" "${_url}"
     _arches+=("${_arch}")
     _assets+=("${_a2}")
-    _vars+=("$(_release_asset_sha "${_tool}" "${_arch}" | cut -d' ' -f1)")
-  done
+    _vars+=("${_var}")
+  done <<<"${_slots}"
 
   _api="$(_github_api_base)/repos/${_owner}/${_repo}/releases/tags/${_tag}"
   _fetch_release "${_tool}" "${_api}" "${_body}" || {
@@ -156,7 +176,12 @@ _validate_tool() {
     printf "%s: %s is empty in %s\n" "${_tool}" "${_ver_var}" "${_file}" >&2
     return 1
   fi
-  for _v in "${_up}_SHA256_AMD64" "${_up}_SHA256_ARM64" "${_up}_SHA256_FOR_VER"; do
+  local -a _pin_vars=()
+  local _slots
+  _slots="$(_pin_slots "${_tool}")" || return 1
+  mapfile -t _pin_vars < <(cut -d'|' -f2 <<<"${_slots}")
+  _pin_vars+=("${_up}_SHA256_FOR_VER")
+  for _v in "${_pin_vars[@]}"; do
     if ! grep -q "^${_v}=" "${_file}"; then
       printf "%s: %s line missing in %s; add it, then re-run\n" "${_tool}" "${_v}" "${_file}" >&2
       return 1
@@ -230,7 +255,7 @@ main() {
         _ACCEPT_CHANGED=1
         shift
         ;;
-      kind | yq | shellcheck | gitleaks)
+      kind | yq | shellcheck | gitleaks | uv)
         case " ${_tools[*]:-} " in
           *" $1 "*) ;;
           *) _tools+=("$1") ;;
@@ -270,7 +295,7 @@ main() {
   source "${_REPO_ROOT}/lib/linux_ubuntu.sh" || return 1
 
   if [[ "${#_tools[@]}" -eq 0 ]]; then
-    for _tool in kind yq shellcheck gitleaks; do
+    for _tool in kind yq shellcheck gitleaks uv; do
       _up="${_tool^^}"
       _for_var="${_up}_SHA256_FOR_VER"
       _ver_var="${_up}_VER"
