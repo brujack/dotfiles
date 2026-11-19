@@ -2168,14 +2168,18 @@ _install_pinned_release_binary() {
       ;;
   esac
 
-  # Stage beside the destination and rename over it, as _install_fetched_binary
-  # does: install(1) unlinks its target before copying, so a copy that failed
-  # straight onto it left the tool missing. A failure now leaves the old binary.
+  # Create the target as the invoking user before the writability test: a
+  # missing directory reads as unwritable, and sudo would then write into a
+  # user-owned path that does not exist yet. A no-op for an existing directory.
   if ! mkdir -p "${_dir}"; then
     log_error "${_name}: cannot create ${_dir}"
     rm -rf "${_tmp}"
     return 1
   fi
+
+  # Stage beside the destination and rename over it, as _install_fetched_binary
+  # does: install(1) unlinks its target before copying, so a copy that failed
+  # straight onto it left the tool missing. A failure now leaves the old binary.
   local -a _as=()
   [[ -w "${_dir}" ]] || _as=(sudo)
   if ! { "${_as[@]}" install -m 0755 "${_extracted}" "${_dir}/${_name}.new" \
