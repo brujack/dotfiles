@@ -4666,6 +4666,11 @@ _pinned_uv_installer_calls() {
   # shellcheck disable=SC2329 # invoked by run_update's pinned-uv section
   install_uv_pinned() { touch "${_fn_marker}"; }
   local _saved="${BATS_TEST_TMPDIR}"
+  # Emptying BATS_TEST_TMPDIR disables EVERY bats-gated seam for this run
+  # (_TERRAFORM_SKILL_REPO, _TFENV_REPO_URL, _FETCHED_*, the hashicorp seams),
+  # not only the uv one. Safe only because _pinned_uv_full_run mocks the rest of
+  # run_update; if a section this run reaches gains a bats-gated seam, stub it.
+  # The exit status is irrelevant here: only which installer ran is asserted.
   BATS_TEST_TMPDIR="" run_update || true
   BATS_TEST_TMPDIR="${_saved}"
   [ -e "${_fn_marker}" ]
