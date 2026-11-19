@@ -1297,7 +1297,8 @@ _words_missing_from() {
   grep -qE '^check-lock:' "${REPO_ROOT}/Makefile"
   # and it must resolve the pinned uv inside its recipe (fail closed), never
   # via a parse-time PATH lookup
-  grep -A8 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'resolve_pinned_uv'
+  grep -A2 '^check-lock:' "${REPO_ROOT}/Makefile" | grep -q 'PINNED_UV_RESOLVE'
+  grep -qE '^PINNED_UV_RESOLVE = .*resolve_pinned_uv' "${REPO_ROOT}/Makefile"
   ! command grep -q 'ifeq ($(UV),)' "${REPO_ROOT}/Makefile"
 }
 
