@@ -1356,6 +1356,15 @@ _install_ubuntu_cloud_tools() {
     fi
   fi
 
+  # Teleport is retired. Remove the apt source and keyring an earlier version of this
+  # function wrote, so apt stops fetching its repo; outside the HAS_DEVTOOLS guard so
+  # a host that lost the capability is cleaned too. The package and ~/.tsh are
+  # operator state and are left for a manual uninstall.
+  sudo rm -f "${_sources}/teleport.list" \
+    "${_sources}"/archive_uri-https_deb_releases_teleport_dev_-*.list \
+    "${_keyrings}/teleport-pubkey.gpg" \
+    || log_warn "could not remove retired teleport apt source/keyring under ${_sources} and ${_keyrings}"
+
   # azure-cli now comes from linuxbrew (see _install_ubuntu_brew_packages). Remove
   # the legacy Microsoft key and source files an earlier version of this function
   # left behind; the glob stays outside the quotes and an unmatched one is harmless.
