@@ -1,7 +1,8 @@
 # Repo session management (tmux, systemd, Warp, ssh routing) — design
 
 - **Date:** 2026-11-19
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-11-19
 
 ## Problem
 
@@ -466,13 +467,13 @@ Report: [round1.md](2026-11-19-repo-session-management-design.external-review/ro
 
 | finding | disposition | evidence | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | -------- | ---------------- | ----------------- |
-| F1.1 | Fixed | Component 1 and R3: the list is read from `${REPO_SESSIONS_FILE:-${HOME}/git-repos/personal/dotfiles/config/repo-sessions.sh}`, never relative to the script; missing or unreadable exits 3, no entry exits 0 with a message; Testing adds a run through a `safe_link` symlink and the missing-list case | unjudged | |
-| F1.2 | Fixed | R14 and the Warp test compare the multiset of (host, dir) pairs against `{(h, d) : d in REPO_SESSIONS[h]}`, no duplicates | unjudged | |
-| F1.3 | Fixed | Component 3, Decisions and N6 now say `$SHELL -c` (zsh sources `~/.zshenv`); routing tests pin `SHELL=/bin/sh` in `setup()` and add one zsh case | unjudged | |
-| F1.4 | Fixed | Ship the keys rather than measure reception and the laptop: tracked `.ssh/known_hosts_home` with `claude`, `workstation` and `workstation.home.conecrazy.ca` ed25519 entries, wired by Darwin-gated `UserKnownHostsFile` for the two aliases and the jump hop (component 3, R12, R16, tests pin the three fingerprints) | unjudged | |
-| F1.5 | Fixed | R4 and component 1 strip trailing `/` before deriving the name; `dotfiles/` and `/` test cases added | unjudged | |
-| F1.6 | Fixed | Component 6 and R12 create `~/.config/systemd/user/` before linking the unit | unjudged | |
-| F1.7 | Fixed | Component 7 and R13 key the not-enabled FAIL on `systemctl --user is-enabled` exiting non-zero | unjudged | |
-| F1.8 | Fixed | V1 covers both hosts: seven sessions, six on `claude`, `ansible` on `workstation` | unjudged | |
+| F1.1 | Fixed | Component 1 and R3: the list is read from `${REPO_SESSIONS_FILE:-${HOME}/git-repos/personal/dotfiles/config/repo-sessions.sh}`, never relative to the script; missing or unreadable exits 3, no entry exits 0 with a message; Testing adds a run through a `safe_link` symlink and the missing-list case | unjudged | accepted (operator, 2026-11-19) |
+| F1.2 | Fixed | R14 and the Warp test compare the multiset of (host, dir) pairs against `{(h, d) : d in REPO_SESSIONS[h]}`, no duplicates | unjudged | accepted (operator, 2026-11-19) |
+| F1.3 | Fixed | Component 3, Decisions and N6 now say `$SHELL -c` (zsh sources `~/.zshenv`); routing tests pin `SHELL=/bin/sh` in `setup()` and add one zsh case | unjudged | accepted (operator, 2026-11-19) |
+| F1.4 | Fixed | Ship the keys rather than measure reception and the laptop: tracked `.ssh/known_hosts_home` with `claude`, `workstation` and `workstation.home.conecrazy.ca` ed25519 entries, wired by Darwin-gated `UserKnownHostsFile` for the two aliases and the jump hop (component 3, R12, R16, tests pin the three fingerprints) | unjudged | accepted (operator, 2026-11-19) |
+| F1.5 | Fixed | R4 and component 1 strip trailing `/` before deriving the name; `dotfiles/` and `/` test cases added | unjudged | accepted (operator, 2026-11-19) |
+| F1.6 | Fixed | Component 6 and R12 create `~/.config/systemd/user/` before linking the unit | unjudged | accepted (operator, 2026-11-19) |
+| F1.7 | Fixed | Component 7 and R13 key the not-enabled FAIL on `systemctl --user is-enabled` exiting non-zero | unjudged | accepted (operator, 2026-11-19) |
+| F1.8 | Fixed | V1 covers both hosts: seven sessions, six on `claude`, `ansible` on `workstation` | unjudged | accepted (operator, 2026-11-19) |
 
 Stopped: reviewer recommended stopping in round 1
