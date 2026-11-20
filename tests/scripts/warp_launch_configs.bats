@@ -202,6 +202,11 @@ scratch|/Users/bruce|"
   [ "${n}" -eq 3 ]
 }
 
+@test "studio tab order: local work beside its host, codex beside ai-config, scratch last" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ "$(tab_rows "${WARP_DIR}/studio.yaml" | cut -d'|' -f1 | paste -sd' ' -)" = "update-studio update-laptop update-workstation ansible-local ratna update-claude etch-cli etch-config dotfiles ai-config codex-ai-config ai-devops math ansible scratch scratch" ]
+}
+
 @test "tab titles are unique in studio and reception, so the ansible session and ansible-local differ" {
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   local c

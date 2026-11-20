@@ -20,6 +20,18 @@ windows:
           cwd: /Users/bruce
           commands:
             - exec: ssh -t workstation
+      # ansible-local only opens the playbook directory: `make update-vms` /
+      # `make update-hosts` stay hand-run.
+      - title: ansible-local
+        layout:
+          cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
+          commands:
+            - exec: git status
+      - title: ratna
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t ratna
       - title: update-claude
         layout:
           cwd: /Users/bruce
@@ -45,6 +57,11 @@ windows:
           cwd: /Users/bruce
           commands:
             - exec: ssh -t claude .local/bin/repo-session ai-config
+      - title: codex-ai-config
+        layout:
+          cwd: /Users/bruce/git-repos/personal/ai-config
+          commands:
+            - exec: tmux new-session -A -s codex-ai-config
       - title: ai-devops
         layout:
           cwd: /Users/bruce
@@ -60,23 +77,6 @@ windows:
           cwd: /Users/bruce
           commands:
             - exec: ssh -t workstation .local/bin/repo-session terraform_ansible/ansible
-      # Local working tabs on the Studio. ansible-local only opens the playbook
-      # directory: `make update-vms` / `make update-hosts` stay hand-run.
-      - title: ansible-local
-        layout:
-          cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
-          commands:
-            - exec: git status
-      - title: ratna
-        layout:
-          cwd: /Users/bruce
-          commands:
-            - exec: ssh -t ratna
-      - title: codex-ai-config
-        layout:
-          cwd: /Users/bruce/git-repos/personal/ai-config
-          commands:
-            - exec: tmux new-session -A -s codex-ai-config
       - title: scratch
         layout:
           cwd: /Users/bruce
