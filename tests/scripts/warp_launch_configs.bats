@@ -152,14 +152,15 @@ STUB
   [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
 }
 
-# Print "<title>|<cwd>|<exec>" for every tab in a config (exec empty when none).
+# Print "<title>|<cwd>|<execs>" for every tab in a config; execs are joined with ";"
+# and empty when the tab runs none.
 tab_rows() {
   python3 - "$1" <<'PY'
 import sys, yaml
 for tab in yaml.safe_load(open(sys.argv[1]))["windows"][0]["tabs"]:
     lay = tab.get("layout", {})
     cmds = lay.get("commands") or []
-    print("|".join([tab["title"], lay.get("cwd", ""), cmds[0]["exec"] if cmds else ""]))
+    print("|".join([tab["title"], lay.get("cwd", ""), ";".join(c["exec"] for c in cmds)]))
 PY
 }
 
@@ -167,7 +168,7 @@ PY
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   local rows
   rows="$(tab_rows "${WARP_DIR}/studio.yaml")"
-  grep -qx 'ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status' <<< "${rows}"
+  grep -qx 'ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|export ENV=home;git status' <<< "${rows}"
   grep -qx 'ratna|/Users/bruce|ssh -t ratna' <<< "${rows}"
   grep -qx 'codex-ai-config|/Users/bruce/git-repos/personal/ai-config|tmux new-session -A -s codex-ai-config' <<< "${rows}"
   [ "$(grep -cx 'scratch|/Users/bruce|' <<< "${rows}")" -eq 2 ]
@@ -177,7 +178,7 @@ PY
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   local expected
   expected="update-reception|/Users/bruce/git-repos/personal/dotfiles|git status
-ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status
+ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|export ENV=genexxe_centrepointe;git status
 update-home|/Users/bruce|ssh -t home
 update-office|/Users/bruce|ssh -t office
 scratch|/Users/bruce|"
@@ -200,6 +201,28 @@ scratch|/Users/bruce|"
     done < <(tab_rows "${WARP_DIR}/${c}.yaml" | grep '^update-[^|]*|[^|]*|git status$')
   done
   [ "${n}" -eq 3 ]
+}
+
+@test "studio tab order: local work beside its host, codex beside ai-config, scratch last" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ "$(tab_rows "${WARP_DIR}/studio.yaml" | cut -d'|' -f1 | paste -sd' ' -)" = "update-studio update-laptop update-workstation ansible-local ratna update-claude etch-cli etch-config dotfiles ai-config codex-ai-config ai-devops math ansible scratch scratch" ]
+}
+
+# Print every exec line of the named tab in a config, one per line.
+tab_execs() {
+  python3 - "$1" "$2" <<'PY'
+import sys, yaml
+for tab in yaml.safe_load(open(sys.argv[1]))["windows"][0]["tabs"]:
+    if tab["title"] == sys.argv[2]:
+        for c in tab["layout"].get("commands") or []:
+            print(c["exec"])
+PY
+}
+
+@test "ansible-local exports the host's ansible ENV before git status" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ "$(tab_execs "${WARP_DIR}/studio.yaml" ansible-local | paste -sd';' -)" = "export ENV=home;git status" ]
+  [ "$(tab_execs "${WARP_DIR}/reception.yaml" ansible-local | paste -sd';' -)" = "export ENV=genexxe_centrepointe;git status" ]
 }
 
 @test "tab titles are unique in studio and reception, so the ansible session and ansible-local differ" {
