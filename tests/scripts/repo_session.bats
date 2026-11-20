@@ -88,13 +88,20 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
 @test "--detached propagates a new-session failure" {
   printf 'dotfiles\n' > "${NEW_SESSION_FAIL_FILE}"
   run "${SCRIPT}" --detached dotfiles < /dev/null
-  [ "${status}" -ne 0 ]
+  [ "${status}" -eq 1 ]
+}
+
+@test "attach-mode new-session failure exits 1" {
+  printf 'dotfiles\n' > "${NEW_SESSION_FAIL_FILE}"
+  run "${SCRIPT}" dotfiles < /dev/null
+  [ "${status}" -eq 1 ]
 }
 
 @test "--all walks the host list and exits 0 when all succeed" {
   run "${SCRIPT}" --detached --all < /dev/null
   [ "${status}" -eq 0 ]
-  grep -q -- ' -s dotfiles ' "${TMUX_LOG}"
+  grep -q -- '^has-session -t =dotfiles$' "${TMUX_LOG}"
+  grep -q -- '^new-session -d -A -s dotfiles ' "${TMUX_LOG}"
   grep -q -- ' -s etch-cli ' "${TMUX_LOG}"
   grep -q -- ' -s ansible ' "${TMUX_LOG}"
 }
@@ -143,6 +150,9 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
 
 @test "dir with .. component exits 2 without calling tmux" {
   run "${SCRIPT}" ../personal/dotfiles < /dev/null
+  [ "${status}" -eq 2 ]
+  [ "$(tmux_calls)" -eq 0 ]
+  run "${SCRIPT}" .. < /dev/null
   [ "${status}" -eq 2 ]
   [ "$(tmux_calls)" -eq 0 ]
   run "${SCRIPT}" dotfiles/.. < /dev/null
@@ -216,4 +226,27 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
   run bash -c 'source "$1"; printf "%s|%s" "${REPO_SESSIONS[claude]}" "${REPO_SESSIONS[workstation]}"' _ "${REPO_ROOT}/config/repo-sessions.sh"
   [ "${status}" -eq 0 ]
   [ "${output}" = "etch-cli etch-config dotfiles ai-config ai-devops math|terraform_ansible/ansible" ]
+}
+
+@test "dot components and dotted or colon names exit 2 without calling tmux" {
+  mkdir -p "${PERSONAL}/my.repo" "${PERSONAL}/a:b"
+  local arg
+  for arg in . ./ dotfiles/. ./dotfiles my.repo a:b; do
+    run "${SCRIPT}" "${arg}" < /dev/null
+    [ "${status}" -eq 2 ]
+    [[ "${output}" == *"${arg}"* ]]
+  done
+  [ "$(tmux_calls)" -eq 0 ]
+}
+
+@test "two positional arguments exit 2 without calling tmux" {
+  run "${SCRIPT}" dotfiles etch-cli < /dev/null
+  [ "${status}" -eq 2 ]
+  [ "$(tmux_calls)" -eq 0 ]
+}
+
+@test "--detached --all with a dir exits 2 without calling tmux" {
+  run "${SCRIPT}" --detached --all dotfiles < /dev/null
+  [ "${status}" -eq 2 ]
+  [ "$(tmux_calls)" -eq 0 ]
 }
