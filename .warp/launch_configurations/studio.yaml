@@ -11,7 +11,8 @@ windows:
         layout:
           cwd: /Users/bruce
           commands:
-            - exec: ssh -t laptop
+            # The laptop is laptop-1 on wireless; ssh exits 255 only when it cannot connect.
+            - exec: ssh -t -o ConnectTimeout=3 laptop; [ $? -ne 255 ] || ssh -t laptop-1
       - title: update-workstation
         layout:
           cwd: /Users/bruce

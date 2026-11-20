@@ -94,3 +94,49 @@ expected_pairs() {
   [ "${status}" -eq 0 ]
   [ "${output}" = "stub-marker" ]
 }
+
+# Print the exec line of the update-laptop tab in studio.yaml.
+update_laptop_exec() {
+  awk '/title: update-laptop/ { t = 1 } t && /exec:/ { sub(/^[^:]*exec: /, ""); print; exit }' \
+    "${WARP_DIR}/studio.yaml"
+}
+
+# Run the update-laptop exec line under zsh with a stub ssh on PATH. The stub logs
+# its last argument (the host) and exits with STUB_RC_<host> (default 0).
+run_update_laptop() {
+  command -v zsh >/dev/null 2>&1 || skip "zsh not installed"
+  local bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${bin}"
+  cat > "${bin}/ssh" <<'STUB'
+#!/bin/sh
+for a; do host="$a"; done
+printf '%s\n' "${host}" >> "${SSH_LOG}"
+eval "rc=\${STUB_RC_$(printf '%s' "${host}" | tr -c 'a-zA-Z0-9\n' _):-0}"
+exit "${rc}"
+STUB
+  chmod +x "${bin}/ssh"
+  export SSH_LOG="${BATS_TEST_TMPDIR}/ssh.log"
+  : > "${SSH_LOG}"
+  local cmd
+  cmd="$(update_laptop_exec)"
+  [ -n "${cmd}" ]
+  PATH="${bin}:${PATH}" run zsh -fc "${cmd}"
+}
+
+@test "update-laptop falls back to laptop-1 when the wired name is unreachable" {
+  export STUB_RC_laptop=255
+  run_update_laptop
+  [ "$(paste -sd' ' "${SSH_LOG}")" = "laptop laptop-1" ]
+}
+
+@test "update-laptop does not retry when the remote shell exits non-zero" {
+  export STUB_RC_laptop=1
+  run_update_laptop
+  [ "$(paste -sd' ' "${SSH_LOG}")" = "laptop" ]
+}
+
+@test "update-laptop makes one connection when the wired name answers" {
+  run_update_laptop
+  [ "${status}" -eq 0 ]
+  [ "$(paste -sd' ' "${SSH_LOG}")" = "laptop" ]
+}
