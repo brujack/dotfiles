@@ -1,0 +1,44 @@
+---
+name: laptop
+windows:
+  - tabs:
+      - title: update-laptop
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: git status
+      - title: etch-cli
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session etch-cli
+      - title: etch-config
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session etch-config
+      - title: dotfiles
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session dotfiles
+      - title: ai-config
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session ai-config
+      - title: ai-devops
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session ai-devops
+      - title: math
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t claude .local/bin/repo-session math
+      - title: ansible
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t workstation .local/bin/repo-session terraform_ansible/ansible
