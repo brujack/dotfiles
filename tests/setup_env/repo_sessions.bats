@@ -63,6 +63,7 @@ printf 'systemctl %s\n' "$*" >> "${MOCK_CALLS_FILE}"
 [[ -n "${STUB_FAIL_ARGS:-}" && "$*" == *"${STUB_FAIL_ARGS}"* ]] && exit 1
 case "$2" in
   is-enabled)
+    if [[ -e "${STUB_DIR}/enabled_word" ]]; then cat "${STUB_DIR}/enabled_word"; exit 0; fi
     if [[ -e "${STUB_DIR}/enabled" ]]; then printf 'enabled\n'; exit 0; fi
     printf 'linked\n'; exit 1 ;;
   is-failed)
@@ -141,7 +142,7 @@ _set_sessions() { printf '%s\n' "$@" > "${STUB_DIR}/sessions"; }
   run ! grep -qE '^(systemctl|loginctl|sudo) ' "${MOCK_CALLS_FILE}"
 }
 
-@test "install: macOS is a no-op on a listed host name" {
+@test "install: macOS does no Linux install on a listed host name" {
   export MACOS=1 _REPO_SESSION_HOST=claude
   run install_repo_sessions
   [ "$status" -eq 0 ]
@@ -415,10 +416,10 @@ _healthy() {
   [[ "${output}" == *'./setup_env.sh -t setup_user'* ]]
 }
 
-@test "doctor: enabled keys on the exit code, not the printed word" {
+@test "doctor: a linked unit (rc 1, prints linked) fails" {
   _healthy
   rm "${STUB_DIR}/enabled"
-  # is-enabled prints 'linked' and exits 1 for a linked, not-yet-enabled unit.
+  # A linked, not-yet-enabled unit prints 'linked' and exits 1.
   run _doctor_check_repo_sessions
   [[ "${output}" == *'./setup_env.sh -t setup_user'* ]]
   [[ "${output}" != *"PASS"* ]]
@@ -481,4 +482,69 @@ _healthy() {
   [[ "${output}" == *"FAIL"* ]]
   [[ "${output}" == *'sudo loginctl enable-linger "$USER"'* ]]
   [[ "${output}" != *"PASS"* ]]
+}
+
+# ── review round: ~/.ssh mode, enabled word, linger predicate, load_mocks seams ──
+
+@test "install: macOS creates a missing ~/.ssh with mode 700" {
+  export MACOS=1
+  umask 022
+  [ ! -e "${HOME}/.ssh" ]
+  run install_repo_sessions
+  [ "$status" -eq 0 ]
+  [ -n "$(find "${HOME}/.ssh" -maxdepth 0 -perm 700)" ]
+}
+
+@test "install: macOS never changes the mode of an existing ~/.ssh" {
+  export MACOS=1
+  umask 022
+  mkdir -p "${HOME}/.ssh"
+  chmod 755 "${HOME}/.ssh"
+  run install_repo_sessions
+  [ "$status" -eq 0 ]
+  [ -n "$(find "${HOME}/.ssh" -maxdepth 0 -perm 755)" ]
+}
+
+@test "install: an is-enabled word other than enabled (rc 0) still runs enable" {
+  export LINUX=1
+  printf 'enabled-runtime\n' > "${STUB_DIR}/enabled_word"
+  run install_repo_sessions
+  [ "$status" -eq 0 ]
+  grep -qx 'systemctl --user enable repo-sessions.service' "${MOCK_CALLS_FILE}"
+}
+
+@test "doctor: an is-enabled word other than enabled (rc 0) fails" {
+  _healthy
+  printf 'enabled-runtime\n' > "${STUB_DIR}/enabled_word"
+  run _doctor_check_repo_sessions
+  [[ "${output}" == *"FAIL"* ]]
+  [[ "${output}" == *'./setup_env.sh -t setup_user'* ]]
+  [[ "${output}" != *"PASS"* ]]
+}
+
+@test "install: a malformed linger read enables linger" {
+  export LINUX=1
+  : > "${STUB_DIR}/linger"
+  run install_repo_sessions
+  [ "$status" -eq 0 ]
+  grep -qx 'loginctl enable-linger tester' "${MOCK_CALLS_FILE}"
+}
+
+@test "load_mocks: exports inert defaults for the repo-sessions seams" {
+  mkdir -p "${BATS_TEST_TMPDIR}/lm"
+  run bash -c 'REPO_ROOT="$1"; export BATS_TEST_TMPDIR="$2"
+    source "$1/tests/helpers/common.bash"; load_mocks
+    printf "%s\n" "${_LOGINCTL_BIN}" "${_SYSTEMCTL_BIN}" "${_TMUX_BIN}" \
+      "${_SYSTEMD_USER_DIR}" "${REPO_SESSIONS_FILE}"' \
+    _ "${REPO_ROOT}" "${BATS_TEST_TMPDIR}/lm"
+  [ "$status" -eq 0 ]
+  local -a _l
+  mapfile -t _l <<< "${output}"
+  [ "${_l[0]}" = "${REPO_ROOT}/tests/mocks/loginctl" ]
+  [ "${_l[1]}" = "${REPO_ROOT}/tests/stubs/systemctl-stub" ]
+  [ "${_l[2]}" = "/bin/false" ]
+  [ "${_l[3]}" = "${BATS_TEST_TMPDIR}/lm/systemd-user" ]
+  [ "${_l[4]}" = "${BATS_TEST_TMPDIR}/lm/repo-sessions-empty.sh" ]
+  [ -f "${_l[4]}" ]
+  [ ! -s "${_l[4]}" ]
 }
