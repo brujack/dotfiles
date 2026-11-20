@@ -594,6 +594,7 @@ run_setup_user() {
   # what reports the gap rather than this line failing the whole workflow.
   install_renovate_held_agent || log_warn "renovate cadence agent not installed — see above"
   install_ledger_drift_agent || log_warn "ledger drift cadence agent not installed — see above"
+  install_repo_sessions || log_warn "repo sessions not installed — see above"
   # A no-op when ~/.pyenv/versions does not exist yet (install_pyenv_rehash_hook's
   # own guard), which is true here on a fresh host -- setup_user runs before pyenv
   # creates versions/. Called anyway so it is a no-op the FIRST time and installs
