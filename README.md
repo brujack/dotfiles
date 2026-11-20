@@ -280,10 +280,13 @@ Each repo under active work has a tmux session running `claude --remote-control`
 - Each Mac has a Warp launch config (`.warp/launch_configurations/studio.yaml`,
   `laptop.yaml`, `reception.yaml`) with one tab per session.
 - From a Mac, `ssh claude` and `ssh workstation` go direct on the home LAN and through
-  Cloudflare elsewhere. The choice comes from `home-lan-probe`, which checks the host's
-  ed25519 fingerprint, not just whether it answers. The two host keys are pinned in
-  `.ssh/known_hosts_home`; a host-key rotation needs that file and the `.ssh/config`
-  `Match` lines updated.
+  Cloudflare elsewhere. The route comes from `home-lan-probe`, which compares the ed25519
+  fingerprint the LAN IP offers with the pinned one; the security boundary is the pinned
+  host key itself (`HostKeyAlias` with `StrictHostKeyChecking yes`), so an impostor is
+  refused rather than prompted. The two host keys are pinned in `.ssh/known_hosts_home`,
+  which `setup_user` links: run it after pulling on a Mac, or `ssh claude` refuses an
+  unknown key. A host-key rotation needs that file and the `.ssh/config` `Match` lines
+  updated.
 
 Design: `docs/superpowers/specs/2026-11-19-repo-session-management-design.md`.
 
