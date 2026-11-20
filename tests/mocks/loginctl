@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+printf 'loginctl %s\n' "$*" >> "${MOCK_CALLS_FILE:-/tmp/mock_calls}"
+if [[ "$1" == "show-user" ]]; then
+  printf 'Linger=%s\n' "${MOCK_LOGINCTL_LINGER:-yes}"
+fi
+exit 0

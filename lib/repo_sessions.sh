@@ -40,6 +40,13 @@ _repo_sessions_link() {
 
 _repo_sessions_install_macos() {
     local _root="$1"
+    # A fresh ~/.ssh must not be group- or world-readable; an existing one is left alone.
+    if [[ ! -d "${HOME}/.ssh" ]]; then
+        run_cmd mkdir -m 700 "${HOME}/.ssh" || {
+            log_warn "repo-sessions: mkdir failed for ${HOME}/.ssh"
+            return 1
+        }
+    fi
     _repo_sessions_link "${_root}/bin/home-lan-probe" \
         "${HOME}/.local/bin/home-lan-probe" "home-lan-probe" || return 1
     _repo_sessions_link "${_root}/.ssh/known_hosts_home" \
@@ -60,7 +67,8 @@ _repo_sessions_install_linux() {
         log_warn "repo-sessions: cannot read linger state for ${USER}"
         return 1
     }
-    if [[ "${_linger}" == "Linger=no" ]]; then
+    # Same predicate as doctor: anything but a positive Linger=yes needs enabling.
+    if [[ "${_linger}" != "Linger=yes" ]]; then
         run_cmd sudo "${_loginctl}" enable-linger "${USER}" || {
             log_warn "repo-sessions: sudo loginctl enable-linger ${USER} failed"
             return 1
@@ -82,7 +90,8 @@ _repo_sessions_install_linux() {
         return 1
     }
     # Already enabled is a no-op, so a second run changes nothing.
-    "${_systemctl}" --user is-enabled repo-sessions.service > /dev/null 2>&1 && return 0
+    # Keyed on the word: `enabled-runtime` also exits 0 but does not survive a reboot.
+    [[ "$("${_systemctl}" --user is-enabled repo-sessions.service 2> /dev/null)" == "enabled" ]] && return 0
     run_cmd "${_systemctl}" --user enable repo-sessions.service || {
         log_warn "repo-sessions: systemctl --user enable repo-sessions.service failed"
         return 1
@@ -117,8 +126,9 @@ _doctor_check_repo_sessions() {
         doctor_fail "repo-sessions" "linger is off — run: sudo loginctl enable-linger \"\$USER\""
         _issues=$((_issues + 1))
     fi
-    # Keyed on the exit code: a linked, not-yet-enabled unit prints `linked` with rc 1.
-    if ! "${_systemctl}" --user is-enabled repo-sessions.service > /dev/null 2>&1; then
+    # Keyed on the word, not the exit code: `enabled-runtime` exits 0 but is not
+    # persistent, and a linked, not-yet-enabled unit prints `linked` with rc 1.
+    if [[ "$("${_systemctl}" --user is-enabled repo-sessions.service 2> /dev/null)" != "enabled" ]]; then
         doctor_fail "repo-sessions" "unit not enabled — run: ./setup_env.sh -t setup_user"
         _issues=$((_issues + 1))
     fi
