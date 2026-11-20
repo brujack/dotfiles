@@ -126,7 +126,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [.ssh/config, .ssh/known_hosts_home, tests/scripts/ssh_routing.bats, tests/bats-files.txt]
+files_touched: [.ssh/config, .ssh/known_hosts_home, tests/scripts/ssh_routing.bats, tests/ssh_config.bats, tests/bats-files.txt]
 depends_on: [2]
 ```
 
@@ -139,7 +139,7 @@ Delete `workstation-home-tmux`/`claude-home-tmux` from the alias lines, the
 three lines, keys from `ssh-keyscan -t ed25519 192.168.51.17 192.168.51.12` with the host
 field replaced by `claude`, `workstation`, `workstation.home.conecrazy.ca`.
 
-**Tests:** the spec's "ssh routing" and "Tracked host keys" bullets. `ssh -G -F
+**Tests:** the spec's "ssh routing" and "Tracked host keys" bullets. Re-plan (Phase 2): the existing `tests/ssh_config.bats` pins the `*-home-tmux` aliases R9 deletes, so this task also removes those assertions and tests and gives the `claude-home` remote-command test a positive control that does not depend on a `-tmux` alias. `ssh -G -F
 .ssh/config` with `HOME` at a fixture (stub probe recording argv), a `uname` stub on
 `PATH`, `SHELL=/bin/sh` in `setup()`, and one zsh case. Pin `hostname`, `hostkeyalias`,
 `proxyjump`, `controlmaster false`, `userknownhostsfile`, probe argv, and "stub never
@@ -163,7 +163,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [config/systemd/repo-sessions.service, lib/repo_sessions.sh, setup_env.sh, tests/setup_env/repo_sessions.bats, tests/bats-files.txt]
+files_touched: [config/systemd/repo-sessions.service, lib/repo_sessions.sh, setup_env.sh, tests/setup_env/repo_sessions.bats, tests/setup_env/unit.bats, tests/mocks/loginctl, tests/helpers/common.bash, tests/bats-files.txt]
 depends_on: [3]
 ```
 
@@ -178,6 +178,8 @@ enabling linger with no user manager running starts one, and a manager started a
 Seams: `_SYSTEMD_USER_DIR`, `_SYSTEMCTL_BIN`, `_LOGINCTL_BIN`, `_TMUX_BIN`,
 `REPO_SESSIONS_FILE`, `_REPO_SESSION_HOST`, all set at `setup()` scope. Source the new lib
 from `setup_env.sh` after `lib/launch_agents.sh`; last line is the sourcing guard.
+
+Re-plan (Phase 2): `tests/setup_env/unit.bats` hand-types one marker per tracked `lib/*.sh` (`setup_env.sh sourced by a relative path defines a marker from every lib`), so this task adds `repo_sessions.sh:install_repo_sessions` to that list. Second re-plan: a recording `tests/mocks/loginctl` and inert `load_mocks` defaults for `_LOGINCTL_BIN`, `_SYSTEMCTL_BIN`, `_TMUX_BIN`, `_SYSTEMD_USER_DIR` and `REPO_SESSIONS_FILE`, so no later test that reaches `install_repo_sessions` can call the real tools.
 
 **Tests:** the spec's "Unit", "Installer" and "Doctor" bullets, plus a recorded-call-order
 case: the `loginctl enable-linger` call precedes the `systemctl --user enable` call (`systemd-analyze --user
@@ -265,7 +267,7 @@ acceptance:
   - cmd: make lint
     exit_code: 0
 max_retries: 2
-files_touched: [lib/launch_agents.sh, CLAUDE.md]
+files_touched: [lib/launch_agents.sh, CLAUDE.md, README.md, docs/superpowers/README.md]
 depends_on: [6]
 ```
 
@@ -274,7 +276,7 @@ Layout line's tracked-dirs list (regenerate with the command that line names), a
 Entry Points bullet: `repo-session <dir>` attaches to or creates a repo's tmux session;
 `repo-sessions.service` recreates them at boot on hosts listed in `config/repo-sessions.sh`
 (spec: `docs/superpowers/specs/2026-11-19-repo-session-management-design.md`). Respect the
-CLAUDE.md byte ceiling the pre-commit hook enforces.
+CLAUDE.md byte ceiling the pre-commit hook enforces. Re-plan (Phase 2): CLAUDE.md had 119 bytes of headroom, so the Entry Points description went to README.md ("Repo sessions (tmux, Warp)") and CLAUDE.md got only the Layout entries; a Backlog row records that `bin/` is outside the bash-coverage set.
 </content>
 </invoke>
 <invoke name="Bash">

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# repo-session [--detached] <dir> | repo-session --detached --all
+# Attach to (or create) the tmux session for a repo directory under
+# ${HOME}/git-repos/personal, running claude in it with Remote Control.
+
+readonly PERSONAL_ROOT="${HOME}/git-repos/personal"
+
+usage() {
+  printf 'usage: repo-session [--detached] <dir> | repo-session --detached --all\n' >&2
+}
+
+# Return 1 on a bad <dir> (run_one maps it to exit 2); ssh passes the argument from
+# another machine, so a typo must not create a stray session in $HOME.
+valid_dir() {
+  local dir="$1"
+  case "${dir}" in
+    '' | /* | .. | ../* | */../* | */.. | . | ./* | */./* | */.) return 1 ;;
+  esac
+  # tmux rewrites '.' and ':' in a session name, so the name would not match the dir.
+  case "${dir##*/}" in
+    *[.:]*) return 1 ;;
+  esac
+  [[ -d "${PERSONAL_ROOT}/${dir}" ]] || return 1
+}
+
+# run_one <detached 0|1> <dir>: strips trailing slashes, validates, then starts or attaches.
+run_one() {
+  local detached="$1" arg="$2" dir="$2" name tmux_bin="${_TMUX_BIN:-tmux}"
+  local pane_cmd
+  while [[ "${dir}" == */ ]]; do dir="${dir%/}"; done
+  if ! valid_dir "${dir}"; then
+    printf 'repo-session: not a directory under %s: %s\n' "${PERSONAL_ROOT}" "${arg}" >&2
+    return 2
+  fi
+  name="${dir##*/}"
+  pane_cmd="zsh -ic 'claude --name \"\$(basename \"\$PWD\")\" --remote-control; exec zsh'"
+  if [[ "${detached}" -eq 1 ]]; then
+    "${tmux_bin}" has-session -t "=${name}" 2> /dev/null && return 0
+    # -A kept: R1 is this same command plus -d, and the check above makes attach a race only.
+    "${tmux_bin}" new-session -d -A -s "${name}" -c "${PERSONAL_ROOT}/${dir}" "${pane_cmd}" || return 1
+  else
+    "${tmux_bin}" new-session -A -s "${name}" -c "${PERSONAL_ROOT}/${dir}" "${pane_cmd}" || return 1
+  fi
+}
+
+# Read this host's entry in a subshell so the sourced file's variables and functions
+# stay out of this script; printf runs in the same scope as the file's declare.
+run_all() {
+  local list="${REPO_SESSIONS_FILE:-${PERSONAL_ROOT}/dotfiles/config/repo-sessions.sh}"
+  local host="${_REPO_SESSION_HOST:-$(hostname -s)}"
+  local entry dir failed=0 dirs
+  if [[ ! -r "${list}" ]]; then
+    printf 'repo-session: cannot read session list: %s\n' "${list}" >&2
+    return 3
+  fi
+  entry="$(
+    # shellcheck source=/dev/null # path is a runtime seam, not statically known
+    source "${list}" && printf '%s' "${REPO_SESSIONS[${host}]-}"
+  )" || {
+    printf 'repo-session: cannot read session list: %s\n' "${list}" >&2
+    return 3
+  }
+  if [[ -z "${entry}" ]]; then
+    printf 'repo-session: no sessions listed for %s\n' "${host}"
+    return 0
+  fi
+  read -ra dirs <<< "${entry}"
+  for dir in "${dirs[@]}"; do
+    run_one 1 "${dir}" || {
+      printf 'repo-session: failed: %s\n' "${dir}" >&2
+      failed=1
+    }
+  done
+  return "${failed}"
+}
+
+main() {
+  local detached=0 all=0 dir="" have_dir=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --detached) detached=1 ;;
+      --all) all=1 ;;
+      *)
+        if [[ "${have_dir}" -eq 1 ]]; then
+          usage
+          return 2
+        fi
+        dir="$1"
+        have_dir=1
+        ;;
+    esac
+    shift
+  done
+  if [[ "${all}" -eq 1 ]]; then
+    if [[ "${detached}" -ne 1 || "${have_dir}" -eq 1 ]]; then
+      usage
+      return 2
+    fi
+    run_all
+    return $?
+  fi
+  if [[ "${have_dir}" -ne 1 ]]; then
+    usage
+    return 2
+  fi
+  run_one "${detached}" "${dir}"
+}
+
+main "$@"
+exit $?

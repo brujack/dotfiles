@@ -661,6 +661,7 @@ run_doctor() {
   _doctor_check_dev_tools
   _doctor_check_login_shell
   _doctor_check_cred_dirs
+  _doctor_check_repo_sessions
   _doctor_check_hooks_path
   _doctor_check_versions
   _doctor_check_aws_key_expiry

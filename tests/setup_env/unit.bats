@@ -3333,7 +3333,8 @@ _tracked_lib_count() {
     git_sync.sh:sync_git_repos helpers.sh:log_info
     launch_agents.sh:install_renovate_held_agent legacy_rsync.sh:sync_legacy_dirs
     linux_shared.sh:install_git_linux linux_ubuntu.sh:install_ubuntu_packages
-    macos.sh:install_rosetta update_summary.sh:_update_summary
+    macos.sh:install_rosetta repo_sessions.sh:install_repo_sessions
+    update_summary.sh:_update_summary
     workflows.sh:setup_claude_plugins)
   [ "${#_markers[@]}" -eq "$(_tracked_lib_count)" ]
   run env -u GO_VER bash -c '

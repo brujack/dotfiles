@@ -45,9 +45,7 @@ resolved() {
   [ "$(resolved example.com user)" = "sentinel" ]
   [ "$(resolved workstation.home.conecrazy.ca user)" = "bruce" ]
   [ "$(resolved claude-home user)" = "bruce" ]
-  [ "$(resolved claude-home-tmux user)" = "bruce" ]
   [ "$(resolved workstation-home user)" = "bruce" ]
-  [ "$(resolved workstation-home-tmux user)" = "bruce" ]
 }
 
 @test "workstation-home jumps through the bastion only, with the home key" {
@@ -58,24 +56,9 @@ resolved() {
   [ -z "$(resolved workstation-home remotecommand)" ]
 }
 
-@test "workstation-home-tmux attaches to tmux on the workstation" {
-  [ "$(resolved workstation-home-tmux hostname)" = "workstation.home.conecrazy.ca" ]
-  [ "$(resolved workstation-home-tmux proxyjump)" = "home-secure.conecrazy.ca" ]
-  [ "$(resolved workstation-home-tmux requesttty)" = "true" ]
-  [ "$(resolved workstation-home-tmux remotecommand)" = "tmux attach-session || tmux new-session" ]
-}
-
 @test "claude-home carries no remote command, so scp and ad-hoc commands still work" {
-  # Positive control first: the tmux alias does carry one, so an empty result
-  # below means the plain alias lacks it, not that the probe cannot see it.
-  [ -n "$(resolved claude-home-tmux remotecommand)" ]
+  # Positive control first: the alias resolves from this config, so an empty
+  # result below means it lacks a remote command, not that the probe sees nothing.
+  [ "$(resolved claude-home hostname)" = "claude.home.conecrazy.ca" ]
   [ -z "$(resolved claude-home remotecommand)" ]
-}
-
-@test "claude-home-tmux attaches to tmux on the target over the same jump chain" {
-  [ "$(resolved claude-home-tmux hostname)" = "claude.home.conecrazy.ca" ]
-  [ "$(resolved claude-home-tmux proxyjump)" = "home-secure.conecrazy.ca,workstation.home.conecrazy.ca" ]
-  [[ "$(resolved claude-home-tmux identityfile)" == */.ssh/home ]]
-  [ "$(resolved claude-home-tmux requesttty)" = "true" ]
-  [ "$(resolved claude-home-tmux remotecommand)" = "tmux attach-session || tmux new-session" ]
 }

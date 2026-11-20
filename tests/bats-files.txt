@@ -25,6 +25,7 @@ tests/scripts/ci_uv_pin.bats
 tests/scripts/commit_msg.bats
 tests/scripts/docs_inert_premise.bats
 tests/scripts/dpkg_sudo_frontend.bats
+tests/scripts/home_lan_probe.bats
 tests/scripts/html2ascii.bats
 tests/scripts/https_only_fetch.bats
 tests/scripts/list_shell_files.bats
@@ -34,10 +35,13 @@ tests/scripts/pre_commit_hook.bats
 tests/scripts/pre_push.bats
 tests/scripts/refresh_sha256_pins.bats
 tests/scripts/refresh_uv_lock.bats
+tests/scripts/repo_session.bats
+tests/scripts/ssh_routing.bats
 tests/scripts/unit.bats
 tests/scripts/uv_lock_refresh_workflow.bats
 tests/scripts/verify_ms_deb.bats
 tests/scripts/verify_release_asset.bats
+tests/scripts/warp_launch_configs.bats
 tests/scripts/whats-new-anthropic.bats
 tests/scripts/whats-new.bats
 tests/scripts/windows_npm_pins.bats
@@ -84,6 +88,7 @@ tests/setup_env/profiles.bats
 tests/setup_env/pyenv_rehash_hook.bats
 tests/setup_env/release_asset_pins.bats
 tests/setup_env/release_binary.bats
+tests/setup_env/repo_sessions.bats
 tests/setup_env/requirements_ci.bats
 tests/setup_env/run_or_exit.bats
 tests/setup_env/run_tmpdir_traps.bats
