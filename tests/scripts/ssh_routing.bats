@@ -93,6 +93,18 @@ resolve() {
   done
 }
 
+@test "Darwin direct blocks offer ~/.ssh/home then ~/.ssh/id_rsa, so an agentless client still has the key claude trusts" {
+  # claude's authorized_keys trusts only id_rsa, and the Studio's ~/.ssh/home is a
+  # different key; with IdentityFile set, ssh no longer falls back to id_rsa itself.
+  local host ids
+  for host in claude workstation; do
+    resolve Darwin "${host}"
+    [ "${status}" -eq 0 ]
+    ids="$(printf '%s\n' "${output}" | awk '$1 == "identityfile" {sub(".*/", "", $2); print $2}' | tr '\n' ' ')"
+    [ "${ids}" = "home id_rsa " ]
+  done
+}
+
 @test "Darwin, probe absent: direct, no proxyjump" {
   rm -f "${HOME}/.local/bin/home-lan-probe"
   local host ip
