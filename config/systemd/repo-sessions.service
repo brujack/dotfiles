@@ -1,0 +1,13 @@
+[Unit]
+Description=Create repo tmux sessions (repo-session --all)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+KillMode=process
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/timeout 60 /bin/sh -c 'until nc -z -w 1 api.anthropic.com 443; do sleep 1; done'
+ExecStart=%h/.local/bin/repo-session --detached --all
+
+[Install]
+WantedBy=default.target

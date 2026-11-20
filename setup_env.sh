@@ -53,6 +53,7 @@ source "${_SETUP_ENV_DIR}/lib/git_sync.sh"
 source "${_SETUP_ENV_DIR}/lib/legacy_rsync.sh"
 source "${_SETUP_ENV_DIR}/lib/git_hooks.sh"
 source "${_SETUP_ENV_DIR}/lib/launch_agents.sh"
+source "${_SETUP_ENV_DIR}/lib/repo_sessions.sh"
 # Unset so no lib reuses it: its value depends on how the caller named this
 # file ("." for ./setup_env.sh, absolute when tests source it by full path).
 unset _SETUP_ENV_DIR

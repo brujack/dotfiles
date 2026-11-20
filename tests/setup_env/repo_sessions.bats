@@ -10,6 +10,8 @@
 
 load '../helpers/common.bash'
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   load_setup_env
@@ -47,6 +49,8 @@ EOF
   # OS vars are not set by load_setup_env; a developer shell may export either.
   unset MACOS LINUX UBUNTU
   UNIT_SRC="${REPO_ROOT}/config/systemd/repo-sessions.service"
+  # The chmod mock logged the stub setup above; start every test from an empty record.
+  : > "${MOCK_CALLS_FILE}"
 }
 
 # Recording stubs. systemctl state lives in files under STUB_DIR: `enabled` exists
