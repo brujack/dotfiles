@@ -41,6 +41,7 @@ tests/scripts/unit.bats
 tests/scripts/uv_lock_refresh_workflow.bats
 tests/scripts/verify_ms_deb.bats
 tests/scripts/verify_release_asset.bats
+tests/scripts/warp_launch_configs.bats
 tests/scripts/whats-new-anthropic.bats
 tests/scripts/whats-new.bats
 tests/scripts/windows_npm_pins.bats
