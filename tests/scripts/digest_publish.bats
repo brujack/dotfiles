@@ -86,6 +86,18 @@ remote_tip() {
   run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
 }
 
+@test "publish_digest refuses a rename into the digest dir, which deletes a file outside it" {
+  cd "${WORK}"
+  # Rename detection would list only the destination; the source path is a
+  # deletion outside the dir that an auto-merged PR would apply to master.
+  PATH="${REAL_PATH}" git mv base.md "${DIR}/base.md"
+  PATH="${REAL_PATH}" git commit -q -m "move base into the digest dir"
+  PATH="${REAL_PATH}" run publish_digest digest/renamed "docs: digest" "${DIR}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"base.md is outside ${DIR}"* ]]
+  [ -z "$(remote_tip digest/renamed)" ]
+}
+
 @test "publish_digest refuses a sibling dir that only shares the prefix" {
   cd "${WORK}"
   mkdir -p "${WORK}/${DIR}-evil"

@@ -26,7 +26,8 @@ publish_digest() {
     printf 'Error: cannot fetch origin master to check what %s would publish\n' "${_branch}" >&2
     return 1
   }
-  _files="$(git diff --name-only FETCH_HEAD...HEAD)" || {
+  # --no-renames: a rename lists only its destination, hiding a deletion outside <dir>.
+  _files="$(git diff --no-renames --name-only FETCH_HEAD...HEAD)" || {
     printf 'Error: cannot diff HEAD against origin master\n' >&2
     return 1
   }
