@@ -9,6 +9,8 @@ PLATFORM_STATE_FILE="${FEATURES_DIR}/.platform-state.md"
 SDK_STATE_FILE="${FEATURES_DIR}/.sdk-state.md"
 TODAY="$(date +%Y-%m-%d)"
 OUTPUT_FILE="${FEATURES_DIR}/features-${TODAY}.md"
+# shellcheck source=scripts/digest-publish.sh
+source "${SCRIPT_DIR}/digest-publish.sh" || { printf "Error: cannot load %s/digest-publish.sh\n" "${SCRIPT_DIR}" >&2; exit 1; }
 
 usage() {
   printf "Usage: %s [--dry-run]\n" "$0"
@@ -87,7 +89,7 @@ commit_and_push() {
   git commit -m "docs: add Anthropic weekly features digest ${TODAY}
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>" || return 1
-  git push || { printf "Warning: git push failed — changes are committed locally\n" >&2; }
+  publish_digest "digest/anthropic-${TODAY}" "docs: add Anthropic weekly features digest ${TODAY}"
 }
 
 send_ntfy() {

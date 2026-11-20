@@ -23,6 +23,7 @@ tests/scripts/ci_test_macos_shard.bats
 tests/scripts/ci_test_shard.bats
 tests/scripts/ci_uv_pin.bats
 tests/scripts/commit_msg.bats
+tests/scripts/digest_publish.bats
 tests/scripts/docs_inert_premise.bats
 tests/scripts/dpkg_sudo_frontend.bats
 tests/scripts/home_lan_probe.bats

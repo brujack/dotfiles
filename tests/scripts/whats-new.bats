@@ -243,7 +243,22 @@ existing content"
   [ "${_rc}" -ne 0 ]
 }
 
-@test "commit_and_push: warns but returns 0 when git push fails after a successful commit" {
+@test "commit_and_push: publishes to digest/claude-code-<today> and opens a PR" {
+  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
+  commit_and_push
+  grep -qx "git push origin HEAD:refs/heads/digest/claude-code-${TODAY}" "${MOCK_CALLS_FILE}"
+  grep -q "^gh pr create --base master --head digest/claude-code-${TODAY} --title docs: add Claude Code weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: returns 1 when the PR cannot be opened" {
+  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
+  export MOCK_GH_EXIT=1
+  local _rc=0
+  commit_and_push 2>/dev/null || _rc=$?
+  [ "${_rc}" -eq 1 ]
+}
+
+@test "commit_and_push: returns 1 when git push fails after a successful commit" {
   source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
 
   # Real git, not the mock: tests/mocks/git can't fail push-only while
@@ -264,9 +279,10 @@ existing content"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" config user.email "test@example.com"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" config user.name "Test"
 
-  local _rc=0
-  PATH="${_real_path}" commit_and_push || _rc=$?
-  [ "${_rc}" -eq 0 ]
+  local _rc=0 _err="${BATS_TEST_TMPDIR}/err"
+  PATH="${_real_path}" commit_and_push 2> "${_err}" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  grep -q "push of digest/claude-code-${TODAY} failed" "${_err}"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" log -1 --format=%s | grep -q "Claude Code weekly features digest"
 }
 

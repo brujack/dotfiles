@@ -185,7 +185,16 @@ ${_full_current}"
   commit_and_push
   grep -q "^git add" "${MOCK_CALLS_FILE}"
   grep -q "^git commit" "${MOCK_CALLS_FILE}"
-  grep -q "^git push" "${MOCK_CALLS_FILE}"
+  grep -qx "git push origin HEAD:refs/heads/digest/anthropic-${TODAY}" "${MOCK_CALLS_FILE}"
+  grep -q "^gh pr create --base master --head digest/anthropic-${TODAY} --title docs: add Anthropic weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: returns 1 when the PR cannot be opened" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  export MOCK_GH_EXIT=1
+  local _rc=0
+  commit_and_push 2>/dev/null || _rc=$?
+  [ "${_rc}" -eq 1 ]
 }
 
 @test "commit_and_push: returns 1 when git commit fails" {
@@ -413,6 +422,21 @@ print(text)
   [ "$status" -eq 1 ]
   [ ! -f "${_OVERRIDE_FEATURES_DIR}/.platform-state.md" ]
   [ ! -f "${_OVERRIDE_FEATURES_DIR}/.sdk-state.md" ]
+}
+
+@test "main: exits 1 when the PR cannot be opened" {
+  run env \
+    _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
+    _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
+    MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
+    MOCK_CURL_PLATFORM_STDOUT="${MOCK_CURL_PLATFORM_STDOUT}" \
+    MOCK_CURL_SDK_STDOUT="${MOCK_CURL_SDK_STDOUT}" \
+    MOCK_CLAUDE_STDOUT="${MOCK_CLAUDE_STDOUT}" \
+    MOCK_GH_EXIT="1" \
+    PATH="${REPO_ROOT}/tests/mocks:${PATH}" \
+    bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not open the PR"* ]]
 }
 
 @test "main: non-zero exit when git push fails but output file exists" {

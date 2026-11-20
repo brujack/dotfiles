@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Recording stand-in for gh, reached only through the _DIGEST_GH_BIN seam.
+# Appends "gh <argv>" to MOCK_CALLS_FILE and exits MOCK_GH_EXIT (default 0).
+printf 'gh %s\n' "$*" >> "${MOCK_CALLS_FILE:-/dev/null}"
+exit "${MOCK_GH_EXIT:-0}"
