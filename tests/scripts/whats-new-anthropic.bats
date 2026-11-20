@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 # Tests for scripts/whats-new-anthropic.sh
 
 FAKE_PLATFORM_HTML="<html><body><h1>Release notes</h1><p>May 2026 Claude Opus 4.7 launched.</p></body></html>"
@@ -24,6 +26,8 @@ setup() {
   export _OVERRIDE_FEATURES_DIR="${BATS_TEST_TMPDIR}/features"
   export _OVERRIDE_DOTFILES_ROOT="${BATS_TEST_TMPDIR}"
   mkdir -p "${_OVERRIDE_FEATURES_DIR}"
+  # publish_digest checks the commit only touches the digest dir; the git mock prints this for diff.
+  export MOCK_GIT_DIFF_STDOUT="docs/anthropic-new-features/features-x.md"
 }
 
 teardown() {
@@ -186,7 +190,16 @@ ${_full_current}"
   grep -q "^git add" "${MOCK_CALLS_FILE}"
   grep -q "^git commit" "${MOCK_CALLS_FILE}"
   grep -qx "git push origin HEAD:refs/heads/digest/anthropic-${TODAY}" "${MOCK_CALLS_FILE}"
-  grep -q "^gh pr create --base master --head digest/anthropic-${TODAY} --title docs: add Anthropic weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+  grep -q "^gh pr create --repo brujack/dotfiles --base master --head digest/anthropic-${TODAY} --title docs: add Anthropic weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: refuses a commit outside its own digest dir" {
+  source "${REPO_ROOT}/scripts/whats-new-anthropic.sh"
+  export MOCK_GIT_DIFF_STDOUT="docs/claude-code-new-features/features-x.md"
+  local _rc=0
+  commit_and_push 2>/dev/null || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
 }
 
 @test "commit_and_push: returns 1 when the PR cannot be opened" {

@@ -89,7 +89,8 @@ commit_and_push() {
   git commit -m "docs: add Anthropic weekly features digest ${TODAY}
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>" || return 1
-  publish_digest "digest/anthropic-${TODAY}" "docs: add Anthropic weekly features digest ${TODAY}"
+  publish_digest "digest/anthropic-${TODAY}" "docs: add Anthropic weekly features digest ${TODAY}" \
+    "docs/anthropic-new-features"
 }
 
 send_ntfy() {

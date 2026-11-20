@@ -62,7 +62,8 @@ commit_and_push() {
   git commit -m "docs: add Claude Code weekly features digest ${TODAY}
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>" || return 1
-  publish_digest "digest/claude-code-${TODAY}" "docs: add Claude Code weekly features digest ${TODAY}"
+  publish_digest "digest/claude-code-${TODAY}" "docs: add Claude Code weekly features digest ${TODAY}" \
+    "docs/claude-code-new-features"
 }
 
 send_ntfy() {
