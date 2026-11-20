@@ -477,3 +477,7 @@ Report: [round1.md](2026-11-19-repo-session-management-design.external-review/ro
 | F1.8 | Fixed | V1 covers both hosts: seven sessions, six on `claude`, `ansible` on `workstation` | unjudged | accepted (operator, 2026-11-19) |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Amendments
+
+- R4 -> `bin/repo-session` strips trailing `/` from `<dir>`, then exits 2, naming the argument, without calling tmux, for a `<dir>` that is empty, absolute, contains a `.` or `..` component, whose last component contains `.` or `:`, or is not a directory under `${HOME}/git-repos/personal`. — Task 1 code review measured that `.` and `dotfiles/.` started a session named `.`, and that tmux 3.6 renames `my.repo` to `my_repo`, so `has-session -t =my.repo` never matches and every later `--all` run fails; rejecting keeps the session name equal to the directory name.
