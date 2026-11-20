@@ -4,6 +4,8 @@
 # home-lan-probe, `uname` is a stub on a PATH prefix, and SHELL is pinned because
 # Match exec runs under "$SHELL -c".
 
+bats_require_minimum_version 1.5.0
+
 CLAUDE_IP=192.168.51.17
 CLAUDE_FPR='SHA256:ng/HWNyh2AZ1gm9iMy1Vd59+VFq8Sx00SJ6Uh3a7qfY'
 WS_IP=192.168.51.12
