@@ -145,6 +145,12 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
   run "${SCRIPT}" /etc < /dev/null
   [ "${status}" -eq 2 ]
   [[ "${output}" == */etc* ]]
+  # /dotfiles also exists as ${PERSONAL}//dotfiles, so only the absolute-path rule
+  # can reject it.
+  [ -d "${PERSONAL}/dotfiles" ]
+  run "${SCRIPT}" /dotfiles < /dev/null
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == */dotfiles* ]]
   [ "$(tmux_calls)" -eq 0 ]
 }
 
@@ -214,6 +220,14 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
   [[ "${output}" == *"${REPO_SESSIONS_FILE}"* ]]
 }
 
+@test "a readable list that fails to source exits 3 without calling tmux" {
+  printf 'declare -A REPO_SESSIONS=( [%s]="dotfiles" )\nfalse\n' "${_REPO_SESSION_HOST}" > "${REPO_SESSIONS_FILE}"
+  run "${SCRIPT}" --detached --all < /dev/null
+  [ "${status}" -eq 3 ]
+  [[ "${output}" == *"${REPO_SESSIONS_FILE}"* ]]
+  [ "$(tmux_calls)" -eq 0 ]
+}
+
 @test "host absent from a readable list exits 0 with a message" {
   export _REPO_SESSION_HOST="unlisted"
   run "${SCRIPT}" --detached --all < /dev/null
@@ -229,9 +243,9 @@ tmux_calls() { wc -l < "${TMUX_LOG}" | tr -d ' '; }
 }
 
 @test "dot components and dotted or colon names exit 2 without calling tmux" {
-  mkdir -p "${PERSONAL}/my.repo" "${PERSONAL}/a:b"
+  mkdir -p "${PERSONAL}/my.repo" "${PERSONAL}/a:b" "${PERSONAL}/terraform_ansible/ansible"
   local arg
-  for arg in . ./ dotfiles/. ./dotfiles my.repo a:b; do
+  for arg in . ./ dotfiles/. ./dotfiles terraform_ansible/./ansible my.repo a:b; do
     run "${SCRIPT}" "${arg}" < /dev/null
     [ "${status}" -eq 2 ]
     [[ "${output}" == *"${arg}"* ]]

@@ -307,6 +307,10 @@ _set_sessions() { printf '%s\n' "$@" > "${STUB_DIR}/sessions"; }
   run install_repo_sessions
   [ "$status" -eq 1 ]
   [[ "${output}" == *"mkdir"* ]]
+  # The ~/.ssh failure returns at once: nothing is linked, and the later
+  # known_hosts_home mkdir is never reached.
+  [[ "${output}" != *"(known_hosts_home)"* ]]
+  [ ! -e "${HOME}/.local/bin/home-lan-probe" ]
 }
 
 @test "install: Linux cannot create ~/.local/bin returns 1" {
