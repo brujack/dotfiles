@@ -75,13 +75,13 @@ expected_pairs() {
   done
 }
 
-@test "update tabs: studio has four, laptop has update-laptop, reception has none" {
+@test "update tabs: studio has four, laptop has update-laptop, reception has three" {
   local t
   for t in update-studio update-laptop update-workstation update-claude; do
     grep -qx "      - title: ${t}" "${WARP_DIR}/studio.yaml"
   done
   grep -qx "      - title: update-laptop" "${WARP_DIR}/laptop.yaml"
-  ! command grep -q 'title: update-' "${WARP_DIR}/reception.yaml"
+  [ "$(command grep -c 'title: update-' "${WARP_DIR}/reception.yaml")" -eq 3 ]
 }
 
 @test "remote PATH: repo-session resolves from a bare HOME via .local/bin" {
@@ -150,4 +150,71 @@ STUB
   run_update_laptop
   [ "${status}" -eq 0 ]
   [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
+}
+
+# Print "<title>|<cwd>|<exec>" for every tab in a config (exec empty when none).
+tab_rows() {
+  python3 - "$1" <<'PY'
+import sys, yaml
+for tab in yaml.safe_load(open(sys.argv[1]))["windows"][0]["tabs"]:
+    lay = tab.get("layout", {})
+    cmds = lay.get("commands") or []
+    print("|".join([tab["title"], lay.get("cwd", ""), cmds[0]["exec"] if cmds else ""]))
+PY
+}
+
+@test "studio keeps its local working tabs: ansible-local, ratna, codex-ai-config, two scratch" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local rows
+  rows="$(tab_rows "${WARP_DIR}/studio.yaml")"
+  grep -qx 'ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status' <<< "${rows}"
+  grep -qx 'ratna|/Users/bruce|ssh -t ratna' <<< "${rows}"
+  grep -qx 'codex-ai-config|/Users/bruce/git-repos/personal/ai-config|tmux new-session -A -s codex-ai-config' <<< "${rows}"
+  [ "$(grep -cx 'scratch|/Users/bruce|' <<< "${rows}")" -eq 2 ]
+}
+
+@test "reception opens with its five local tabs, in order, before the session tabs" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local expected
+  expected="update-reception|/Users/bruce/git-repos/personal/dotfiles|git status
+ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status
+update-home|/Users/bruce|ssh -t home
+update-office|/Users/bruce|ssh -t office
+scratch|/Users/bruce|"
+  [ "$(tab_rows "${WARP_DIR}/reception.yaml" | head -5)" = "${expected}" ]
+}
+
+@test "laptop opens with update-laptop then scratch, before the session tabs" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ "$(tab_rows "${WARP_DIR}/laptop.yaml" | head -2 | cut -d'|' -f1,3 | paste -sd' ' -)" = "update-laptop|git status scratch|" ]
+  tab_rows "${WARP_DIR}/laptop.yaml" | grep -qx 'scratch|/Users/bruce|'
+}
+
+@test "local update tabs run git status in the dotfiles checkout, not in HOME" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local c row n=0
+  for c in "${CONFIGS[@]}"; do
+    while IFS= read -r row; do
+      [ "${row}" = "${row%%|*}|/Users/bruce/git-repos/personal/dotfiles|git status" ]
+      n=$((n + 1))
+    done < <(tab_rows "${WARP_DIR}/${c}.yaml" | grep '^update-[^|]*|[^|]*|git status$')
+  done
+  [ "${n}" -eq 3 ]
+}
+
+@test "tab titles are unique in studio and reception, so the ansible session and ansible-local differ" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local c
+  for c in studio reception; do
+    # scratch tabs may repeat; every other title names one tab.
+    [ -z "$(tab_rows "${WARP_DIR}/${c}.yaml" | cut -d'|' -f1 | grep -vx scratch | LC_ALL=C sort | uniq -d)" ]
+  done
+}
+
+@test "no tab runs a make target at launch (ansible-local only opens the directory)" {
+  local c
+  for c in "${CONFIGS[@]}"; do
+    run awk '/exec:/ && /(^|[ ;&|])make /{ print; bad = 1 } END { exit bad }' "${WARP_DIR}/${c}.yaml"
+    [ "${status}" -eq 0 ]
+  done
 }

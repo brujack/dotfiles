@@ -4,9 +4,12 @@ windows:
   - tabs:
       - title: update-laptop
         layout:
-          cwd: /Users/bruce
+          cwd: /Users/bruce/git-repos/personal/dotfiles
           commands:
             - exec: git status
+      - title: scratch
+        layout:
+          cwd: /Users/bruce
       - title: etch-cli
         layout:
           cwd: /Users/bruce
