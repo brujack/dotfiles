@@ -72,6 +72,7 @@ resolve() {
   resolve Darwin claude
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'\nhostname 192.168.51.17\n'* ]]
+  [[ "${output}" == *$'\nhostkeyalias claude\n'* ]]
   [[ "${output}" == *$'\nproxyjump home-secure.conecrazy.ca,workstation.home.conecrazy.ca\n'* ]]
 }
 
@@ -86,6 +87,8 @@ resolve() {
     [ "${status}" -eq 0 ]
     [[ "${output}" == *$'\nhostname '"${ip}"$'\n'* ]]
     [[ "${output}" == *$'\nhostkeyalias '"${alias}"$'\n'* ]]
+    [[ "${output}" == *$'\nuser bruce\n'* ]]
+    [[ "${output}" == *$'\nidentityfile '*'/.ssh/home'$'\n'* ]]
     [[ "${output}" != *proxyjump* ]]
   done
 }
@@ -136,7 +139,7 @@ resolve() {
 @test "controlmaster resolves false for claude and workstation" {
   local plat host
   for plat in Darwin Linux; do
-    for host in claude workstation; do
+    for host in claude workstation workstation.home.conecrazy.ca; do
       resolve "${plat}" "${host}"
       [ "${status}" -eq 0 ]
       [[ "${output}" == *$'\ncontrolmaster false\n'* ]]
@@ -159,12 +162,18 @@ resolve() {
   done
 }
 
-@test "N4: workstation.home.conecrazy.ca block sets only the known-hosts file" {
+@test "N4: Darwin changes only userknownhostsfile and its derived updatehostkeys for the jump hop" {
   resolve Darwin workstation.home.conecrazy.ca
   [ "${status}" -eq 0 ]
+  local darwin="${output}"
+  resolve Linux workstation.home.conecrazy.ca
+  [ "${status}" -eq 0 ]
   [[ "${output}" == *$'\nhostname workstation.home.conecrazy.ca\n'* ]]
-  [[ "${output}" != *proxyjump* ]]
-  [[ "${output}" != *hostkeyalias* ]]
+  # Keys of every line that differs between the platforms (ssh derives
+  # updatehostkeys from a custom UserKnownHostsFile).
+  local keys
+  keys="$(diff <(printf '%s\n' "${darwin}") <(printf '%s\n' "${output}") | awk '/^[<>]/ {print $2}' | LC_ALL=C sort -u | tr '\n' ' ')"
+  [ "${keys}" = "updatehostkeys userknownhostsfile " ]
 }
 
 @test "N4: -home aliases keep their ProxyJump on Darwin and Linux" {
