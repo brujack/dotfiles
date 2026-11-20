@@ -548,3 +548,15 @@ _healthy() {
   [ -f "${_l[4]}" ]
   [ ! -s "${_l[4]}" ]
 }
+
+@test "call site: run_setup_user calls install_repo_sessions" {
+  run declare -f run_setup_user
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"install_repo_sessions"* ]]
+}
+
+@test "call site: run_doctor calls _doctor_check_repo_sessions" {
+  run declare -f run_doctor
+  [ "$status" -eq 0 ]
+  [[ "${output}" == *"_doctor_check_repo_sessions"* ]]
+}
