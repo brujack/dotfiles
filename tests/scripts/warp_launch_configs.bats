@@ -177,7 +177,7 @@ PY
 @test "reception opens with its five local tabs, in order, before the session tabs" {
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   local expected
-  expected="update-reception|/Users/bruce|git status
+  expected="update-reception|/Users/bruce/git-repos/personal/dotfiles|git status
 ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status
 update-home|/Users/bruce|ssh -t home
 update-office|/Users/bruce|ssh -t office
@@ -189,6 +189,18 @@ scratch|/Users/bruce|"
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   [ "$(tab_rows "${WARP_DIR}/laptop.yaml" | head -2 | cut -d'|' -f1,3 | paste -sd' ' -)" = "update-laptop|git status scratch|" ]
   tab_rows "${WARP_DIR}/laptop.yaml" | grep -qx 'scratch|/Users/bruce|'
+}
+
+@test "local update tabs run git status in the dotfiles checkout, not in HOME" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local c row n=0
+  for c in "${CONFIGS[@]}"; do
+    while IFS= read -r row; do
+      [ "${row}" = "${row%%|*}|/Users/bruce/git-repos/personal/dotfiles|git status" ]
+      n=$((n + 1))
+    done < <(tab_rows "${WARP_DIR}/${c}.yaml" | grep '^update-[^|]*|[^|]*|git status$')
+  done
+  [ "${n}" -eq 3 ]
 }
 
 @test "tab titles are unique in studio and reception, so the ansible session and ansible-local differ" {

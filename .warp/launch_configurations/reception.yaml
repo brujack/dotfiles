@@ -6,7 +6,7 @@ windows:
       # `make` runs stay hand-run. home and office are the other work Macs.
       - title: update-reception
         layout:
-          cwd: /Users/bruce
+          cwd: /Users/bruce/git-repos/personal/dotfiles
           commands:
             - exec: git status
       - title: ansible-local
