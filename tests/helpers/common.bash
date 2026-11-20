@@ -127,9 +127,9 @@ load_mocks() {
   # and tmux (and `sudo loginctl enable-linger`, which tests/mocks/sudo execs) and read
   # the operator's real session list unless these seams are set. _SYSTEMCTL_BIN is
   # set above; tests/mocks/loginctl records and defaults to Linger=yes
-  # (MOCK_LOGINCTL_LINGER), and /bin/false is an inert tmux.
+  # (MOCK_LOGINCTL_LINGER), and /usr/bin/false (present on Ubuntu and macOS) is an inert tmux.
   export _LOGINCTL_BIN="${REPO_ROOT}/tests/mocks/loginctl"
-  export _TMUX_BIN="/bin/false"
+  export _TMUX_BIN="/usr/bin/false"
   export _SYSTEMD_USER_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/systemd-user"
   export REPO_SESSIONS_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/repo-sessions-empty.sh"
   [[ -z "${BATS_TEST_TMPDIR:-}" ]] || : > "${REPO_SESSIONS_FILE}"

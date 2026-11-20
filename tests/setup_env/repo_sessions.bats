@@ -542,7 +542,7 @@ _healthy() {
   mapfile -t _l <<< "${output}"
   [ "${_l[0]}" = "${REPO_ROOT}/tests/mocks/loginctl" ]
   [ "${_l[1]}" = "${REPO_ROOT}/tests/stubs/systemctl-stub" ]
-  [ "${_l[2]}" = "/bin/false" ]
+  [ "${_l[2]}" = "/usr/bin/false" ]
   [ "${_l[3]}" = "${BATS_TEST_TMPDIR}/lm/systemd-user" ]
   [ "${_l[4]}" = "${BATS_TEST_TMPDIR}/lm/repo-sessions-empty.sh" ]
   [ -f "${_l[4]}" ]
