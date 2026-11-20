@@ -131,7 +131,7 @@ STUB
 @test "update-laptop uses laptop-1 when the wired name's port 22 does not answer" {
   export STUB_NC_RC=1
   run_update_laptop
-  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ')" = "ssh laptop-1" ]
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop-1" ]
 }
 
 @test "update-laptop probes laptop:22 with a bounded timeout" {
@@ -143,11 +143,11 @@ STUB
   # 255 also means a failed host-key check; that must not send the session elsewhere.
   export STUB_SSH_RC=255
   run_update_laptop
-  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ')" = "ssh laptop" ]
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
 }
 
 @test "update-laptop makes one connection to the wired name when it answers" {
   run_update_laptop
   [ "${status}" -eq 0 ]
-  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ')" = "ssh laptop" ]
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
 }
