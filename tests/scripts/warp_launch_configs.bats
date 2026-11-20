@@ -170,8 +170,7 @@ PY
   grep -qx 'ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status' <<< "${rows}"
   grep -qx 'ratna|/Users/bruce|ssh -t ratna' <<< "${rows}"
   grep -qx 'codex-ai-config|/Users/bruce/git-repos/personal/ai-config|tmux new-session -A -s codex-ai-config' <<< "${rows}"
-  grep -qx 'scratch-math|/Users/bruce/git-repos/personal/math/descartes/descartes-rs|' <<< "${rows}"
-  grep -qx 'scratch|/Users/bruce|' <<< "${rows}"
+  [ "$(grep -cx 'scratch|/Users/bruce|' <<< "${rows}")" -eq 2 ]
 }
 
 @test "reception opens with its five local tabs, in order, before the session tabs" {
@@ -207,7 +206,8 @@ scratch|/Users/bruce|"
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
   local c
   for c in studio reception; do
-    [ -z "$(tab_rows "${WARP_DIR}/${c}.yaml" | cut -d'|' -f1 | LC_ALL=C sort | uniq -d)" ]
+    # scratch tabs may repeat; every other title names one tab.
+    [ -z "$(tab_rows "${WARP_DIR}/${c}.yaml" | cut -d'|' -f1 | grep -vx scratch | LC_ALL=C sort | uniq -d)" ]
   done
 }
 

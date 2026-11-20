@@ -77,9 +77,9 @@ windows:
           cwd: /Users/bruce/git-repos/personal/ai-config
           commands:
             - exec: tmux new-session -A -s codex-ai-config
-      - title: scratch-math
+      - title: scratch
         layout:
-          cwd: /Users/bruce/git-repos/personal/math/descartes/descartes-rs
+          cwd: /Users/bruce
       - title: scratch
         layout:
           cwd: /Users/bruce
