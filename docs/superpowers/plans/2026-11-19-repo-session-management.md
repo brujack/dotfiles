@@ -1,5 +1,7 @@
 # Repo Session Management Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#466 (ed2d1444), 2026-11-20.
+
 spec: docs/superpowers/specs/2026-11-19-repo-session-management-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
