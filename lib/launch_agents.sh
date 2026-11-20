@@ -129,7 +129,7 @@ _doctor_check_cadence() {
 # Studio-only, and that is not arbitrary. The check is FLEET-wide -- it queries
 # all nine repos -- so a second machine running it produces duplicate pushes for
 # the same held PR, which is the fastest way to train the operator to mute the
-# channel. One runner is correct; the Studio is the tmux host and is always up.
+# channel. One runner is correct; the Studio is always up.
 
 # Two agents share one installer and one plist template. Two call sites is the
 # threshold that justifies the abstraction; a single one would be the

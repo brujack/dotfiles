@@ -8,7 +8,7 @@ Personal development environment bootstrapping system for macOS and Linux (Ubunt
 
 ## Layout
 
-Tracked top-level dirs: `lib/` (shell libraries), `config/` (`profiles.sh`, git-ignored `local.sh`, `hook_repos.sh`), `scripts/`, `tests/`, `docs/`, `.config/` (`.zshrc.d/`), `.github/` (workflows), `.claude/`, `powershell/`, `LaunchAgents/`, `keys/`, `manifests/`, `pyenv.d/`, `.ssh/`, `.vscode/`, `.warp/`; `pyenv.d/rehash/*.bash` is installed as a copy into `${PYENV_ROOT}/pyenv.d/rehash/`, never symlinked, so edits need a reinstall; regenerate with `git ls-files | awk -F/ 'NF>1{print $1}' | sort -u`, never from memory. → `dotfiles-conventions.md` § `CLAUDE.md budget: Layout directory tree`
+Tracked top-level dirs: `bin/` (`repo-session`, `home-lan-probe`), `lib/` (shell libraries), `config/` (`profiles.sh`, git-ignored `local.sh`, `hook_repos.sh`, `repo-sessions.sh`), `scripts/`, `tests/`, `docs/`, `.config/` (`.zshrc.d/`), `.github/` (workflows), `.claude/`, `powershell/`, `LaunchAgents/`, `keys/`, `manifests/`, `pyenv.d/`, `.ssh/`, `.vscode/`, `.warp/`; `pyenv.d/rehash/*.bash` is installed as a copy into `${PYENV_ROOT}/pyenv.d/rehash/`, never symlinked, so edits need a reinstall; regenerate with `git ls-files | awk -F/ 'NF>1{print $1}' | sort -u`, never from memory. → `dotfiles-conventions.md` § `CLAUDE.md budget: Layout directory tree`
 
 ## 10-80-10 Execution Cycle
 

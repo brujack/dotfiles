@@ -267,7 +267,7 @@ acceptance:
   - cmd: make lint
     exit_code: 0
 max_retries: 2
-files_touched: [lib/launch_agents.sh, CLAUDE.md]
+files_touched: [lib/launch_agents.sh, CLAUDE.md, README.md, docs/superpowers/README.md]
 depends_on: [6]
 ```
 
@@ -276,7 +276,7 @@ Layout line's tracked-dirs list (regenerate with the command that line names), a
 Entry Points bullet: `repo-session <dir>` attaches to or creates a repo's tmux session;
 `repo-sessions.service` recreates them at boot on hosts listed in `config/repo-sessions.sh`
 (spec: `docs/superpowers/specs/2026-11-19-repo-session-management-design.md`). Respect the
-CLAUDE.md byte ceiling the pre-commit hook enforces.
+CLAUDE.md byte ceiling the pre-commit hook enforces. Re-plan (Phase 2): CLAUDE.md had 119 bytes of headroom, so the Entry Points description went to README.md ("Repo sessions (tmux, Warp)") and CLAUDE.md got only the Layout entries; a Backlog row records that `bin/` is outside the bash-coverage set.
 </content>
 </invoke>
 <invoke name="Bash">
