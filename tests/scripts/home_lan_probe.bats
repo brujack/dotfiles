@@ -16,7 +16,8 @@ setup() {
   STUB="${BATS_TEST_TMPDIR}/keyscan-stub"
   cat > "${STUB}" << STUBEOF
 #!/usr/bin/env bash
-printf '%s %s\n' "\$4" "\$(cut -d' ' -f1,2 "${BATS_TEST_TMPDIR}/k.pub")"
+printf '%s\n' "\$*" > "${BATS_TEST_TMPDIR}/argv"
+printf '%s %s\n' "\${!#}" "\$(cut -d' ' -f1,2 "${BATS_TEST_TMPDIR}/k.pub")"
 STUBEOF
   chmod +x "${STUB}"
   export _SSH_KEYSCAN_BIN="${STUB}"
@@ -79,5 +80,47 @@ STUBEOF
   [ "${status}" -eq 0 ]
   # Field 1 (key size) and the comment must not count as a match.
   run "${SCRIPT}" 192.0.2.10 "256"
+  [ "${status}" -eq 1 ]
+}
+
+@test "fingerprint with a trailing extra character exits 1" {
+  run "${SCRIPT}" 192.0.2.10 "${FPR}x"
+  [ "${status}" -eq 1 ]
+}
+
+@test "truncated fingerprint exits 1" {
+  run "${SCRIPT}" 192.0.2.10 "${FPR%?}"
+  [ "${status}" -eq 1 ]
+}
+
+@test "prefix-only fingerprint exits 1" {
+  run "${SCRIPT}" 192.0.2.10 "SHA256:"
+  [ "${status}" -eq 1 ]
+}
+
+@test "glob fingerprint exits 1 (right-hand side is compared literally)" {
+  run "${SCRIPT}" 192.0.2.10 '*'
+  [ "${status}" -eq 1 ]
+}
+
+@test "keyscan is called with exactly -T 1 -t ed25519 <ip>" {
+  run "${SCRIPT}" 192.0.2.10 "${FPR}"
+  [ "${status}" -eq 0 ]
+  [ "$(cat "${BATS_TEST_TMPDIR}/argv")" = "-T 1 -t ed25519 192.0.2.10" ]
+}
+
+@test "empty keyscan output with an empty fingerprint exits 1" {
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${STUB}"
+  run "${SCRIPT}" 192.0.2.10 ""
+  [ "${status}" -eq 1 ]
+}
+
+@test "only the first key line is compared (matching key second exits 1)" {
+  cat > "${STUB}" << STUBEOF
+#!/usr/bin/env bash
+printf '%s %s\n' "\${!#}" "\$(cut -d' ' -f1,2 "${BATS_TEST_TMPDIR}/other.pub")"
+printf '%s %s\n' "\${!#}" "\$(cut -d' ' -f1,2 "${BATS_TEST_TMPDIR}/k.pub")"
+STUBEOF
+  run "${SCRIPT}" 192.0.2.10 "${FPR}"
   [ "${status}" -eq 1 ]
 }
