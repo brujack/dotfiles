@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 # Tests for scripts/whats-new-claude-code.sh
 
 FAKE_CHANGELOG="## [1.0.1] - 2026-05-08
@@ -25,6 +27,8 @@ setup() {
   export _OVERRIDE_FEATURES_DIR="${BATS_TEST_TMPDIR}/features"
   export _OVERRIDE_DOTFILES_ROOT="${BATS_TEST_TMPDIR}"
   mkdir -p "${_OVERRIDE_FEATURES_DIR}"
+  # publish_digest checks the commit only touches the digest dir; the git mock prints this for diff.
+  export MOCK_GIT_DIFF_STDOUT="docs/claude-code-new-features/features-x.md"
 }
 
 teardown() {
@@ -243,7 +247,31 @@ existing content"
   [ "${_rc}" -ne 0 ]
 }
 
-@test "commit_and_push: warns but returns 0 when git push fails after a successful commit" {
+@test "commit_and_push: publishes to digest/claude-code-<today> and opens a PR" {
+  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
+  commit_and_push
+  grep -qx "git push origin HEAD:refs/heads/digest/claude-code-${TODAY}" "${MOCK_CALLS_FILE}"
+  grep -q "^gh pr create --repo brujack/dotfiles --base master --head digest/claude-code-${TODAY} --title docs: add Claude Code weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: refuses a commit outside its own digest dir" {
+  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
+  export MOCK_GIT_DIFF_STDOUT="docs/anthropic-new-features/features-x.md"
+  local _rc=0
+  commit_and_push 2>/dev/null || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
+}
+
+@test "commit_and_push: returns 1 when the PR cannot be opened" {
+  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
+  export MOCK_GH_EXIT=1
+  local _rc=0
+  commit_and_push 2>/dev/null || _rc=$?
+  [ "${_rc}" -eq 1 ]
+}
+
+@test "commit_and_push: returns 1 when origin is unreachable after a successful commit" {
   source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
 
   # Real git, not the mock: tests/mocks/git can't fail push-only while
@@ -264,9 +292,10 @@ existing content"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" config user.email "test@example.com"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" config user.name "Test"
 
-  local _rc=0
-  PATH="${_real_path}" commit_and_push || _rc=$?
-  [ "${_rc}" -eq 0 ]
+  local _rc=0 _err="${BATS_TEST_TMPDIR}/err"
+  PATH="${_real_path}" commit_and_push 2> "${_err}" || _rc=$?
+  [ "${_rc}" -eq 1 ]
+  grep -q "cannot fetch origin master" "${_err}"
   PATH="${_real_path}" git -C "${DOTFILES_ROOT}" log -1 --format=%s | grep -q "Claude Code weekly features digest"
 }
 
