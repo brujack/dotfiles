@@ -151,3 +151,38 @@ STUB
   [ "${status}" -eq 0 ]
   [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
 }
+
+# Print "<title>|<cwd>|<exec>" for every tab in a config (exec empty when none).
+tab_rows() {
+  python3 - "$1" <<'PY'
+import sys, yaml
+for tab in yaml.safe_load(open(sys.argv[1]))["windows"][0]["tabs"]:
+    lay = tab.get("layout", {})
+    cmds = lay.get("commands") or []
+    print("|".join([tab["title"], lay.get("cwd", ""), cmds[0]["exec"] if cmds else ""]))
+PY
+}
+
+@test "studio keeps its local working tabs: ansible-local, ratna, codex-ai-config, two scratch" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local rows
+  rows="$(tab_rows "${WARP_DIR}/studio.yaml")"
+  grep -qx 'ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status' <<< "${rows}"
+  grep -qx 'ratna|/Users/bruce|ssh -t ratna' <<< "${rows}"
+  grep -qx 'codex-ai-config|/Users/bruce/git-repos/personal/ai-config|tmux new-session -A -s codex-ai-config' <<< "${rows}"
+  grep -qx 'scratch-math|/Users/bruce/git-repos/personal/math/descartes/descartes-rs|' <<< "${rows}"
+  grep -qx 'scratch|/Users/bruce|' <<< "${rows}"
+}
+
+@test "studio tab titles are unique, so the workstation ansible session and ansible-local differ" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ -z "$(tab_rows "${WARP_DIR}/studio.yaml" | cut -d'|' -f1 | sort | uniq -d)" ]
+}
+
+@test "no tab runs a make target at launch (ansible-local only opens the directory)" {
+  local c
+  for c in "${CONFIGS[@]}"; do
+    run awk '/exec:/ && /(^|[ ;&|])make /{ print; bad = 1 } END { exit bad }' "${WARP_DIR}/${c}.yaml"
+    [ "${status}" -eq 0 ]
+  done
+}

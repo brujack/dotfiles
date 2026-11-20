@@ -278,7 +278,9 @@ Each repo under active work has a tmux session running `claude --remote-control`
   enables linger, so the sessions are recreated detached after a reboot. `-t doctor` reports
   linger, the unit and any missing session.
 - Each Mac has a Warp launch config (`.warp/launch_configurations/studio.yaml`,
-  `laptop.yaml`, `reception.yaml`) with one tab per session.
+  `laptop.yaml`, `reception.yaml`) with one tab per session. `studio.yaml` also keeps the
+  Studio's update tabs and its local working tabs (`ansible-local`, `ratna`,
+  `codex-ai-config`, `scratch-math`, `scratch`); none runs an update or `make` at launch.
 - From a Mac, `ssh claude` and `ssh workstation` go direct on the home LAN and through
   Cloudflare elsewhere. The route comes from `home-lan-probe`, which compares the ed25519
   fingerprint the LAN IP offers with the pinned one; the security boundary is the pinned
