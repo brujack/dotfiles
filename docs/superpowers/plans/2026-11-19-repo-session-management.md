@@ -126,7 +126,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [.ssh/config, .ssh/known_hosts_home, tests/scripts/ssh_routing.bats, tests/bats-files.txt]
+files_touched: [.ssh/config, .ssh/known_hosts_home, tests/scripts/ssh_routing.bats, tests/ssh_config.bats, tests/bats-files.txt]
 depends_on: [2]
 ```
 
@@ -139,7 +139,7 @@ Delete `workstation-home-tmux`/`claude-home-tmux` from the alias lines, the
 three lines, keys from `ssh-keyscan -t ed25519 192.168.51.17 192.168.51.12` with the host
 field replaced by `claude`, `workstation`, `workstation.home.conecrazy.ca`.
 
-**Tests:** the spec's "ssh routing" and "Tracked host keys" bullets. `ssh -G -F
+**Tests:** the spec's "ssh routing" and "Tracked host keys" bullets. Re-plan (Phase 2): the existing `tests/ssh_config.bats` pins the `*-home-tmux` aliases R9 deletes, so this task also removes those assertions and tests and gives the `claude-home` remote-command test a positive control that does not depend on a `-tmux` alias. `ssh -G -F
 .ssh/config` with `HOME` at a fixture (stub probe recording argv), a `uname` stub on
 `PATH`, `SHELL=/bin/sh` in `setup()`, and one zsh case. Pin `hostname`, `hostkeyalias`,
 `proxyjump`, `controlmaster false`, `userknownhostsfile`, probe argv, and "stub never
