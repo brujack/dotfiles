@@ -162,6 +162,21 @@ resolve() {
   done
 }
 
+@test "Darwin direct blocks refuse an unknown host key; Linux and the jump hop are unchanged" {
+  local host
+  for host in claude workstation; do
+    resolve Darwin "${host}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *$'\nstricthostkeychecking true\n'* ]]
+    resolve Linux "${host}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *$'\nstricthostkeychecking true\n'* ]]
+  done
+  resolve Darwin workstation.home.conecrazy.ca
+  [ "${status}" -eq 0 ]
+  [[ "${output}" != *$'\nstricthostkeychecking true\n'* ]]
+}
+
 @test "N4: Darwin changes only userknownhostsfile and its derived updatehostkeys for the jump hop" {
   resolve Darwin workstation.home.conecrazy.ca
   [ "${status}" -eq 0 ]
