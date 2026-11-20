@@ -26,6 +26,7 @@ windows:
         layout:
           cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
           commands:
+            - exec: export ENV=home
             - exec: git status
       - title: ratna
         layout:

@@ -282,7 +282,9 @@ Each repo under active work has a tmux session running `claude --remote-control`
   Studio's update tabs and its local working tabs (`ansible-local`, `ratna`,
   `codex-ai-config` and two `scratch` tabs). `reception.yaml` opens with
   `update-reception`, `ansible-local`, `update-home`, `update-office` and `scratch`;
-  `laptop.yaml` with `update-laptop` and `scratch`. None runs an update or `make` at launch.
+  `laptop.yaml` with `update-laptop` and `scratch`. `ansible-local` exports the ansible `ENV`
+  (`home` on the Studio, `genexxe_centrepointe` on reception). None runs an update or `make`
+  at launch.
 - From a Mac, `ssh claude` and `ssh workstation` go direct on the home LAN and through
   Cloudflare elsewhere. The route comes from `home-lan-probe`, which compares the ed25519
   fingerprint the LAN IP offers with the pinned one; the security boundary is the pinned

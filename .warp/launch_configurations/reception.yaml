@@ -13,6 +13,7 @@ windows:
         layout:
           cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
           commands:
+            - exec: export ENV=genexxe_centrepointe
             - exec: git status
       - title: update-home
         layout:
