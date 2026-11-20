@@ -7,6 +7,9 @@ windows:
           cwd: /Users/bruce
           commands:
             - exec: git status
+      - title: scratch
+        layout:
+          cwd: /Users/bruce
       - title: etch-cli
         layout:
           cwd: /Users/bruce

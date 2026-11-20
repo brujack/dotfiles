@@ -75,13 +75,13 @@ expected_pairs() {
   done
 }
 
-@test "update tabs: studio has four, laptop has update-laptop, reception has none" {
+@test "update tabs: studio has four, laptop has update-laptop, reception has three" {
   local t
   for t in update-studio update-laptop update-workstation update-claude; do
     grep -qx "      - title: ${t}" "${WARP_DIR}/studio.yaml"
   done
   grep -qx "      - title: update-laptop" "${WARP_DIR}/laptop.yaml"
-  ! command grep -q 'title: update-' "${WARP_DIR}/reception.yaml"
+  [ "$(command grep -c 'title: update-' "${WARP_DIR}/reception.yaml")" -eq 3 ]
 }
 
 @test "remote PATH: repo-session resolves from a bare HOME via .local/bin" {
@@ -174,9 +174,29 @@ PY
   grep -qx 'scratch|/Users/bruce|' <<< "${rows}"
 }
 
-@test "studio tab titles are unique, so the workstation ansible session and ansible-local differ" {
+@test "reception opens with its five local tabs, in order, before the session tabs" {
   python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
-  [ -z "$(tab_rows "${WARP_DIR}/studio.yaml" | cut -d'|' -f1 | sort | uniq -d)" ]
+  local expected
+  expected="update-reception|/Users/bruce|git status
+ansible-local|/Users/bruce/git-repos/personal/terraform_ansible/ansible|git status
+update-home|/Users/bruce|ssh -t home
+update-office|/Users/bruce|ssh -t office
+scratch|/Users/bruce|"
+  [ "$(tab_rows "${WARP_DIR}/reception.yaml" | head -5)" = "${expected}" ]
+}
+
+@test "laptop opens with update-laptop then scratch, before the session tabs" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  [ "$(tab_rows "${WARP_DIR}/laptop.yaml" | head -2 | cut -d'|' -f1,3 | paste -sd' ' -)" = "update-laptop|git status scratch|" ]
+  tab_rows "${WARP_DIR}/laptop.yaml" | grep -qx 'scratch|/Users/bruce|'
+}
+
+@test "tab titles are unique in studio and reception, so the ansible session and ansible-local differ" {
+  python3 -c 'import yaml' 2>/dev/null || skip "PyYAML not installed"
+  local c
+  for c in studio reception; do
+    [ -z "$(tab_rows "${WARP_DIR}/${c}.yaml" | cut -d'|' -f1 | LC_ALL=C sort | uniq -d)" ]
+  done
 }
 
 @test "no tab runs a make target at launch (ansible-local only opens the directory)" {

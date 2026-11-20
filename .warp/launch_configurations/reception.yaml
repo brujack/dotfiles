@@ -2,6 +2,31 @@
 name: reception
 windows:
   - tabs:
+      # Local tabs first. ansible-local only opens the playbook directory:
+      # `make` runs stay hand-run. home and office are the other work Macs.
+      - title: update-reception
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: git status
+      - title: ansible-local
+        layout:
+          cwd: /Users/bruce/git-repos/personal/terraform_ansible/ansible
+          commands:
+            - exec: git status
+      - title: update-home
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t home
+      - title: update-office
+        layout:
+          cwd: /Users/bruce
+          commands:
+            - exec: ssh -t office
+      - title: scratch
+        layout:
+          cwd: /Users/bruce
       - title: etch-cli
         layout:
           cwd: /Users/bruce
