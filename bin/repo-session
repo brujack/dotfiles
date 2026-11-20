@@ -9,8 +9,8 @@ usage() {
   printf 'usage: repo-session [--detached] <dir> | repo-session --detached --all\n' >&2
 }
 
-# Exit 2 on a bad <dir>; ssh passes the argument from another machine, so a typo
-# must not create a stray session in $HOME.
+# Return 1 on a bad <dir> (run_one maps it to exit 2); ssh passes the argument from
+# another machine, so a typo must not create a stray session in $HOME.
 valid_dir() {
   local dir="$1"
   case "${dir}" in
