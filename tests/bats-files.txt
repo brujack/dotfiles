@@ -87,6 +87,7 @@ tests/setup_env/profiles.bats
 tests/setup_env/pyenv_rehash_hook.bats
 tests/setup_env/release_asset_pins.bats
 tests/setup_env/release_binary.bats
+tests/setup_env/repo_sessions.bats
 tests/setup_env/requirements_ci.bats
 tests/setup_env/run_or_exit.bats
 tests/setup_env/run_tmpdir_traps.bats
