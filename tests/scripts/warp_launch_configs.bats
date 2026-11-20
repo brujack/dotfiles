@@ -94,3 +94,60 @@ expected_pairs() {
   [ "${status}" -eq 0 ]
   [ "${output}" = "stub-marker" ]
 }
+
+# Print the exec line of the update-laptop tab in studio.yaml.
+update_laptop_exec() {
+  awk '/title: update-laptop/ { t = 1 } t && /exec:/ { sub(/^[^:]*exec: /, ""); print; exit }' \
+    "${WARP_DIR}/studio.yaml"
+}
+
+# Run the update-laptop exec line under zsh with stub ssh and nc on PATH. ssh logs
+# "ssh <host>" and exits STUB_SSH_RC (default 0); nc logs "nc" and exits STUB_NC_RC
+# (default 0, port open).
+run_update_laptop() {
+  command -v zsh >/dev/null 2>&1 || skip "zsh not installed"
+  local bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${bin}"
+  cat > "${bin}/ssh" <<'STUB'
+#!/bin/sh
+for a; do host="$a"; done
+printf 'ssh %s\n' "${host}" >> "${SSH_LOG}"
+exit "${STUB_SSH_RC:-0}"
+STUB
+  cat > "${bin}/nc" <<'STUB'
+#!/bin/sh
+printf 'nc %s\n' "$*" >> "${SSH_LOG}"
+exit "${STUB_NC_RC:-0}"
+STUB
+  chmod +x "${bin}/ssh" "${bin}/nc"
+  export SSH_LOG="${BATS_TEST_TMPDIR}/ssh.log"
+  : > "${SSH_LOG}"
+  local cmd
+  cmd="$(update_laptop_exec)"
+  [ -n "${cmd}" ]
+  PATH="${bin}:${PATH}" run zsh -fc "${cmd}"
+}
+
+@test "update-laptop uses laptop-1 when the wired name's port 22 does not answer" {
+  export STUB_NC_RC=1
+  run_update_laptop
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop-1" ]
+}
+
+@test "update-laptop probes laptop:22 with a bounded timeout" {
+  run_update_laptop
+  grep -qx 'nc -z -G 3 laptop 22' "${SSH_LOG}"
+}
+
+@test "update-laptop never falls back after the wired name answered, whatever ssh returns" {
+  # 255 also means a failed host-key check; that must not send the session elsewhere.
+  export STUB_SSH_RC=255
+  run_update_laptop
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
+}
+
+@test "update-laptop makes one connection to the wired name when it answers" {
+  run_update_laptop
+  [ "${status}" -eq 0 ]
+  [ "$(grep '^ssh ' "${SSH_LOG}" | paste -sd' ' -)" = "ssh laptop" ]
+}
