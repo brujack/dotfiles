@@ -21,7 +21,6 @@ tab_pairs() {
 # Print "<host> <dir>" for every entry in config/repo-sessions.sh.
 expected_pairs() {
   (
-    # shellcheck disable=SC1091 # path resolved at runtime from REPO_ROOT
     source "${REPO_ROOT}/config/repo-sessions.sh" || exit 1
     local host dir
     for host in "${!REPO_SESSIONS[@]}"; do
