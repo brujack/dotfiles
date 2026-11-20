@@ -3,112 +3,110 @@
 
 ## Bug Fixes
 
-- no-clobber keyring, seamed paths, run first (#360)
+- open a scoped PR instead of a bare push (#469)
 
-- atomic repair, run from setup/developer (#361)
-
-- no false PASS, cause-specific remedies (#362)
-
-- bump certifi, gitpython and pillow for CVEs (#364)
+- offer id_rsa after home on the direct route (#470)
 
 
 
 ## Documentation
 
-- gh cli step exits 0 on partial, ledger records 2
+- approve the plugin prune gone-path spec
 
-- approve gh cli keyring spec
+- plugin prune gone-path implementation plan
 
-- gh cli keyring implementation plan
+- use the list-item approval line spec_contract reads
 
-- mark gh cli keyring plan done
+- mark the plugin prune gone-path plan done
 
-- replace stale workflows.sh line cites
+- record the auto-merge V1 ready-half result
 
-- one-line gh seam rule with knowledge pointer
+- record the auto-merge V1 draft-half result
 
-- plugin node repair atomic write and setup call
+- remove the wall-clock bound from the pre-push signal cases
 
-- plugin node repair round-1 dispositions
+- record round 1 multi-lens review of the signal-case bound spec
 
-- approve plugin node repair spec
+- address round 1 review of the signal-case bound spec
 
-- plugin node repair setup implementation plan
+- record round 2 review of the signal-case bound spec
 
-- mark plugin node repair setup done
+- approve the signal-case bound spec
 
-- file -w refusal absence-check gap
+- pre-push signal-case bound removal plan
 
-- plugin node check hardening
+- mark the pre-push signal-case bound plan done
 
-- plugin node check round-1 lens review
+- trace all 30 Dependabot alerts to checkov's pins
 
-- plugin node check round-1 dispositions
+- Renovate Python security PRs leave renderings stale
 
-- plugin node check round-2 revisions
+- pin uv for requirements renderings and lock check
 
-- plugin node check round-3 apparatus fixes
+- revise pinned-uv spec after round-1 lens review
 
-- approve plugin node check hardening spec
+- record round-1 lens dispositions for pinned uv
 
-- plugin node check hardening implementation plan
+- revise pinned-uv spec after round-2 lens review
 
-- mark plugin node check hardening done
+- fold round-3 risk findings into pinned-uv spec
 
-- close 8 resolved rows after re-audit
+- approve pinned-uv spec
 
-- close maintainability re-scope and argv note rows
+- pinned uv renderings implementation plan
 
-- CLAUDE.md ceiling ratchet to 85,000 bytes
+- mark the pinned uv renderings plan done
 
-- move ceiling remedy into checker, round 1 review
+- document make install-pinned-uv and the pinned uv
 
-- record ceiling ratchet round 2 dispositions
+- move the crates.io contact out of the update source
 
-- approve CLAUDE.md ceiling ratchet spec
+- repo session management design
 
-- CLAUDE.md ceiling ratchet implementation plan
+- repo session Multi-Lens Review round 1
 
-- mark CLAUDE.md ceiling ratchet done
+- repo session revision 1 after Multi-Lens Review
 
-- pre-push wrong-tree refusal design
+- repo session revision 2 after round 2
 
-- pre-push wrong-tree round 1 multi-lens review
+- repo session: Linux hosts plain ssh, work macs via Cloudflare
 
-- pre-push wrong-tree round 1 dispositions
+- repo session: work LAN is 192.168.10/24, drop hostname rule
 
-- pre-push wrong-tree round 2 multi-lens review
+- repo session: probe host identity, not reachability
 
-- pre-push wrong-tree round 2 dispositions
+- repo session revision 3, drop home-ssh
 
-- pre-push wrong-tree round 3 scoped review
+- repo session revision 4, HostKeyAlias and macOS-only aliases
 
-- approve pre-push wrong-tree refusal spec
+- repo-session-management external review round 1
 
-- pre-push wrong-tree refusal implementation plan
+- approve repo session management design
 
-- record pre-push wrong-tree refusal as shipped
+- repo session management implementation plan
 
-- bats stdin hang design
+- mark repo session management done
 
-- descope bats stdin to redirect and gpg fix
+- ADR-0059 repo sessions, README host-key boundary
 
-- bats stdin round 2 scoped review
+- add Anthropic weekly features digest 2026-11-16 (#467)
 
-- bats stdin goal-fit record and wording
-
-- approve bats stdin hang spec
-
-- bats stdin hang implementation plan
-
-- bats stdin non-goal check (inline)
+- add Claude Code weekly features digest 2026-11-16 (#468)
 
 
 
 ## Features
 
-- lower CLAUDE.md ceiling to 85,000 bytes (#363)
+- prune plugin records whose project directory is gone (#459)
 
-- refuse a push whose tested tree is not the pushed commit (#365)
+- pin uv for the requirements renderings and lock check (#463)
+
+- per-repo tmux sessions, boot unit, LAN-aware ssh (#466)
+
+
+
+## Testing
+
+- drop wall-clock bound from signal cases (#461)
 
 
