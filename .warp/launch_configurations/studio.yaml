@@ -11,8 +11,10 @@ windows:
         layout:
           cwd: /Users/bruce
           commands:
-            # The laptop is laptop-1 on wireless; ssh exits 255 only when it cannot connect.
-            - exec: ssh -t -o ConnectTimeout=3 laptop; [ $? -ne 255 ] || ssh -t laptop-1
+            # The laptop answers as laptop-1 on wireless. Choose the name by whether port 22
+            # answers (macOS nc -G is the connect timeout), never by ssh's exit status: 255
+            # also means a failed host-key check, which must not send the session elsewhere.
+            - exec: if nc -z -G 3 laptop 22 2>/dev/null; then ssh -t laptop; else ssh -t laptop-1; fi
       - title: update-workstation
         layout:
           cwd: /Users/bruce
