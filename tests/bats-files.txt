@@ -25,6 +25,7 @@ tests/scripts/ci_uv_pin.bats
 tests/scripts/commit_msg.bats
 tests/scripts/docs_inert_premise.bats
 tests/scripts/dpkg_sudo_frontend.bats
+tests/scripts/home_lan_probe.bats
 tests/scripts/html2ascii.bats
 tests/scripts/https_only_fetch.bats
 tests/scripts/list_shell_files.bats
