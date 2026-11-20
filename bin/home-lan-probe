@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# home-lan-probe <ip> <fingerprint>
+# Exit 0 only when the host at <ip> presents an ed25519 host key whose
+# fingerprint equals <fingerprint>. Exit 1 on any mismatch or failure, 2 on bad usage.
+
+usage() {
+  printf 'usage: home-lan-probe <ip> <fingerprint>\n' >&2
+}
+
+main() {
+  local ip fingerprint keyscan_bin="${_SSH_KEYSCAN_BIN:-ssh-keyscan}" seen
+  if [[ $# -ne 2 ]]; then
+    usage
+    return 2
+  fi
+  ip="$1"
+  fingerprint="$2"
+  # A missing keyscan binary or a failing ssh-keygen leaves seen empty; the pipeline
+  # status is deliberately ignored because the empty-or-mismatch check below covers it.
+  seen="$("${keyscan_bin}" -T 1 -t ed25519 "${ip}" 2> /dev/null | ssh-keygen -lf - 2> /dev/null | awk 'NR == 1 {print $2}')"
+  [[ -n "${seen}" && "${seen}" == "${fingerprint}" ]] || return 1
+}
+
+main "$@"
+exit $?
