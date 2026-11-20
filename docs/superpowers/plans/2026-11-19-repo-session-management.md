@@ -163,7 +163,7 @@ acceptance:
   - cmd: make test
     exit_code: 0
 max_retries: 3
-files_touched: [config/systemd/repo-sessions.service, lib/repo_sessions.sh, setup_env.sh, tests/setup_env/repo_sessions.bats, tests/setup_env/unit.bats, tests/bats-files.txt]
+files_touched: [config/systemd/repo-sessions.service, lib/repo_sessions.sh, setup_env.sh, tests/setup_env/repo_sessions.bats, tests/setup_env/unit.bats, tests/mocks/loginctl, tests/helpers/common.bash, tests/bats-files.txt]
 depends_on: [3]
 ```
 
@@ -179,7 +179,7 @@ Seams: `_SYSTEMD_USER_DIR`, `_SYSTEMCTL_BIN`, `_LOGINCTL_BIN`, `_TMUX_BIN`,
 `REPO_SESSIONS_FILE`, `_REPO_SESSION_HOST`, all set at `setup()` scope. Source the new lib
 from `setup_env.sh` after `lib/launch_agents.sh`; last line is the sourcing guard.
 
-Re-plan (Phase 2): `tests/setup_env/unit.bats` hand-types one marker per tracked `lib/*.sh` (`setup_env.sh sourced by a relative path defines a marker from every lib`), so this task adds `repo_sessions.sh:install_repo_sessions` to that list.
+Re-plan (Phase 2): `tests/setup_env/unit.bats` hand-types one marker per tracked `lib/*.sh` (`setup_env.sh sourced by a relative path defines a marker from every lib`), so this task adds `repo_sessions.sh:install_repo_sessions` to that list. Second re-plan: a recording `tests/mocks/loginctl` and inert `load_mocks` defaults for `_LOGINCTL_BIN`, `_SYSTEMCTL_BIN`, `_TMUX_BIN`, `_SYSTEMD_USER_DIR` and `REPO_SESSIONS_FILE`, so no later test that reaches `install_repo_sessions` can call the real tools.
 
 **Tests:** the spec's "Unit", "Installer" and "Doctor" bullets, plus a recorded-call-order
 case: the `loginctl enable-linger` call precedes the `systemctl --user enable` call (`systemd-analyze --user
