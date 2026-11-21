@@ -16,9 +16,11 @@ setup() {
   chmod +x "${FX_BIN}/python3"
 }
 
-# Run zsh with the fixture environment; args are passed to zsh.
+# Run zsh with the fixture environment; args are passed to zsh. The caller's
+# CLAUDE_CODE_PLUGIN_DIRS is always dropped; set PLUGIN_DIRS to hand zsh one.
 _zsh() {
-  env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH=/usr/bin:/bin \
+  env -u CLAUDE_CODE_PLUGIN_DIRS ${PLUGIN_DIRS+CLAUDE_CODE_PLUGIN_DIRS="${PLUGIN_DIRS}"} \
+    HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH=/usr/bin:/bin \
     _OVERRIDE_HOMEBREW_PREFIX_ARM="${ARM:-${FX_PREFIX}}" \
     _OVERRIDE_HOMEBREW_PREFIX_INTEL="${INTEL:-${BATS_TEST_TMPDIR}/nonexistent}" \
     zsh "$@"
@@ -109,4 +111,76 @@ _zsh() {
   [ "$status" -eq 0 ]
   [[ "$output" == "${FX_BIN}:"* ]]
   [[ "$output" != *"${_intel}"* ]]
+}
+
+# CLAUDE_CODE_PLUGIN_DIRS: Claude Code loads each ':'-separated absolute path as a
+# --plugin-dir. FX_HOME stands in for HOME, so the guarded path is a fixture.
+
+@test "present progress mod dir is exported as CLAUDE_CODE_PLUGIN_DIRS" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${FX_HOME}/.claude/mods/progress" ]
+}
+
+@test "absent progress mod dir leaves CLAUDE_CODE_PLUGIN_DIRS unset" {
+  run _zsh -c 'print -r -- "set=${+CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "set=0" ]
+}
+
+@test "inherited CLAUDE_CODE_PLUGIN_DIRS is kept and the mod dir appended" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  PLUGIN_DIRS=/opt/other-mod run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/opt/other-mod:${FX_HOME}/.claude/mods/progress" ]
+}
+
+@test "nested zsh carries the progress mod dir exactly once" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  PLUGIN_DIRS=/opt/other-mod run _zsh -c 'zsh -c "print -r -- \${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/opt/other-mod:${FX_HOME}/.claude/mods/progress" ]
+}
+
+@test "mod dir already first in an inherited list is not appended again" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  PLUGIN_DIRS="${FX_HOME}/.claude/mods/progress:/opt/other-mod" run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${FX_HOME}/.claude/mods/progress:/opt/other-mod" ]
+}
+
+@test "a path that only extends the mod dir does not count as the mod dir" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  PLUGIN_DIRS="${FX_HOME}/.claude/mods/progress-old" run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${FX_HOME}/.claude/mods/progress-old:${FX_HOME}/.claude/mods/progress" ]
+}
+
+@test "empty inherited CLAUDE_CODE_PLUGIN_DIRS gets the mod dir with no leading colon" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  PLUGIN_DIRS='' run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "${FX_HOME}/.claude/mods/progress" ]
+}
+
+@test "CLAUDE_CODE_PLUGIN_DIRS reaches child processes of interactive zsh" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  run _zsh +Z -i -c 'printenv CLAUDE_CODE_PLUGIN_DIRS'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"${FX_HOME}/.claude/mods/progress" ]]
+}
+
+@test "absent progress mod dir keeps an inherited CLAUDE_CODE_PLUGIN_DIRS unchanged" {
+  PLUGIN_DIRS=/opt/other-mod run _zsh -c 'print -r -- "${CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "/opt/other-mod" ]
+}
+
+@test ".zshenv.local runs after the export and can override it" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  printf 'unset CLAUDE_CODE_PLUGIN_DIRS\n' > "${FX_HOME}/.zshenv.local"
+  run _zsh -c 'print -r -- "set=${+CLAUDE_CODE_PLUGIN_DIRS}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "set=0" ]
 }
