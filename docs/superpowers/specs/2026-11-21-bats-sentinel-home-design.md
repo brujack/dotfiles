@@ -49,11 +49,11 @@ XDG residue never fails the gate: the XDG dirs are redirected so tool caches can
 
 ### 2. Call sites
 
-The three bats command lines in the `test-bats` recipe (parallel, serial fallback, serial carve-out) become `scripts/bats-isolated.sh bats …` with their arguments unchanged, and the bats invocation in `scripts/run-bash-coverage.sh` becomes `"<its own directory>/bats-isolated.sh" "${_bats_bin}" "${_bats_args[@]}"`. That covers `make test`, the pre-push hook, and every CI shard (Linux `make bash-coverage`, macOS `make test`/`make test-bats`). `_OVERRIDE_BATS_BIN` keeps its current scope: the coverage script only. A direct `bats tests/x.bats` run is unwrapped by choice; the gate forbids the HOME writes such a run could make.
+The four bats command lines in the Makefile (the `test-bats` recipe's parallel, serial fallback and serial carve-out lines, and the `test-unit` recipe's line) become `scripts/bats-isolated.sh bats …` with their arguments unchanged, and the bats invocation in `scripts/run-bash-coverage.sh` becomes `"<its own directory>/bats-isolated.sh" "${_bats_bin}" "${_bats_args[@]}"`. That covers `make test`, the pre-push hook, and every CI shard (Linux `make bash-coverage`, macOS `make test`/`make test-bats`). `_OVERRIDE_BATS_BIN` keeps its current scope: the coverage script only. A direct `bats tests/x.bats` run is unwrapped by choice; the gate forbids the HOME writes such a run could make.
 
 Two test files assert the recipe's text through `make -n`, and change with it:
 
-- `tests/makefile_parallel_target.bats` and `tests/makefile_shard_list.bats` grep `make -n` output for lines anchored `^bats`. Each positive match is re-anchored to `^scripts/bats-isolated\.sh bats ` with the rest of its pattern unchanged.
+- `tests/makefile_parallel_target.bats` and `tests/makefile_shard_list.bats` match `make -n` output against bats command lines in 19 places (counted 2026-11-21): 17 greps anchored `^bats` and one exact-line `grep -qx 'bats --print-output-on-failure tests/setup_env/git_hooks.bats < /dev/null'` (line 199) in parallel_target, and one `^[[:space:]]*bats[[:space:]]` guard (line 190) in shard_list. Two of the anchored greps sit in helpers (`_bats_lines_all_print_output`, `_assert_bats_lines_redirect_stdin`) shared by `test-bats` and `test-unit` tests, which is why `test-unit` is wrapped too: every recipe line then has one shape. Each positive match is re-anchored to `scripts/bats-isolated.sh bats ` at line start (`^scripts/bats-isolated\.sh bats `, or the same prefix inside the `-x` literal) with the rest of its pattern unchanged.
 - Four of those greps are absence guards: parallel_target's "non-GNU parallel takes the serial path", "`HAVE_PARALLEL=` forces serial" and "empty file list" tests, and shard_list's "`test-prereqs` plans no bats call". Re-anchoring a negative grep to a new shape leaves it passing forever if the shape changes again, so each absence pattern becomes `^(scripts/bats-isolated\.sh )?bats ` (either shape fails it), and the two serial-path tests also assert that exactly one `^scripts/bats-isolated\.sh bats ` line without `--jobs` is present.
 - `tests/makefile_shard_list.bats` runs `make test-bats` for real under a `PATH` restricted to a shim directory (`make git env bash sed awk grep mktemp find sort file tr cut head cat python3` plus a recording `bats` stub). The wrapper runs inside that `PATH`, so the shim list gains `mkdir` and `rm`. The wrapper uses only bash builtins and those shim tools.
 
@@ -89,22 +89,23 @@ Drive the wrapper over fixture `.bats` files written per test under `BATS_TEST_T
 - **R6.** The wrapper exits with bats' status when it is non-zero, with 1 when bats exited 0 and R5 found at least one entry or the listing failed, and with 0 otherwise.
 - **R7.** A write under `<s>/xdg` or `<s>/parallel` alone never makes the wrapper exit non-zero.
 - **R8.** `<s>` no longer exists after the wrapper exits, whether bats passed or failed.
-- **R9.** Each of the three bats command lines in the Makefile `test-bats` recipe starts `scripts/bats-isolated.sh bats ` followed by the arguments it has today.
+- **R9.** Each of the four bats command lines in the Makefile (three in the `test-bats` recipe, one in the `test-unit` recipe) starts `scripts/bats-isolated.sh bats ` followed by the arguments it has today.
 - **R10.** `scripts/run-bash-coverage.sh` runs `bats-isolated.sh` from its own directory with `"${_bats_bin}"` as the first argument, so `_OVERRIDE_BATS_BIN` still selects the bats binary there and nowhere else; when the suite is red, `_check_red_suite` also prints every `bats_run.log` line starting `bats-isolated: ` to stderr.
 - **R11.** `tests/zshrc.d/unit.bats` `setup()` exports `HOME="${BATS_TEST_TMPDIR}/home"`, creates `${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions`, and exports `_OVERRIDE_RBENV_BINARY=/nonexistent/rbenv`.
 - **R12.** `tests/scripts/bats_isolated.bats` has a test for each of R2-R8 and R15, including one fixture that writes `$HOME/x` and asserts exit 1 with `bats-isolated: residue: x` in the output, one failing fixture with residue that asserts bats' status and the residue line together, one clean fixture that asserts `bats-isolated: residue check: clean`, and an R8 test that records `<s>` from inside the fixture, asserts it existed during the run, and asserts it is gone afterwards.
 - **R13.** `tests/bats-files.txt` lists `tests/scripts/bats_isolated.bats`.
-- **R14.** In `tests/makefile_parallel_target.bats` and `tests/makefile_shard_list.bats`, every grep of `make -n` output anchored on `^bats` is re-anchored on `^scripts/bats-isolated\.sh bats ` with the rest of its pattern unchanged, except the four absence guards (parallel_target: non-GNU parallel serial path, `HAVE_PARALLEL=` forces serial, empty file list; shard_list: `test-prereqs` plans no bats call), whose absence pattern is `^(scripts/bats-isolated\.sh )?bats `; the shim tool list in `tests/makefile_shard_list.bats` `setup()` gains `mkdir` and `rm`; the two serial-path guards also assert exactly one `^scripts/bats-isolated\.sh bats ` line not containing `--jobs`.
+- **R14.** In `tests/makefile_parallel_target.bats` and `tests/makefile_shard_list.bats`, each of the 19 matches of `make -n` output against a bats command line (17 greps anchored `^bats` and the `grep -qx 'bats --print-output-on-failure tests/setup_env/git_hooks.bats < /dev/null'` in parallel_target, the `^[[:space:]]*bats[[:space:]]` guard in shard_list) is re-anchored so the line must start `scripts/bats-isolated.sh bats ` with the rest of its pattern unchanged, except the four absence guards (parallel_target: non-GNU parallel serial path, `HAVE_PARALLEL=` forces serial, empty file list; shard_list: `test-prereqs` plans no bats call), whose absence pattern is `^(scripts/bats-isolated\.sh )?bats `; the shim tool list in `tests/makefile_shard_list.bats` `setup()` gains `mkdir` and `rm`; the two serial-path guards also assert exactly one `^scripts/bats-isolated\.sh bats ` line not containing `--jobs`.
 - **R15.** When `mktemp -d` fails, the wrapper prints `bats-isolated: cannot create scratch directory under <root>` to stderr, exits 1, and does not run its command.
+- **R16.** The `Run tests` step of the `test-macos-shard` job in `.github/workflows/ci.yml` runs `grep '^bats-isolated: ' /tmp/make-test.log` after the `make` call whatever `make` returned, without changing the step's exit status; `tests/scripts/bats_isolated.bats` asserts that line is present in that step.
 - **V1.** `make test` and `make bash-coverage` on the finished branch on `claude` each exit 0; the `make test` output and the `make bash-coverage` `bats_run.log` each contain `bats-isolated: residue check: clean`, and it contains no `bats-isolated: residue:` line.
 - **V2.** Positive control: on the branch with R11 reverted, `make test-bats` and `make bash-coverage` on `claude` each fail, and each one's terminal output names `.oh-my-zsh` and `.rbenv` as residue.
 - **V3.** CI is green on the PR, including all three `test-macos-shard` legs and all three `test-shard` legs.
 - **V4.** Positive control for R14: with one Makefile recipe line reverted to a bare `bats`, each of the four absence guards still fails when its forbidden condition is forced (one mutation per guard).
-- **V5.** On the PR, the downloaded log of one `test-shard` leg and one `test-macos-shard` leg each contain `bats-isolated: residue check: clean` (for a green leg, read the job log with `gh run view --log`).
+- **V5.** On the PR, the downloaded log of one `test-shard` leg and one `test-macos-shard` leg each contain `bats-isolated: residue check: clean` (read each green leg's job log with `gh run view --log`: the Linux leg prints it through `run-bash-coverage.sh`'s `tail -3` of `bats_run.log`, the macOS leg through R16).
 - **V6.** `tests/makefile_shard_list.bats` passes against the real wrapper on `claude` and on the Studio.
 - **N1.** No mock under `tests/mocks/` changes its `MOCK_CALLS_FILE` default.
 - **N2.** No `.bats` file other than `tests/zshrc.d/unit.bats`, `tests/makefile_parallel_target.bats`, `tests/makefile_shard_list.bats` and the new `tests/scripts/bats_isolated.bats` is edited, and the two makefile test files change only as R14 states.
-- **N3.** The wrapper's own commands, excluding the bats process it runs, read nothing under the pre-swap `HOME` except the R4 executable check and create or modify no file outside `<s>`; writes to file descriptors it inherited (the coverage tracer's fd 9, stdout, stderr) are not file writes for this purpose.
+- **N3.** The wrapper's own commands, excluding the bats process it runs, read nothing under the pre-swap `HOME` except the R4 executable check and create or modify no file outside `<s>`; writes to stdout, stderr and the coverage tracer's own fd 9 (opened by `bash-tracer.sh`, which `BASH_ENV` sources into the wrapper under `make bash-coverage`) are not file writes for this purpose.
 
 ## Multi-Lens Review
 
@@ -155,6 +156,32 @@ Disposition: Addressed (operator, 2026-11-21): `_check_red_suite` surfaces `bats
 Finding: R9 still conflicted with N2: `tests/makefile_shard_list.bats` runs `make test-bats` for real under a shim `PATH` without `mkdir`, `rm`, `uname` or `hostname`, and a prototype wrapper failed 5 of its tests and leaked its scratch directories. Minor: under `make bash-coverage` the wrapper's xtrace goes to fd 9, outside `<s>`, contradicting N3's wording.
 Assumption: same as Goal-Fit (runner-only `HOME` writes, for example a self-heal triggered by a tool missing on the runner).
 Disposition: Addressed (operator, 2026-11-21): the shim gains `mkdir` and `rm` (R14); `UV_VER` is read with `sed`, not by sourcing (R4); the wrapper uses only builtins and shim tools; V6 runs the file against the real wrapper; N3 exempts inherited file descriptors. Runner assumption Accepted as under Goal-Fit.
+
+#### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 3
+
+Reviewed at commit: `c976ed0a` (round-2 revision)
+
+#### Goal-Fit
+
+Finding: No issues. The residue gate is what makes leaving a direct `bats` run unwrapped safe, so it is not decoration; the gate would have reported `residue: brew` for F15; `PARALLEL_HOME` measured to keep GNU parallel's writes out of the gated `HOME`.
+Assumption: no uncertain assumption found beyond round 2's runner-residue assumption (Accepted).
+Disposition: N/A — clean, no action needed.
+
+#### Ergonomics
+
+Finding: V5 could not pass on a green macOS leg: `make test` output goes only to `/tmp/make-test.log` (`ci.yml:292`), printed and uploaded only on failure, so the clean marker never reaches any record.
+Assumption: no uncertain assumption found.
+Disposition: Addressed (operator, 2026-11-21): R16 prints the wrapper's lines from `/tmp/make-test.log` in the macOS job log on every run; V5 names both routes.
+
+#### Risk
+
+Finding: R14 still contradicted N2. A prototype turned 3 of 20 `tests/makefile_parallel_target.bats` tests red: two re-anchored helpers are shared with `make -n test-unit`, whose recipe line R9 left unwrapped, and the exact-line `grep -qx 'bats …'` at line 199 has no `^` anchor, so R14's wording did not reach it. Minor: N3 called the tracer's fd 9 inherited; `bash-tracer.sh` opens it inside the wrapper.
+Assumption: round 2's runner-residue assumption (Accepted).
+Disposition: Addressed (operator, 2026-11-21): R9 wraps all four bats recipe lines, `test-unit` included; R14 enumerates its 19-match population; N3 reworded.
 
 #### Adversarial Spec Review (comparison/judge designs only)
 
