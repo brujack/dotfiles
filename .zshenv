@@ -21,8 +21,10 @@ fi
 # skip the append when the dir is already an element: every nested zsh re-reads this file.
 # Split into a real array: a one-element nested ${(s.:.)...} is a scalar, and (Ie) on a
 # scalar is a substring search that counts a path like .../progress-old as a match.
+# The '-' default keeps a nounset (zsh -u) shell from aborting this file before
+# .zshenv.local is sourced.
 _progress_mod="${HOME}/.claude/mods/progress"
-_plugin_dirs=("${(@s.:.)CLAUDE_CODE_PLUGIN_DIRS}")
+_plugin_dirs=("${(@s.:.)CLAUDE_CODE_PLUGIN_DIRS-}")
 if [[ -d "${_progress_mod}" ]] && (( ! ${_plugin_dirs[(Ie)${_progress_mod}]} )); then
   export CLAUDE_CODE_PLUGIN_DIRS="${CLAUDE_CODE_PLUGIN_DIRS:+${CLAUDE_CODE_PLUGIN_DIRS}:}${_progress_mod}"
 fi

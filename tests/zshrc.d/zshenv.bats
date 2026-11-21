@@ -184,3 +184,11 @@ _zsh() {
   [ "$status" -eq 0 ]
   [ "$output" = "set=0" ]
 }
+
+@test "nounset zsh with CLAUDE_CODE_PLUGIN_DIRS unset still reaches .zshenv.local" {
+  mkdir -p "${FX_HOME}/.claude/mods/progress"
+  printf 'export ZSHENV_LOCAL_MARK=1\n' > "${FX_HOME}/.zshenv.local"
+  run _zsh -u -c 'print -r -- "mark=${ZSHENV_LOCAL_MARK-missing} dirs=${CLAUDE_CODE_PLUGIN_DIRS-unset}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "mark=1 dirs=${FX_HOME}/.claude/mods/progress" ]
+}
