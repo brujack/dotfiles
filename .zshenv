@@ -15,6 +15,21 @@ if [[ ! -o interactive ]]; then
   unset _py_prefix
 fi
 
+# Claude Code loads each ':'-separated absolute path in CLAUDE_CODE_PLUGIN_DIRS as a
+# --plugin-dir. The progress mod is linked from ai-config by setup_env.sh, so export it
+# only where the link exists. Append to an inherited value rather than replace it, and
+# skip the append when the dir is already an element: every nested zsh re-reads this file.
+# Split into a real array: a one-element nested ${(s.:.)...} is a scalar, and (Ie) on a
+# scalar is a substring search that counts a path like .../progress-old as a match.
+# The '-' default keeps a nounset (zsh -u) shell from aborting this file before
+# .zshenv.local is sourced.
+_progress_mod="${HOME}/.claude/mods/progress"
+_plugin_dirs=("${(@s.:.)CLAUDE_CODE_PLUGIN_DIRS-}")
+if [[ -d "${_progress_mod}" ]] && (( ! ${_plugin_dirs[(Ie)${_progress_mod}]} )); then
+  export CLAUDE_CODE_PLUGIN_DIRS="${CLAUDE_CODE_PLUGIN_DIRS:+${CLAUDE_CODE_PLUGIN_DIRS}:}${_progress_mod}"
+fi
+unset _progress_mod _plugin_dirs
+
 # Machine-local additions (installer-written lines such as rustup's) live here, never in
 # this tracked file.
 [[ -r "${HOME}/.zshenv.local" ]] && source "${HOME}/.zshenv.local"
