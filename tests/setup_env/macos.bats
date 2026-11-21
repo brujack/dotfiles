@@ -13,10 +13,32 @@ setup() {
   # pre-existing install_homebrew tests that exercised curl/xcode-select mocks
   # against the real HOME until now.
   export HOME="${BATS_TEST_TMPDIR}"
+  # lib/constants.sh froze these from the real HOME when load_setup_env sourced
+  # it above; re-derive them from the redirected HOME, or a test that does not
+  # override them writes the operator's real ~/brew and checkout (audit F15).
+  export BREWFILE_LOC="${HOME}/brew"
+  export GITREPOS="${HOME}/git-repos"
+  export PERSONAL_GITREPOS="${GITREPOS}/personal"
 }
 
 teardown() {
   rm -f "${MOCK_CALLS_FILE:-}"
+}
+
+# ── setup isolation ──────────────────────────────────────────────────────────
+
+# lib/constants.sh derives these from HOME when load_setup_env sources it, before
+# setup() redirects HOME, so they kept pointing at the operator's real ~/brew and
+# real checkout: install_macos_casks tests that did not override them repointed
+# the real ~/brew/Brewfile to Brewfile.gui (security audit 2026-11-16, F15).
+@test "setup: HOME-derived path constants point into BATS_TEST_TMPDIR" {
+  local _var
+  for _var in BREWFILE_LOC GITREPOS PERSONAL_GITREPOS; do
+    [[ ${!_var} == "${BATS_TEST_TMPDIR}"/* ]] || {
+      printf '%s=%s is outside BATS_TEST_TMPDIR\n' "${_var}" "${!_var}"
+      return 1
+    }
+  done
 }
 
 # ── install_rosetta ──────────────────────────────────────────────────────────
