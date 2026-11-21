@@ -346,7 +346,7 @@ dotfiles/
 │   └── tests/                # Pester v5 tests
 ├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
 ├── .zprofile                 # Zsh login shell config
-├── .zshenv                   # Non-interactive zsh: Homebrew python3 first on macOS; sources ~/.zshenv.local
+├── .zshenv                   # Every zsh: CLAUDE_CODE_PLUGIN_DIRS (progress mod); non-interactive: Homebrew python3 first on macOS; sources ~/.zshenv.local
 ├── .vimrc                    # Vim config with 50+ plugins
 ├── .tmux.conf                # Tmux config (Dracula theme, tpm, C-a prefix)
 ├── .gitconfig_mac            # Git config for macOS
