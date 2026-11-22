@@ -7,10 +7,13 @@
 # prints findings to stdout and exits 0/1/2. This script is the thin wrapper
 # that turns that into an ntfy push and a heartbeat.
 #
-# THE DETECTOR IS RUN WITH NTFY_URL SCRUBBED, deliberately. ledger_drift_check.sh
-# makes its own ntfy call, so left alone it would both duplicate this script's
-# push and keep the failure mode below. Scrubbing demotes it to a pure detector
-# without modifying a script this repo does not own.
+# THE DETECTOR IS RUN WITH NTFY_URL, NTFY_USER AND NTFY_PASSWORD SCRUBBED,
+# deliberately. ledger_drift_check.sh makes its own ntfy call, so left alone it
+# would both duplicate this script's push and keep the failure mode below;
+# scrubbing the URL demotes it to a pure detector without modifying a script this
+# repo does not own. Scrubbing the credentials keeps them out of anything the
+# detector could echo, since its output is POSTed off-box (redacted by
+# _rhn_redact, which is a bounded pattern set, not a guarantee).
 #
 # The split matters. ledger_drift_check.sh makes its own ntfy call, so an unset
 # NTFY_URL degrades detection AND delivery together and still returns 0 --
@@ -62,12 +65,6 @@ _rhn_write_heartbeat() {
         > "${_dir}/last-run.json" || return 1
 }
 
-# Deliberately void: delivery is best-effort and its outcome must never reach the
-# caller's exit code, because a missing or broken channel is not a finding about
-# the fleet. Do NOT add `|| return 1` at the call site -- that is the
-# ledger_drift_check.sh failure, where detection and delivery fail together and
-# "no drift" becomes indistinguishable from "no channel". Both failure branches
-# are pinned by tests; the return value is not read and carries no information.
 # Resolve the channel. `config/local.sh` is this repo's established home for
 # machine-local secrets -- git-ignored and untracked (verified two ways), where
 # the plist's EnvironmentVariables is world-readable (`-rw-r--r--`) and would be
@@ -117,6 +114,12 @@ _rhn_redact() {
         || return 1
 }
 
+# Deliberately void: delivery is best-effort and its outcome must never reach the
+# caller's exit code, because a missing or broken channel is not a finding about
+# the fleet. Do NOT add `|| return 1` at the call site -- that is the
+# ledger_drift_check.sh failure, where detection and delivery fail together and
+# "no drift" becomes indistinguishable from "no channel". Both failure branches
+# are pinned by tests; the return value is not read and carries no information.
 _rhn_notify() {
     local _msg="$1"
     _rhn_load_channel
