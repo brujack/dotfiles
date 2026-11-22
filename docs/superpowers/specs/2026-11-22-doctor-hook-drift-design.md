@@ -285,3 +285,25 @@ Report: [round1.md](2026-11-22-doctor-hook-drift-design.external-review/round1.m
 | F1.5 | Fixed | Round 1 Ergonomics and Risk dispositions annotated as superseded (V4 removed; R8 is now R6). | unjudged | accepted as fixed (2026-11-22) |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Spec alignment (2026-11-22)
+
+- spec: docs/superpowers/specs/2026-11-22-doctor-hook-drift-design.md
+- anchor: a2ec342e6d3a1baff576b5165f3b45fd3d03b06b
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Task 1 spec review: comparing against the working-tree file instead of the default-branch blob turned 4 identity tests red (drift cases incl. 'dirty target is drift with reason, default branch and candidate fields').
+- V2: _doctor_check_git_hooks from the branch on claude, 2026-11-22: all 9 repos PASS, no drift or error line.
+- V3: Task 2 spec review, scratch HOME/GITREPOS clone with symlinked hooks: editing scripts/pre-push printed '[WARN] dotfiles: pre-push drifts: scripts/pre-push differs from master — remedy: ...' (clone off the default branch, so WARN per amended R8); after git checkout -- scripts/pre-push the pass line returned.
