@@ -702,7 +702,7 @@ clone_personal_repos() {
   local _repo _rc=0
   for _repo in dotfiles docker_container_terraform \
     docker_container_terraform_packer_ansible kubernetes pfsense_config \
-    python-learning terraform_ansible; do
+    terraform_ansible; do
     [[ -d "${PERSONAL_GITREPOS}/${_repo}" ]] && continue
     if ! git clone "git@github.com:brujack/${_repo}.git" "${PERSONAL_GITREPOS}/${_repo}"; then
       log_warn "${_repo}: clone failed"

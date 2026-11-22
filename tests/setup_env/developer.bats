@@ -749,7 +749,7 @@ _clone_fails_for() {
   _clone_fails_for dotfiles
   run clone_personal_repos
   [ "$status" -eq 1 ]
-  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 7 ]
+  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 6 ]
   grep -q "git clone.*/terraform_ansible.git" "${MOCK_CALLS_FILE}"
   [[ "$output" == *"dotfiles"*"clone failed"* ]]
 }
@@ -768,8 +768,44 @@ _clone_fails_for() {
   _clone_fails_for no-such-repo
   run clone_personal_repos
   [ "$status" -eq 0 ]
-  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 7 ]
+  [ "$(grep -c '^git clone ' "${MOCK_CALLS_FILE}")" -eq 6 ]
   [[ "$output" != *"clone failed"* ]]
+}
+
+# Security audit F12: a cloned repo absent from both hook lists got no hooks and
+# no gap report. Every repo clone_personal_repos clones must be either expected
+# to carry hooks or exempted on purpose in config/hook_repos.sh.
+@test "clone_personal_repos: every cloned repo is on exactly one hook list" {
+  mkdir -p "${PERSONAL_GITREPOS}"
+  _clone_fails_for no-such-repo
+  run clone_personal_repos
+  [ "$status" -eq 0 ]
+  source "${REPO_ROOT}/config/hook_repos.sh"
+  local _url _name _n=0 _hits
+  while read -r _url; do
+    _name="${_url##*/}"; _name="${_name%.git}"
+    _n=$((_n + 1))
+    _hits=0
+    [[ " ${HOOK_EXPECTED_REPOS[*]} " == *" ${_name} "* ]] && _hits=$((_hits + 1))
+    [[ " ${HOOK_EXEMPT_REPOS[*]} " == *" ${_name} "* ]] && _hits=$((_hits + 1))
+    [ "${_hits}" -eq 1 ] || { printf '%s is on %s hook lists\n' "${_name}" "${_hits}"; return 1; }
+  done < <(awk '$1 == "git" && $2 == "clone" { print $3 }' "${MOCK_CALLS_FILE}")
+  # Positive control: the clone log was read, so the loop above checked something.
+  [ "${_n}" -eq 6 ]
+}
+
+@test "clone_personal_repos: no longer clones python-learning" {
+  mkdir -p "${PERSONAL_GITREPOS}"
+  _clone_fails_for no-such-repo
+  run clone_personal_repos
+  [ "$status" -eq 0 ]
+  # run + status, not a bare `! grep`: errexit ignores a negated command, so a
+  # bare negation that is not the last line can never fail the test.
+  run command grep -q '/python-learning\.git ' "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 1 ]
+  # Positive control: another repo's clone line matches the same pattern shape.
+  run command grep -q '/kubernetes\.git ' "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
 }
 
 # ── setup_ansible — Linux branch ─────────────────────────────────────────────
