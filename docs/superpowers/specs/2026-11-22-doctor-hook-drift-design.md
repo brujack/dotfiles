@@ -140,16 +140,16 @@ existing rc 2 path, and the fail-closed `*)` arm still FAILs any unknown word.
 
 ## Requirements
 
-- **R1.** For a symlink whose resolved target is a source candidate in the repo's main working tree, `_git_hooks_identity` resolves `<default>` as `main` when `git show-ref --verify -q refs/heads/main` succeeds and `git show-ref --verify -q refs/heads/master` fails, else `master`, and prints `error`, a TAB and `no local <default> branch`, returning 2, when `refs/heads/<default>` does not exist.
+- **R1.** A source candidate for hook `<hook>` is a path listed by `git ls-files` whose basename is `<hook>` or `<hook>-hook.sh`. For a symlink whose resolved target is a source candidate in the repo's main working tree, `_git_hooks_identity` resolves `<default>` as `main` when `git show-ref --verify -q refs/heads/main` succeeds and `git show-ref --verify -q refs/heads/master` fails, else `master`, and prints `error`, a TAB and `no local <default> branch`, returning 2, when `refs/heads/<default>` does not exist.
 - **R2.** For such a symlink, `_git_hooks_identity` hashes the resolved target with `git hash-object --no-filters <target>` and looks up the reference with `git rev-parse --verify -q refs/heads/<default>:<candidate>`, only after `refs/heads/<default>` is known to exist.
 - **R3.** `_git_hooks_identity` prints `match` and returns 0 for such a symlink when the target's hash equals the candidate's default-branch blob, whatever branch the repo's HEAD is on.
 - **R4.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> differs from <default>`, and returns 1, for such a symlink when the target's hash differs from the candidate's default-branch blob.
 - **R5.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> is not on <default>`, and returns 1, for such a symlink when `git rev-parse --verify -q refs/heads/<default>:<candidate>` exits 1.
-- **R6.** `_git_hooks_identity` prints `error`, a TAB and a reason naming the failed call, and returns 2, for such a symlink when `git hash-object` exits non-zero or prints an empty string, or when the blob lookup exits with a status other than 0 or 1; an empty or failed hash is never compared.
-- **R7.** `_git_hooks_identity` judges a regular-file hook exactly as before: `match` when it is byte-identical (`cmp -s`) to a candidate's working-tree file, otherwise `stale` or the generated-shim words.
+- **R6.** `_git_hooks_identity` prints `error`, a TAB and a reason, and returns 2, for such a symlink: reason `cannot hash <target>` when `git hash-object` exits non-zero or prints an empty string, and reason `cannot read refs/heads/<default>:<candidate> (rc <n>)` when the blob lookup exits with a status `<n>` other than 0 or 1; an empty or failed hash is never compared.
+- **R7.** `_git_hooks_identity` judges a regular-file hook exactly as before: `match` when it is byte-identical (`cmp -s`) to a candidate's working-tree file, otherwise `stale`, or for a repo tracking no candidate one of `generated`, `generated-broken` and `generated-unverified` as today.
 - **R8.** `_doctor_check_git_hooks` calls `doctor_warn "<repo>" "<hook> drifts: <reason> — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change"` for `drift`.
 - **R9.** Every git call added to `lib/git_hooks.sh` or `lib/helpers.sh` runs under `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`.
-- **R10.** `tests/setup_env/git_hooks_identity.bats` has at least one case for each of R1 and R3 to R7, and `tests/setup_env/doctor_git_hooks.bats` has a case for R8.
+- **R10.** `tests/setup_env/git_hooks_identity.bats` has separate cases for R1 choosing `main` (only `refs/heads/main` exists), R1 choosing `master`, and R1's `error` (neither exists), and at least one case for each of R3 to R7, and `tests/setup_env/doctor_git_hooks.bats` has a case for R8.
 - **R11.** `docs/adr/0061-doctor-hook-identity-and-ggshield-probe.md` gains an amendment section dated 2026-11-22 naming the default-branch blob comparison for symlinked hooks and the `drift` word.
 - **V1.** A mutation that compares the symlink target against the working-tree file instead of the default-branch blob turns at least the R4 case red.
 - **V2.** `./setup_env.sh -t doctor` on `claude` after the change reports no `drift` line and no `error` line for any of the nine repos (prediction from the Measured section).
@@ -229,3 +229,21 @@ Reviewed at commit: `ab1f7ce9` (round-1 revision; the body above is the round-2 
   `scripts/crate_templates/` files, not hook scripts). Disposition: Addressed — ref existence
   is tested with `show-ref` before the blob lookup (R1, R2); `--no-filters` restored with the
   CRLF limit documented (N3); the local reference kept by operator decision.
+
+### Round 3 (scoped Risk lens on Design, Alternatives and Requirements)
+
+Reviewed at commit: `8bc9547f`
+
+Finding: no blocking defect. R10 let one case satisfy R1's three outcomes (`main`, `master`,
+`error`), leaving etch-config's `main` path covered only by V2; "source candidate", R6's
+reason and R7's shim words were not self-contained. Probed: missing path and missing ref both
+`rc=1` for `rev-parse --verify -q`, `show-ref --verify -q` missing `rc=1`, corrupt subtree
+`rc=128`; relative symlinks (math) and symlinked repo paths resolve physically; all 9
+candidates are mode `100755`; no R contradicts N3 or N4; R7 matches the current code. The
+wording fixes (R1 candidate definition, exact R6 reasons, listed shim words, three R1 cases
+in R10) were applied in the next commit.
+Assumption: the main checkout's local default branch is reviewed content. A direct local
+commit to a hook script would become the reference and read `match`. Today every symlinked
+repo's default branch is 0 commits ahead of origin, and no dotfiles reflog commit touched a
+hook script; core.md git-workflow-001/-003 allow only docs and pure data direct to master.
+Disposition:
