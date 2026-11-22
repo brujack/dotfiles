@@ -95,6 +95,27 @@ _rhn_ntfy_target() {
     printf '%s' "${_u}"
 }
 
+# Everything POSTed off-box passes through here. The detector's stderr is
+# attacker-influenced text (a failing tool may echo its environment, a header or
+# a token) and is surfaced verbatim in the message, so the credential and the
+# common token shapes are removed before delivery.
+#
+# The password is replaced by parameter expansion, never sed: no second process,
+# so the credential never crosses a process boundary. The patterns are POSIX ERE
+# so one sed invocation behaves the same on GNU and BSD.
+_rhn_redact() {
+    local _msg="$1" _sed="${_RHN_SED_BIN:-sed}"
+    if [[ -n "${NTFY_PASSWORD:-}" ]]; then
+        _msg="${_msg//"${NTFY_PASSWORD}"/[REDACTED]}"
+    fi
+    printf '%s' "${_msg}" | "${_sed}" -E \
+        -e 's/gh[pousr]_[A-Za-z0-9]{20,}/[REDACTED]/g' \
+        -e 's/github_pat_[A-Za-z0-9_]{20,}/[REDACTED]/g' \
+        -e 's/([Aa]uthorization:[[:space:]]*)[^[:space:]].*/\1[REDACTED]/' \
+        -e 's/([Bb]earer[[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+        || return 1
+}
+
 _rhn_notify() {
     local _msg="$1"
     _rhn_load_channel
@@ -146,6 +167,11 @@ _rhn_notify() {
     esac
     # Parameter expansion rather than a sed pipeline: no second process, so the
     # credential never crosses a process boundary at all. Backslash first.
+    # After the credential load above, so a local.sh-supplied password is known
+    # to the redactor. A failed redaction withholds the text rather than sending
+    # it raw.
+    _msg="$(_rhn_redact "${_msg}")" \
+        || _msg="${_RHN_NAME:-cadence} notification withheld: redaction failed"
     local _cred="${NTFY_USER}:${NTFY_PASSWORD}"
     _cred="${_cred//\\/\\\\}"
     _cred="${_cred//\"/\\\"}"
@@ -177,7 +203,9 @@ run_cadence_notify() {
         return 2
     fi
 
-    # NTFY_URL scrubbed: the detector detects, this script delivers.
+    # NTFY_URL, NTFY_USER and NTFY_PASSWORD scrubbed: the detector detects, this
+    # script delivers. A detector that echoes its environment (set -x, an error
+    # dump) must not hold the credential, since its stderr is POSTed off-box.
     #
     # The two streams are kept SEPARATE and neither is discarded. stdout is the
     # findings channel and is what `_count` measures; stderr is the diagnosis
@@ -206,7 +234,7 @@ run_cadence_notify() {
         _rhn_notify "${_name} INCOMPLETE - cannot determine: no temp file for detector stderr"
         return 2
     fi
-    _out="$(env -u NTFY_URL "${_detector}" 2>"${_errfile}")"
+    _out="$(env -u NTFY_URL -u NTFY_USER -u NTFY_PASSWORD "${_detector}" 2>"${_errfile}")"
     _rc=$?
     # The cap is a security property, not tidiness -- this stream is POSTed
     # off-box. It bounds an accidental dump; it does not make the stream safe.
