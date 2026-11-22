@@ -716,7 +716,13 @@ component add rust-analyzer" ]
   mkdir -p "${PERSONAL_GITREPOS}/dotfiles"
   run clone_personal_repos
   [ "$status" -eq 0 ]
-  ! grep -q "git clone.*dotfiles" "${MOCK_CALLS_FILE}"
+  # Compare the clone destination (last field) exactly: a regex on "dotfiles" also
+  # matches every other repo's line when TMPDIR's path contains that word.
+  run awk -v dest="${PERSONAL_GITREPOS}/dotfiles" '$1 == "git" && $2 == "clone" && $NF == dest { found = 1 } END { exit !found }' "${MOCK_CALLS_FILE}"
+  [ "$status" -ne 0 ]
+  # Positive control: another repo's clone is logged, so the log and matcher work.
+  run awk -v dest="${PERSONAL_GITREPOS}/terraform_ansible" '$1 == "git" && $2 == "clone" && $NF == dest { found = 1 } END { exit !found }' "${MOCK_CALLS_FILE}"
+  [ "$status" -eq 0 ]
 }
 
 @test "clone_personal_repos: calls git clone for dotfiles when dir missing" {
