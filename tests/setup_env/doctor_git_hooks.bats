@@ -38,6 +38,9 @@ make_repo() {
   else
     printf 'repos: []\n' > "${_d}/.pre-commit-config.yaml"
   fi
+  # Executable, as real hook sources are: a symlinked hook is only -x when its
+  # target is.
+  chmod +x "${_d}/scripts/"*
   git -C "${_d}" add -A
   git -C "${_d}" commit -q -m init
   cp "${_d}/scripts/pre-push" "${_d}/.git/hooks/pre-push"
@@ -297,6 +300,7 @@ run_arm() {
   make_repo alpha with_precommit
   local _d="${PERSONAL_GITREPOS}/alpha"
   printf '#!/bin/sh\necho elsewhere\n' > "${BATS_TEST_TMPDIR}/elsewhere"
+  chmod +x "${BATS_TEST_TMPDIR}/elsewhere"
   rm "${_d}/.git/hooks/pre-push"
   ln -s "${BATS_TEST_TMPDIR}/elsewhere" "${_d}/.git/hooks/pre-push"
   HOOK_EXPECTED_REPOS=(alpha)

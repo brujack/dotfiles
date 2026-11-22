@@ -27,6 +27,11 @@ setup() {
   # pwsh/tflint/zig/terraform/tfsec happen to be installed there (tdd.md
   # E2). Mirrors doctor_dev_tools.bats' own setup().
   unset LINUX HAS_DEVTOOLS
+  # run_doctor calls _doctor_check_git_hooks, which reads the repos under
+  # PERSONAL_GITREPOS and runs each shim's interpreter. No test in this file
+  # drives the real arm (tests/setup_env/doctor_git_hooks.bats does, against
+  # fixtures), so every run_doctor call here gets the no-op.
+  _doctor_check_git_hooks() { :; }
 }
 
 teardown() {
