@@ -99,7 +99,7 @@ _rhn_ntfy_target() {
 #
 # The password is replaced by parameter expansion, never sed: no second process,
 # so the credential never crosses a process boundary. The patterns are POSIX ERE
-# with spelled-out case classes ([Aa][Uu]...) because BSD sed has no I flag.
+# with spelled-out case classes ([Aa][Uu]...) because the I flag is not POSIX.
 # sed runs under LC_ALL=C: in a UTF-8 locale GNU sed's `.` stops at an invalid
 # byte, so `Authorization: ab<0xff>SECRET` leaked SECRET, and BSD sed refuses the
 # line outright. Byte semantics make both redact the whole value.
