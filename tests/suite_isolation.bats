@@ -104,9 +104,12 @@ _uv_ver() {
 }
 
 @test "mktemp failure stops the suite" {
-  mkfx ':'
-  run env _BATS_SENTINEL_TMP_ROOT="${BATS_TEST_TMPDIR}/missing" bats "${FX}/a.bats" < /dev/null
+  local _mark="${BATS_TEST_TMPDIR}/ran"
+  mkfx 'touch "${MARK}"'
+  run env MARK="${_mark}" _BATS_SENTINEL_TMP_ROOT="${BATS_TEST_TMPDIR}/missing" bats "${FX}/a.bats" < /dev/null
   [ "${status}" -eq 1 ]
+  # setup_suite must stop the run: the fixture test never executes.
+  [ ! -e "${_mark}" ]
   [[ "${output}" == *"not ok 1 setup_suite"* ]]
   [[ "${output}" == *"bats isolation: cannot create sentinel under"* ]]
 }
@@ -133,14 +136,37 @@ _uv_ver() {
 }
 
 @test "a nested failing setup never deletes an inherited sentinel" {
-  local _plant="${BATS_TEST_TMPDIR}/bats-sentinel.keep/home"
-  mkdir -p "${_plant}"
+  # Pins the outcome: a failed $(mktemp) assignment empties the variable anyway,
+  # so the inherited value must be neither used nor deleted. The plant is a
+  # valid sentinel path (basename bats-sentinel.*), so only the unset protects it.
+  local _plant="${BATS_TEST_TMPDIR}/bats-sentinel.keep"
+  mkdir -p "${_plant}/home"
   mkfx ':'
   run env _BATS_SENTINEL="${_plant}" _BATS_SENTINEL_TMP_ROOT="${BATS_TEST_TMPDIR}/missing" \
     bats "${FX}/a.bats" < /dev/null
   [ -d "${_plant}" ]
   [[ "${output}" == *"cannot create sentinel under"* ]]
   [[ "${output}" == *"no sentinel to check"* ]]
+}
+
+@test "an inherited exported _BATS_SENTINEL does not leak into tests" {
+  local _plant="${BATS_TEST_TMPDIR}/bats-sentinel.inherit"
+  mkdir -p "${_plant}/home"
+  mkfx 'env > "${OUT}"'
+  run env _BATS_SENTINEL="${_plant}" OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
+  [ "${status}" -eq 0 ]
+  # `!` does not trip errexit mid-test, so branch explicitly.
+  if command grep -q '^_BATS_SENTINEL=' "${OUT}"; then return 1; fi
+  [ -d "${_plant}" ]
+}
+
+@test "guard refuses a sentinel-named path that does not exist" {
+  # shellcheck disable=SC1090 # HELPER is derived from BATS_TEST_DIRNAME in setup(); path is tests/helpers/suite_isolation.bash
+  source "${HELPER}"
+  _BATS_SENTINEL="${BATS_TEST_TMPDIR}/bats-sentinel.gone"
+  run teardown_suite
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"bats isolation: no sentinel to check"* ]]
 }
 
 @test "a failed removal is reported even when rm exits 0" {
