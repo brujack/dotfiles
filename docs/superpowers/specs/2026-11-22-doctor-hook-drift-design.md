@@ -174,6 +174,10 @@ existing rc 2 path, and the fail-closed `*)` arm still FAILs any unknown word.
 - **N3.** No added code runs a git clean or smudge filter; every added `git hash-object` call passes `--no-filters`.
 - **N4.** For regular-file hooks and generated shims, every identity word is printed for exactly the inputs it was before; `worktree`, `foreign` and `stale` for symlinks are printed for exactly the inputs they were before.
 
+## Amendments
+
+- R8 -> `_doctor_check_git_hooks` reads the identity line's third and fourth TAB-separated fields as `<default>` and `<candidate>` and, for `drift`, calls `doctor_fail` when `git symbolic-ref --short -q HEAD` names `master` or `main` and `doctor_warn` otherwise, each with the message `<hook> drifts: <reason> — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change`. — operator, 2026-11-22: drift on the default branch is the observed hazard (a dirty hook in the main checkout on master), so it fails closed like `stale`; off the default branch it stays a warning.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `531c10f4` (round 1, first draft; the body above is the revision)
@@ -281,3 +285,25 @@ Report: [round1.md](2026-11-22-doctor-hook-drift-design.external-review/round1.m
 | F1.5 | Fixed | Round 1 Ergonomics and Risk dispositions annotated as superseded (V4 removed; R8 is now R6). | unjudged | accepted as fixed (2026-11-22) |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Spec alignment (2026-11-22)
+
+- spec: docs/superpowers/specs/2026-11-22-doctor-hook-drift-design.md
+- anchor: a2ec342e6d3a1baff576b5165f3b45fd3d03b06b
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: Task 1 spec review: comparing against the working-tree file instead of the default-branch blob turned 4 identity tests red (drift cases incl. 'dirty target is drift with reason, default branch and candidate fields').
+- V2: _doctor_check_git_hooks from the branch on claude, 2026-11-22: all 9 repos PASS, no drift or error line.
+- V3: Task 2 spec review, scratch HOME/GITREPOS clone with symlinked hooks: editing scripts/pre-push printed '[WARN] dotfiles: pre-push drifts: scripts/pre-push differs from master — remedy: ...' (clone off the default branch, so WARN per amended R8); after git checkout -- scripts/pre-push the pass line returned.

@@ -293,14 +293,90 @@ _git_hooks_phys_path() {
   printf '%s\n' "${_p}"
 }
 
+# A symlink executes the live working-tree file, so it is judged against the
+# committed default-branch blob; a copy's bytes are frozen at install time, so
+# copies keep the working-tree comparison (spec 2026-11-22-doctor-hook-drift,
+# Design 1).
+# _git_hooks_symlink_content_check judges a symlink whose target is the repo's
+# own candidate file: the target's bytes must equal the candidate's blob on the
+# local default branch (main or master; HEAD's name when both exist). Local refs
+# only, no network, no filters. Prints `match` (rc 0), a four-field
+# `drift<TAB>reason<TAB>default<TAB>candidate` line (rc 1), or
+# `error<TAB>reason` (rc 2).
+_git_hooks_symlink_content_check() {
+  local _repo_dir="$1"
+  local _cand="$2"
+  local _target="$3"
+  local _default="" _has_main=0 _has_master=0 _head _target_hash _blob_hash _rc
+
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" show-ref --verify -q refs/heads/main 2>/dev/null && _has_main=1
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" show-ref --verify -q refs/heads/master 2>/dev/null && _has_master=1
+
+  if [[ ${_has_main} -eq 1 && ${_has_master} -eq 1 ]]; then
+    _head="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      git -C "${_repo_dir}" symbolic-ref --short -q HEAD 2>/dev/null)"
+    case "${_head}" in
+      main | master) _default="${_head}" ;;
+      *)
+        printf 'error\tboth main and master exist\n'
+        return 2
+        ;;
+    esac
+  elif [[ ${_has_main} -eq 1 ]]; then
+    _default="main"
+  elif [[ ${_has_master} -eq 1 ]]; then
+    _default="master"
+  else
+    printf 'error\tno local main or master branch\n'
+    return 2
+  fi
+
+  _target_hash="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" hash-object --no-filters "${_target}" 2>/dev/null)"
+  _rc=$?
+  if [[ ${_rc} -ne 0 || -z "${_target_hash}" ]]; then
+    printf 'error\tcannot hash %s\n' "${_target}"
+    return 2
+  fi
+
+  _blob_hash="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" rev-parse --verify -q "refs/heads/${_default}:${_cand}" 2>/dev/null)"
+  _rc=$?
+  if [[ ${_rc} -eq 1 ]]; then
+    printf 'drift\t%s is not on %s\t%s\t%s\n' "${_cand}" "${_default}" "${_default}" "${_cand}"
+    return 1
+  elif [[ ${_rc} -ne 0 ]]; then
+    printf 'error\tcannot read refs/heads/%s:%s (rc %s)\n' "${_default}" "${_cand}" "${_rc}"
+    return 2
+  fi
+
+  if [[ "${_target_hash}" == "${_blob_hash}" ]]; then
+    printf 'match\n'
+    return 0
+  fi
+  printf 'drift\t%s differs from %s\t%s\t%s\n' "${_cand}" "${_default}" "${_default}" "${_cand}"
+  return 1
+}
+
 # _git_hooks_identity judges whether HOOK_PATH (an installed hook of REPO_DIR)
 # is that repo's own script for HOOK_NAME. Prints one word, plus a TAB and a
-# reason for generated-broken, generated-unverified and an rc 2 result:
-#   match (rc 0)                -- a symlink to, or a byte copy of, a source
-#                                  candidate: a tracked path whose basename is
-#                                  HOOK_NAME or HOOK_NAME-hook.sh. Matching by
-#                                  name is what stops a pre-commit that is a
-#                                  copy of the repo's own pre-push passing.
+# reason for generated-broken, generated-unverified and an rc 2 result, and
+# for drift the reason, default branch and candidate as further TAB fields:
+#   match (rc 0)                -- a byte copy of a source candidate, or a
+#                                  symlink to one whose bytes equal the
+#                                  candidate's blob on the local default branch
+#                                  (main or master). A candidate is a tracked
+#                                  path whose basename is HOOK_NAME or
+#                                  HOOK_NAME-hook.sh. Matching by name is what
+#                                  stops a pre-commit that is a copy of the
+#                                  repo's own pre-push passing.
+#   drift (rc 1)                -- a symlink to a candidate whose bytes differ
+#                                  from the default-branch blob, or whose path
+#                                  is not on the default branch. Prints four
+#                                  TAB fields: drift, reason, default branch,
+#                                  candidate.
 #   generated (rc 0)            -- a pre-commit shim (judged only when the repo
 #                                  tracks no candidate) whose own interpreter
 #                                  imports pre_commit here.
@@ -316,8 +392,11 @@ _git_hooks_phys_path() {
 #                                  non-candidate in the main working tree, or a
 #                                  symlink to a candidate whose file is missing.
 #   foreign (rc 1)              -- a symlink outside the repo and its worktrees.
-#   error (rc 2)                -- `git ls-files` failed or HOOK_PATH is
-#                                  unreadable.
+#   error (rc 2)                -- `git ls-files` failed, HOOK_PATH is
+#                                  unreadable, the default branch is ambiguous
+#                                  (main and master both exist, HEAD on neither)
+#                                  or absent, the target cannot be hashed, or
+#                                  the default-branch blob cannot be read.
 # The shim is read as text only (never sourced or evaluated): INSTALL_PYTHON
 # is attacker-shaped data as far as this function is concerned. The probe
 # runs the interpreter with -I so the caller's working directory and
@@ -367,8 +446,8 @@ _git_hooks_identity() {
     }
     for _cand in "${_cands[@]}"; do
       if [[ "${_target}" == "${_repo_phys}/${_cand}" && -f "${_target}" ]]; then
-        printf 'match\n'
-        return 0
+        _git_hooks_symlink_content_check "${_repo_dir}" "${_cand}" "${_target}"
+        return $?
       fi
     done
     # The first porcelain entry is the main working tree; the rest are linked.

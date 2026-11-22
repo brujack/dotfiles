@@ -418,3 +418,68 @@ run_arm() {
   [ -n "${_prev_line}" ]
   [ "$(sed -n "$(( _prev_line + 1 ))p" "${_src}")" = "  _doctor_check_git_hooks" ]
 }
+
+# make_symlinked_repo <name> [branch] -- make_repo, then every mandated hook is
+# a symlink into the repo's own scripts/ (how a symlink-installed checkout looks).
+make_symlinked_repo() {
+  local _d="${PERSONAL_GITREPOS}/$1" _h
+  make_repo "$1" with_precommit
+  if [[ -n "${2:-}" && "$2" != master ]]; then
+    git -C "${_d}" branch -m "$2"
+  fi
+  for _h in pre-push commit-msg; do
+    rm "${_d}/.git/hooks/${_h}"
+    ln -s "../../scripts/${_h}" "${_d}/.git/hooks/${_h}"
+  done
+  rm "${_d}/.git/hooks/pre-commit"
+  ln -s ../../scripts/pre-commit-hook.sh "${_d}/.git/hooks/pre-commit"
+}
+
+@test "doctor git hooks: a symlinked hook that drifts on master fails with the inspect-then-clean remedy" {
+  make_symlinked_repo alpha master
+  local _d="${PERSONAL_GITREPOS}/alpha"
+  printf '# edit\n' >> "${_d}/scripts/pre-push"
+  HOOK_EXPECTED_REPOS=(alpha)
+  run_arm
+  grep -qF "alpha: pre-push drifts: scripts/pre-push differs from master — remedy: inspect with git -C ${_d} diff master -- scripts/pre-push, then return ${_d} to a clean master once no session owns the change" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+  [ "${_DOCTOR_PASS}" -eq 0 ]
+}
+
+@test "doctor git hooks: a symlinked hook that drifts on main fails and names main in the remedy" {
+  make_symlinked_repo alpha main
+  local _d="${PERSONAL_GITREPOS}/alpha"
+  printf '# edit\n' >> "${_d}/scripts/pre-push"
+  HOOK_EXPECTED_REPOS=(alpha)
+  run_arm
+  grep -qF "alpha: pre-push drifts: scripts/pre-push differs from main — remedy: inspect with git -C ${_d} diff main -- scripts/pre-push, then return ${_d} to a clean main once no session owns the change" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+}
+
+@test "doctor git hooks: a clean symlinked repo passes with no drift line" {
+  make_symlinked_repo alpha master
+  # shellcheck disable=SC2034 # read by _doctor_check_git_hooks (lib/helpers.sh) through run_arm
+  HOOK_EXPECTED_REPOS=(alpha)
+  run_arm
+  command grep -qF "alpha: pre-commit pre-push commit-msg installed" "${OUT}"
+  if command grep -qF "drifts:" "${OUT}"; then return 1; fi
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+}
+
+@test "doctor: symlinked hook drift on a feature branch names the default branch in the remedy" {
+  make_symlinked_repo alpha master
+  local _d="${PERSONAL_GITREPOS}/alpha"
+  git -C "${_d}" checkout -q -b feat
+  printf '# edit\n' >> "${_d}/scripts/pre-push"
+  # shellcheck disable=SC2034 # read by _doctor_check_git_hooks (lib/helpers.sh) through run_arm
+  HOOK_EXPECTED_REPOS=(alpha)
+  run_arm
+  command grep -qF "diff master -- scripts/pre-push" "${OUT}"
+  command grep -qF "return ${_d} to a clean master" "${OUT}"
+  if command grep -qF "diff feat" "${OUT}"; then return 1; fi
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+}
