@@ -1624,27 +1624,17 @@ _doctor_brew_links_names() {
 # for a rejected one). Both streams are discarded so no key can reach the report.
 _doctor_check_ggshield() {
   printf "\nggshield:\n"
-  local _gg="" _cand _timeout_bin _rc=0 _limit="${_DOCTOR_PROBE_TIMEOUT:-10}"
-  local -a _cands
+  local _gg="" _timeout_bin _rc=0 _limit="${_DOCTOR_PROBE_TIMEOUT:-10}"
   if [[ -n "${GGSHIELD_BIN:-}" ]]; then
-    if [[ ! -x "${GGSHIELD_BIN}" ]]; then
+    if [[ ! -f "${GGSHIELD_BIN}" || ! -x "${GGSHIELD_BIN}" ]]; then
       doctor_fail "ggshield" "GGSHIELD_BIN=${GGSHIELD_BIN} is not executable"
       return 0
     fi
     _gg="${GGSHIELD_BIN}"
   else
-    _gg="$(command -v ggshield 2>/dev/null)" || _gg=""
-    if [[ "${_gg}" != /* || ! -x "${_gg}" ]]; then
-      _gg=""
-      read -ra _cands <<< "${GGSHIELD_FALLBACK_PATHS:-/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield}"
-      for _cand in "${_cands[@]}"; do
-        if [[ -x "${_cand}" ]]; then
-          _gg="${_cand}"
-          break
-        fi
-      done
-    fi
+    _gg="$(_doctor_resolve_executable ggshield "${GGSHIELD_FALLBACK_PATHS:-/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield}")"
   fi
+
   if [[ -z "${_gg}" ]]; then
     doctor_fail "ggshield" "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"
     return 0

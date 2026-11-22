@@ -95,6 +95,16 @@ run_arm() {
   run_arm
   grep -qF "GGSHIELD_BIN=${BATS_TEST_TMPDIR}/not-exec is not executable" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ ! -e "${STUB_GGSHIELD_CALLS}" ]
+}
+
+@test "doctor ggshield: a GGSHIELD_BIN that is a directory is a FAIL" {
+  mkdir -p "${BATS_TEST_TMPDIR}/adir"
+  export GGSHIELD_BIN="${BATS_TEST_TMPDIR}/adir"
+  run_arm
+  grep -qF "GGSHIELD_BIN=${BATS_TEST_TMPDIR}/adir is not executable" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_PASS}" -eq 0 ]
 }
 
 @test "doctor ggshield: no timeout binary is a WARN and ggshield never runs" {
@@ -116,7 +126,7 @@ run_arm() {
   ln -s "${STUB}" "${_bin}/ggshield"
   unset GGSHIELD_BIN
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
-  PATH="/usr/bin:/bin:${_bin}" _doctor_check_ggshield > "${OUT}" 2>&1
+  PATH="${_bin}:/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
   grep -qF "${_bin}/ggshield: authenticated" "${OUT}"
   [ "${_DOCTOR_PASS}" -eq 1 ]
 }
@@ -125,9 +135,21 @@ run_arm() {
   unset GGSHIELD_BIN
   export GGSHIELD_FALLBACK_PATHS="/nonexistent/a ${STUB}"
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
-  mkdir -p "${BATS_TEST_TMPDIR}/empty"
-  PATH="${BATS_TEST_TMPDIR}/empty:/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
+  # Only what the stub needs on PATH: a machine with /usr/bin/ggshield cannot win.
+  mkdir -p "${BATS_TEST_TMPDIR}/tonly"
+  local _t
+  for _t in timeout bash sleep; do
+    ln -s "$(readlink -f "$(command -v "${_t}")")" "${BATS_TEST_TMPDIR}/tonly/${_t}"
+  done
+  PATH="${BATS_TEST_TMPDIR}/tonly" _doctor_check_ggshield > "${OUT}" 2>&1
   grep -qF "${STUB}: authenticated" "${OUT}"
+}
+
+@test "doctor ggshield: the probe runs from the root directory" {
+  mkdir -p "${BATS_TEST_TMPDIR}/elsewhere"
+  cd "${BATS_TEST_TMPDIR}/elsewhere"
+  run_arm
+  [ "$(cut -d' ' -f2- "${STUB_GGSHIELD_CALLS}")" = "/" ]
 }
 
 @test "doctor ggshield: the probe runs and a fake key never reaches the output" {
@@ -180,4 +202,33 @@ run_arm() {
   [ "${_a}" -lt "${_b}" ]
   [ "${_b}" -lt "${_c}" ]
   [ "${_c}" -lt "${_d}" ]
+}
+
+# scan_doctor_subprocess_lines <file>... -- prints file:line for every non-comment
+# line that runs the setup script in doctor mode without GGSHIELD_BIN= on it.
+scan_doctor_subprocess_lines() {
+  awk '
+    /^[[:space:]]*#/ || /^@test/ { next }
+    /setup_env\.sh"? -t doctor/ && !/GGSHIELD_BIN=/ { print FILENAME ":" FNR }
+  ' "$@"
+}
+
+@test "doctor ggshield: the scanner reports a doctor subprocess line without GGSHIELD_BIN" {
+  local _f="${BATS_TEST_TMPDIR}/fixture.bats"
+  # The "-t" and "doctor" words are joined at run time so this file's own lines
+  # stay clear of the scanner under test.
+  local _cmd='bash "${x}/setup_env.sh" -t'" doctor"
+  printf '%s\n' "  run ${_cmd}" \
+    "  GGSHIELD_BIN=/s run ${_cmd}" \
+    "  # run ${_cmd}" > "${_f}"
+  [ "$(scan_doctor_subprocess_lines "${_f}")" = "${_f}:1" ]
+}
+
+@test "doctor ggshield: every tracked doctor subprocess test sets GGSHIELD_BIN" {
+  local -a _files
+  mapfile -t _files < <(cd "${REPO_ROOT}" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git ls-files 'tests/*.bats')
+  [ "${#_files[@]}" -gt 0 ]
+  local _bad
+  _bad="$(cd "${REPO_ROOT}" && scan_doctor_subprocess_lines "${_files[@]}")"
+  [ -z "${_bad}" ] || { printf 'unguarded doctor subprocess: %s\n' "${_bad}" >&2; false; }
 }
