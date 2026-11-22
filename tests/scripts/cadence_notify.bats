@@ -538,3 +538,16 @@ _detector_stderr() {  # $1 = exit code, $2 = stderr line, $3... = stdout lines
   command grep -q 'errline-100' "${_RHN_NTFY_LOG}"
   run ! command grep -q 'errline-1$' "${_RHN_NTFY_LOG}"
 }
+
+# GNU sed's `.` does not cross an invalid byte in a UTF-8 locale, so the
+# Authorization value after it survived redaction until sed ran under LC_ALL=C.
+@test "an invalid byte in a UTF-8 locale cannot hide the rest of an Authorization value" {
+  local _d="${BATS_TEST_TMPDIR}/detector"
+  printf '#!/usr/bin/env bash\nprintf "Authorization: ab\\377fixture-after-byte\\n" >&2\nexit 2\n' > "${_d}"
+  chmod +x "${_d}"
+  LC_ALL=C.UTF-8 run bash "${SCRIPT}" "${NAME}" "${_d}"
+  [ "$status" -eq 2 ]
+  command grep -q 'Authorization: \[REDACTED\]' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'fixture-after-byte' "${_RHN_NTFY_LOG}"
+}
+

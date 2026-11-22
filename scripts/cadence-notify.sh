@@ -99,13 +99,16 @@ _rhn_ntfy_target() {
 #
 # The password is replaced by parameter expansion, never sed: no second process,
 # so the credential never crosses a process boundary. The patterns are POSIX ERE
-# so one sed invocation behaves the same on GNU and BSD.
+# with spelled-out case classes ([Aa][Uu]...) because BSD sed has no I flag.
+# sed runs under LC_ALL=C: in a UTF-8 locale GNU sed's `.` stops at an invalid
+# byte, so `Authorization: ab<0xff>SECRET` leaked SECRET, and BSD sed refuses the
+# line outright. Byte semantics make both redact the whole value.
 _rhn_redact() {
     local _msg="$1"
     if [[ -n "${NTFY_PASSWORD:-}" ]]; then
         _msg="${_msg//"${NTFY_PASSWORD}"/[REDACTED]}"
     fi
-    printf '%s' "${_msg}" | sed -E \
+    printf '%s' "${_msg}" | LC_ALL=C sed -E \
         -e 's/gh[pousr]_[A-Za-z0-9]{20,}/[REDACTED]/g' \
         -e 's/github_pat_[A-Za-z0-9_]{20,}/[REDACTED]/g' \
         -e 's/([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn][[:space:]]*[:=][[:space:]]*)[^[:space:]].*/\1[REDACTED]/' \
