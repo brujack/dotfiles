@@ -396,3 +396,35 @@ Report: [round1.md](2026-11-21-bats-sentinel-home-design.external-review/round1.
 | F1.2 | Fixed | V7 (was V9) uses `strace -f -qq -e trace=%file -e status=successful` on `claude` and `workstation` (strace 6.19 present on both, `ptrace_scope` 1) and lists write-flagged calls under the real `$HOME`; the Studio diffs `find -newer` against an equal-length window with no suite. | unjudged | |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Amendments
+
+- finding R9 (2026-11-22, reviewer A): DIFFERS — All required tests exist, but the inherited-sentinel test asserts only the substrings 'cannot create sentinel under' and 'no sentinel to check', not the spec's literal 'bats isolation: cannot create sentinel under' and 'bats isolation: no sentinel to check', so it would pass on output lacking the 'bats isolation:' prefix (the other tests assert the full strings).
+- R9 reviewed: the `bats isolation: ` prefix of both messages is pinned by other tests in tests/suite_isolation.bats: the mktemp-failure test asserts `bats isolation: cannot create sentinel under` and the three guard tests assert `bats isolation: no sentinel to check`, so a helper dropping the prefix fails four tests; the inherited-sentinel test's job is that the planted directory survives and both branches ran, which its substring checks establish.
+
+## Spec alignment (2026-11-22)
+
+- spec: docs/superpowers/specs/2026-11-21-bats-sentinel-home-design.md
+- anchor: 4124de9ff48ade717f1afd82b8573ca1b58b38e0
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R9 | A | DIFFERS | All required tests exist, but the inherited-sentinel test asserts only the substrings 'cannot create sentinel under' and 'no sentinel to check', not the spec's literal 'bats isolation: cannot create sentinel under' and 'bats isolation: no sentinel to check', so it would pass on output lacking the 'bats isolation:' prefix (the other tests assert the full strings). | - R9 reviewed: the `bats isolation: ` prefix of both messages is pinned by other tests in tests/suite_isolation.bats: the mktemp-failure test asserts `bats isolation: cannot create sentinel under` and the three guard tests assert `bats isolation: no sentinel to check`, so a helper dropping the prefix fails four tests; the inherited-sentinel test's job is that the planted directory survives and both branches ran, which its substring checks establish. |
+
+### Reviewed
+
+- R9 reviewed: the `bats isolation: ` prefix of both messages is pinned by other tests in tests/suite_isolation.bats: the mktemp-failure test asserts `bats isolation: cannot create sentinel under` and the three guard tests assert `bats isolation: no sentinel to check`, so a helper dropping the prefix fails four tests; the inherited-sentinel test's job is that the planted directory survives and both branches ran, which its substring checks establish.
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
+- V4: no evidence recorded
+- V5: no evidence recorded
+- V6: no evidence recorded
+- V7: no evidence recorded
