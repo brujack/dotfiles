@@ -66,6 +66,7 @@ tests/setup_env/extracted_functions.bats
 tests/setup_env/fetched_binary.bats
 tests/setup_env/flatpak.bats
 tests/setup_env/git_hooks.bats
+tests/setup_env/git_hooks_identity.bats
 tests/setup_env/git_sync.bats
 tests/setup_env/install_functions.bats
 tests/setup_env/install_guards.bats
