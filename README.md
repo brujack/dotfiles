@@ -365,7 +365,7 @@ dotfiles/
 │   ├── setup_env/            # BATS tests (unit, profiles, install_guards, etc.)
 │   ├── zshrc.d/              # BATS tests for zsh config modules
 │   ├── mocks/                # PATH-injected mock executables
-│   └── helpers/
+│   └── helpers/              # shared bats helpers; suite_isolation.bash gives every run a sentinel HOME (ADR-0060)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml            # test-shard (3 legs) + test gate + lint-macos + test-macos-shard (3 legs) + test-macos gate + powershell + secret-scan + auto-merge
@@ -467,6 +467,8 @@ gh pr create
 ## Testing
 
 Uses [BATS](https://github.com/bats-core/bats-core) (Bash Automated Testing System), installed natively.
+
+Every bats invocation, `make` or a direct `bats tests/x.bats`, runs under a throwaway `HOME`, XDG dirs and `/dev/null` git config, set up by bats' own `setup_suite` hooks in `tests/helpers/suite_isolation.bash` ([ADR-0060](docs/adr/0060-bats-suite-hooks-sentinel-home.md)); a new test directory needs its own `setup_suite.bash`.
 
 ```bash
 make test          # lint + Python tests + all BATS tests (parallel; override with JOBS=N, force serial with HAVE_PARALLEL=)
