@@ -1,7 +1,8 @@
 # Doctor checks: installed hooks and ggshield authentication
 
 **Date:** 2026-11-22
-**Status:** Draft (revised after external review round 1)
+**Status:** Approved
+- **Approved:** 2026-11-22
 **Source:** security audit 2026-11-16, findings F5, F6 and F10 (ai-config
 `docs/knowledge/dotfiles-security-audit-2026-11-16.md`).
 
@@ -436,13 +437,13 @@ Report: [round1.md](2026-11-22-doctor-hook-and-ggshield-checks-design.external-r
 
 | finding | disposition | evidence | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | -------- | ---------------- | ----------------- |
-| F1.1 | Fixed | ggshield table and R18 map `quota` rc 1 and 4 to `doctor_warn "<path>" "could not reach GitGuardian (rc <rc>)"`; test list expects WARN for 1 and 4; V5 added (dead proxy expects WARN). | unjudged | |
-| F1.2 | Fixed | R20 requires each test to set `GGSHIELD_BIN` to the stub or run under a scoped `/usr/bin:/bin` `PATH`, and adds a test that reaches the `command -v` branch via the stub on that `PATH`. | unjudged | |
-| F1.3 | Fixed | Premise and the rejected `generated-fallback` rationale now say interactive zsh sets `PYENV_VERSION` (`7_final.zsh` `pyenv activate ansible`, `claude` maps to `WORKSTATION`); confirmed by reading both files. Only non-interactive callers fail. Verdict unchanged. | unjudged | |
-| F1.4 | Fixed | Every `doctor_fail`/`doctor_warn` form is now two-argument (`"<name>" "<message>"`, `"ggshield"`, `"git hooks"`); `lib/helpers.sh` `doctor_fail`/`doctor_warn` print `"%s: %s"`, `doctor_pass` one `%s`, confirmed by reading. | unjudged | |
-| F1.5 | Fixed | Probe is `"$INSTALL_PYTHON" -I -c 'import pre_commit'` in the design and R9; R28 adds a test with `pre_commit.py` in the working directory and on `PYTHONPATH`. | unjudged | |
-| F1.6 | Fixed | Not measured here (the agent guard refuses `GIT_CONFIG_*` and `-c core.hooksPath`); ai-config ADR-0055 measured `--git-path hooks` following `core.hooksPath` on git 2.55.0. The arm now skips with one WARN when `_git_hooks_hookspath_offenders` prints anything (R27). | unjudged | |
-| F1.7 | Fixed | Empty `HOOK_EXPECTED_REPOS` gives its own FAIL naming `config/hook_repos.sh` (R26). | unjudged | |
-| F1.8 | Fixed | The probe runs in a subshell after `cd /` so no repo `.env` supplies the key, and the PASS line names `GITGUARDIAN_API_KEY` when it is set (R18). | unjudged | |
+| F1.1 | Fixed | ggshield table and R18 map `quota` rc 1 and 4 to `doctor_warn "<path>" "could not reach GitGuardian (rc <rc>)"`; test list expects WARN for 1 and 4; V5 added (dead proxy expects WARN). | unjudged | approved 2026-11-22 |
+| F1.2 | Fixed | R20 requires each test to set `GGSHIELD_BIN` to the stub or run under a scoped `/usr/bin:/bin` `PATH`, and adds a test that reaches the `command -v` branch via the stub on that `PATH`. | unjudged | approved 2026-11-22 |
+| F1.3 | Fixed | Premise and the rejected `generated-fallback` rationale now say interactive zsh sets `PYENV_VERSION` (`7_final.zsh` `pyenv activate ansible`, `claude` maps to `WORKSTATION`); confirmed by reading both files. Only non-interactive callers fail. Verdict unchanged. | unjudged | approved 2026-11-22 |
+| F1.4 | Fixed | Every `doctor_fail`/`doctor_warn` form is now two-argument (`"<name>" "<message>"`, `"ggshield"`, `"git hooks"`); `lib/helpers.sh` `doctor_fail`/`doctor_warn` print `"%s: %s"`, `doctor_pass` one `%s`, confirmed by reading. | unjudged | approved 2026-11-22 |
+| F1.5 | Fixed | Probe is `"$INSTALL_PYTHON" -I -c 'import pre_commit'` in the design and R9; R28 adds a test with `pre_commit.py` in the working directory and on `PYTHONPATH`. | unjudged | approved 2026-11-22 |
+| F1.6 | Fixed | Not measured here (the agent guard refuses `GIT_CONFIG_*` and `-c core.hooksPath`); ai-config ADR-0055 measured `--git-path hooks` following `core.hooksPath` on git 2.55.0. The arm now skips with one WARN when `_git_hooks_hookspath_offenders` prints anything (R27). | unjudged | approved 2026-11-22 |
+| F1.7 | Fixed | Empty `HOOK_EXPECTED_REPOS` gives its own FAIL naming `config/hook_repos.sh` (R26). | unjudged | approved 2026-11-22 |
+| F1.8 | Fixed | The probe runs in a subshell after `cd /` so no repo `.env` supplies the key, and the PASS line names `GITGUARDIAN_API_KEY` when it is set (R18). | unjudged | approved 2026-11-22 |
 
 Stopped: reviewer recommended stopping in round 1
