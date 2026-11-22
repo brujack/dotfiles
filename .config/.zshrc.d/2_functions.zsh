@@ -59,6 +59,28 @@ function sshu() {
   ssh ubuntu@$1
 }
 
+# with-gcloud-creds <command> [args...]: run one command with ~/.google_creds
+# loaded. The file used to be sourced at shell start, so every process the shell
+# spawned inherited the credential (security audit F3). Sourcing it in a
+# subshell scopes it to this command; allexport also exports plain VAR=value
+# lines, which the command would otherwise not see.
+with-gcloud-creds() {
+  if [[ $# -eq 0 ]]; then
+    print -u2 "usage: with-gcloud-creds <command> [args...]"
+    return 1
+  fi
+  if [[ ! -f "${HOME}/.google_creds" ]]; then
+    print -u2 "with-gcloud-creds: ${HOME}/.google_creds not found"
+    return 1
+  fi
+  (
+    setopt allexport
+    source "${HOME}/.google_creds" || exit 1
+    unsetopt allexport
+    "$@"
+  )
+}
+
 search_pkg() {
   if [ $# -eq 0 ]; then
     echo "No arguments supplied. Please provide the package to search for"
