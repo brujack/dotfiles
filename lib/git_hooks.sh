@@ -362,7 +362,8 @@ _git_hooks_symlink_content_check() {
 
 # _git_hooks_identity judges whether HOOK_PATH (an installed hook of REPO_DIR)
 # is that repo's own script for HOOK_NAME. Prints one word, plus a TAB and a
-# reason for generated-broken, generated-unverified and an rc 2 result:
+# reason for generated-broken, generated-unverified and an rc 2 result, and
+# for drift the reason, default branch and candidate as further TAB fields:
 #   match (rc 0)                -- a byte copy of a source candidate, or a
 #                                  symlink to one whose bytes equal the
 #                                  candidate's blob on the local default branch

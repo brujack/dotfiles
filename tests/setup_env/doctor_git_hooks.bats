@@ -463,8 +463,8 @@ make_symlinked_repo() {
   # shellcheck disable=SC2034 # read by _doctor_check_git_hooks (lib/helpers.sh) through run_arm
   HOOK_EXPECTED_REPOS=(alpha)
   run_arm
-  grep -qF "alpha: pre-commit pre-push commit-msg installed" "${OUT}"
-  if grep -qF "drifts:" "${OUT}"; then return 1; fi
+  command grep -qF "alpha: pre-commit pre-push commit-msg installed" "${OUT}"
+  if command grep -qF "drifts:" "${OUT}"; then return 1; fi
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
 }
@@ -477,9 +477,9 @@ make_symlinked_repo() {
   # shellcheck disable=SC2034 # read by _doctor_check_git_hooks (lib/helpers.sh) through run_arm
   HOOK_EXPECTED_REPOS=(alpha)
   run_arm
-  grep -qF "diff master -- scripts/pre-push" "${OUT}"
-  grep -qF "return ${_d} to a clean master" "${OUT}"
-  if grep -qF "diff feat" "${OUT}"; then return 1; fi
+  command grep -qF "diff master -- scripts/pre-push" "${OUT}"
+  command grep -qF "return ${_d} to a clean master" "${OUT}"
+  if command grep -qF "diff feat" "${OUT}"; then return 1; fi
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
 }
