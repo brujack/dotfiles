@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # lib/git_hooks.sh — discover personal repos carrying an install-hooks target
+#
+# _git_hooks_identity uses _doctor_resolve_timeout from lib/helpers.sh when it
+# is loaded, and falls back to `timeout` on PATH when this file is sourced alone.
 
 # HOOK_EXPECTED_REPOS is normally provided by config/hook_repos.sh (same
 # sourcing chain as detect_env.sh's config/profiles.sh). Define an empty
@@ -263,8 +266,9 @@ _git_hooks_check_complete() {
 }
 
 # _git_hooks_phys_path prints the physical (symlink-free) form of PATH,
-# following a final symlink through every level. A dangling final link still
-# resolves to the path it points at. Uses `cd -P`/`pwd -P` only, so it works
+# following a final symlink through every level. A dangling final link
+# resolves to the path it points at only when that target's parent directory
+# exists. Uses `cd -P`/`pwd -P` only, so it works
 # on BSD/macOS where `readlink -f` is not guaranteed. Returns 1 when a parent
 # directory is missing or the link chain loops.
 _git_hooks_phys_path() {
@@ -438,19 +442,34 @@ _git_hooks_identity() {
     printf 'generated-broken\tno INSTALL_PYTHON\n'
     return 1
   fi
+  # A relative value would be -x-tested against this cwd but exec'd through
+  # PATH by timeout, so the probe could verify a different interpreter.
+  # pre-commit always writes an absolute sys.executable.
+  if [[ "${_py}" != /* ]]; then
+    printf 'generated-broken\tINSTALL_PYTHON %s not absolute\n' "${_py}"
+    return 1
+  fi
   if [[ ! -f "${_py}" || ! -x "${_py}" ]]; then
     printf 'generated-broken\tINSTALL_PYTHON %s missing\n' "${_py}"
     return 1
   fi
 
   local _timeout_bin
-  _timeout_bin="$(_doctor_resolve_timeout)"
+  # lib/helpers.sh's resolver (with its fallback paths) when loaded; a bare
+  # `command -v timeout` when this file is sourced standalone.
+  if declare -F _doctor_resolve_timeout >/dev/null; then
+    _timeout_bin="$(_doctor_resolve_timeout)"
+  else
+    _timeout_bin="$(command -v timeout 2>/dev/null)"
+  fi
   if [[ -z "${_timeout_bin}" ]]; then
     printf 'generated-unverified\tno timeout binary\n'
     return 1
   fi
   "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_py}" -I -c 'import pre_commit' </dev/null >/dev/null 2>&1
   _rc=$?
+  # 124 is the only timeout exit code treated as unverified; timeout's own
+  # 125-127/137 fall through to generated-broken as before.
   if [[ ${_rc} -eq 124 ]]; then
     printf 'generated-unverified\tprobe timed out\n'
     return 1

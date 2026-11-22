@@ -352,3 +352,56 @@ write_shim() {
   [ "${status}" -eq 1 ]
   [ "${output}" = "generated-broken${TAB}${_py} cannot import pre_commit" ]
 }
+
+@test "shim: relative INSTALL_PYTHON is generated-broken not absolute, never run from cwd or PATH" {
+  make_repo
+  local canary="${TESTDIR}/canary"
+  mkdir -p "${TESTDIR}/cwd" "${TESTDIR}/bin"
+  printf '#!/bin/sh\ntouch %s\nexit 0\n' "${canary}" > "${TESTDIR}/cwd/python"
+  chmod +x "${TESTDIR}/cwd/python"
+  printf '#!/bin/sh\ntouch %s\nexit 0\n' "${canary}" > "${TESTDIR}/bin/python"
+  chmod +x "${TESTDIR}/bin/python"
+  write_shim "${HK}/pre-commit" "python" pre-commit
+  cd "${TESTDIR}/cwd"
+  PATH="${TESTDIR}/bin:${PATH}" run _git_hooks_identity "${REPO}" pre-commit "${HK}/pre-commit"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "generated-broken${TAB}INSTALL_PYTHON python not absolute" ]
+  [ ! -e "${canary}" ]
+}
+
+@test "shim: without _doctor_resolve_timeout the probe resolves timeout from PATH" {
+  command -v timeout >/dev/null || skip "no timeout on PATH"
+  make_repo
+  make_py "${TESTDIR}/py/python" 0
+  write_shim "${HK}/pre-commit" "${TESTDIR}/py/python" pre-commit
+  unset -f _doctor_resolve_timeout
+  run _git_hooks_identity "${REPO}" pre-commit "${HK}/pre-commit"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "generated" ]
+}
+
+@test "resolver: a two-link symlink loop is rc 2 cannot resolve" {
+  make_repo
+  ln -s "${TESTDIR}/loop-b" "${TESTDIR}/loop-a"
+  ln -s "${TESTDIR}/loop-a" "${TESTDIR}/loop-b"
+  ln -s "${TESTDIR}/loop-a" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 2 ]
+  [ "${output}" = "error${TAB}cannot resolve ${HK}/pre-push" ]
+}
+
+@test "resolver: a dangling link whose target parent is missing is rc 2" {
+  make_repo
+  ln -s "${TESTDIR}/no-such-dir/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 2 ]
+  [ "${output}" = "error${TAB}cannot resolve ${HK}/pre-push" ]
+}
+
+@test "resolver: a dangling link whose target parent exists is classified, not rc 2" {
+  make_repo
+  ln -s "${REPO}/scripts/gone" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "stale" ]
+}
