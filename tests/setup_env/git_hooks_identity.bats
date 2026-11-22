@@ -27,7 +27,7 @@ setup() {
 # pre-commit source (like state-ledger, whose pre-commit comes from pre-commit
 # itself) and does track .pre-commit-config.yaml.
 make_repo() {
-  git init -q "${REPO}"
+  git init -q -b master "${REPO}"
   mkdir -p "${REPO}/scripts"
   printf '#!/bin/sh\necho push\n' > "${REPO}/scripts/pre-push"
   printf '#!/bin/sh\necho msg\n' > "${REPO}/scripts/commit-msg"
@@ -413,4 +413,114 @@ write_shim() {
   run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
   [ "${status}" -eq 1 ]
   [ "${output}" = "stale" ]
+}
+
+# --- symlink content check against the default branch ---------------------
+
+@test "identity: main-only repo resolves its default branch and a clean symlink is match" {
+  make_repo
+  git -C "${REPO}" branch -m master main
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "match" ]
+}
+
+@test "identity: main-only repo with a dirty target reports drift naming main" {
+  make_repo
+  git -C "${REPO}" branch -m master main
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  printf 'echo dirty\n' >> "${REPO}/scripts/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "drift${TAB}scripts/pre-push differs from main${TAB}main${TAB}scripts/pre-push" ]
+}
+
+@test "identity: master-only repo clean symlink is match" {
+  make_repo
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "match" ]
+}
+
+@test "identity: both main and master with HEAD on main uses main as default branch (drift)" {
+  make_repo
+  git -C "${REPO}" branch main
+  git -C "${REPO}" checkout -q main
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  printf 'echo dirty\n' >> "${REPO}/scripts/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "drift${TAB}scripts/pre-push differs from main${TAB}main${TAB}scripts/pre-push" ]
+}
+
+@test "identity: both main and master with HEAD on a feature branch is an error (default branch ambiguous)" {
+  make_repo
+  git -C "${REPO}" branch main
+  git -C "${REPO}" checkout -q -b feature
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 2 ]
+  [ "${output}" = "error${TAB}both main and master exist" ]
+}
+
+@test "identity: neither main nor master is an error (no default branch)" {
+  make_repo
+  git -C "${REPO}" checkout -q -b feature
+  git -C "${REPO}" update-ref -d refs/heads/master
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 2 ]
+  [ "${output}" = "error${TAB}no local main or master branch" ]
+}
+
+@test "identity: clean match while HEAD is on a feature branch equal to the default branch" {
+  make_repo
+  git -C "${REPO}" checkout -q -b feature
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "match" ]
+}
+
+@test "identity: dirty target is drift with reason, default branch and candidate fields" {
+  make_repo
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  printf 'echo dirty\n' >> "${REPO}/scripts/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "drift${TAB}scripts/pre-push differs from master${TAB}master${TAB}scripts/pre-push" ]
+}
+
+@test "identity: candidate staged but never committed on the default branch is drift" {
+  make_repo
+  git -C "${REPO}" checkout -q -b feature
+  printf '#!/bin/sh\necho new\n' > "${REPO}/scripts/pre-commit-hook.sh"
+  git -C "${REPO}" add scripts/pre-commit-hook.sh
+  git -C "${REPO}" commit -q -m "add candidate on feature only"
+  ln -s "${REPO}/scripts/pre-commit-hook.sh" "${HK}/pre-commit"
+  run _git_hooks_identity "${REPO}" pre-commit "${HK}/pre-commit"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "drift${TAB}scripts/pre-commit-hook.sh is not on master${TAB}master${TAB}scripts/pre-commit-hook.sh" ]
+}
+
+@test "identity: unreadable target is an error naming cannot hash" {
+  [[ "$(id -u)" -ne 0 ]] || skip "root reads a chmod 000 file"
+  make_repo
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  chmod 000 "${REPO}/scripts/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  chmod 644 "${REPO}/scripts/pre-push"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == "error${TAB}cannot hash "* ]]
+}
+
+@test "identity: regular-file copy of a dirty working-tree file is still match" {
+  make_repo
+  printf 'echo dirty\n' >> "${REPO}/scripts/pre-push"
+  cp "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "match" ]
 }
