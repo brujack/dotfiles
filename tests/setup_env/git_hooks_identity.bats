@@ -444,15 +444,32 @@ write_shim() {
   [ "${output}" = "match" ]
 }
 
-@test "identity: both main and master with HEAD on main uses main as default branch (drift)" {
+@test "identity: both main and master with HEAD on main uses main as default branch (match)" {
   make_repo
   git -C "${REPO}" branch main
+  # master gets different committed bytes; main keeps the original blob.
+  printf 'echo master-only\n' >> "${REPO}/scripts/pre-push"
+  git -C "${REPO}" commit -q -am "master diverges"
   git -C "${REPO}" checkout -q main
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "match" ]
+}
+
+@test "identity: both main and master with HEAD on master uses master as default branch (drift)" {
+  make_repo
+  git -C "${REPO}" branch main
+  # main gets different committed bytes; master keeps the original blob.
+  git -C "${REPO}" checkout -q main
+  printf 'echo main-only\n' >> "${REPO}/scripts/pre-push"
+  git -C "${REPO}" commit -q -am "main diverges"
+  git -C "${REPO}" checkout -q master
   ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
   printf 'echo dirty\n' >> "${REPO}/scripts/pre-push"
   run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
   [ "${status}" -eq 1 ]
-  [ "${output}" = "drift${TAB}scripts/pre-push differs from main${TAB}main${TAB}scripts/pre-push" ]
+  [ "${output}" = "drift${TAB}scripts/pre-push differs from master${TAB}master${TAB}scripts/pre-push" ]
 }
 
 @test "identity: both main and master with HEAD on a feature branch is an error (default branch ambiguous)" {
@@ -493,7 +510,7 @@ write_shim() {
   [ "${output}" = "drift${TAB}scripts/pre-push differs from master${TAB}master${TAB}scripts/pre-push" ]
 }
 
-@test "identity: candidate staged but never committed on the default branch is drift" {
+@test "identity: candidate committed only on a feature branch is drift (not on default)" {
   make_repo
   git -C "${REPO}" checkout -q -b feature
   printf '#!/bin/sh\necho new\n' > "${REPO}/scripts/pre-commit-hook.sh"

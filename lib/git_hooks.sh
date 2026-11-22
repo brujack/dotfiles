@@ -293,6 +293,10 @@ _git_hooks_phys_path() {
   printf '%s\n' "${_p}"
 }
 
+# A symlink executes the live working-tree file, so it is judged against the
+# committed default-branch blob; a copy's bytes are frozen at install time, so
+# copies keep the working-tree comparison (spec 2026-11-22-doctor-hook-drift,
+# Design 1).
 # _git_hooks_symlink_content_check judges a symlink whose target is the repo's
 # own candidate file: the target's bytes must equal the candidate's blob on the
 # local default branch (main or master; HEAD's name when both exist). Local refs
