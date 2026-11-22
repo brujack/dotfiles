@@ -976,7 +976,7 @@ _doctor_check_git_hooks() {
   fi
 
   local _name _dir _remedy_dir _hooks_dir _missing _rc _hook _hook_path
-  local _out _word _reason _default _cand _branch _wt _faulty _found=0 _m _remedies _r _seen
+  local _out _word _reason _default _cand _msg _branch _wt _faulty _found=0 _m _remedies _r _seen
   for _name in "${_repos[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
     if [[ ! -d "${_dir}" ]]; then
@@ -1057,7 +1057,13 @@ _doctor_check_git_hooks() {
           doctor_warn "${_name}" "${_hook} pre-commit shim not verified (${_reason})"
           _faulty=1 ;;
         drift)
-          doctor_warn "${_name}" "${_hook} drifts: ${_reason} — remedy: inspect with git -C ${_dir} diff ${_default} -- ${_cand}, then return ${_dir} to a clean ${_default} once no session owns the change"
+          _msg="${_hook} drifts: ${_reason} — remedy: inspect with git -C ${_dir} diff ${_default} -- ${_cand}, then return ${_dir} to a clean ${_default} once no session owns the change"
+          _branch="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+            git -C "${_dir}" symbolic-ref --short -q HEAD 2>/dev/null)" || _branch=""
+          case "${_branch}" in
+            master|main) doctor_fail "${_name}" "${_msg}" ;;
+            *) doctor_warn "${_name}" "${_msg}" ;;
+          esac
           _faulty=1 ;;
         *)
           # Fail closed: an identity word this arm does not know is not a pass.
