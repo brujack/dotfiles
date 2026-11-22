@@ -664,6 +664,7 @@ run_doctor() {
   _doctor_check_repo_sessions
   _doctor_check_hooks_path
   _doctor_check_git_hooks
+  _doctor_check_ggshield
   _doctor_check_versions
   _doctor_check_aws_key_expiry
   _doctor_check_gnu_coreutils
@@ -1614,6 +1615,62 @@ _doctor_brew_links_names() {
     _shown+=", … $(( $# - _max )) more"
   fi
   printf '%s' "${_shown}"
+}
+
+# _doctor_check_ggshield judges whether ggshield resolves and holds a working
+# key. It resolves ggshield itself (GGSHIELD_BIN, PATH, then the same fallback
+# list as scripts/pre-commit-hook.sh; a test pins the two lists equal) and runs
+# `ggshield quota`, which exits 0 only for an accepted key (`api-status` exits 0
+# for a rejected one). Both streams are discarded so no key can reach the report.
+_doctor_check_ggshield() {
+  printf "\nggshield:\n"
+  local _gg="" _cand _timeout_bin _rc=0 _limit="${_DOCTOR_PROBE_TIMEOUT:-10}"
+  local -a _cands
+  if [[ -n "${GGSHIELD_BIN:-}" ]]; then
+    if [[ ! -x "${GGSHIELD_BIN}" ]]; then
+      doctor_fail "ggshield" "GGSHIELD_BIN=${GGSHIELD_BIN} is not executable"
+      return 0
+    fi
+    _gg="${GGSHIELD_BIN}"
+  else
+    _gg="$(command -v ggshield 2>/dev/null)" || _gg=""
+    if [[ "${_gg}" != /* || ! -x "${_gg}" ]]; then
+      _gg=""
+      read -ra _cands <<< "${GGSHIELD_FALLBACK_PATHS:-/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield}"
+      for _cand in "${_cands[@]}"; do
+        if [[ -x "${_cand}" ]]; then
+          _gg="${_cand}"
+          break
+        fi
+      done
+    fi
+  fi
+  if [[ -z "${_gg}" ]]; then
+    doctor_fail "ggshield" "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"
+    return 0
+  fi
+
+  _timeout_bin="$(_doctor_resolve_timeout)"
+  if [[ -z "${_timeout_bin}" ]]; then
+    doctor_warn "${_gg}" "found; API key not verified (no timeout binary)"
+    return 0
+  fi
+  # cd / so the probe never reads a repo-local .gitguardian.yaml.
+  ( cd / && "${_timeout_bin}" "${_limit}" "${_gg}" quota </dev/null >/dev/null 2>&1 ) || _rc=$?
+  case "${_rc}" in
+    0)
+      if [[ -n "${GITGUARDIAN_API_KEY:-}" ]]; then
+        doctor_pass "${_gg}: authenticated (key from GITGUARDIAN_API_KEY in this shell)"
+      else
+        doctor_pass "${_gg}: authenticated"
+      fi
+      ;;
+    3) doctor_fail "${_gg}" "no API key — remedy: ggshield auth login" ;;
+    1 | 4) doctor_warn "${_gg}" "could not reach GitGuardian (rc ${_rc})" ;;
+    124) doctor_warn "${_gg}" "could not verify the API key: no answer in ${_limit}s" ;;
+    *) doctor_fail "${_gg}" "API key rejected or check failed (rc ${_rc}) — remedy: ggshield auth login" ;;
+  esac
+  return 0
 }
 
 # Prints the `timeout` to bound a doctor probe with: the one on PATH, else

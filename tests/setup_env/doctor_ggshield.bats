@@ -39,33 +39,33 @@ run_arm() {
 
 @test "doctor ggshield: rc 3 is a FAIL for no key" {
   STUB_GGSHIELD_EXIT=3 run_arm
-  grep -qiF "no key" "${OUT}"
+  grep -qF "no API key — remedy: ggshield auth login" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
 }
 
 @test "doctor ggshield: rc 128 is a FAIL rejected or failed (rc 128)" {
   STUB_GGSHIELD_EXIT=128 run_arm
-  grep -qF "(rc 128)" "${OUT}"
+  grep -qF "API key rejected or check failed (rc 128) — remedy: ggshield auth login" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
 }
 
 @test "doctor ggshield: rc 2 is a FAIL" {
   STUB_GGSHIELD_EXIT=2 run_arm
-  grep -qF "(rc 2)" "${OUT}"
+  grep -qF "API key rejected or check failed (rc 2)" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
 }
 
 @test "doctor ggshield: rc 1 is a WARN could not reach" {
   STUB_GGSHIELD_EXIT=1 run_arm
-  grep -qiF "could not reach" "${OUT}"
+  grep -qF "could not reach GitGuardian (rc 1)" "${OUT}"
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
 }
 
 @test "doctor ggshield: rc 4 is a WARN could not reach" {
   STUB_GGSHIELD_EXIT=4 run_arm
-  grep -qiF "could not reach" "${OUT}"
+  grep -qF "could not reach GitGuardian (rc 4)" "${OUT}"
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
 }
@@ -73,7 +73,7 @@ run_arm() {
 @test "doctor ggshield: a probe past the timeout is a WARN no answer" {
   if [[ -z "$(_doctor_resolve_timeout)" ]]; then skip "no timeout binary"; fi
   _DOCTOR_PROBE_TIMEOUT=1 STUB_GGSHIELD_SLEEP=5 run_arm
-  grep -qF "no answer in 1s" "${OUT}"
+  grep -qF "could not verify the API key: no answer in 1s" "${OUT}"
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
 }
@@ -82,8 +82,9 @@ run_arm() {
   unset GGSHIELD_BIN
   export GGSHIELD_FALLBACK_PATHS="/nonexistent/ggshield"
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
-  PATH="/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
-  grep -qF "not found" "${OUT}"
+  mkdir -p "${BATS_TEST_TMPDIR}/empty"
+  PATH="${BATS_TEST_TMPDIR}/empty" _doctor_check_ggshield > "${OUT}" 2>&1
+  grep -qF "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ ! -e "${STUB_GGSHIELD_CALLS}" ]
 }
@@ -92,8 +93,7 @@ run_arm() {
   : > "${BATS_TEST_TMPDIR}/not-exec"
   export GGSHIELD_BIN="${BATS_TEST_TMPDIR}/not-exec"
   run_arm
-  grep -qF "not-exec" "${OUT}"
-  grep -qF "not executable" "${OUT}"
+  grep -qF "GGSHIELD_BIN=${BATS_TEST_TMPDIR}/not-exec is not executable" "${OUT}"
   [ "${_DOCTOR_FAIL}" -eq 1 ]
 }
 
@@ -105,7 +105,7 @@ run_arm() {
   unset GGSHIELD_BIN
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
   PATH="${_bin}" _doctor_check_ggshield > "${OUT}" 2>&1
-  grep -qiF "timeout" "${OUT}"
+  grep -qF "found; API key not verified (no timeout binary)" "${OUT}"
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ ! -e "${STUB_GGSHIELD_CALLS}" ]
 }
@@ -125,7 +125,8 @@ run_arm() {
   unset GGSHIELD_BIN
   export GGSHIELD_FALLBACK_PATHS="/nonexistent/a ${STUB}"
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
-  PATH="/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
+  mkdir -p "${BATS_TEST_TMPDIR}/empty"
+  PATH="${BATS_TEST_TMPDIR}/empty:/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
   grep -qF "${STUB}: authenticated" "${OUT}"
 }
 
