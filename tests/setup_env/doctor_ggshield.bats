@@ -137,9 +137,11 @@ run_arm() {
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
   # Only what the stub needs on PATH: a machine with /usr/bin/ggshield cannot win.
   mkdir -p "${BATS_TEST_TMPDIR}/tonly"
-  local _t
+  local _t _src
   for _t in timeout bash sleep; do
-    ln -s "$(readlink -f "$(command -v "${_t}")")" "${BATS_TEST_TMPDIR}/tonly/${_t}"
+    _src="$(command -v "${_t}" || { [[ "${_t}" == timeout ]] && command -v gtimeout; })" || _src=""
+    [ -n "${_src}" ] || { printf 'no %s on PATH for the scoped-PATH fixture\n' "${_t}" >&2; return 1; }
+    ln -s "$(readlink -f "${_src}")" "${BATS_TEST_TMPDIR}/tonly/${_t}"
   done
   PATH="${BATS_TEST_TMPDIR}/tonly" _doctor_check_ggshield > "${OUT}" 2>&1
   grep -qF "${STUB}: authenticated" "${OUT}"
@@ -205,23 +207,30 @@ run_arm() {
 }
 
 # scan_doctor_subprocess_lines <file>... -- prints file:line for every non-comment
-# line that runs the setup script in doctor mode without GGSHIELD_BIN= on it.
+# line that runs the setup script in doctor mode without a non-empty GGSHIELD_BIN=
+# value on it.
 scan_doctor_subprocess_lines() {
   awk '
     /^[[:space:]]*#/ || /^@test/ { next }
-    /setup_env\.sh"? -t doctor/ && !/GGSHIELD_BIN=/ { print FILENAME ":" FNR }
+    /setup_env\.sh"?[[:space:]]+-t[[:space:]]+"?doctor"?/ && !/GGSHIELD_BIN="?[^ "]/ { print FILENAME ":" FNR }
   ' "$@"
 }
 
 @test "doctor ggshield: the scanner reports a doctor subprocess line without GGSHIELD_BIN" {
   local _f="${BATS_TEST_TMPDIR}/fixture.bats"
-  # The "-t" and "doctor" words are joined at run time so this file's own lines
-  # stay clear of the scanner under test.
-  local _cmd='bash "${x}/setup_env.sh" -t'" doctor"
-  printf '%s\n' "  run ${_cmd}" \
-    "  GGSHIELD_BIN=/s run ${_cmd}" \
-    "  # run ${_cmd}" > "${_f}"
-  [ "$(scan_doctor_subprocess_lines "${_f}")" = "${_f}:1" ]
+  # The "-t" and "doctor" words are kept apart so this file's own lines stay
+  # clear of the scanner under test.
+  local _cmd='bash "${x}/setup_env.sh" -t'
+  printf '%s\n' "  run ${_cmd} doctor" \
+    "  GGSHIELD_BIN=/s run ${_cmd} doctor" \
+    "  # run ${_cmd} doctor" \
+    "  GGSHIELD_BIN= run ${_cmd} doctor" \
+    "  run ${_cmd} \"doctor\"" \
+    "  run ${_cmd}  doctor" > "${_f}"
+  [ "$(scan_doctor_subprocess_lines "${_f}")" = "${_f}:1
+${_f}:4
+${_f}:5
+${_f}:6" ]
 }
 
 @test "doctor ggshield: every tracked doctor subprocess test sets GGSHIELD_BIN" {
