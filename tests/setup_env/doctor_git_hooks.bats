@@ -468,3 +468,16 @@ make_symlinked_repo() {
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
 }
+
+@test "doctor: symlinked hook drift on a feature branch names the default branch in the remedy" {
+  make_symlinked_repo alpha master
+  local _d="${PERSONAL_GITREPOS}/alpha"
+  git -C "${_d}" checkout -q -b feat
+  printf '# edit\n' >> "${_d}/scripts/pre-push"
+  # shellcheck disable=SC2034 # read by _doctor_check_git_hooks (lib/helpers.sh) through run_arm
+  HOOK_EXPECTED_REPOS=(alpha)
+  run_arm
+  grep -qF "diff master -- scripts/pre-push" "${OUT}"
+  grep -qF "return ${_d} to a clean master" "${OUT}"
+  if grep -qF "diff feat" "${OUT}"; then return 1; fi
+}
