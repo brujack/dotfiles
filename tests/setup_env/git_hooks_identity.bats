@@ -80,6 +80,15 @@ write_shim() {
   [ "${output}" = "match" ]
 }
 
+@test "identity: symlink to a tracked candidate deleted from the working tree is stale" {
+  make_repo
+  ln -s "${REPO}/scripts/pre-push" "${HK}/pre-push"
+  rm -- "${REPO}/scripts/pre-push"
+  run _git_hooks_identity "${REPO}" pre-push "${HK}/pre-push"
+  [ "${status}" -eq 1 ]
+  [ "${output}" = "stale" ]
+}
+
 @test "identity: relative symlink to the tracked source is match" {
   make_repo
   ln -s ../../scripts/pre-push "${HK}/pre-push"
