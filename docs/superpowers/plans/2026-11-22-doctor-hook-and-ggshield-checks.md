@@ -1,5 +1,7 @@
 # Doctor checks for installed hooks and ggshield authentication — Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#479 (43c47c25) on 2026-11-22.
+
 spec: docs/superpowers/specs/2026-11-22-doctor-hook-and-ggshield-checks-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
