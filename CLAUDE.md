@@ -28,7 +28,7 @@ The validator (`~/.claude/scripts/validate-plan.py`, shared from ai-config) enfo
 
 ## Knowledge Directory
 
-Reference material for this repo lives in `ai-config/docs/knowledge/` under `dotfiles-<topic>.md` naming (per ADR-0020). The local `docs/knowledge/README.md` is a pointer stub.
+Reference material lives in `ai-config/docs/knowledge/dotfiles-<topic>.md` (ADR-0020). The local `docs/knowledge/README.md` is a pointer stub.
 
 When web research (web-research skill) or context-mode fetches produce findings worth preserving, save to `ai-config/docs/knowledge/dotfiles-<topic>.md`.
 
@@ -55,7 +55,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 
 ## Symlink Strategy
 
-Dotfiles live at the repo root and in the ai-config repo (`.claude/`/`.cursor/`). `setup_env.sh` creates symlinks from `$HOME` into the repos:
+Dotfiles live at the repo root and in ai-config (`.claude/`/`.cursor/`); `setup_env.sh` symlinks them from `$HOME`:
 
 - Repo-root dotfiles: symlink each individually into `$HOME`, `.zshenv` included (an existing regular `~/.zshenv` is adopted as `~/.zshenv.local`; if both exist setup warns and leaves both).
 - `.claude/`: symlink each ai-config `.claude/` item that git tracks individually into `~/.claude/`, except `rules/` (never linked: it would load ai-config's project rules as user-level rules) and `projects/` (linked explicitly, see below); `CLAUDE_HOME_STORES` names (`lib/constants.sh`) are never linked even when tracked. → `dotfiles-conventions.md` § `CLAUDE.md budget: Symlink repo-root and .claude rules`
@@ -87,7 +87,7 @@ See `~/.claude/standards/shell.md` for the full shell coding standards. Dotfiles
 
 ### Platform Detection Pattern
 
-The shape used where code branches by OS — for example `lib/detect_env.sh:80` and `.config/.zshrc.d/5_general.zsh:69`. `setup_env.sh` itself contains no such branch, and the exact two-arm form below is illustrative rather than copied from any file:
+Shape of an OS branch, as at `lib/detect_env.sh:80` and `.config/.zshrc.d/5_general.zsh:69`. `setup_env.sh` has no such branch; the two-arm form below is illustrative, not copied from any file:
 
 ```bash
 if [[ -n ${MACOS} ]]; then ...
@@ -97,7 +97,7 @@ fi
 
 ### Homebrew Helpers
 
-Use the established helper functions, don't call `brew` directly:
+Use these helpers, never `brew` directly:
 
 ```bash
 brew_formula_installed <formula>
@@ -115,7 +115,7 @@ cask "lens"           # [HAS_K8S]
 brew "rustup"         # [HAS_RUST]
 ```
 
-Untagged entries are expected on all macs. When adding a new Brewfile entry that is developer-, K8s-, Docker-, or Rust-specific, add the appropriate tag.
+Untagged entries are expected on all macs. A new developer-, K8s-, Docker- or Rust-specific entry takes the matching tag.
 
 - A `# [HAS_*]` Brewfile tag selects drift expectations only and never gates installation; every mac installs every main-Brewfile entry; to gate installation put the entry in `Brewfile.gui`/`Brewfile.devtools` (wrapped by `HAS_GUI`/`HAS_DEVTOOLS` in `install_macos_casks`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: Brewfile HAS_ tag selects drift only`
 
@@ -145,8 +145,7 @@ All tool versions are defined as constants in `lib/constants.sh`:
 # see lib/constants.sh for current pins: GO_VER, PYTHON_VER, RUBY_VER, RUSTUP_VER
 ```
 
-Update these constants when bumping versions — don't hardcode versions elsewhere.
-When a constant is updated, update all other references to that constant across the repo.
+Bump versions in these constants only, never hardcoded elsewhere; when one changes, update every other reference to it in the repo.
 
 ### Ruby Version Manager Split
 
@@ -154,7 +153,7 @@ Ruby managers are not interchangeable: rbenv on Linux (`lib/linux_ubuntu.sh`), c
 
 ## Language Standards
 
-Language-specific standards for this repo. These supplement the universal standards loaded
+Language standards for this repo, supplementing the universal standards loaded
 from `~/.claude/CLAUDE.md` (tdd, behavior, git-workflow, ci, code-standards, logic-review,
 repo-structure, shell).
 
@@ -243,15 +242,15 @@ Rules for any new suppression:
 
 `.github/workflows/ci.yml` runs on PRs to master only (the pre-push hook gates branch pushes locally):
 
-- `test-shard` (ubuntu-latest, matrix of 3 legs, `contents: read`): pinned, checksum-verified shellcheck plus bats, prints `locale` and the `sort`/`comm` it resolves (`Tool versions`); `scripts/bats-shard.sh <i> 3` writes `shard-<i>.files`, shard 1 also runs `make test-prereqs`, every leg runs `make bash-coverage` under step-env `BATS_FILES_FROM` and `COVERAGE_TRACE_DIR` (the Makefile passes them to the script as arguments; both are `unexport`ed), then `scripts/ci-suite-report.sh shard-out/bats_run.log --files shard-<i>.files` (no `if:`; executed must equal declared and be above zero); the success-only artifact `test-shard-<attempt>-<i>` holds the list and `shard-<i>.trace`; on failure or cancellation the log is uploaded as `test-shard-log-<i>`, replaced by a re-run attempt, so download it first. Reproduce a leg with `bash scripts/bats-shard.sh <i> 3 > /tmp/s && BATS_FILES_FROM=/tmp/s COVERAGE_TRACE_DIR=/tmp/out make bash-coverage` (environment, never `make VAR=...`). Reasoning: ADR-0054.
-- `test` (ubuntu-latest; **gates at 91%**, blocks auto-merge, `contents: write` for the badge push) is the Linux aggregation gate: `needs: test-shard` with `if: always()`, it fails unless the shard result is `success`, runs `scripts/ci-shard-gate.sh --with-traces` (every file exactly once, one non-empty trace per list), then `scripts/run-bash-coverage.sh --score` on the union of the traces. CI no longer runs the Linux suite untraced; pre-push still does (ADR-0054). Re-run all jobs, never failed-only (as `test-macos` below).
+- `test-shard` (ubuntu-latest, matrix of 3 legs, `contents: read`): pinned, checksum-verified shellcheck plus bats, prints `locale` and the `sort`/`comm` it resolves (`Tool versions`); `scripts/bats-shard.sh <i> 3` writes `shard-<i>.files`, shard 1 also runs `make test-prereqs`, every leg runs `make bash-coverage` under step-env `BATS_FILES_FROM` and `COVERAGE_TRACE_DIR` (the Makefile passes both to the script as arguments and `unexport`s them), then `scripts/ci-suite-report.sh shard-out/bats_run.log --files shard-<i>.files` (no `if:`; executed must equal declared, above zero); the success-only artifact `test-shard-<attempt>-<i>` holds the list and `shard-<i>.trace`; on failure or cancellation the log is uploaded as `test-shard-log-<i>`; a re-run replaces it, so download it first. Reproduce a leg with `bash scripts/bats-shard.sh <i> 3 > /tmp/s && BATS_FILES_FROM=/tmp/s COVERAGE_TRACE_DIR=/tmp/out make bash-coverage` (environment, never `make VAR=...`). Reasoning: ADR-0054.
+- `test` (ubuntu-latest; **gates at 91%**, blocks auto-merge, `contents: write` for the badge push) is the Linux aggregation gate: `needs: test-shard` with `if: always()`, it fails unless the shard result is `success`, runs `scripts/ci-shard-gate.sh --with-traces` (every file exactly once, one non-empty trace per list), then `scripts/run-bash-coverage.sh --score` on the union of the traces. CI never runs the Linux suite untraced; pre-push still does (ADR-0054). Re-run all jobs, never failed-only (as `test-macos` below).
 - `lint-macos` (blocks auto-merge): `bash -n` over the derived `SHELL_FILES` via `make print-SHELL_FILES | tr ' ' '\n' | xargs` (the `tr` is load-bearing: `xargs -I` does not split on blanks), and `zsh -n` over `git ls-files '*.zsh' '*.zsh-theme' '.zshrc' '.zprofile' 'config/profiles.sh'`, which must stay in step with `Makefile`'s `ZSH_FILES`; each step refuses an empty list.
-- `test-macos-shard` (macos-latest, matrix of 3 legs): `scripts/bats-shard.sh <i> 3` packs the bats files from `tests/bats-weights.tsv` into `shard-<i>.files`, which the leg runs via step-env `BATS_FILES_FROM` (shard 1 `make test`, the others `make test-bats`) under GNU Make 3.81 with four unpinned Homebrew packages (bash, bats-core, parallel, coreutils for `timeout`); shellcheck and uv are pinned and checksum-verified; `scripts/ci-suite-report.sh <log> --files shard-<i>.files` fails unless the executed count equals the declared count and is above zero; the success-only list artifact `test-macos-shard-<attempt>-<i>` is the authority for which files a shard ran; on failure or cancellation the full log is uploaded as `test-macos-make-test-log-<i>`, since the 40-line tail can miss the cause; download it before re-running, because a re-run attempt replaces it; `permissions: contents: read`. Reasoning: ADR-0037, ADR-0053.
-- `test-macos` (ubuntu-latest; blocks auto-merge; must stay in `auto-merge`'s `needs:` because the merge is a plain `gh pr merge --squash`) is the aggregation gate: `needs: test-macos-shard` with `if: always()`, it fails unless the shard result is `success`, downloads this attempt's lists and runs `scripts/ci-shard-gate.sh`, which requires them to cover every test file exactly once. Re-run all jobs, never failed-only: a failed-only attempt has no lists for the passed shards, so the gate's coverage check fails by design.
-  - A macOS failure cannot be reproduced on the Linux development box. Reproduce a shard with `bash scripts/bats-shard.sh <i> 3 > /tmp/s && BATS_FILES_FROM=/tmp/s make test-bats`, or a file on the Studio, in a bare environment like the runner's: → `dotfiles-bats-test-infrastructure.md` § `Testing: CI workflow jobs`
+- `test-macos-shard` (macos-latest, matrix of 3 legs): `scripts/bats-shard.sh <i> 3` packs the bats files from `tests/bats-weights.tsv` into `shard-<i>.files`, which the leg runs via step-env `BATS_FILES_FROM` (shard 1 `make test`, the others `make test-bats`) under GNU Make 3.81 with four unpinned Homebrew packages (bash, bats-core, parallel, coreutils for `timeout`); shellcheck and uv are pinned and checksum-verified; `scripts/ci-suite-report.sh <log> --files shard-<i>.files` fails unless the executed count equals the declared count, above zero; the success-only list artifact `test-macos-shard-<attempt>-<i>` is the authority for which files a shard ran; on failure or cancellation the full log is uploaded as `test-macos-make-test-log-<i>` (the 40-line tail can miss the cause); download it before re-running, since a re-run replaces it; `permissions: contents: read`. Reasoning: ADR-0037, ADR-0053.
+- `test-macos` (ubuntu-latest; blocks auto-merge; must stay in `auto-merge`'s `needs:` because the merge is a plain `gh pr merge --squash`) is the aggregation gate: `needs: test-macos-shard` with `if: always()`, it fails unless the shard result is `success`, downloads this attempt's lists and runs `scripts/ci-shard-gate.sh`, requiring every test file exactly once. Re-run all jobs, never failed-only: a failed-only attempt has no lists for the passed shards, so the gate's coverage check fails by design.
+  - A macOS failure does not reproduce on the Linux box. Reproduce a shard with `bash scripts/bats-shard.sh <i> 3 > /tmp/s && BATS_FILES_FROM=/tmp/s make test-bats`, or a file on the Studio, in a bare environment like the runner's: → `dotfiles-bats-test-infrastructure.md` § `Testing: CI workflow jobs`
 
     ```bash
-    ssh studio 'cd /tmp/<clone> && env -i HOME="$(mktemp -d)" \
+    ssh studio 'cd /tmp/<clone> && env -i \
       PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin \
       bats tests/<file>.bats' < /dev/null
     ```
@@ -269,6 +268,7 @@ CI requirements:
 
 ### Testing Rules
 
+- Every bats invocation runs under a throwaway `HOME`, XDG dirs and `/dev/null` git config from `tests/helpers/suite_isolation.bash`, sourced by each test directory's `setup_suite.bash`; a new test directory needs one (`tests/suite_isolation.bats` fails otherwise). → `dotfiles-test-seams.md` § `bats suite sentinel HOME`
 - `load_setup_env()` does NOT set OS vars (`setup_env.sh` returns at its sourcing guard before `detect_env`): `MACOS`, `LINUX`, `UBUNTU` and `HAS_*` hold whatever the parent exported. A test depending on OS detection must set them itself (e.g. `unset MACOS; export LINUX=1; export UBUNTU=1`) or call `detect_env`; a test running a real platform tool (`stat`, `date`) sets the platform from `uname -s`.
 - `run_update` tests stay off real pip because `load_mocks` (`tests/helpers/common.bash`) exports `MOCK_PYENV_WHICH_STDOUT` by default; a file calling `load_setup_env` without `load_mocks` loses it and a pip-section test then runs a real `pip install` (1–3 min).
 - Every new function in `setup_env.sh` needs a test in `tests/setup_env/unit.bats` (pure logic) or `tests/setup_env/install_guards.bats` (side effects, mocks); every modified function updates its test; new shell scripts get their own `tests/` directory (e.g. `tests/scripts/`).
