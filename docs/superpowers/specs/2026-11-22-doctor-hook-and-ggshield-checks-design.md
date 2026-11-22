@@ -337,6 +337,7 @@ scan runs and no scan quota is consumed.
 ## Amendments
 
 - N1 -> No change in this repository to `-t update`, `setup_user`, `install_git_hooks_all_repos`, any repair path, or any hook script; V1's operator-approved `pre-commit install` in the state-ledger checkout is verification of this design, not part of it. — the plan's non-goal check found N1 UNCLEAR on whether it covers an operator-run reinstall in another repo.
+- R10 -> For a judged shim failing a condition of R9, `_git_hooks_identity` prints `generated-broken` and returns 1 with the reason `no .pre-commit-config.yaml`, `hook type <x>`, `no INSTALL_PYTHON`, `INSTALL_PYTHON <path> not absolute`, `INSTALL_PYTHON <path> missing` or `<path> cannot import pre_commit` (first failing condition, in that order), whatever `pre-commit` resolves to on `PATH`; it prints `generated-unverified` and returns 1 with `probe timed out` when the probe exits 124 and `no timeout binary` when no `timeout` resolves. — Task 1 code review showed a relative value is checked against doctor's working directory but executed through PATH, so the probe can verify a different interpreter; pre-commit always writes an absolute `sys.executable`.
 
 ## Multi-Lens Review
 
