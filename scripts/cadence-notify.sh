@@ -7,10 +7,13 @@
 # prints findings to stdout and exits 0/1/2. This script is the thin wrapper
 # that turns that into an ntfy push and a heartbeat.
 #
-# THE DETECTOR IS RUN WITH NTFY_URL SCRUBBED, deliberately. ledger_drift_check.sh
-# makes its own ntfy call, so left alone it would both duplicate this script's
-# push and keep the failure mode below. Scrubbing demotes it to a pure detector
-# without modifying a script this repo does not own.
+# THE DETECTOR IS RUN WITH NTFY_URL, NTFY_USER AND NTFY_PASSWORD SCRUBBED,
+# deliberately. ledger_drift_check.sh makes its own ntfy call, so left alone it
+# would both duplicate this script's push and keep the failure mode below;
+# scrubbing the URL demotes it to a pure detector without modifying a script this
+# repo does not own. Scrubbing the credentials keeps them out of anything the
+# detector could echo, since its output is POSTed off-box (redacted by
+# _rhn_redact, which is a bounded pattern set, not a guarantee).
 #
 # The split matters. ledger_drift_check.sh makes its own ntfy call, so an unset
 # NTFY_URL degrades detection AND delivery together and still returns 0 --
@@ -31,7 +34,7 @@
 # nothing is wrong. Fixed in ai-config#227.
 #
 # STDERR IS THE DIAGNOSIS CHANNEL, and it is PUBLISHED: surfaced in the ntfy
-# push, capped at the last 20 lines, never counted. It was discarded before
+# push, capped at the last 20 lines and redacted (_rhn_redact), never counted. It was discarded before
 # 2026-08-28, so a detector must not print credentials, tokens or environment
 # dumps there on the assumption that nobody reads it.
 #
@@ -62,12 +65,6 @@ _rhn_write_heartbeat() {
         > "${_dir}/last-run.json" || return 1
 }
 
-# Deliberately void: delivery is best-effort and its outcome must never reach the
-# caller's exit code, because a missing or broken channel is not a finding about
-# the fleet. Do NOT add `|| return 1` at the call site -- that is the
-# ledger_drift_check.sh failure, where detection and delivery fail together and
-# "no drift" becomes indistinguishable from "no channel". Both failure branches
-# are pinned by tests; the return value is not read and carries no information.
 # Resolve the channel. `config/local.sh` is this repo's established home for
 # machine-local secrets -- git-ignored and untracked (verified two ways), where
 # the plist's EnvironmentVariables is world-readable (`-rw-r--r--`) and would be
@@ -95,6 +92,37 @@ _rhn_ntfy_target() {
     printf '%s' "${_u}"
 }
 
+# Everything POSTed off-box passes through here. The detector's stderr is
+# attacker-influenced text (a failing tool may echo its environment, a header or
+# a token) and is surfaced verbatim in the message, so the credential and the
+# common token shapes are removed before delivery.
+#
+# The password is replaced by parameter expansion, never sed: no second process,
+# so the credential never crosses a process boundary. The patterns are POSIX ERE
+# with spelled-out case classes ([Aa][Uu]...) because the I flag is not POSIX.
+# sed runs under LC_ALL=C: in a UTF-8 locale GNU sed's `.` stops at an invalid
+# byte, so `Authorization: ab<0xff>SECRET` leaked SECRET, and BSD sed refuses the
+# line outright. Byte semantics make both redact the whole value.
+_rhn_redact() {
+    local _msg="$1"
+    if [[ -n "${NTFY_PASSWORD:-}" ]]; then
+        _msg="${_msg//"${NTFY_PASSWORD}"/[REDACTED]}"
+    fi
+    printf '%s' "${_msg}" | LC_ALL=C sed -E \
+        -e 's/gh[pousr]_[A-Za-z0-9]{20,}/[REDACTED]/g' \
+        -e 's/github_pat_[A-Za-z0-9_]{20,}/[REDACTED]/g' \
+        -e 's/([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn][[:space:]]*[:=][[:space:]]*)[^[:space:]].*/\1[REDACTED]/' \
+        -e 's/([Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+        -e 's,(://[^/:@[:space:]]+:)[^@/[:space:]]+@,\1[REDACTED]@,g' \
+        || return 1
+}
+
+# Deliberately void: delivery is best-effort and its outcome must never reach the
+# caller's exit code, because a missing or broken channel is not a finding about
+# the fleet. Do NOT add `|| return 1` at the call site -- that is the
+# ledger_drift_check.sh failure, where detection and delivery fail together and
+# "no drift" becomes indistinguishable from "no channel". Both failure branches
+# are pinned by tests; the return value is not read and carries no information.
 _rhn_notify() {
     local _msg="$1"
     _rhn_load_channel
@@ -144,6 +172,11 @@ _rhn_notify() {
             return 0
             ;;
     esac
+    # After the credential load above, so a local.sh-supplied password is known
+    # to the redactor. A failed redaction withholds the text rather than sending
+    # it raw.
+    _msg="$(_rhn_redact "${_msg}")" \
+        || _msg="${_RHN_NAME:-cadence} notification withheld: redaction failed"
     # Parameter expansion rather than a sed pipeline: no second process, so the
     # credential never crosses a process boundary at all. Backslash first.
     local _cred="${NTFY_USER}:${NTFY_PASSWORD}"
@@ -177,7 +210,12 @@ run_cadence_notify() {
         return 2
     fi
 
-    # NTFY_URL scrubbed: the detector detects, this script delivers.
+    # NTFY_URL, NTFY_USER and NTFY_PASSWORD scrubbed: the detector detects, this
+    # script delivers. A detector that echoes its environment (set -x, an error
+    # dump) must not hold the credential, since its stderr is POSTed off-box.
+    # This protects against credentials EXPORTED by the caller; ones loaded from
+    # config/local.sh are never in the detector's environment, because local.sh
+    # is sourced inside _rhn_notify, after the detector has run.
     #
     # The two streams are kept SEPARATE and neither is discarded. stdout is the
     # findings channel and is what `_count` measures; stderr is the diagnosis
@@ -206,10 +244,11 @@ run_cadence_notify() {
         _rhn_notify "${_name} INCOMPLETE - cannot determine: no temp file for detector stderr"
         return 2
     fi
-    _out="$(env -u NTFY_URL "${_detector}" 2>"${_errfile}")"
+    _out="$(env -u NTFY_URL -u NTFY_USER -u NTFY_PASSWORD "${_detector}" 2>"${_errfile}")"
     _rc=$?
     # The cap is a security property, not tidiness -- this stream is POSTed
-    # off-box. It bounds an accidental dump; it does not make the stream safe.
+    # off-box. It bounds an accidental dump; _rhn_redact then scrubs known
+    # credential shapes before the POST. Neither makes the stream safe.
     _err="$(command tail -n 20 "${_errfile}" 2>/dev/null)"
     rm -f "${_errfile}"
 

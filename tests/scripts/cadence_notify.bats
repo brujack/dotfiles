@@ -14,7 +14,9 @@ setup() {
   NAME="renovate-held"
   export _RHN_NTFY_LOG="${BATS_TEST_TMPDIR}/ntfy.log"
   export NTFY_URL="https://ntfy.invalid/test"
-  export NTFY_TOPIC="t" NTFY_USER="u" NTFY_PASSWORD="p"
+  # Distinctive, not "p": _rhn_redact replaces the password value wherever it
+  # occurs, so a one-letter password would eat unrelated message text.
+  export NTFY_TOPIC="t" NTFY_USER="u" NTFY_PASSWORD="fixture-setup-value"
   # At setup scope, not per-test. _rhn_load_channel falls back to
   # REPO_ROOT/config/local.sh when this is unset, and that file exists untracked
   # on any provisioned machine with a live NTFY_URL -- so any case that unsets
@@ -176,6 +178,117 @@ EOF
   [ "$status" -eq 1 ]
   command grep -q 'NTFY_URL_SEEN=\[\]' "${_RHN_NTFY_LOG}"
   run ! command grep -q 'NTFY_URL_SEEN=\[https' "${_RHN_NTFY_LOG}"
+}
+
+# Security audit F2: the detector's output is POSTed off-box, so the credential
+# must not be in the detector's environment and must not survive in the message.
+_stderr_detector() {  # $1 = exit code, $2 = literal text printed to stderr
+  local _d="${BATS_TEST_TMPDIR}/stderr-detector"
+  { printf '#!/usr/bin/env bash\n'
+    printf 'printf "%%s\\n" %q >&2\n' "$2"
+    printf 'exit %s\n' "$1"; } > "${_d}"
+  chmod +x "${_d}"
+  export _RHN_DETECTOR="${_d}"
+}
+
+@test "the detector runs with NTFY_USER and NTFY_PASSWORD scrubbed" {
+  local _d="${BATS_TEST_TMPDIR}/cred-detector"
+  cat > "${_d}" <<'EOF2'
+#!/usr/bin/env bash
+printf 'USER_SEEN=[%s] PW_SEEN=[%s]\n' "${NTFY_USER:-}" "${NTFY_PASSWORD:-}"
+exit 1
+EOF2
+  chmod +x "${_d}"
+  export _RHN_DETECTOR="${_d}"
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 1 ]
+  command grep -qF 'USER_SEEN=[] PW_SEEN=[]' "${_RHN_NTFY_LOG}"
+}
+
+@test "the password value is redacted from detector stderr before it is posted" {
+  export NTFY_PASSWORD='fixture-redact-me'
+  _stderr_detector 2 'auth failed with fixture-redact-me'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  [ "$status" -eq 2 ]
+  run ! command grep -qF 'fixture-redact-me' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "a ghp_ token in detector stderr is redacted" {
+  _stderr_detector 2 'token ghp_abcdefghijklmnopqrstuvwxyz0123456789 leaked'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'ghp_abcdefghijklmnopqrstuvwxyz0123456789' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+  command grep -qF 'leaked' "${_RHN_NTFY_LOG}"
+}
+
+@test "a github_pat_ token in detector stderr is redacted" {
+  _stderr_detector 2 'pat github_pat_11ABCDEFG0abcdefghij_klmnopqrstuvwxyz end'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'github_pat_11ABCDEFG0' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an Authorization header value in detector stderr is redacted" {
+  _stderr_detector 2 'sent Authorization: token abc123'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'abc123' "${_RHN_NTFY_LOG}"
+  command grep -qF 'Authorization:' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "a Bearer value in detector stderr is redacted" {
+  _stderr_detector 2 'header Bearer abc.def rejected'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'abc.def' "${_RHN_NTFY_LOG}"
+  command grep -qF 'Bearer' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an upper-case Authorization header with a Basic value is redacted" {
+  _stderr_detector 2 'sent AUTHORIZATION: Basic dXNlcjpwdw=='
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'dXNlcjpwdw' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an authorization= assignment is redacted" {
+  _stderr_detector 2 'cfg authorization=tok123'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'tok123' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an upper-case BEARER value is redacted" {
+  _stderr_detector 2 'header BEARER abc.def rejected'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'abc.def' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "URL userinfo passwords are redacted" {
+  _stderr_detector 2 'fetch https://u:secretpw@host/x failed'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'secretpw' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+  command grep -qF 'host/x failed' "${_RHN_NTFY_LOG}"
+}
+
+@test "ordinary diagnostics are not redacted" {
+  _stderr_detector 2 'ERROR: ledger binary not found'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  command grep -qF 'ERROR: ledger binary not found' "${_RHN_NTFY_LOG}"
+  run ! command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "a redaction failure withholds the message" {
+  mkdir -p "${BATS_TEST_TMPDIR}/sedstub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/sedstub/sed"
+  chmod +x "${BATS_TEST_TMPDIR}/sedstub/sed"
+  _stderr_detector 2 'secret diagnostic text'
+  PATH="${BATS_TEST_TMPDIR}/sedstub:${PATH}" run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  command grep -qF 'notification withheld: redaction failed' "${_RHN_NTFY_LOG}"
+  run ! command grep -qF 'secret diagnostic text' "${_RHN_NTFY_LOG}"
 }
 
 @test "two cadences keep separate heartbeats" {
@@ -425,3 +538,16 @@ _detector_stderr() {  # $1 = exit code, $2 = stderr line, $3... = stdout lines
   command grep -q 'errline-100' "${_RHN_NTFY_LOG}"
   run ! command grep -q 'errline-1$' "${_RHN_NTFY_LOG}"
 }
+
+# GNU sed's `.` does not cross an invalid byte in a UTF-8 locale, so the
+# Authorization value after it survived redaction until sed ran under LC_ALL=C.
+@test "an invalid byte in a UTF-8 locale cannot hide the rest of an Authorization value" {
+  local _d="${BATS_TEST_TMPDIR}/detector"
+  printf '#!/usr/bin/env bash\nprintf "Authorization: ab\\377fixture-after-byte\\n" >&2\nexit 2\n' > "${_d}"
+  chmod +x "${_d}"
+  LC_ALL=C.UTF-8 run bash "${SCRIPT}" "${NAME}" "${_d}"
+  [ "$status" -eq 2 ]
+  command grep -q 'Authorization: \[REDACTED\]' "${_RHN_NTFY_LOG}"
+  run ! command grep -q 'fixture-after-byte' "${_RHN_NTFY_LOG}"
+}
+
