@@ -15,9 +15,11 @@ Alternatives considered (spec, Problem, Design and External Review):
 - **A wrapper script around the Makefile's bats lines.** Designed, then replaced. Direct `bats`
   runs (the form the Studio repro uses, and what an operator types) escaped the wrapper, and the
   tests that assert the recipe text kept breaking whenever the lines changed.
-- **A residue gate in teardown** that fails when a test leaves files in the real `HOME`.
-  Rejected (external review F1.1): it detects damage after the fact. The `HOME` swap is the
-  protection, so the gate adds a second mechanism without adding safety.
+- **A residue gate in teardown** that fails when a test leaves files in the sentinel `HOME`.
+  Rejected (external review F1.1): the `HOME` swap is what protects the real home, so the gate
+  would fire on writes that harmed nothing and would re-impose the per-file "redirect `HOME` in
+  `setup()`" convention this decision replaces. Its one benefit, keeping one test's leftovers
+  from affecting another in the same run, is unmeasured and did not justify the apparatus.
 
 ## Decision
 
@@ -44,4 +46,4 @@ every bats invocation, wrapped or direct, runs them.
 
 - Spec: [bats-sentinel-home](../superpowers/specs/2026-11-21-bats-sentinel-home-design.md)
 - Plan: [bats-sentinel-home](../superpowers/plans/2026-11-21-bats-sentinel-home.md)
-- PR: dotfiles#475
+- F15 fix: dotfiles#475
