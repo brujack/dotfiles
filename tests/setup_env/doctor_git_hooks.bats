@@ -435,27 +435,27 @@ make_symlinked_repo() {
   ln -s ../../scripts/pre-commit-hook.sh "${_d}/.git/hooks/pre-commit"
 }
 
-@test "doctor git hooks: a symlinked hook that drifts on master warns with the inspect-then-clean remedy" {
+@test "doctor git hooks: a symlinked hook that drifts on master fails with the inspect-then-clean remedy" {
   make_symlinked_repo alpha master
   local _d="${PERSONAL_GITREPOS}/alpha"
   printf '# edit\n' >> "${_d}/scripts/pre-push"
   HOOK_EXPECTED_REPOS=(alpha)
   run_arm
   grep -qF "alpha: pre-push drifts: scripts/pre-push differs from master — remedy: inspect with git -C ${_d} diff master -- scripts/pre-push, then return ${_d} to a clean master once no session owns the change" "${OUT}"
-  [ "${_DOCTOR_WARN}" -eq 1 ]
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
 }
 
-@test "doctor git hooks: a symlinked hook that drifts on main names main in the remedy" {
+@test "doctor git hooks: a symlinked hook that drifts on main fails and names main in the remedy" {
   make_symlinked_repo alpha main
   local _d="${PERSONAL_GITREPOS}/alpha"
   printf '# edit\n' >> "${_d}/scripts/pre-push"
   HOOK_EXPECTED_REPOS=(alpha)
   run_arm
   grep -qF "alpha: pre-push drifts: scripts/pre-push differs from main — remedy: inspect with git -C ${_d} diff main -- scripts/pre-push, then return ${_d} to a clean main once no session owns the change" "${OUT}"
-  [ "${_DOCTOR_WARN}" -eq 1 ]
-  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
 }
 
 @test "doctor git hooks: a clean symlinked repo passes with no drift line" {
@@ -480,4 +480,6 @@ make_symlinked_repo() {
   grep -qF "diff master -- scripts/pre-push" "${OUT}"
   grep -qF "return ${_d} to a clean master" "${OUT}"
   if grep -qF "diff feat" "${OUT}"; then return 1; fi
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
 }
