@@ -2,6 +2,8 @@
 
 spec: docs/superpowers/specs/2026-11-22-doctor-hook-drift-design.md
 
+> **Status: DONE** — merged as dotfiles#483 (59e7b077), 2026-11-22.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** `setup_env.sh -t doctor` warns when a symlink-installed hook's target differs from the committed script on the repo's local default branch (security audit F7).
