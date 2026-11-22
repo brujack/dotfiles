@@ -245,6 +245,35 @@ EOF2
   command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
 }
 
+@test "an upper-case Authorization header with a Basic value is redacted" {
+  _stderr_detector 2 'sent AUTHORIZATION: Basic dXNlcjpwdw=='
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'dXNlcjpwdw' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an authorization= assignment is redacted" {
+  _stderr_detector 2 'cfg authorization=tok123'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'tok123' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "an upper-case BEARER value is redacted" {
+  _stderr_detector 2 'header BEARER abc.def rejected'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'abc.def' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+}
+
+@test "URL userinfo passwords are redacted" {
+  _stderr_detector 2 'fetch https://u:secretpw@host/x failed'
+  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  run ! command grep -qF 'secretpw' "${_RHN_NTFY_LOG}"
+  command grep -qF '[REDACTED]' "${_RHN_NTFY_LOG}"
+  command grep -qF 'host/x failed' "${_RHN_NTFY_LOG}"
+}
+
 @test "ordinary diagnostics are not redacted" {
   _stderr_detector 2 'ERROR: ledger binary not found'
   run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
@@ -253,12 +282,11 @@ EOF2
 }
 
 @test "a redaction failure withholds the message" {
-  local _sed="${BATS_TEST_TMPDIR}/failing-sed"
-  printf '#!/usr/bin/env bash\nexit 1\n' > "${_sed}"
-  chmod +x "${_sed}"
-  export _RHN_SED_BIN="${_sed}"
+  mkdir -p "${BATS_TEST_TMPDIR}/sedstub"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${BATS_TEST_TMPDIR}/sedstub/sed"
+  chmod +x "${BATS_TEST_TMPDIR}/sedstub/sed"
   _stderr_detector 2 'secret diagnostic text'
-  run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
+  PATH="${BATS_TEST_TMPDIR}/sedstub:${PATH}" run bash "${SCRIPT}" "${NAME}" "${_RHN_DETECTOR}"
   command grep -qF 'notification withheld: redaction failed' "${_RHN_NTFY_LOG}"
   run ! command grep -qF 'secret diagnostic text' "${_RHN_NTFY_LOG}"
 }

@@ -31,7 +31,7 @@
 # nothing is wrong. Fixed in ai-config#227.
 #
 # STDERR IS THE DIAGNOSIS CHANNEL, and it is PUBLISHED: surfaced in the ntfy
-# push, capped at the last 20 lines, never counted. It was discarded before
+# push, capped at the last 20 lines and redacted (_rhn_redact), never counted. It was discarded before
 # 2026-08-28, so a detector must not print credentials, tokens or environment
 # dumps there on the assumption that nobody reads it.
 #
@@ -104,15 +104,16 @@ _rhn_ntfy_target() {
 # so the credential never crosses a process boundary. The patterns are POSIX ERE
 # so one sed invocation behaves the same on GNU and BSD.
 _rhn_redact() {
-    local _msg="$1" _sed="${_RHN_SED_BIN:-sed}"
+    local _msg="$1"
     if [[ -n "${NTFY_PASSWORD:-}" ]]; then
         _msg="${_msg//"${NTFY_PASSWORD}"/[REDACTED]}"
     fi
-    printf '%s' "${_msg}" | "${_sed}" -E \
+    printf '%s' "${_msg}" | sed -E \
         -e 's/gh[pousr]_[A-Za-z0-9]{20,}/[REDACTED]/g' \
         -e 's/github_pat_[A-Za-z0-9_]{20,}/[REDACTED]/g' \
-        -e 's/([Aa]uthorization:[[:space:]]*)[^[:space:]].*/\1[REDACTED]/' \
-        -e 's/([Bb]earer[[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+        -e 's/([Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn][[:space:]]*[:=][[:space:]]*)[^[:space:]].*/\1[REDACTED]/' \
+        -e 's/([Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]+)[A-Za-z0-9._~+\/=-]+/\1[REDACTED]/g' \
+        -e 's,(://[^/:@[:space:]]+:)[^@/[:space:]]+@,\1[REDACTED]@,g' \
         || return 1
 }
 
@@ -165,13 +166,13 @@ _rhn_notify() {
             return 0
             ;;
     esac
-    # Parameter expansion rather than a sed pipeline: no second process, so the
-    # credential never crosses a process boundary at all. Backslash first.
     # After the credential load above, so a local.sh-supplied password is known
     # to the redactor. A failed redaction withholds the text rather than sending
     # it raw.
     _msg="$(_rhn_redact "${_msg}")" \
         || _msg="${_RHN_NAME:-cadence} notification withheld: redaction failed"
+    # Parameter expansion rather than a sed pipeline: no second process, so the
+    # credential never crosses a process boundary at all. Backslash first.
     local _cred="${NTFY_USER}:${NTFY_PASSWORD}"
     _cred="${_cred//\\/\\\\}"
     _cred="${_cred//\"/\\\"}"
@@ -206,6 +207,9 @@ run_cadence_notify() {
     # NTFY_URL, NTFY_USER and NTFY_PASSWORD scrubbed: the detector detects, this
     # script delivers. A detector that echoes its environment (set -x, an error
     # dump) must not hold the credential, since its stderr is POSTed off-box.
+    # This protects against credentials EXPORTED by the caller; ones loaded from
+    # config/local.sh are never in the detector's environment, because local.sh
+    # is sourced inside _rhn_notify, after the detector has run.
     #
     # The two streams are kept SEPARATE and neither is discarded. stdout is the
     # findings channel and is what `_count` measures; stderr is the diagnosis
@@ -237,7 +241,8 @@ run_cadence_notify() {
     _out="$(env -u NTFY_URL -u NTFY_USER -u NTFY_PASSWORD "${_detector}" 2>"${_errfile}")"
     _rc=$?
     # The cap is a security property, not tidiness -- this stream is POSTed
-    # off-box. It bounds an accidental dump; it does not make the stream safe.
+    # off-box. It bounds an accidental dump; _rhn_redact then scrubs known
+    # credential shapes before the POST. Neither makes the stream safe.
     _err="$(command tail -n 20 "${_errfile}" 2>/dev/null)"
     rm -f "${_errfile}"
 

@@ -404,7 +404,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - List every detector dependency in the cadence plist `PATH` (launchd sources no profile) and check a new one with `env -i PATH=<plist PATH> bash -c 'command -v <tool>'`; a template edit does not reach installed agents: re-run `setup_env.sh -t setup_user` and verify the live `~/Library/LaunchAgents/*.plist`. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: cadence agent PATH rules`
 
-- POST to `${NTFY_URL}/${NTFY_TOPIC}` with auth (never bare `${NTFY_URL}`); send credentials on stdin via `curl -K -`, never `-u`; refuse (never escape) a credential containing a newline; run the detector under `env -u NTFY_URL` and keep the heartbeat as a second silent-when-clean channel. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: cadence ntfy delivery rules`
+- POST to `${NTFY_URL}/${NTFY_TOPIC}` with auth (never bare `${NTFY_URL}`); credentials on stdin via `curl -K -`, never `-u`; refuse a credential with a newline (never escape); run the detector under `env -u NTFY_URL -u NTFY_USER -u NTFY_PASSWORD`, redact every message before POST, keep the heartbeat as a second silent-when-clean channel. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: cadence ntfy delivery rules`
 
 - This group covers the pyenv shim defect and the cargo plugin repair added 2026-09-17; treat each seam below individually, not as one combined pyenv/cargo unit. → `dotfiles-test-seams.md` § `Pyenv-rehash and cargo-tools seams overview`
 
