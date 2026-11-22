@@ -29,8 +29,8 @@ Add `_doctor_check_git_hooks` and `_doctor_check_ggshield` to `-t doctor`.
 - **A `.git` directory that `git rev-parse` rejects is a FAIL** (amended R4). A worktree or
   submodule checkout, where `.git` is not a directory, is the only silent skip.
 - **ggshield is probed with `ggshield quota`**, not `api-status`. Exit codes: 0 PASS, 3 FAIL
-  (credential rejected), 1 or 4 WARN (unreachable; measured 2026-11-22 that a refused connection,
-  DNS failure and a dead proxy all give rc 1), 124 WARN (probe timed out), any other code FAIL.
+  (no API key), 1 or 4 WARN (unreachable; measured 2026-11-22 that a refused connection,
+  DNS failure and a dead proxy all give rc 1), 124 WARN (probe timed out), any other code FAIL (128 is a rejected key).
 - **The ggshield resolver is duplicated in doctor**, with a drift test against the pre-commit
   hook's copy. Sharing it through a lib file was rejected: the hook would source that file from
   the working tree under scan, so a commit could replace the resolver that guards it (fail-open).
@@ -46,12 +46,13 @@ Add `_doctor_check_git_hooks` and `_doctor_check_ggshield` to `-t doctor`.
   superpowers Backlog.
 - The resolver exists in two places. The drift test fails when they diverge, and nothing else
   keeps them equal.
-- A hook edit that renames a source file breaks the name match until the candidate list is
-  updated.
+- Renaming a hook's source file to anything other than `<hook>` or `<hook>-hook.sh` makes the
+  installed hook read as `stale`.
 
 ## Related
 
 - Spec: [doctor-hook-and-ggshield-checks](../superpowers/specs/2026-11-22-doctor-hook-and-ggshield-checks-design.md)
 - Plan: [doctor-hook-and-ggshield-checks](../superpowers/plans/2026-11-22-doctor-hook-and-ggshield-checks.md)
-- ai-config ADR-0055 (Claude plugin install records), ADR-0052
+- ai-config ADR-0055 (hook installation integrity, ai-config's own `check-hooks`)
+- [ADR-0052](0052-pre-commit-triages-the-ggshield-exit-code.md) (pre-commit triages the ggshield exit code)
 - [ADR-0060](0060-bats-suite-hooks-sentinel-home.md)
