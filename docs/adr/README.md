@@ -64,3 +64,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0058](0058-pinned-uv-for-renderings-and-lock-check.md) | Pin uv for the requirements renderings and the lock check | 2026-11-19 | Accepted |
 | [0059](0059-repo-sessions-on-linux-hosts-and-pinned-lan-routing.md) | Repo sessions on the Linux hosts, with LAN routing pinned by host key | 2026-11-20 | Accepted |
 | [0060](0060-bats-suite-hooks-sentinel-home.md) | Bats suite hooks give every run a sentinel HOME | 2026-11-21 | Accepted |
+| [0061](0061-doctor-hook-identity-and-ggshield-probe.md) | Doctor judges hook identity by name-matched source and probes ggshield with `quota` | 2026-11-22 | Accepted |
