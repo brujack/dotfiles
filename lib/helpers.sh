@@ -976,7 +976,7 @@ _doctor_check_git_hooks() {
   fi
 
   local _name _dir _remedy_dir _hooks_dir _missing _rc _hook _hook_path
-  local _out _word _reason _branch _wt _faulty _found=0 _m _remedies _r _seen
+  local _out _word _reason _default _cand _branch _wt _faulty _found=0 _m _remedies _r _seen
   for _name in "${_repos[@]}"; do
     _dir="${PERSONAL_GITREPOS}/${_name}"
     if [[ ! -d "${_dir}" ]]; then
@@ -1025,7 +1025,7 @@ _doctor_check_git_hooks() {
       _hook_path="${_hooks_dir}/${_hook}"
       _rc=0
       _out="$(_git_hooks_identity "${_dir}" "${_hook}" "${_hook_path}")" || _rc=$?
-      IFS=$'\t' read -r _word _reason <<< "${_out}"
+      IFS=$'\t' read -r _word _reason _default _cand <<< "${_out}"
       if [[ ${_rc} -eq 2 ]]; then
         doctor_fail "${_name}" "cannot verify hooks (${_reason})"
         _faulty=1
@@ -1055,6 +1055,9 @@ _doctor_check_git_hooks() {
           _faulty=1 ;;
         generated-unverified)
           doctor_warn "${_name}" "${_hook} pre-commit shim not verified (${_reason})"
+          _faulty=1 ;;
+        drift)
+          doctor_warn "${_name}" "${_hook} drifts: ${_reason} — remedy: inspect with git -C ${_dir} diff ${_default} -- ${_cand}, then return ${_dir} to a clean ${_default} once no session owns the change"
           _faulty=1 ;;
         *)
           # Fail closed: an identity word this arm does not know is not a pass.

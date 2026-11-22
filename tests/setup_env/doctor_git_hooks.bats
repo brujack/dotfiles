@@ -464,7 +464,7 @@ make_symlinked_repo() {
   HOOK_EXPECTED_REPOS=(alpha)
   run_arm
   grep -qF "alpha: pre-commit pre-push commit-msg installed" "${OUT}"
-  run ! grep -qF "drifts:" "${OUT}"
+  if grep -qF "drifts:" "${OUT}"; then return 1; fi
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
 }
