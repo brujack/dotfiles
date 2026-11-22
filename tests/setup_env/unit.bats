@@ -29,8 +29,10 @@ setup() {
   unset LINUX HAS_DEVTOOLS
   # run_doctor calls _doctor_check_git_hooks, which reads the repos under
   # PERSONAL_GITREPOS and runs each shim's interpreter. No test in this file
-  # drives the real arm (tests/setup_env/doctor_git_hooks.bats does, against
-  # fixtures), so every run_doctor call here gets the no-op.
+  # drives the real arm in-process (tests/setup_env/doctor_git_hooks.bats does,
+  # against fixtures), so every in-process run_doctor call here gets the no-op.
+  # The subprocess `bash setup_env.sh -t doctor` tests cannot see this function
+  # and run the real arm against the throwaway suite HOME (no real repo read).
   _doctor_check_git_hooks() { :; }
 }
 

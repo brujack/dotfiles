@@ -162,17 +162,37 @@ run_arm() {
   [ "${_DOCTOR_PASS}" -eq 0 ]
 }
 
-@test "doctor git hooks: a .git file or a broken .git directory prints nothing" {
+@test "doctor git hooks: a .git file prints nothing" {
   make_repo alpha with_precommit
-  mkdir -p "${PERSONAL_GITREPOS}/wtlike" "${PERSONAL_GITREPOS}/partial/.git"
+  mkdir -p "${PERSONAL_GITREPOS}/wtlike"
   printf 'gitdir: /nonexistent\n' > "${PERSONAL_GITREPOS}/wtlike/.git"
-  HOOK_EXPECTED_REPOS=(wtlike partial alpha)
+  HOOK_EXPECTED_REPOS=(wtlike alpha)
   run_arm
   [ "$(grep -cF "wtlike" "${OUT}")" -eq 0 ]
-  [ "$(grep -cF "partial" "${OUT}")" -eq 0 ]
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
+}
+
+@test "doctor git hooks: a .git directory git cannot use is a FAIL" {
+  make_repo alpha with_precommit
+  mkdir -p "${PERSONAL_GITREPOS}/partial/.git"
+  HOOK_EXPECTED_REPOS=(partial alpha)
+  run_arm
+  grep -qF "partial: cannot verify hooks (not a usable git repository)" "${OUT}"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "doctor git hooks: missing hooks sharing one remedy name it once" {
+  make_repo beta
+  local _d="${PERSONAL_GITREPOS}/beta"
+  rm "${_d}/.git/hooks/pre-commit" "${_d}/.git/hooks/pre-push" "${_d}/.git/hooks/commit-msg"
+  HOOK_EXPECTED_REPOS=(beta)
+  run_arm
+  grep -qF "beta: missing pre-commit pre-push commit-msg — remedy: cd ${_d} && pre-commit install; make -C ${_d} install-hooks" "${OUT}"
+  [ "$(grep -cF "install-hooks; make" "${OUT}")" -eq 0 ]
+  [ "$(grep -cF "beta: missing" "${OUT}")" -eq 1 ]
 }
 
 @test "doctor git hooks: no hooks directory FAILs with the install-hooks remedy" {

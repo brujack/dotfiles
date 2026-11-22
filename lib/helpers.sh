@@ -984,8 +984,11 @@ _doctor_check_git_hooks() {
     fi
     _found=1
     [[ -d "${_dir}/.git" ]] || continue
-    env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
-      git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1 || continue
+    if ! env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1; then
+      doctor_fail "${_name}" "cannot verify hooks (not a usable git repository)"
+      continue
+    fi
 
     _remedy_dir="$(_git_hooks_target_dir "${_dir}" 2>/dev/null)" || _remedy_dir=""
     [[ -n "${_remedy_dir}" ]] || _remedy_dir="${_dir}"
@@ -1003,14 +1006,19 @@ _doctor_check_git_hooks() {
         # Distinct remedies only, in hook order: three hooks sharing one fix
         # name it once.
         _seen=0
-        [[ "; ${_remedies}" == *"; ${_r};"* || "${_remedies}" == "${_r}" ]] && _seen=1
+        [[ "; ${_remedies}; " == *"; ${_r}; "* ]] && _seen=1
         [[ ${_seen} -eq 1 ]] || _remedies="${_remedies:+${_remedies}; }${_r}"
       done
       doctor_fail "${_name}" "missing ${_missing} — remedy: ${_remedies}"
       continue
     fi
 
-    _hooks_dir="$(_git_hooks_dir "${_dir}")" || continue
+    # Reachable only if the hooks directory vanishes between the check above
+    # and this call; fail closed rather than skip the repo.
+    if ! _hooks_dir="$(_git_hooks_dir "${_dir}")"; then
+      doctor_fail "${_name}" "cannot verify hooks (hooks directory unreadable)"
+      continue
+    fi
     _faulty=0
     for _hook in "${_GIT_HOOKS_MANDATED[@]}"; do
       _hook_path="${_hooks_dir}/${_hook}"
