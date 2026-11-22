@@ -14,10 +14,9 @@ every linked worktree, is therefore whatever that working tree holds. An uncommi
 changes the gate for every push from every worktree.
 
 `_git_hooks_identity` (`lib/git_hooks.sh`, ADR-0061) reports such a symlink as `match`
-because it checks only that the target is a tracked source candidate. A copy-installed hook
-is judged against the working-tree file (`cmp -s`), so a copy taken from a dirty working
-tree also reads as `match`, while a correct copy beside a dirty working tree reads as
-`stale`.
+because it checks only that the target is a tracked source candidate, whatever the target's
+content. Copy-installed hooks are out of scope: their content is fixed at install time and
+the existing `stale` check already compares them with the working tree.
 
 This is an integrity gap, not a confidentiality one. Any process that can edit the main
 checkout can equally write `.git/hooks` directly, so nothing here raises the bar against an
@@ -40,10 +39,10 @@ attacker. What it fixes is a gate that changes silently.
   `origin/master` on 2026-10-03). In both, `git rev-parse <ref>:scripts/<hook>` equals
   master's blob at the time for all three hooks, so neither changed the gate. Population:
   one repo's main checkout on one machine.
-- Predicted effect on today's fleet: for each of the 26 hooks with a tracked candidate (all
-  27 mandated hooks minus state-ledger's generated pre-commit), the installed content hashes
-  to the candidate's blob on the local default branch, and every main checkout is clean and
-  on that branch. The change below therefore reports `match` for all of them. Population:
+- Predicted effect on today's fleet: all 9 symlinked hooks (dotfiles, etch-config and math,
+  three each) hash with `--no-filters` to their candidate's blob on the local default branch,
+  and all three main checkouts are clean and on that branch. The change below therefore
+  reports `match` for all of them, and copy-installed hooks are untouched. Population:
   `claude` only.
 - How often doctor runs: the operator runs `setup_env.sh -t doctor` after setup and
   updates only. This check is therefore a diagnostic for when something already looks
@@ -51,57 +50,75 @@ attacker. What it fixes is a gate that changes silently.
 
 ## Design
 
-### 1. `_git_hooks_identity` judges content against the default branch's blob
+### 1. `_git_hooks_identity` judges a symlinked hook against the default branch's blob
 
-The reference is the candidate's blob on the repo's local default branch:
-`git rev-parse --verify -q refs/heads/<default>:<candidate>`, where `<default>` is `main`
-when `refs/heads/main` exists and `refs/heads/master` does not, else `master`. The installed
-content is hashed with `git hash-object --path=<candidate> <file>`, so the candidate's
-attributes apply (an `eol=crlf` checkout compares equal to its LF blob). A symlink is hashed
-through to its target. All git calls use the
-`env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE` wrapper the function
-already uses. No temporary file, no network, no `origin` ref.
+Scope: symlink-installed hooks only. A copy-installed hook is judged exactly as today
+(byte-compared with the candidate's working-tree file, `stale` when it differs, with the
+existing `stale` arm and remedy). A copy's content is fixed at install time, its staleness
+already has a check, and F7 is about symlinks; changing copy semantics was tried in review
+round 1 and made the existing `stale` arm report false text (see Multi-Lens Review).
+
+For a symlink whose target is a source candidate in the main working tree (today's `match`
+condition), the reference is that candidate's blob on the repo's local default branch:
+
+1. `<default>` is `main` when `refs/heads/main` exists and `refs/heads/master` does not,
+   else `master`; existence is tested with `git show-ref --verify -q refs/heads/<name>`.
+   If the chosen ref does not exist, the result is `error`.
+2. Only then is the blob looked up with `git rev-parse --verify -q refs/heads/<default>:<candidate>`.
+   Because the ref is known to exist, rc 1 means the path is not on `<default>`; any other
+   non-zero rc is `error`.
+3. The installed content is hashed with `git hash-object --no-filters <target>`, the target
+   being the symlink's resolved path. `--no-filters` compares raw bytes and runs no
+   configured clean filter, so the check executes no repo-supplied code. Known limit: a
+   checkout under an `eol=crlf` attribute would read as `drift`; no fleet repo sets one
+   (dotfiles sets `eol=lf`, the other eight have no `.gitattributes`).
+
+All git calls use the `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`
+wrapper the function already uses. No temporary file, no network, no `origin` ref.
+
+The reference is the local default branch, not `origin`: F7 is about the main checkout's
+working tree differing from what is committed there. A local branch lagging origin is the
+update sweep's concern; on `claude` today four repos lag (dotfiles 2, math 1,
+terraform_ansible 3, state-ledger 9 commits) and none of the lag touches a hook script.
 
 Comparing against the default branch rather than HEAD means a branch checked out in the main
 tree warns only when it actually changes the hook script, which was never the case in the
-measured episodes.
+measured branch episodes.
 
-| Installed hook       | Content vs default-branch blob                                     | Before             | After                                                       |
-| -------------------- | ------------------------------------------------------------------ | ------------------ | ----------------------------------------------------------- |
-| symlink to candidate | equal                                                              | `match`            | `match`                                                     |
-| symlink to candidate | different                                                          | `match`            | `drift` (rc 1), reason `<candidate> differs from <default>` |
-| symlink to candidate | candidate absent from `<default>`                                  | `match`            | `drift` (rc 1), reason `<candidate> is not on <default>`    |
-| copy                 | equal to some candidate's blob                                     | `match` or `stale` | `match`                                                     |
-| copy                 | equal to no candidate's blob                                       | `match` or `stale` | `stale`                                                     |
-| any                  | a hash call fails or prints nothing, or no default branch resolves | n/a                | `error` (rc 2), reason naming the failed call               |
+| Symlink to candidate, target content | Before | After |
+| --- | --- | --- |
+| equals the default-branch blob | `match` | `match` |
+| differs from the default-branch blob | `match` | `drift` (rc 1), reason `<candidate> differs from <default>` |
+| candidate path not on `<default>` | `match` | `drift` (rc 1), reason `<candidate> is not on <default>` |
+| hash fails or prints nothing; default ref missing; blob lookup rc other than 0 or 1 | `match` | `error` (rc 2), reason naming the failed call |
 
-A copy has no `drift` row. Its content is fixed at install time, so the remedy is always a
-reinstall, which is exactly what `stale` and its existing remedy already say. A symlink to a
-candidate whose file is missing stays `stale`; symlinks into worktrees or outside the repo
-keep `worktree` and `foreign`; the generated-shim path is unchanged. Candidates are still
-filtered by hook name first, so a pre-commit copied from a pre-push script still fails
-(ADR-0061's matching-by-name rule).
+A symlink to a candidate whose file is missing stays `stale`; symlinks into worktrees or
+outside the repo keep `worktree` and `foreign`; regular files and generated shims are
+unchanged. Candidates are still filtered by hook name first (ADR-0061's matching-by-name
+rule).
 
 ### 2. Doctor arm
 
 `_doctor_check_git_hooks` (`lib/helpers.sh`) gains one arm:
 
-- `drift` gives `doctor_warn "<repo>" "<hook> runs <reason> in the main checkout — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change"`.
+- `drift` gives `doctor_warn "<repo>" "<hook> drifts: <reason> — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change"`.
 
 WARN, not FAIL: the hook is still the repo's own script and the state is usually
 short-lived. The remedy names no `commit` and no `switch`: committing on the main checkout's
 default branch is a direct-to-master commit, and switching could move another session's
-tree. The existing `stale` arm and its remedy are unchanged. The fail-closed `*)` arm is
-unchanged, so any other identity word still FAILs.
+tree. Every other arm, `stale` included, is unchanged; `error` already FAILs through the
+existing rc 2 path, and the fail-closed `*)` arm still FAILs any unknown word.
 
 ### 3. Tests and documentation
 
 - `tests/setup_env/git_hooks_identity.bats`: one fixture-repo case per row of the table in
-  section 1, including a failed hash call; a mutation control that compares against the
-  working-tree file instead of the default-branch blob must turn the symlink `drift` case red.
+  section 1, plus a copy-hook regression case showing a copy is still judged against the
+  working tree. A mutation control that compares against the working-tree file instead of
+  the default-branch blob must turn the `drift` case red.
 - `tests/setup_env/doctor_git_hooks.bats`: the `drift` message with its remedy text.
-- ADR-0061 gets a dated amendment section recording the default-branch blob comparison and
-  the `drift` word; its decision (doctor judges hook identity, read-only) is unchanged.
+- ADR-0061 gets a dated amendment section recording the default-branch blob comparison for
+  symlinks and the `drift` word; its decision (doctor judges hook identity, read-only) is
+  unchanged.
 
 ### Alternatives considered
 
@@ -110,32 +127,37 @@ unchanged, so any other identity word still FAILs.
   drifted. A modified hook script can delete or bypass its own check, and the measured
   episode replaced the whole file. A check is only meaningful outside the thing it checks.
 - **Compare against HEAD and warn separately when the main checkout is off its default
-  branch.** Rejected in review: both measured branch episodes left the hook bytes unchanged,
-  so a branch-name test warns about states that never change the gate.
+  branch.** Rejected in review round 1: both measured branch episodes left the hook bytes
+  unchanged, so a branch-name test warns about states that never change the gate.
+- **Also judge copies against the default-branch blob.** Rejected in review round 2: every
+  copy-installing `install-hooks` copies from the working tree, so the `stale` remedy would
+  reinstall the same bytes and never clear, and the existing off-branch `stale` text would
+  name the wrong reference.
+- **Compare against `origin/<default>`.** Rejected: it would warn on every lagging main
+  checkout (four repos on `claude` today) for a state that does not change the gate.
 - **Install copies everywhere.** Not chosen: it reverses the symlink direction ADR-0016
   records and brings back copies that go stale until reinstalled.
 
 ## Requirements
 
-- **R1.** `_git_hooks_identity` resolves the default branch as `main` when `refs/heads/main` exists and `refs/heads/master` does not, else `master`, and compares installed content against `git rev-parse --verify -q refs/heads/<default>:<candidate>`.
-- **R2.** `_git_hooks_identity` hashes installed content with `git hash-object --path=<candidate> <file>`, following a symlink to its target.
-- **R3.** `_git_hooks_identity` prints `match` and returns 0 for a symlink to a source candidate whose content hash equals the candidate's default-branch blob, whatever branch the repo's HEAD is on.
-- **R4.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> differs from <default>`, and returns 1, for a symlink to a source candidate whose content hash differs from the candidate's default-branch blob.
-- **R5.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> is not on <default>`, and returns 1, for a symlink to a source candidate that has no blob on the default branch.
-- **R6.** `_git_hooks_identity` prints `match` and returns 0 for a regular-file hook whose content hash equals the default-branch blob of a source candidate, whatever the working-tree file holds.
-- **R7.** `_git_hooks_identity` prints `stale` and returns 1 for a regular-file hook whose content hash equals no source candidate's default-branch blob.
-- **R8.** `_git_hooks_identity` prints `error`, a TAB and a reason naming the failed call, and returns 2, when `git hash-object` exits non-zero or prints an empty hash, when `git rev-parse --verify -q` for a default-branch blob exits with a status other than 0 or 1 (1 means the blob is missing), or when neither `refs/heads/master` nor `refs/heads/main` exists; an empty or failed hash is never compared.
-- **R9.** `_doctor_check_git_hooks` calls `doctor_warn "<repo>" "<hook> runs <reason> in the main checkout — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change"` for `drift`.
-- **R10.** Every git call added to `lib/git_hooks.sh` or `lib/helpers.sh` runs under `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`.
-- **R11.** `tests/setup_env/git_hooks_identity.bats` has at least one case for each of R3 to R8, and `tests/setup_env/doctor_git_hooks.bats` has a case for R9.
-- **R12.** `docs/adr/0061-doctor-hook-identity-and-ggshield-probe.md` gains an amendment section dated 2026-11-22 naming the default-branch blob comparison and the `drift` word.
-- **V1.** A mutation that compares against the working-tree file instead of the default-branch blob turns at least the R4 case red.
-- **V2.** `./setup_env.sh -t doctor` on `claude` after the change reports no `drift` line and no new `stale` line for any of the nine repos (prediction from the Measured section).
-- **V3.** In a scratch clone whose hooks are installed as symlinks by its own `make install-hooks`, an uncommitted edit to `scripts/pre-push` makes the doctor arm print the R9 warning for that clone.
-- **V4.** In a scratch clone with copy-installed hooks, a hook copied from a non-default branch whose script differs makes the doctor arm report that hook as stale.
+- **R1.** For a symlink whose resolved target is a source candidate in the repo's main working tree, `_git_hooks_identity` resolves `<default>` as `main` when `git show-ref --verify -q refs/heads/main` succeeds and `git show-ref --verify -q refs/heads/master` fails, else `master`, and prints `error`, a TAB and `no local <default> branch`, returning 2, when `refs/heads/<default>` does not exist.
+- **R2.** For such a symlink, `_git_hooks_identity` hashes the resolved target with `git hash-object --no-filters <target>` and looks up the reference with `git rev-parse --verify -q refs/heads/<default>:<candidate>`, only after `refs/heads/<default>` is known to exist.
+- **R3.** `_git_hooks_identity` prints `match` and returns 0 for such a symlink when the target's hash equals the candidate's default-branch blob, whatever branch the repo's HEAD is on.
+- **R4.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> differs from <default>`, and returns 1, for such a symlink when the target's hash differs from the candidate's default-branch blob.
+- **R5.** `_git_hooks_identity` prints `drift`, a TAB and `<candidate> is not on <default>`, and returns 1, for such a symlink when `git rev-parse --verify -q refs/heads/<default>:<candidate>` exits 1.
+- **R6.** `_git_hooks_identity` prints `error`, a TAB and a reason naming the failed call, and returns 2, for such a symlink when `git hash-object` exits non-zero or prints an empty string, or when the blob lookup exits with a status other than 0 or 1; an empty or failed hash is never compared.
+- **R7.** `_git_hooks_identity` judges a regular-file hook exactly as before: `match` when it is byte-identical (`cmp -s`) to a candidate's working-tree file, otherwise `stale` or the generated-shim words.
+- **R8.** `_doctor_check_git_hooks` calls `doctor_warn "<repo>" "<hook> drifts: <reason> — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change"` for `drift`.
+- **R9.** Every git call added to `lib/git_hooks.sh` or `lib/helpers.sh` runs under `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`.
+- **R10.** `tests/setup_env/git_hooks_identity.bats` has at least one case for each of R1 and R3 to R7, and `tests/setup_env/doctor_git_hooks.bats` has a case for R8.
+- **R11.** `docs/adr/0061-doctor-hook-identity-and-ggshield-probe.md` gains an amendment section dated 2026-11-22 naming the default-branch blob comparison for symlinked hooks and the `drift` word.
+- **V1.** A mutation that compares the symlink target against the working-tree file instead of the default-branch blob turns at least the R4 case red.
+- **V2.** `./setup_env.sh -t doctor` on `claude` after the change reports no `drift` line and no `error` line for any of the nine repos (prediction from the Measured section).
+- **V3.** In a scratch clone whose hooks are installed as symlinks by its own `make install-hooks`, an uncommitted edit to `scripts/pre-push` makes the doctor arm print the R8 warning for that clone, and reverting the edit makes it print the repo's pass line again.
 - **N1.** No repo's `install-hooks` target changes, and doctor never reinstalls, copies, relinks, restores, commits or switches anything.
 - **N2.** No added code reads a remote ref (`origin/*`) or performs a fetch or other network call.
-- **N3.** No identity word other than `match`, `stale` and the new `drift` changes when it is printed; `worktree`, `foreign`, `generated`, `generated-broken` and `generated-unverified` are printed for exactly the inputs they were before.
+- **N3.** No added code runs a git clean or smudge filter; every added `git hash-object` call passes `--no-filters`.
+- **N4.** For regular-file hooks and generated shims, every identity word is printed for exactly the inputs it was before; `worktree`, `foreign` and `stale` for symlinks are printed for exactly the inputs they were before.
 
 ## Multi-Lens Review
 
@@ -181,3 +203,29 @@ Disposition: Addressed — R8 makes a failed or empty hash an `error`; N3 rewrit
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+### Round 2
+
+Reviewed at commit: `ab1f7ce9` (round-1 revision; the body above is the round-2 revision)
+
+- **Goal-Fit.** Finding: R6/R7 changed what `stale` means for copies while the `stale` doctor
+  arm, declared unchanged, still branches on the HEAD branch name, so a copy taken on a
+  feature branch is reported as differing from the branch it equals, and on master the
+  reinstall remedy copies the same dirty bytes and never clears. Assumption: the local
+  default ref is current when doctor runs. Disposition: Addressed — copies are out of scope
+  and judged exactly as before (R7, N4); the local default branch stays the reference
+  (operator, 2026-11-22), recorded under Alternatives considered.
+- **Ergonomics.** Finding: the same copy-side `stale` defect (every copy-installing
+  `install-hooks` copies from the working tree: ai-config, etch-cli, the site, state-ledger);
+  the R9 sentence was ungrammatical; lag and worktree edits do not fire (26 of 26 `match`
+  with four repos lagging origin). Assumption: an off-default main checkout never coincides
+  with copies installed from that branch. Disposition: Addressed — copy scope removed, remedy
+  sentence reworded to `<hook> drifts: <reason>`.
+- **Risk.** Finding: the same copy-side `stale` defect; `rev-parse --verify -q` returns rc 1
+  for both a missing path and a missing branch, so R8's rc rule needs the ref checked first;
+  `hash-object --path` reads working-tree attributes and runs configured clean filters (code
+  execution inside a read-only check); a missing default ref turns a former `match` into a
+  FAIL. Assumption: the local default branch is a sound reference (math lags origin in two
+  `scripts/crate_templates/` files, not hook scripts). Disposition: Addressed — ref existence
+  is tested with `show-ref` before the blob lookup (R1, R2); `--no-filters` restored with the
+  CRLF limit documented (N3); the local reference kept by operator decision.
