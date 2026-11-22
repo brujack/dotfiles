@@ -3,14 +3,12 @@ title = "dotfiles gitleaks config"
 [extend]
 useDefault = true
 
+# No path allowlists: a full-history scan (gitleaks 8.30.1, 2026-11-22) found
+# nothing under the paths that were allowlisted, so each was an unused
+# allow-path. Allowlist a real false positive narrowly, with a reason, when one
+# appears; tests/scripts/gitleaks_config.bats enforces both shapes.
 [allowlist]
-description = "Suppress findings in config/settings paths and known-rotated token commits"
-paths = [
-  '''^\.cursor/''',
-  '''^\.claude/''',
-  '''^Brewfile''',
-  '''^ubuntu_.*_packages\.txt$''',
-]
+description = "Commits whose credential has been revoked and rotated"
 commits = [
-  "0eb455be89ec4434b32ff29eb1c7d2655f27c6fd",
+  "0eb455be89ec4434b32ff29eb1c7d2655f27c6fd", # revoked and rotated by the operator 2026-11-22
 ]
