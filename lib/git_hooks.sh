@@ -302,9 +302,13 @@ _git_hooks_phys_path() {
 #                                  name is what stops a pre-commit that is a
 #                                  copy of the repo's own pre-push passing.
 #   generated (rc 0)            -- a pre-commit shim (judged only when the repo
-#                                  tracks no candidate) that can run here.
-#   generated-broken (rc 1)     -- a shim that cannot run; reason names the
-#                                  first failing condition.
+#                                  tracks no candidate) whose own interpreter
+#                                  imports pre_commit here.
+#   generated-broken (rc 1)     -- a shim whose own interpreter is unusable here;
+#                                  reason names the first failing condition. The
+#                                  shim's `command -v pre-commit` fallback is
+#                                  ignored: it works only where the committing
+#                                  process has pre-commit on PATH.
 #   generated-unverified (rc 1) -- a shim whose probe timed out or could not
 #                                  run for want of a timeout binary.
 #   worktree (rc 1)             -- a symlink into a linked worktree.
@@ -442,8 +446,9 @@ _git_hooks_identity() {
     printf 'generated-broken\tno INSTALL_PYTHON\n'
     return 1
   fi
-  # A relative value would be -x-tested against this cwd but exec'd through
-  # PATH by timeout, so the probe could verify a different interpreter.
+  # A slashless value would be -x-tested against this cwd but looked up on
+  # PATH by timeout, so the probe could verify a different interpreter; any
+  # relative value also depends on the committer's cwd.
   # pre-commit always writes an absolute sys.executable.
   if [[ "${_py}" != /* ]]; then
     printf 'generated-broken\tINSTALL_PYTHON %s not absolute\n' "${_py}"
@@ -469,7 +474,7 @@ _git_hooks_identity() {
   "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_py}" -I -c 'import pre_commit' </dev/null >/dev/null 2>&1
   _rc=$?
   # 124 is the only timeout exit code treated as unverified; timeout's own
-  # 125-127/137 fall through to generated-broken as before.
+  # 125-127/137 fall through to generated-broken.
   if [[ ${_rc} -eq 124 ]]; then
     printf 'generated-unverified\tprobe timed out\n'
     return 1

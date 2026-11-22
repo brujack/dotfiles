@@ -144,7 +144,7 @@ run_arm() {
   HOOK_EXPECTED_REPOS=()
   run_arm
   grep -qF "git hooks: HOOK_EXPECTED_REPOS is empty — config/hook_repos.sh missing or empty" "${OUT}"
-  [ "$(grep -cF "alpha" "${OUT}")" -eq 0 ]
+  [ "$(command grep -cF "alpha" "${OUT}")" -eq 0 ]
   [ "${_DOCTOR_FAIL}" -eq 1 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
 }
@@ -155,8 +155,8 @@ run_arm() {
   HOOK_EXPECTED_REPOS=(alpha ghost)
   run_arm
   grep -qF "git hooks: skipped: core.hooksPath is pinned (see Git hooksPath above)" "${OUT}"
-  [ "$(grep -cF "alpha" "${OUT}")" -eq 0 ]
-  [ "$(grep -cF "ghost" "${OUT}")" -eq 0 ]
+  [ "$(command grep -cF "alpha" "${OUT}")" -eq 0 ]
+  [ "$(command grep -cF "ghost" "${OUT}")" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_PASS}" -eq 0 ]
@@ -168,7 +168,7 @@ run_arm() {
   printf 'gitdir: /nonexistent\n' > "${PERSONAL_GITREPOS}/wtlike/.git"
   HOOK_EXPECTED_REPOS=(wtlike alpha)
   run_arm
-  [ "$(grep -cF "wtlike" "${OUT}")" -eq 0 ]
+  [ "$(command grep -cF "wtlike" "${OUT}")" -eq 0 ]
   [ "${_DOCTOR_PASS}" -eq 1 ]
   [ "${_DOCTOR_FAIL}" -eq 0 ]
   [ "${_DOCTOR_WARN}" -eq 0 ]
@@ -191,8 +191,8 @@ run_arm() {
   HOOK_EXPECTED_REPOS=(beta)
   run_arm
   grep -qF "beta: missing pre-commit pre-push commit-msg — remedy: cd ${_d} && pre-commit install; make -C ${_d} install-hooks" "${OUT}"
-  [ "$(grep -cF "install-hooks; make" "${OUT}")" -eq 0 ]
-  [ "$(grep -cF "beta: missing" "${OUT}")" -eq 1 ]
+  [ "$(command grep -cF "install-hooks; make" "${OUT}")" -eq 0 ]
+  [ "$(command grep -cF "beta: missing" "${OUT}")" -eq 1 ]
 }
 
 @test "doctor git hooks: no hooks directory FAILs with the install-hooks remedy" {

@@ -157,7 +157,7 @@ run_arm() {
 @test "doctor ggshield: the probe runs and a fake key never reaches the output" {
   STUB_GGSHIELD_EXIT=0 run_arm
   [ -s "${STUB_GGSHIELD_CALLS}" ]
-  ! grep -qF "fake-key-AbCdEf123" "${OUT}"
+  ! command grep -qF "fake-key-AbCdEf123" "${OUT}"
 }
 
 @test "doctor ggshield: fallback list equals the pre-commit hook's" {

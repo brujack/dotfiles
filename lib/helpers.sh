@@ -1665,7 +1665,7 @@ _doctor_check_ggshield() {
 
 # Prints the `timeout` to bound a doctor probe with: the one on PATH, else
 # Homebrew's gtimeout (macOS ships no `timeout`). Prints nothing when none
-# resolves, and the caller then runs the probe unbounded.
+# resolves; each caller decides what to do then (some run unbounded, some warn).
 _doctor_resolve_timeout() {
   _doctor_resolve_executable timeout "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}"
 }
