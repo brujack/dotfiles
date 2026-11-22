@@ -4,7 +4,7 @@ setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   ZSHRC_D="${REPO_ROOT}/.config/.zshrc.d"
   source "${REPO_ROOT}/tests/helpers/common.bash"
-  # F16: the sourced zsh config self-heals ~/.oh-my-zsh and runs rbenv init;
+  # F16 (security audit 2026-11-16; spec docs/superpowers/specs/2026-11-21-bats-sentinel-home-design.md): the sourced zsh config self-heals ~/.oh-my-zsh and runs rbenv init;
   # keep both inside this test's own HOME, never the suite's shared one.
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}/.oh-my-zsh/custom/plugins/zsh-autosuggestions"

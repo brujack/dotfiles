@@ -23,7 +23,11 @@ mkfx() {
 }
 
 _uv_ver() {
-  sed -n 's/^UV_VER="\(.*\)"$/\1/p' "${REPO_ROOT}/lib/constants.sh"
+  local _v
+  _v="$(sed -n 's/^UV_VER="\(.*\)"$/\1/p' "${REPO_ROOT}/lib/constants.sh")"
+  # A pattern broken the same way here and in the helper must not pass silently.
+  [[ "${_v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  printf '%s\n' "${_v}"
 }
 
 @test "every test directory has a setup_suite.bash that sources the helper" {
@@ -41,7 +45,7 @@ _uv_ver() {
 }
 
 @test "setup_suite exports the R2 values" {
-  mkfx 'env > "${OUT}"'
+  mkfx 'env > "${OUT}"; for _d in HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME PARALLEL_HOME; do [ -d "${!_d}" ] && printf "dir-ok:%s\n" "${_d}" >> "${OUT}"; done'
   run env -u MOCK_CALLS_FILE OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
   [ "${status}" -eq 0 ]
   local _h _s
@@ -59,7 +63,11 @@ _uv_ver() {
   command grep -qx "GIT_CONFIG_GLOBAL=/dev/null" "${OUT}"
   command grep -qx "GIT_CONFIG_SYSTEM=/dev/null" "${OUT}"
   command grep -qx "MOCK_CALLS_FILE=${_s}/mock_calls" "${OUT}"
-  ! command grep -q '^_BATS_SENTINEL=' "${OUT}"
+  if command grep -q '^_BATS_SENTINEL=' "${OUT}"; then return 1; fi
+  local _n
+  for _n in HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME PARALLEL_HOME; do
+    command grep -qx "dir-ok:${_n}" "${OUT}"
+  done
 }
 
 @test "a caller's MOCK_CALLS_FILE survives" {
@@ -83,6 +91,15 @@ _uv_ver() {
   run env PINNED_UV_BIN=/caller/uv HOME="${_fake}" OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
   [ "${status}" -eq 0 ]
   command grep -qx 'PINNED_UV_BIN=/caller/uv' "${OUT}"
+}
+
+@test "PINNED_UV_BIN stays unset when the real HOME has no pinned uv" {
+  local _fake="${BATS_TEST_TMPDIR}/emptyhome"
+  mkdir -p "${_fake}"
+  mkfx 'env > "${OUT}"'
+  run env -u PINNED_UV_BIN HOME="${_fake}" OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
+  [ "${status}" -eq 0 ]
+  if command grep -q '^PINNED_UV_BIN=' "${OUT}"; then return 1; fi
 }
 
 @test "an unreadable constants file prints the message and still isolates" {
