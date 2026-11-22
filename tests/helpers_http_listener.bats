@@ -74,7 +74,7 @@ teardown() {
     [[ "${_fd##*/}" == 0 ]] && continue
     [[ "$(readlink "${_fd}")" != pipe:* ]]
   done
-  [ "$(readlink "/proc/${HTTP_LISTENER_PID}/fd/1")" = "${BATS_TEST_TMPDIR}/listener.log" ]
+  [ "$(readlink "/proc/${HTTP_LISTENER_PID}/fd/1")" = "$(cd "${BATS_TEST_TMPDIR}" && pwd -P)/listener.log" ]
 }
 
 @test "stop_http_listener is safe under errexit after the listener already exited" {
