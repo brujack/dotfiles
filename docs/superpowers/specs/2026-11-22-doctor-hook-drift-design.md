@@ -1,7 +1,8 @@
 # Doctor check: installed hooks that drift from the committed script
 
 **Date:** 2026-11-22
-**Status:** Draft
+**Status:** Approved
+- **Approved:** 2026-11-22
 **Source:** security audit 2026-11-16, finding F7 (ai-config
 `docs/knowledge/dotfiles-security-audit-2026-11-16.md`).
 
@@ -261,7 +262,7 @@ Assumption: the main checkout's local default branch is reviewed content. A dire
 commit to a hook script would become the reference and read `match`. Today every symlinked
 repo's default branch is 0 commits ahead of origin, and no dotfiles reflog commit touched a
 hook script; core.md git-workflow-001/-003 allow only docs and pure data direct to master.
-Disposition:
+Disposition: Accepted, reason: chosen limit; direct hook-script commits to master are already forbidden (operator, 2026-11-22).
 
 ## External Review
 
@@ -273,10 +274,10 @@ Report: [round1.md](2026-11-22-doctor-hook-drift-design.external-review/round1.m
 
 | finding | disposition | evidence | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | -------- | ---------------- | ----------------- |
-| F1.1 | Fixed | R1 and Design 1 step 1: with both refs, the branch HEAD is symbolically on wins; HEAD on neither is `error` (`both main and master exist`); R10 gains the two both-refs cases. On `claude` no symlinked repo has both refs (dotfiles master, etch-config main, math master). | unjudged | |
-| F1.2 | Fixed | `drift` prints `drift<TAB><reason><TAB><default><TAB><candidate>` (R4, R5, Design 2); the doctor reads fields 3 and 4 (R8); R10 asserts the remedy line for a `master` and a `main` repo. | unjudged | |
-| F1.3 | Fixed | V3 sets `HOME` and `GITREPOS` to scratch, places the clone at `<scratch>/personal/dotfiles`, and calls `_doctor_check_git_hooks` only. | unjudged | |
-| F1.4 | Fixed | Design 1 step 4 records the unpushed-local-commit limit as a chosen trade, citing the origin alternative and git-workflow-001/-003; round 3's disposition stays for the operator at Step 9. | unjudged | |
-| F1.5 | Fixed | Round 1 Ergonomics and Risk dispositions annotated as superseded (V4 removed; R8 is now R6). | unjudged | |
+| F1.1 | Fixed | R1 and Design 1 step 1: with both refs, the branch HEAD is symbolically on wins; HEAD on neither is `error` (`both main and master exist`); R10 gains the two both-refs cases. On `claude` no symlinked repo has both refs (dotfiles master, etch-config main, math master). | unjudged | accepted as fixed (2026-11-22) |
+| F1.2 | Fixed | `drift` prints `drift<TAB><reason><TAB><default><TAB><candidate>` (R4, R5, Design 2); the doctor reads fields 3 and 4 (R8); R10 asserts the remedy line for a `master` and a `main` repo. | unjudged | accepted as fixed (2026-11-22) |
+| F1.3 | Fixed | V3 sets `HOME` and `GITREPOS` to scratch, places the clone at `<scratch>/personal/dotfiles`, and calls `_doctor_check_git_hooks` only. | unjudged | accepted as fixed (2026-11-22) |
+| F1.4 | Fixed | Design 1 step 4 records the unpushed-local-commit limit as a chosen trade, citing the origin alternative and git-workflow-001/-003; round 3's disposition stays for the operator at Step 9. | unjudged | accepted as fixed (2026-11-22) |
+| F1.5 | Fixed | Round 1 Ergonomics and Risk dispositions annotated as superseded (V4 removed; R8 is now R6). | unjudged | accepted as fixed (2026-11-22) |
 
 Stopped: reviewer recommended stopping in round 1
