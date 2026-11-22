@@ -333,6 +333,11 @@ scan runs and no scan quota is consumed.
 - **N3.** `_doctor_check_ggshield` never runs `ggshield secret scan` or any other command that consumes scan quota.
 - **N4.** No per-repo hook-name map is added.
 
+
+## Amendments
+
+- N1 -> No change in this repository to `-t update`, `setup_user`, `install_git_hooks_all_repos`, any repair path, or any hook script; V1's operator-approved `pre-commit install` in the state-ledger checkout is verification of this design, not part of it. — the plan's non-goal check found N1 UNCLEAR on whether it covers an operator-run reinstall in another repo.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `2d179d54` (Step 7 self-review commit, before Step 8 dispatch)
