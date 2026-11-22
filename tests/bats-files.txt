@@ -108,6 +108,7 @@ tests/setup_env/update_summary.bats
 tests/setup_env/update_summary_integrity.bats
 tests/setup_env/workflows.bats
 tests/ssh_config.bats
+tests/suite_isolation.bats
 tests/zshrc.d/cross_shell.bats
 tests/zshrc.d/profiles.bats
 tests/zshrc.d/unit.bats
