@@ -312,8 +312,9 @@ _git_hooks_phys_path() {
 #   generated-unverified (rc 1) -- a shim whose probe timed out or could not
 #                                  run for want of a timeout binary.
 #   worktree (rc 1)             -- a symlink into a linked worktree.
-#   stale (rc 1)                -- a non-matching regular file, or a symlink to
-#                                  a non-candidate in the main working tree.
+#   stale (rc 1)                -- a non-matching regular file, a symlink to a
+#                                  non-candidate in the main working tree, or a
+#                                  symlink to a candidate whose file is missing.
 #   foreign (rc 1)              -- a symlink outside the repo and its worktrees.
 #   error (rc 2)                -- `git ls-files` failed or HOOK_PATH is
 #                                  unreadable.
