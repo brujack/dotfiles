@@ -2,6 +2,7 @@
 
 - **Date:** 2026-11-21
 - **Source:** security audit 2026-11-16, findings F15-F20 (ai-config `docs/knowledge/dotfiles-security-audit-2026-11-16.md`); F15 fixed in dotfiles#475.
+- **Approved:** 2026-11-21
 
 ## Problem
 
