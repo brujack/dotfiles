@@ -26,6 +26,7 @@ tests/scripts/commit_msg.bats
 tests/scripts/digest_publish.bats
 tests/scripts/docs_inert_premise.bats
 tests/scripts/dpkg_sudo_frontend.bats
+tests/scripts/gitleaks_config.bats
 tests/scripts/home_lan_probe.bats
 tests/scripts/html2ascii.bats
 tests/scripts/https_only_fetch.bats
