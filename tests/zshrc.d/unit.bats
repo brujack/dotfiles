@@ -1459,3 +1459,57 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"count=1"* ]]
 }
+
+# ── Google Cloud credentials are per-command (security audit F3) ──────────────
+# ~/.google_creds used to be sourced at shell start, so every child process
+# inherited its exports. with-gcloud-creds loads it for one command only.
+# /bin/sh, not sh: 2_functions.zsh defines an sh() ssh helper.
+
+_gcreds_fixture() {
+  mkdir -p "${BATS_TEST_TMPDIR}/gchome"
+  printf 'export GCREDS_FIXTURE_EXPORTED=fixture-exported\nGCREDS_FIXTURE_PLAIN=fixture-plain\n' \
+    > "${BATS_TEST_TMPDIR}/gchome/.google_creds"
+}
+
+@test "5_general.zsh does not load ~/.google_creds into the shell" {
+  _gcreds_fixture
+  run env HOME="${BATS_TEST_TMPDIR}/gchome" zsh -c "
+    source '${ZSHRC_D}/5_general.zsh' 2>/dev/null
+    printf '%s\n' \"\${GCREDS_FIXTURE_EXPORTED:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = "unset" ]
+}
+
+@test "with-gcloud-creds gives one command the credentials and leaves the shell clean" {
+  _gcreds_fixture
+  run env HOME="${BATS_TEST_TMPDIR}/gchome" zsh -c "
+    source '${ZSHRC_D}/2_functions.zsh' 2>/dev/null
+    with-gcloud-creds /bin/sh -c 'printf \"%s %s\n\" \"\$GCREDS_FIXTURE_EXPORTED\" \"\$GCREDS_FIXTURE_PLAIN\"'
+    printf 'after=%s\n' \"\${GCREDS_FIXTURE_EXPORTED:-unset}\"
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"fixture-exported fixture-plain"* ]]
+  [[ "$output" == *"after=unset"* ]]
+}
+
+@test "with-gcloud-creds fails without running the command when the file is missing" {
+  mkdir -p "${BATS_TEST_TMPDIR}/emptyhome"
+  run env HOME="${BATS_TEST_TMPDIR}/emptyhome" zsh -c "
+    source '${ZSHRC_D}/2_functions.zsh' 2>/dev/null
+    with-gcloud-creds touch '${BATS_TEST_TMPDIR}/ran'
+  "
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".google_creds not found"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/ran" ]
+}
+
+@test "with-gcloud-creds with no command prints usage and fails" {
+  _gcreds_fixture
+  run env HOME="${BATS_TEST_TMPDIR}/gchome" zsh -c "
+    source '${ZSHRC_D}/2_functions.zsh' 2>/dev/null
+    with-gcloud-creds
+  "
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"usage: with-gcloud-creds"* ]]
+}

@@ -98,10 +98,9 @@ setopt hist_reduce_blanks
 # add in aws creds for terraform and ansible
 export AWS_HOME=${HOME}/.aws
 
-# add in google cloud creds for terraform
-if [[ -f ${HOME}/.google_creds ]]; then
-  source ${HOME}/.google_creds
-fi
+# Google Cloud creds are not loaded here: every child of the shell would inherit
+# them. Run the command that needs them as `with-gcloud-creds <cmd>` instead
+# (2_functions.zsh).
 
 # ansible vault password file
 if [[ -f ${HOME}/.ansible_vault_pass.txt ]]; then
