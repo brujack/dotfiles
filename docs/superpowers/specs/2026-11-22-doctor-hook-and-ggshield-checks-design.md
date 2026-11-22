@@ -340,6 +340,10 @@ scan runs and no scan quota is consumed.
 - R10 -> For a judged shim failing a condition of R9, `_git_hooks_identity` prints `generated-broken` and returns 1 with the reason `no .pre-commit-config.yaml`, `hook type <x>`, `no INSTALL_PYTHON`, `INSTALL_PYTHON <path> not absolute`, `INSTALL_PYTHON <path> missing` or `<path> cannot import pre_commit` (first failing condition, in that order), whatever `pre-commit` resolves to on `PATH`; it prints `generated-unverified` and returns 1 with `probe timed out` when the probe exits 124 and `no timeout binary` when no `timeout` resolves. — Task 1 code review showed a relative value is checked against doctor's working directory but executed through PATH, so the probe can verify a different interpreter; pre-commit always writes an absolute `sys.executable`.
 - R4 -> `_doctor_check_git_hooks` prints nothing for a listed name whose `.git` is not a directory (a linked worktree or submodule checkout); when `.git` is a directory but `git rev-parse --git-dir` fails, it calls `doctor_fail "<name>" "cannot verify hooks (not a usable git repository)"`. — Task 2 review and the automated security review showed a corrupt `.git` directory was skipped silently, failing open; only the worktree/submodule shape is a legitimate silent skip.
 - R6 -> When any of `pre-commit`, `pre-push`, `commit-msg` is not executable in a repo's hooks directory, `_doctor_check_git_hooks` calls `doctor_fail "<name>" "missing <hooks> — remedy: <remedies>"`, `<hooks>` being the space-joined names `_git_hooks_check_complete` prints and `<remedies>` the distinct per-hook remedies of the missing hooks, each once, in hook order, joined by `; `. — the spec named one remedy for a line that can cover hooks with different remedies (state-ledger: `pre-commit install` for `pre-commit`, `install-hooks` for the others); Task 2 reviews.
+- finding R5 (2026-11-22, reviewer both): DIFFERS — The specified message is emitted at 1000 when _git_hooks_check_complete returns 2 (missing hooks dir, remedy dir from _git_hooks_target_dir or the repo dir, tested), but a _git_hooks_dir failure at 1019 (the race after that check) emits doctor_fail "<name>" "cannot verify hooks (hooks directory unreadable)" instead of the required 'no hooks directory — remedy: make -C <remedy-dir> install-hooks'.
+- R5 -> When `_git_hooks_check_complete` reports that a repo has no hooks directory (its rc 2, which is `_git_hooks_dir` failing), `_doctor_check_git_hooks` calls `doctor_fail "<name>" "no hooks directory — remedy: make -C <remedy-dir> install-hooks"`, where `<remedy-dir>` is the directory `_git_hooks_target_dir` prints for that repo, or the repo directory when it prints nothing; if a later `_git_hooks_dir` call fails for a repo that passed that check (the directory vanished mid-run), it calls `doctor_fail "<name>" "cannot verify hooks (hooks directory unreadable)"`. — spec alignment 2026-11-22: the built check routes the no-hooks-directory case through `_git_hooks_check_complete`, and the race branch fails closed with its own reason; `_git_hooks_target_dir` prints a path only on success, so a printed path is never discarded.
+- finding R20 (2026-11-22, reviewer A): DIFFERS — Several _doctor_check_ggshield tests use neither stated mechanism: 'not found anywhere' runs with PATH=<empty dir> and GGSHIELD_BIN unset, 'no timeout binary' with PATH=<stub dir only>, 'resolves through GGSHIELD_FALLBACK_PATHS' with PATH=<tonly dir>, and the two invalid-GGSHIELD_BIN tests set it to a non-stub path; none appears able to reach a real ggshield, but the requirement names only 'GGSHIELD_BIN=stub' or 'PATH=/usr/bin:/bin plus a stub dir' (the command -v test does match the latter).
+- R20 -> No test reaches the real `ggshield` binary or the network: every `_doctor_check_ggshield` test either sets `GGSHIELD_BIN` to `tests/stubs/ggshield-stub`, sets it to a deliberately invalid path whose failure the test asserts, or runs the arm under a scoped `PATH` that contains no real `ggshield` (empty, the stub directory, `/usr/bin:/bin` plus a stub directory with the stub first, or links to `timeout`, `bash` and `sleep` only); one test reaches the `command -v` branch by putting the stub on a scoped `PATH` with `GGSHIELD_BIN` unset. — spec alignment 2026-11-22: the built tests use these narrower PATHs, each of which excludes any real ggshield more tightly than `/usr/bin:/bin` does.
 
 ## Multi-Lens Review
 
@@ -455,3 +459,29 @@ Report: [round1.md](2026-11-22-doctor-hook-and-ggshield-checks-design.external-r
 | F1.8 | Fixed | The probe runs in a subshell after `cd /` so no repo `.env` supplies the key, and the PASS line names `GITGUARDIAN_API_KEY` when it is set (R18). | unjudged | approved 2026-11-22 |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Spec alignment (2026-11-22)
+
+- spec: docs/superpowers/specs/2026-11-22-doctor-hook-and-ggshield-checks-design.md
+- anchor: 38821bb17401aa382752a61c291061f7c94207fd
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+| R5 | both | DIFFERS | The specified message is emitted at 1000 when _git_hooks_check_complete returns 2 (missing hooks dir, remedy dir from _git_hooks_target_dir or the repo dir, tested), but a _git_hooks_dir failure at 1019 (the race after that check) emits doctor_fail "<name>" "cannot verify hooks (hooks directory unreadable)" instead of the required 'no hooks directory — remedy: make -C <remedy-dir> install-hooks'. | - R5 -> When `_git_hooks_check_complete` reports that a repo has no hooks directory (its rc 2, which is `_git_hooks_dir` failing), `_doctor_check_git_hooks` calls `doctor_fail "<name>" "no hooks directory — remedy: make -C <remedy-dir> install-hooks"`, where `<remedy-dir>` is the directory `_git_hooks_target_dir` prints for that repo, or the repo directory when it prints nothing; if a later `_git_hooks_dir` call fails for a repo that passed that check (the directory vanished mid-run), it calls `doctor_fail "<name>" "cannot verify hooks (hooks directory unreadable)"`. — spec alignment 2026-11-22: the built check routes the no-hooks-directory case through `_git_hooks_check_complete`, and the race branch fails closed with its own reason; `_git_hooks_target_dir` prints a path only on success, so a printed path is never discarded. |
+| R20 | A | DIFFERS | Several _doctor_check_ggshield tests use neither stated mechanism: 'not found anywhere' runs with PATH=<empty dir> and GGSHIELD_BIN unset, 'no timeout binary' with PATH=<stub dir only>, 'resolves through GGSHIELD_FALLBACK_PATHS' with PATH=<tonly dir>, and the two invalid-GGSHIELD_BIN tests set it to a non-stub path; none appears able to reach a real ggshield, but the requirement names only 'GGSHIELD_BIN=stub' or 'PATH=/usr/bin:/bin plus a stub dir' (the command -v test does match the latter). | - R20 -> No test reaches the real `ggshield` binary or the network: every `_doctor_check_ggshield` test either sets `GGSHIELD_BIN` to `tests/stubs/ggshield-stub`, sets it to a deliberately invalid path whose failure the test asserts, or runs the arm under a scoped `PATH` that contains no real `ggshield` (empty, the stub directory, `/usr/bin:/bin` plus a stub directory with the stub first, or links to `timeout`, `bash` and `sleep` only); one test reaches the `command -v` branch by putting the stub on a scoped `PATH` with `GGSHIELD_BIN` unset. — spec alignment 2026-11-22: the built tests use these narrower PATHs, each of which excludes any real ggshield more tightly than `/usr/bin:/bin` does. |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: no evidence recorded
+- V2: no evidence recorded
+- V3: no evidence recorded
+- V4: no evidence recorded
+- V5: no evidence recorded
