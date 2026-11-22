@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Stand-in for ggshield, reached only through GGSHIELD_BIN or a scoped PATH.
+# Knobs: STUB_GGSHIELD_EXIT (default 0), STUB_GGSHIELD_SLEEP seconds (default 0),
+# STUB_GGSHIELD_CALLS (file: one line appended per `quota` call).
+# It prints a fake key on stdout and stderr, so a test can prove doctor
+# discards both streams.
+if [[ "${1:-}" == "quota" ]]; then
+  sleep "${STUB_GGSHIELD_SLEEP:-0}"
+  if [[ -n "${STUB_GGSHIELD_CALLS:-}" ]]; then
+    printf 'quota\n' >> "${STUB_GGSHIELD_CALLS}"
+  fi
+  printf 'fake-key-AbCdEf123\n'
+  printf 'fake-key-AbCdEf123\n' >&2
+  exit "${STUB_GGSHIELD_EXIT:-0}"
+fi
+exit 99

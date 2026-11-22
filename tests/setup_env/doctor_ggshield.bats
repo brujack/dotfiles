@@ -1,0 +1,182 @@
+#!/usr/bin/env bats
+# _doctor_check_ggshield: does ggshield resolve and hold a working key?
+
+load '../helpers/common.bash'
+
+setup() {
+  load_setup_env
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  mkdir -p "${HOME}"
+  STUB="${REPO_ROOT}/tests/stubs/ggshield-stub"
+  # Every test points the arm at the stub (or a scoped PATH holding it) so the
+  # real ggshield and its network are unreachable.
+  export GGSHIELD_BIN="${STUB}"
+  unset GGSHIELD_FALLBACK_PATHS GITGUARDIAN_API_KEY
+  export STUB_GGSHIELD_CALLS="${BATS_TEST_TMPDIR}/calls"
+  OUT="${BATS_TEST_TMPDIR}/arm_out"
+}
+
+# run_arm -- NOT `run`: a subshell would lose the counters.
+run_arm() {
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
+  _doctor_check_ggshield > "${OUT}" 2>&1
+}
+
+@test "doctor ggshield: rc 0 is one PASS naming the path" {
+  STUB_GGSHIELD_EXIT=0 run_arm
+  grep -qF "ggshield:" "${OUT}"
+  grep -qF "${STUB}: authenticated" "${OUT}"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+  [ "${_DOCTOR_WARN}" -eq 0 ]
+}
+
+@test "doctor ggshield: GITGUARDIAN_API_KEY in the shell is named in the PASS" {
+  GITGUARDIAN_API_KEY=x STUB_GGSHIELD_EXIT=0 run_arm
+  grep -qF "${STUB}: authenticated (key from GITGUARDIAN_API_KEY in this shell)" "${OUT}"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
+@test "doctor ggshield: rc 3 is a FAIL for no key" {
+  STUB_GGSHIELD_EXIT=3 run_arm
+  grep -qiF "no key" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ "${_DOCTOR_PASS}" -eq 0 ]
+}
+
+@test "doctor ggshield: rc 128 is a FAIL rejected or failed (rc 128)" {
+  STUB_GGSHIELD_EXIT=128 run_arm
+  grep -qF "(rc 128)" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "doctor ggshield: rc 2 is a FAIL" {
+  STUB_GGSHIELD_EXIT=2 run_arm
+  grep -qF "(rc 2)" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "doctor ggshield: rc 1 is a WARN could not reach" {
+  STUB_GGSHIELD_EXIT=1 run_arm
+  grep -qiF "could not reach" "${OUT}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+}
+
+@test "doctor ggshield: rc 4 is a WARN could not reach" {
+  STUB_GGSHIELD_EXIT=4 run_arm
+  grep -qiF "could not reach" "${OUT}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+}
+
+@test "doctor ggshield: a probe past the timeout is a WARN no answer" {
+  if [[ -z "$(_doctor_resolve_timeout)" ]]; then skip "no timeout binary"; fi
+  _DOCTOR_PROBE_TIMEOUT=1 STUB_GGSHIELD_SLEEP=5 run_arm
+  grep -qF "no answer in 1s" "${OUT}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ "${_DOCTOR_FAIL}" -eq 0 ]
+}
+
+@test "doctor ggshield: not found anywhere is a FAIL" {
+  unset GGSHIELD_BIN
+  export GGSHIELD_FALLBACK_PATHS="/nonexistent/ggshield"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
+  PATH="/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
+  grep -qF "not found" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+  [ ! -e "${STUB_GGSHIELD_CALLS}" ]
+}
+
+@test "doctor ggshield: a non-executable GGSHIELD_BIN is a FAIL and nothing runs" {
+  : > "${BATS_TEST_TMPDIR}/not-exec"
+  export GGSHIELD_BIN="${BATS_TEST_TMPDIR}/not-exec"
+  run_arm
+  grep -qF "not-exec" "${OUT}"
+  grep -qF "not executable" "${OUT}"
+  [ "${_DOCTOR_FAIL}" -eq 1 ]
+}
+
+@test "doctor ggshield: no timeout binary is a WARN and ggshield never runs" {
+  export _TIMEOUT_FALLBACK_PATHS="/nonexistent/gtimeout"
+  local _bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${_bin}"
+  ln -s "${STUB}" "${_bin}/ggshield"
+  unset GGSHIELD_BIN
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
+  PATH="${_bin}" _doctor_check_ggshield > "${OUT}" 2>&1
+  grep -qiF "timeout" "${OUT}"
+  [ "${_DOCTOR_WARN}" -eq 1 ]
+  [ ! -e "${STUB_GGSHIELD_CALLS}" ]
+}
+
+@test "doctor ggshield: resolves through command -v when GGSHIELD_BIN is unset" {
+  local _bin="${BATS_TEST_TMPDIR}/bin"
+  mkdir -p "${_bin}"
+  ln -s "${STUB}" "${_bin}/ggshield"
+  unset GGSHIELD_BIN
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
+  PATH="/usr/bin:/bin:${_bin}" _doctor_check_ggshield > "${OUT}" 2>&1
+  grep -qF "${_bin}/ggshield: authenticated" "${OUT}"
+  [ "${_DOCTOR_PASS}" -eq 1 ]
+}
+
+@test "doctor ggshield: resolves through GGSHIELD_FALLBACK_PATHS" {
+  unset GGSHIELD_BIN
+  export GGSHIELD_FALLBACK_PATHS="/nonexistent/a ${STUB}"
+  _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
+  PATH="/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
+  grep -qF "${STUB}: authenticated" "${OUT}"
+}
+
+@test "doctor ggshield: the probe runs and a fake key never reaches the output" {
+  STUB_GGSHIELD_EXIT=0 run_arm
+  [ -s "${STUB_GGSHIELD_CALLS}" ]
+  ! grep -qF "fake-key-AbCdEf123" "${OUT}"
+}
+
+@test "doctor ggshield: fallback list equals the pre-commit hook's" {
+  local _h _p _l
+  _h="$(sed -n 's/.*GGSHIELD_FALLBACK_PATHS:-\([^}]*\)}.*/\1/p' "${REPO_ROOT}/lib/helpers.sh" | head -1)"
+  _p="$(sed -n 's/.*GGSHIELD_FALLBACK_PATHS:-\([^}]*\)}.*/\1/p' "${REPO_ROOT}/scripts/pre-commit-hook.sh" | head -1)"
+  [ -n "${_h}" ]
+  [ "${_h}" = "${_p}" ]
+  [ "$(printf '%s\n' "${_h}" | wc -w)" -eq 3 ]
+  for _l in ${_h}; do
+    [[ "${_l}" == /* ]]
+  done
+}
+
+@test "doctor ggshield: run_doctor calls the arm on the line after _doctor_check_git_hooks" {
+  local _body _l
+  _body="$(declare -f run_doctor | sed 's/^ *//')"
+  _l="$(printf '%s\n' "${_body}" | grep -n '^_doctor_check_git_hooks;$' | head -1 | cut -d: -f1)"
+  [ -n "${_l}" ]
+  [ "$(printf '%s\n' "${_body}" | sed -n "$(( _l + 1 ))p")" = "_doctor_check_ggshield;" ]
+  local _src="${REPO_ROOT}/lib/helpers.sh"
+  _l="$(grep -n '^  _doctor_check_git_hooks$' "${_src}" | head -1 | cut -d: -f1)"
+  [ -n "${_l}" ]
+  [ "$(sed -n "$(( _l + 1 ))p" "${_src}")" = "  _doctor_check_ggshield" ]
+}
+
+@test "doctor ggshield: headings sit between Git hooksPath and the versions section" {
+  local _fn
+  for _fn in $(declare -F | awk '{print $3}' | command grep '^_doctor_check_'); do
+    eval "${_fn}() { :; }"
+  done
+  _doctor_check_hooks_path() { printf '\nGit hooksPath:\n'; }
+  _doctor_check_git_hooks() { printf '\nGit hooks:\n'; }
+  _doctor_check_ggshield() { printf '\nggshield:\n'; }
+  _doctor_check_versions() { printf '\nVersions:\n'; }
+  run run_doctor
+  local _o="${output}"
+  local _a _b _c _d
+  _a="$(printf '%s\n' "${_o}" | grep -n 'Git hooksPath:' | head -1 | cut -d: -f1)"
+  _b="$(printf '%s\n' "${_o}" | grep -n 'Git hooks:' | head -1 | cut -d: -f1)"
+  _c="$(printf '%s\n' "${_o}" | grep -n 'ggshield:' | head -1 | cut -d: -f1)"
+  _d="$(printf '%s\n' "${_o}" | grep -n 'Versions:' | head -1 | cut -d: -f1)"
+  [ -n "${_a}" ] && [ -n "${_d}" ]
+  [ "${_a}" -lt "${_b}" ]
+  [ "${_b}" -lt "${_c}" ]
+  [ "${_c}" -lt "${_d}" ]
+}
