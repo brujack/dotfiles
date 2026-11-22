@@ -56,3 +56,7 @@ Add `_doctor_check_git_hooks` and `_doctor_check_ggshield` to `-t doctor`.
 - ai-config ADR-0055 (hook installation integrity, ai-config's own `check-hooks`)
 - [ADR-0052](0052-pre-commit-triages-the-ggshield-exit-code.md) (pre-commit triages the ggshield exit code)
 - [ADR-0060](0060-bats-suite-hooks-sentinel-home.md)
+
+## Amendment 1 (2026-11-22)
+
+Symlinked hooks are now judged against the default-branch blob (security audit F7; spec `docs/superpowers/specs/2026-11-22-doctor-hook-drift-design.md`). A symlink to a source candidate is `match` only when `git hash-object --no-filters` of its target equals the candidate's blob on the local default branch: `main` or `master`, or the one HEAD is on when both exist. A differing or missing blob is `drift`, which doctor reports as a FAIL when the main checkout is on `master` or `main` and as a WARN on any other branch. In both cases the remedy is to inspect the change with `git -C <dir> diff <default> -- <candidate>`, then return the main checkout to a clean default branch once no session owns the change. A failed hash or an unresolvable default branch is `error`, which doctor reports as a FAIL. Regular-file hooks and generated pre-commit shims are judged exactly as before. The decision above is unchanged: doctor judges hook identity and changes nothing.
