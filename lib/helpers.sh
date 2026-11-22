@@ -663,6 +663,8 @@ run_doctor() {
   _doctor_check_cred_dirs
   _doctor_check_repo_sessions
   _doctor_check_hooks_path
+  _doctor_check_git_hooks
+  _doctor_check_ggshield
   _doctor_check_versions
   _doctor_check_aws_key_expiry
   _doctor_check_gnu_coreutils
@@ -925,6 +927,147 @@ _doctor_check_hooks_path() {
   # invokes it directly rather than via `run`. This check's contract is
   # side-effect-only (doctor_fail/doctor_pass counters); a bare bash
   # expression is not a suitable proxy for that contract.
+  return 0
+}
+# _doctor_git_hook_remedy <repo_dir> <hook> <remedy_dir> prints the command that
+# reinstalls HOOK. A repo that tracks .pre-commit-config.yaml and has no tracked
+# file named <hook> or <hook>-hook.sh gets that hook from `pre-commit install`;
+# every other hook comes from the repo's install-hooks target.
+_doctor_git_hook_remedy() {
+  local _dir="$1" _hook="$2" _remedy_dir="$3"
+  local _file _base _has_source=0 _has_config=0
+  if [[ -n "$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      git -C "${_dir}" ls-files -- .pre-commit-config.yaml 2>/dev/null)" ]]; then
+    _has_config=1
+  fi
+  while IFS= read -r -d '' _file; do
+    _base="${_file##*/}"
+    if [[ "${_base}" == "${_hook}" || "${_base}" == "${_hook}-hook.sh" ]]; then
+      _has_source=1
+    fi
+  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_dir}" ls-files -z 2>/dev/null)
+  if [[ ${_has_config} -eq 1 && ${_has_source} -eq 0 ]]; then
+    printf 'cd %s && pre-commit install' "${_dir}"
+  else
+    printf 'make -C %s install-hooks' "${_remedy_dir}"
+  fi
+}
+
+# _doctor_check_git_hooks judges the installed hooks of every HOOK_EXPECTED_REPOS
+# repo cloned under PERSONAL_GITREPOS: present, executable, and that repo's own
+# (or a pre-commit shim that can run here). Read-only: it repairs nothing.
+_doctor_check_git_hooks() {
+  printf "\nGit hooks:\n"
+  local -a _repos=()
+  if [[ -n "${HOOK_EXPECTED_REPOS+x}" ]]; then
+    _repos=("${HOOK_EXPECTED_REPOS[@]}")
+  fi
+  if [[ ${#_repos[@]} -eq 0 ]]; then
+    doctor_fail "git hooks" "HOOK_EXPECTED_REPOS is empty — config/hook_repos.sh missing or empty"
+    return 0
+  fi
+  # A pinned core.hooksPath makes `--git-path hooks` answer the pin for every
+  # repo, so each would report the same wrong cause; _doctor_check_hooks_path
+  # already owns that finding.
+  if [[ -n "$(_git_hooks_hookspath_offenders)" ]]; then
+    doctor_warn "git hooks" "skipped: core.hooksPath is pinned (see Git hooksPath above)"
+    return 0
+  fi
+
+  local _name _dir _remedy_dir _hooks_dir _missing _rc _hook _hook_path
+  local _out _word _reason _branch _wt _faulty _found=0 _m _remedies _r _seen
+  for _name in "${_repos[@]}"; do
+    _dir="${PERSONAL_GITREPOS}/${_name}"
+    if [[ ! -d "${_dir}" ]]; then
+      printf '  - %s: not cloned on this host\n' "${_name}"
+      continue
+    fi
+    _found=1
+    [[ -d "${_dir}/.git" ]] || continue
+    if ! env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+        git -C "${_dir}" rev-parse --git-dir >/dev/null 2>&1; then
+      doctor_fail "${_name}" "cannot verify hooks (not a usable git repository)"
+      continue
+    fi
+
+    _remedy_dir="$(_git_hooks_target_dir "${_dir}" 2>/dev/null)" || _remedy_dir=""
+    [[ -n "${_remedy_dir}" ]] || _remedy_dir="${_dir}"
+
+    _rc=0
+    _missing="$(_git_hooks_check_complete "${_dir}")" || _rc=$?
+    if [[ ${_rc} -eq 2 ]]; then
+      doctor_fail "${_name}" "no hooks directory — remedy: make -C ${_remedy_dir} install-hooks"
+      continue
+    fi
+    if [[ ${_rc} -ne 0 ]]; then
+      _remedies=""
+      for _m in ${_missing}; do
+        _r="$(_doctor_git_hook_remedy "${_dir}" "${_m}" "${_remedy_dir}")"
+        # Distinct remedies only, in hook order: three hooks sharing one fix
+        # name it once.
+        _seen=0
+        [[ "; ${_remedies}; " == *"; ${_r}; "* ]] && _seen=1
+        [[ ${_seen} -eq 1 ]] || _remedies="${_remedies:+${_remedies}; }${_r}"
+      done
+      doctor_fail "${_name}" "missing ${_missing} — remedy: ${_remedies}"
+      continue
+    fi
+
+    # Reachable only if the hooks directory vanishes between the check above
+    # and this call; fail closed rather than skip the repo.
+    if ! _hooks_dir="$(_git_hooks_dir "${_dir}")"; then
+      doctor_fail "${_name}" "cannot verify hooks (hooks directory unreadable)"
+      continue
+    fi
+    _faulty=0
+    for _hook in "${_GIT_HOOKS_MANDATED[@]}"; do
+      _hook_path="${_hooks_dir}/${_hook}"
+      _rc=0
+      _out="$(_git_hooks_identity "${_dir}" "${_hook}" "${_hook_path}")" || _rc=$?
+      IFS=$'\t' read -r _word _reason <<< "${_out}"
+      if [[ ${_rc} -eq 2 ]]; then
+        doctor_fail "${_name}" "cannot verify hooks (${_reason})"
+        _faulty=1
+        continue
+      fi
+      case "${_word}" in
+        match|generated) ;;
+        foreign)
+          doctor_fail "${_name}" "${_hook} is not this repo's ${_hook} script — remedy: $(_doctor_git_hook_remedy "${_dir}" "${_hook}" "${_remedy_dir}")"
+          _faulty=1 ;;
+        stale)
+          _branch="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+            git -C "${_dir}" symbolic-ref --short -q HEAD 2>/dev/null)" || _branch=""
+          case "${_branch}" in
+            master|main)
+              doctor_fail "${_name}" "${_hook} is stale — remedy: $(_doctor_git_hook_remedy "${_dir}" "${_hook}" "${_remedy_dir}")" ;;
+            *)
+              doctor_warn "${_name}" "${_hook} differs from ${_branch:-detached HEAD} (expected off the default branch)" ;;
+          esac
+          _faulty=1 ;;
+        worktree)
+          _wt="$(_git_hooks_phys_path "${_hook_path}")" || _wt="${_hook_path}"
+          doctor_warn "${_name}" "${_hook} runs from worktree ${_wt} — remedy: $(_doctor_git_hook_remedy "${_dir}" "${_hook}" "${_remedy_dir}")"
+          _faulty=1 ;;
+        generated-broken)
+          doctor_fail "${_name}" "${_hook} is a pre-commit shim that cannot run here (${_reason}) — remedy: cd ${_dir} && pre-commit install"
+          _faulty=1 ;;
+        generated-unverified)
+          doctor_warn "${_name}" "${_hook} pre-commit shim not verified (${_reason})"
+          _faulty=1 ;;
+        *)
+          # Fail closed: an identity word this arm does not know is not a pass.
+          doctor_fail "${_name}" "cannot verify hooks (unexpected identity '${_word}' for ${_hook})"
+          _faulty=1 ;;
+      esac
+    done
+    [[ ${_faulty} -eq 0 ]] && doctor_pass "${_name}: pre-commit pre-push commit-msg installed"
+  done
+
+  if [[ ${_found} -eq 0 ]]; then
+    doctor_fail "git hooks" "no listed repo found under ${PERSONAL_GITREPOS} — check GITREPOS"
+  fi
   return 0
 }
 _doctor_check_versions() {
@@ -1474,9 +1617,55 @@ _doctor_brew_links_names() {
   printf '%s' "${_shown}"
 }
 
+# _doctor_check_ggshield judges whether ggshield resolves and holds a working
+# key. It resolves ggshield itself (GGSHIELD_BIN, PATH, then the same fallback
+# list as scripts/pre-commit-hook.sh; a test pins the two lists equal) and runs
+# `ggshield quota`, which exits 0 only for an accepted key (`api-status` exits 0
+# for a rejected one). Both streams are discarded so no key can reach the report.
+_doctor_check_ggshield() {
+  printf "\nggshield:\n"
+  local _gg="" _timeout_bin _rc=0 _limit="${_DOCTOR_PROBE_TIMEOUT:-10}"
+  if [[ -n "${GGSHIELD_BIN:-}" ]]; then
+    if [[ ! -f "${GGSHIELD_BIN}" || ! -x "${GGSHIELD_BIN}" ]]; then
+      doctor_fail "ggshield" "GGSHIELD_BIN=${GGSHIELD_BIN} is not executable"
+      return 0
+    fi
+    _gg="${GGSHIELD_BIN}"
+  else
+    _gg="$(_doctor_resolve_executable ggshield "${GGSHIELD_FALLBACK_PATHS:-/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield}")"
+  fi
+
+  if [[ -z "${_gg}" ]]; then
+    doctor_fail "ggshield" "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"
+    return 0
+  fi
+
+  _timeout_bin="$(_doctor_resolve_timeout)"
+  if [[ -z "${_timeout_bin}" ]]; then
+    doctor_warn "${_gg}" "found; API key not verified (no timeout binary)"
+    return 0
+  fi
+  # cd / so the probe never reads a repo-local .gitguardian.yaml.
+  ( cd / && "${_timeout_bin}" "${_limit}" "${_gg}" quota </dev/null >/dev/null 2>&1 ) || _rc=$?
+  case "${_rc}" in
+    0)
+      if [[ -n "${GITGUARDIAN_API_KEY:-}" ]]; then
+        doctor_pass "${_gg}: authenticated (key from GITGUARDIAN_API_KEY in this shell)"
+      else
+        doctor_pass "${_gg}: authenticated"
+      fi
+      ;;
+    3) doctor_fail "${_gg}" "no API key — remedy: ggshield auth login" ;;
+    1 | 4) doctor_warn "${_gg}" "could not reach GitGuardian (rc ${_rc})" ;;
+    124) doctor_warn "${_gg}" "could not verify the API key: no answer in ${_limit}s" ;;
+    *) doctor_fail "${_gg}" "API key rejected or check failed (rc ${_rc}) — remedy: ggshield auth login" ;;
+  esac
+  return 0
+}
+
 # Prints the `timeout` to bound a doctor probe with: the one on PATH, else
 # Homebrew's gtimeout (macOS ships no `timeout`). Prints nothing when none
-# resolves, and the caller then runs the probe unbounded.
+# resolves; each caller decides what to do then (some run unbounded, some warn).
 _doctor_resolve_timeout() {
   _doctor_resolve_executable timeout "${_TIMEOUT_FALLBACK_PATHS:-/opt/homebrew/bin/gtimeout /usr/local/bin/gtimeout}"
 }

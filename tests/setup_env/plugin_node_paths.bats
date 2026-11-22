@@ -417,6 +417,8 @@ _make_plugin() {
   _doctor_check_login_shell()    { :; }
   _doctor_check_cred_dirs()      { :; }
   _doctor_check_hooks_path()     { :; }
+  _doctor_check_git_hooks()      { :; }
+  _doctor_check_ggshield()       { :; }
   _doctor_check_versions()       { :; }
   _doctor_check_aws_key_expiry() { :; }
   _doctor_check_gnu_coreutils()  { :; }

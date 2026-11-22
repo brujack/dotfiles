@@ -27,6 +27,16 @@ setup() {
   # pwsh/tflint/zig/terraform/tfsec happen to be installed there (tdd.md
   # E2). Mirrors doctor_dev_tools.bats' own setup().
   unset LINUX HAS_DEVTOOLS
+  # run_doctor calls _doctor_check_git_hooks, which reads the repos under
+  # PERSONAL_GITREPOS and runs each shim's interpreter. No test in this file
+  # drives the real arm in-process (tests/setup_env/doctor_git_hooks.bats does,
+  # against fixtures), so every in-process run_doctor call here gets the no-op.
+  # The subprocess `bash setup_env.sh -t doctor` tests cannot see this function
+  # and run the real arm against the throwaway suite HOME (no real repo read);
+  # each sets GGSHIELD_BIN to tests/stubs/ggshield-stub so the real ggshield and
+  # its network call are unreachable.
+  _doctor_check_git_hooks() { :; }
+  _doctor_check_ggshield() { :; }
 }
 
 teardown() {
@@ -355,7 +365,7 @@ _aws_key_make_fixture() {
 @test "setup_env.sh -t doctor bypasses brew prereq when brew is missing" {
   load_mocks
   export MOCK_WHICH_MISSING=brew
-  run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" -t doctor
+  GGSHIELD_BIN="${REPO_ROOT}/tests/stubs/ggshield-stub" run bash "${BATS_TEST_DIRNAME}/../../setup_env.sh" -t doctor
   [[ "$output" != *"Homebrew not found"* ]]
 }
 
@@ -560,7 +570,7 @@ EOF
   cp "${REPO_ROOT}/config/profiles.sh" "${fixture}/config/"
   chmod 000 "${fixture}/config/profiles.sh"
 
-  run bash "${fixture}/setup_env.sh" -t doctor
+  GGSHIELD_BIN="${REPO_ROOT}/tests/stubs/ggshield-stub" run bash "${fixture}/setup_env.sh" -t doctor
   chmod 644 "${fixture}/config/profiles.sh"
 
   # Both assertions are required, and the first is the one that makes this
@@ -1463,7 +1473,7 @@ EOF
   chmod 000 "${fixture}/config/profiles.sh"
 
   export PROFILE="mac_workstation"
-  run bash "${fixture}/setup_env.sh" -t doctor
+  GGSHIELD_BIN="${REPO_ROOT}/tests/stubs/ggshield-stub" run bash "${fixture}/setup_env.sh" -t doctor
   chmod 644 "${fixture}/config/profiles.sh"
 
   # doctor_pass/doctor_fail's printf template puts an ANSI reset escape

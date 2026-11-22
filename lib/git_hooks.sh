@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # lib/git_hooks.sh — discover personal repos carrying an install-hooks target
+#
+# _git_hooks_identity uses _doctor_resolve_timeout from lib/helpers.sh when it
+# is loaded, and falls back to `timeout` on PATH when this file is sourced alone.
 
 # HOOK_EXPECTED_REPOS is normally provided by config/hook_repos.sh (same
 # sourcing chain as detect_env.sh's config/profiles.sh). Define an empty
@@ -260,6 +263,229 @@ _git_hooks_check_complete() {
 
   printf '%s\n' "${_missing[*]}"
   return 1
+}
+
+# _git_hooks_phys_path prints the physical (symlink-free) form of PATH,
+# following a final symlink through every level. A dangling final link
+# resolves to the path it points at only when that target's parent directory
+# exists. Uses `cd -P`/`pwd -P` only, so it works
+# on BSD/macOS where `readlink -f` is not guaranteed. Returns 1 when a parent
+# directory is missing or the link chain loops.
+_git_hooks_phys_path() {
+  local _p="$1"
+  local _dir _base _target
+  local _hops=0
+
+  while :; do
+    _dir="$(cd -P -- "$(dirname -- "${_p}")" 2>/dev/null && pwd -P)" || return 1
+    _base="$(basename -- "${_p}")"
+    _p="${_dir%/}/${_base}"
+    [[ -L "${_p}" ]] || break
+    _hops=$((_hops + 1))
+    [[ ${_hops} -le 40 ]] || return 1
+    _target="$(readlink -- "${_p}")" || return 1
+    case "${_target}" in
+      /*) _p="${_target}" ;;
+      *) _p="${_dir%/}/${_target}" ;;
+    esac
+  done
+
+  printf '%s\n' "${_p}"
+}
+
+# _git_hooks_identity judges whether HOOK_PATH (an installed hook of REPO_DIR)
+# is that repo's own script for HOOK_NAME. Prints one word, plus a TAB and a
+# reason for generated-broken, generated-unverified and an rc 2 result:
+#   match (rc 0)                -- a symlink to, or a byte copy of, a source
+#                                  candidate: a tracked path whose basename is
+#                                  HOOK_NAME or HOOK_NAME-hook.sh. Matching by
+#                                  name is what stops a pre-commit that is a
+#                                  copy of the repo's own pre-push passing.
+#   generated (rc 0)            -- a pre-commit shim (judged only when the repo
+#                                  tracks no candidate) whose own interpreter
+#                                  imports pre_commit here.
+#   generated-broken (rc 1)     -- a shim whose own interpreter is unusable here;
+#                                  reason names the first failing condition. The
+#                                  shim's `command -v pre-commit` fallback is
+#                                  ignored: it works only where the committing
+#                                  process has pre-commit on PATH.
+#   generated-unverified (rc 1) -- a shim whose probe timed out or could not
+#                                  run for want of a timeout binary.
+#   worktree (rc 1)             -- a symlink into a linked worktree.
+#   stale (rc 1)                -- a non-matching regular file, a symlink to a
+#                                  non-candidate in the main working tree, or a
+#                                  symlink to a candidate whose file is missing.
+#   foreign (rc 1)              -- a symlink outside the repo and its worktrees.
+#   error (rc 2)                -- `git ls-files` failed or HOOK_PATH is
+#                                  unreadable.
+# The shim is read as text only (never sourced or evaluated): INSTALL_PYTHON
+# is attacker-shaped data as far as this function is concerned. The probe
+# runs the interpreter with -I so the caller's working directory and
+# PYTHONPATH cannot satisfy `import pre_commit`.
+_git_hooks_identity() {
+  local _repo_dir="$1"
+  local _hook_name="$2"
+  local _hook_path="$3"
+  local _files _rc _line _file _base
+
+  _files="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+    git -C "${_repo_dir}" -c core.quotepath=off ls-files 2>/dev/null)"
+  _rc=$?
+  if [[ ${_rc} -ne 0 ]]; then
+    printf 'error\tgit ls-files failed\n'
+    return 2
+  fi
+
+  if [[ ! -L "${_hook_path}" && ! -e "${_hook_path}" ]] \
+    || { [[ ! -L "${_hook_path}" ]] && [[ ! -f "${_hook_path}" || ! -r "${_hook_path}" ]]; }; then
+    printf 'error\tcannot read %s\n' "${_hook_path}"
+    return 2
+  fi
+
+  local -a _cands=()
+  local _has_config=0
+  while IFS= read -r _file; do
+    [[ -n "${_file}" ]] || continue
+    _base="${_file##*/}"
+    if [[ "${_base}" == "${_hook_name}" || "${_base}" == "${_hook_name}-hook.sh" ]]; then
+      _cands+=("${_file}")
+    fi
+    [[ "${_file}" == ".pre-commit-config.yaml" ]] && _has_config=1
+  done <<< "${_files}"
+
+  local _repo_phys _cand
+  _repo_phys="$(cd -P -- "${_repo_dir}" 2>/dev/null && pwd -P)" || {
+    printf 'error\tcannot resolve %s\n' "${_repo_dir}"
+    return 2
+  }
+
+  if [[ -L "${_hook_path}" ]]; then
+    local _target _wt _wts
+    _target="$(_git_hooks_phys_path "${_hook_path}")" || {
+      printf 'error\tcannot resolve %s\n' "${_hook_path}"
+      return 2
+    }
+    for _cand in "${_cands[@]}"; do
+      if [[ "${_target}" == "${_repo_phys}/${_cand}" && -f "${_target}" ]]; then
+        printf 'match\n'
+        return 0
+      fi
+    done
+    # The first porcelain entry is the main working tree; the rest are linked.
+    local _first=1
+    _wts="$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE \
+      git -C "${_repo_dir}" worktree list --porcelain 2>/dev/null)"
+    while IFS= read -r _line; do
+      [[ "${_line}" == "worktree "* ]] || continue
+      if [[ ${_first} -eq 1 ]]; then
+        _first=0
+        continue
+      fi
+      _wt="$(cd -P -- "${_line#worktree }" 2>/dev/null && pwd -P)" || continue
+      if [[ "${_target}" == "${_wt}" || "${_target}" == "${_wt}"/* ]]; then
+        printf 'worktree\n'
+        return 1
+      fi
+    done <<< "${_wts}"
+    if [[ "${_target}" == "${_repo_phys}"/* ]]; then
+      printf 'stale\n'
+      return 1
+    fi
+    printf 'foreign\n'
+    return 1
+  fi
+
+  # Regular file: a byte copy of a source candidate matches.
+  for _cand in "${_cands[@]}"; do
+    if [[ -f "${_repo_dir}/${_cand}" ]] && cmp -s "${_hook_path}" "${_repo_dir}/${_cand}"; then
+      printf 'match\n'
+      return 0
+    fi
+  done
+
+  # A shim is judged only where the repo tracks no source for this hook.
+  if [[ ${#_cands[@]} -gt 0 ]] \
+    || ! head -n 5 "${_hook_path}" 2>/dev/null | command grep -q -F '# File generated by pre-commit'; then
+    printf 'stale\n'
+    return 1
+  fi
+
+  local _py="" _type="" _in_block=0 _v
+  local _q="'" _esc="'\"'\"'"
+  local _type_re='--hook-type=([^[:space:])]+)'
+  while IFS= read -r _line || [[ -n "${_line}" ]]; do
+    if [[ "${_line}" == "# start templated"* ]]; then
+      _in_block=1
+      continue
+    fi
+    if [[ "${_line}" == "# end templated"* ]]; then
+      break
+    fi
+    [[ ${_in_block} -eq 1 ]] || continue
+    if [[ "${_line}" == "INSTALL_PYTHON="* ]]; then
+      _v="${_line#INSTALL_PYTHON=}"
+      if [[ ${#_v} -ge 2 && "${_v}" == "'"*"'" ]]; then
+        _v="${_v#"'"}"
+        _v="${_v%"'"}"
+        _v="${_v//"${_esc}"/${_q}}"
+      fi
+      _py="${_v}"
+    elif [[ "${_line}" == "ARGS="* && "${_line}" =~ ${_type_re} ]]; then
+      _type="${BASH_REMATCH[1]}"
+    fi
+  done < "${_hook_path}"
+
+  if [[ ${_has_config} -ne 1 ]]; then
+    printf 'generated-broken\tno .pre-commit-config.yaml\n'
+    return 1
+  fi
+  if [[ "${_type}" != "${_hook_name}" ]]; then
+    printf 'generated-broken\thook type %s\n' "${_type}"
+    return 1
+  fi
+  if [[ -z "${_py}" ]]; then
+    printf 'generated-broken\tno INSTALL_PYTHON\n'
+    return 1
+  fi
+  # A slashless value would be -x-tested against this cwd but looked up on
+  # PATH by timeout, so the probe could verify a different interpreter; any
+  # relative value also depends on the committer's cwd.
+  # pre-commit always writes an absolute sys.executable.
+  if [[ "${_py}" != /* ]]; then
+    printf 'generated-broken\tINSTALL_PYTHON %s not absolute\n' "${_py}"
+    return 1
+  fi
+  if [[ ! -f "${_py}" || ! -x "${_py}" ]]; then
+    printf 'generated-broken\tINSTALL_PYTHON %s missing\n' "${_py}"
+    return 1
+  fi
+
+  local _timeout_bin
+  # lib/helpers.sh's resolver (with its fallback paths) when loaded; a bare
+  # `command -v timeout` when this file is sourced standalone.
+  if declare -F _doctor_resolve_timeout >/dev/null; then
+    _timeout_bin="$(_doctor_resolve_timeout)"
+  else
+    _timeout_bin="$(command -v timeout 2>/dev/null)"
+  fi
+  if [[ -z "${_timeout_bin}" ]]; then
+    printf 'generated-unverified\tno timeout binary\n'
+    return 1
+  fi
+  "${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_py}" -I -c 'import pre_commit' </dev/null >/dev/null 2>&1
+  _rc=$?
+  # 124 is the only timeout exit code treated as unverified; timeout's own
+  # 125-127/137 fall through to generated-broken.
+  if [[ ${_rc} -eq 124 ]]; then
+    printf 'generated-unverified\tprobe timed out\n'
+    return 1
+  fi
+  if [[ ${_rc} -ne 0 ]]; then
+    printf 'generated-broken\t%s cannot import pre_commit\n' "${_py}"
+    return 1
+  fi
+  printf 'generated\n'
+  return 0
 }
 
 # _git_hooks_gap_repos prints six distinct gap shapes for repos on
