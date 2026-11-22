@@ -174,6 +174,10 @@ existing rc 2 path, and the fail-closed `*)` arm still FAILs any unknown word.
 - **N3.** No added code runs a git clean or smudge filter; every added `git hash-object` call passes `--no-filters`.
 - **N4.** For regular-file hooks and generated shims, every identity word is printed for exactly the inputs it was before; `worktree`, `foreign` and `stale` for symlinks are printed for exactly the inputs they were before.
 
+## Amendments
+
+- R8 -> `_doctor_check_git_hooks` reads the identity line's third and fourth TAB-separated fields as `<default>` and `<candidate>` and, for `drift`, calls `doctor_fail` when `git symbolic-ref --short -q HEAD` names `master` or `main` and `doctor_warn` otherwise, each with the message `<hook> drifts: <reason> — remedy: inspect with git -C <dir> diff <default> -- <candidate>, then return <dir> to a clean <default> once no session owns the change`. — operator, 2026-11-22: drift on the default branch is the observed hazard (a dirty hook in the main checkout on master), so it fails closed like `stale`; off the default branch it stays a warning.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `531c10f4` (round 1, first draft; the body above is the revision)
