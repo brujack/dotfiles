@@ -1,7 +1,7 @@
 # Doctor checks: installed hooks and ggshield authentication
 
 **Date:** 2026-11-22
-**Status:** Draft (revised after Step 8 round 2)
+**Status:** Draft (revised after external review round 1)
 **Source:** security audit 2026-11-16, findings F5, F6 and F10 (ai-config
 `docs/knowledge/dotfiles-security-audit-2026-11-16.md`).
 
@@ -49,10 +49,11 @@ reports an uninstalled or stale hook."
   box: the interpreter does not exist, so the shim falls back to `command -v pre-commit`.
   Whether that runs depends on the caller's environment. On `claude`, `pre-commit`
   resolves to the pyenv shim `~/.pyenv/shims/pre-commit` everywhere, but runs only when
-  `PYENV_VERSION=ansible` is set: under `env -i HOME=… PATH=/usr/bin:/bin:~/.pyenv/shims`
-  it exits 127. `PYENV_VERSION` is not set by any zsh startup file or `~/.pyenv/version`
-  there. That is the live F6 instance: present, executable, and runnable only by
-  environment luck. On the Studio and `workstation` the same shim's `INSTALL_PYTHON` is
+  `PYENV_VERSION=ansible` is set. Interactive zsh sets it
+  (`.config/.zshrc.d/7_final.zsh` runs `pyenv activate ansible` for `WORKSTATION`, which
+  `config/profiles.sh` maps `claude` to); a non-interactive caller (`ssh host 'git
+  commit'`, cron, `env -i`) does not, and there the shim exits 127. That is the live F6
+  instance: present, executable, and runnable only from an interactive shell. On the Studio and `workstation` the same shim's `INSTALL_PYTHON` is
   executable and imports `pre_commit` (Step 8 round 2, ergonomics lens).
 - **ggshield 1.56.1 exit codes, by command** (measured on `claude` with the real key, with
   `GITGUARDIAN_API_KEY=invalid-fixture-key`, and with `HOME`/`XDG_CONFIG_HOME` pointing at
@@ -93,15 +94,15 @@ Prints the heading `Git hooks:`. For each name in `HOOK_EXPECTED_REPOS`, with
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `dir` absent                                                   | `printf '  - %s: not cloned on this host\n'` (info; neither PASS nor FAIL)                                                                       |
 | `dir/.git` not a directory, or `git rev-parse --git-dir` fails | nothing (same rule as `_git_hooks_gap_repos`)                                                                                                    |
-| `_git_hooks_dir` fails                                         | `doctor_fail "<name>: no hooks directory — remedy: make -C <remedy-dir> install-hooks"`                                                          |
-| any mandated hook not `-x`                                     | `doctor_fail "<name>: missing <hooks> — remedy: <per-hook remedy>"`                                                                              |
-| a hook's identity is `foreign`                                 | `doctor_fail "<name>: <hook> is not this repo's <hook> script — remedy: <per-hook remedy>"`                                                      |
-| a hook `stale`, repo on `master` or `main`                     | `doctor_fail "<name>: <hook> is stale — remedy: <per-hook remedy>"`                                                                              |
-| a hook `stale`, repo on any other branch or detached           | `doctor_warn "<name>: <hook> differs from <branch> (expected off the default branch)"`                                                           |
-| a hook `worktree`                                              | `doctor_warn "<name>: <hook> runs from worktree <path> — remedy: <per-hook remedy>"`                                                             |
-| a hook `generated-broken`                                      | `doctor_fail "<name>: <hook> is a pre-commit shim that cannot run here (<reason>) — remedy: cd <dir> && pre-commit install"`                     |
-| a hook `generated-unverified`  | `doctor_warn "<name>: <hook> pre-commit shim not verified (<reason>)"` |
-| identity unreadable (rc 2)                                     | `doctor_fail "<name>: cannot verify hooks (<reason>)"`                                                                                           |
+| `_git_hooks_dir` fails                                         | `doctor_fail "<name>" "no hooks directory — remedy: make -C <remedy-dir> install-hooks"`                                                          |
+| any mandated hook not `-x`                                     | `doctor_fail "<name>" "missing <hooks> — remedy: <per-hook remedy>"`                                                                              |
+| a hook's identity is `foreign`                                 | `doctor_fail "<name>" "<hook> is not this repo's <hook> script — remedy: <per-hook remedy>"`                                                      |
+| a hook `stale`, repo on `master` or `main`                     | `doctor_fail "<name>" "<hook> is stale — remedy: <per-hook remedy>"`                                                                              |
+| a hook `stale`, repo on any other branch or detached           | `doctor_warn "<name>" "<hook> differs from <branch> (expected off the default branch)"`                                                           |
+| a hook `worktree`                                              | `doctor_warn "<name>" "<hook> runs from worktree <path> — remedy: <per-hook remedy>"`                                                             |
+| a hook `generated-broken`                                      | `doctor_fail "<name>" "<hook> is a pre-commit shim that cannot run here (<reason>) — remedy: cd <dir> && pre-commit install"`                     |
+| a hook `generated-unverified`  | `doctor_warn "<name>" "<hook> pre-commit shim not verified (<reason>)"` |
+| identity unreadable (rc 2)                                     | `doctor_fail "<name>" "cannot verify hooks (<reason>)"`                                                                                           |
 | every hook `-x` and `match` or `generated`                     | `doctor_pass "<name>: pre-commit pre-push commit-msg installed"`                                                                                 |
 
 One line per repo when the repo is healthy; one line per faulty hook otherwise.
@@ -110,8 +111,19 @@ is `cd <dir> && pre-commit install` for a hook whose repo tracks `.pre-commit-co
 and has no tracked `<hook>` or `<hook>-hook.sh`, and `make -C <remedy-dir> install-hooks`
 otherwise.
 
+Before the loop, two preconditions short-circuit the arm with a single line:
+
+- `HOOK_EXPECTED_REPOS` is empty (`config/hook_repos.sh` missing or empty, so
+  `lib/git_hooks.sh` falls back to `()`): `doctor_fail "git hooks" "HOOK_EXPECTED_REPOS
+  is empty — config/hook_repos.sh missing or empty"`.
+- `_git_hooks_hookspath_offenders` prints anything (a system or global `core.hooksPath`
+  pin, which `_doctor_check_hooks_path` already reports as FAIL): `doctor_warn "git hooks"
+  "skipped: core.hooksPath is pinned (see Git hooksPath above)"`. `--git-path hooks`
+  follows `core.hooksPath` (ai-config ADR-0055, measured), so with a pin every repo would
+  otherwise report the same cause nine times with the wrong remedy.
+
 After the loop, when no listed repo was found under `PERSONAL_GITREPOS` at all, the arm
-calls `doctor_fail "no listed repo found under <PERSONAL_GITREPOS> — check GITREPOS"`. A
+calls `doctor_fail "git hooks" "no listed repo found under <PERSONAL_GITREPOS> — check GITREPOS"`. A
 wrong `PERSONAL_GITREPOS` therefore cannot read as nine healthy repos.
 
 The default-branch test reads the branch name with `git symbolic-ref --short -q HEAD`
@@ -145,11 +157,13 @@ word on the `ARGS=` line.
 
 - **`generated`, rc 0.** A shim, the repo tracks `.pre-commit-config.yaml`, its hook type
   equals `<hook_name>`, `INSTALL_PYTHON` is an executable file, and
-  `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" "$INSTALL_PYTHON" -c 'import pre_commit'`,
+  `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" "$INSTALL_PYTHON" -I -c 'import pre_commit'`,
   run with stdin from `/dev/null` and output discarded, exits 0. Running that interpreter
   grants nothing new: the shim `exec`s the same path on every commit. The probe uses the
   absolute interpreter the shim itself would `exec`, so its answer does not depend on
-  doctor's `PATH` or `PYENV_VERSION`.
+  doctor's `PATH` or `PYENV_VERSION`; `-I` (isolated mode) keeps doctor's working
+  directory and `PYTHONPATH` out of the import (measured, Python 3.14.4: a `pre_commit.py`
+  in the working directory or on `PYTHONPATH` made the import succeed without `-I`).
 - **`generated-broken`, rc 1.** A shim failing any condition above other than a probe
   timeout or a missing `timeout` binary. The printed reason names the first that failed:
   `no .pre-commit-config.yaml`, `hook type <x>`, `no INSTALL_PYTHON`,
@@ -191,18 +205,25 @@ override rule are covered by doctor's own tests, not by the drift test.
 
 | condition                             | line                                                                                                  |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GGSHIELD_BIN` set but not executable | `doctor_fail "GGSHIELD_BIN=<value> is not executable"`                                                |
-| nothing resolves                      | `doctor_fail "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"` |
-| no `timeout` binary resolvable        | `doctor_warn "<path>: found; API key not verified (no timeout binary)"`                               |
+| `GGSHIELD_BIN` set but not executable | `doctor_fail "ggshield" "GGSHIELD_BIN=<value> is not executable"`                                                |
+| nothing resolves                      | `doctor_fail "ggshield" "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"` |
+| no `timeout` binary resolvable        | `doctor_warn "<path>" "found; API key not verified (no timeout binary)"`                               |
 | `quota` rc 0                          | `doctor_pass "<path>: authenticated"`                                                                 |
-| `quota` rc 3                          | `doctor_fail "<path>: no API key — remedy: ggshield auth login"`                                      |
-| `quota` rc 124                        | `doctor_warn "<path>: could not verify the API key: no answer in <N>s"`                               |
-| `quota` any other non-zero rc         | `doctor_fail "<path>: API key rejected or check failed (rc <rc>) — remedy: ggshield auth login"`      |
+| `quota` rc 3                          | `doctor_fail "<path>" "no API key — remedy: ggshield auth login"`                                      |
+| `quota` rc 1 or 4 | `doctor_warn "<path>" "could not reach GitGuardian (rc <rc>)"` |
+| `quota` rc 124                        | `doctor_warn "<path>" "could not verify the API key: no answer in <N>s"`                               |
+| `quota` any other non-zero rc         | `doctor_fail "<path>" "API key rejected or check failed (rc <rc>) — remedy: ggshield auth login"`      |
 
 The probe runs
 `"${_timeout_bin}" "${_DOCTOR_PROBE_TIMEOUT:-10}" "${_ggshield}" quota </dev/null >/dev/null 2>&1`,
 with `_timeout_bin` resolved the same way `_doctor_check_dev_tools` resolves it, through
-`_TIMEOUT_FALLBACK_PATHS`. Neither stdout nor stderr of `ggshield` reaches doctor's
+`_TIMEOUT_FALLBACK_PATHS`, run in a subshell after `cd /`: ggshield loads a `.env` from the
+working directory or its git root with override, and the hook runs in each repo's root, so
+doctor must not let the repo it happens to run from supply the key. `quota` rc 1 is
+ggshield's uncaught connection error (refused, DNS failure); rc 4 is its
+server-unavailable code; both mean "not verified", not "rejected" (external review round
+1, measured on ggshield 1.56.1). When `GITGUARDIAN_API_KEY` is set in doctor's environment
+the PASS line says so, since a commit from another process may not have it. Neither stdout nor stderr of `ggshield` reaches doctor's
 output, so no key material or account detail can. `quota` is a read-only endpoint; no
 scan runs and no scan quota is consumed.
 
@@ -230,7 +251,7 @@ scan runs and no scan quota is consumed.
   one-byte edit to the installed hook, in the same test.
 - **ggshield.** A stub at `tests/stubs/ggshield-stub`, reached only through `GGSHIELD_BIN`
   and `GGSHIELD_FALLBACK_PATHS`, with exit code and sleep read from `STUB_GGSHIELD_*`.
-  Cases: rc 0, 3, 128, 1, timeout (`_DOCTOR_PROBE_TIMEOUT=1`, stub sleeps 5), not found,
+  Cases: rc 0, 3, 128 (FAIL), 1 and 4 (WARN), 2 (FAIL), timeout (`_DOCTOR_PROBE_TIMEOUT=1`, stub sleeps 5), not found,
   non-executable override, and no `timeout` binary (`_TIMEOUT_FALLBACK_PATHS` at a missing
   path and a scoped `PATH` of stubs).
 - **Leak check.** The stub prints a fixed fake key on stdout and stderr and records its
@@ -264,7 +285,9 @@ scan runs and no scan quota is consumed.
 - **A `generated-fallback` WARN when `INSTALL_PYTHON` is missing but `pre-commit` resolves.**
   `command -v pre-commit` always resolves a pyenv shim, and whether it runs depends on
   `PYENV_VERSION` in the committing process, which doctor cannot see (measured on
-  `claude`: runs in the agent session, exits 127 under `env -i`). Step 8 round 2, all three
+  `claude`: runs where interactive zsh ran `pyenv activate ansible`, exits 127 under
+  `env -i`). Doctor runs interactively, so it would grade the non-interactive failure as
+  healthy. Step 8 round 2, all three
   lenses.
 - **Presence-only for generated hooks**, or moving state-ledger to a tracked `pre-commit`
   first. Operator chose the shim check (A), 2026-11-22.
@@ -273,33 +296,37 @@ scan runs and no scan quota is consumed.
 
 - **R1.** `run_doctor` calls `_doctor_check_git_hooks` and then `_doctor_check_ggshield`, both immediately after `_doctor_check_hooks_path` and before `_doctor_check_versions`.
 - **R2.** `_doctor_check_git_hooks` prints the heading `Git hooks:` and, for each `HOOK_EXPECTED_REPOS` name whose directory under `PERSONAL_GITREPOS` is absent, prints `  - <name>: not cloned on this host` without calling `doctor_pass`, `doctor_warn` or `doctor_fail`.
-- **R3.** When none of the `HOOK_EXPECTED_REPOS` directories exists under `PERSONAL_GITREPOS`, `_doctor_check_git_hooks` calls `doctor_fail "no listed repo found under <PERSONAL_GITREPOS> — check GITREPOS"`.
+- **R3.** When none of the `HOOK_EXPECTED_REPOS` directories exists under `PERSONAL_GITREPOS`, `_doctor_check_git_hooks` calls `doctor_fail "git hooks" "no listed repo found under <PERSONAL_GITREPOS> — check GITREPOS"`.
 - **R4.** `_doctor_check_git_hooks` prints nothing for a listed name whose `.git` is not a directory or whose `git rev-parse --git-dir` fails.
-- **R5.** When `_git_hooks_dir` fails for a repo, `_doctor_check_git_hooks` calls `doctor_fail "<name>: no hooks directory — remedy: make -C <remedy-dir> install-hooks"`, where `<remedy-dir>` is the directory `_git_hooks_target_dir` prints for that repo, or the repo directory when it prints nothing.
-- **R6.** When any of `pre-commit`, `pre-push`, `commit-msg` is not executable in a repo's hooks directory, `_doctor_check_git_hooks` calls `doctor_fail "<name>: missing <hooks> — remedy: <per-hook remedy>"`, `<hooks>` being the space-joined names `_git_hooks_check_complete` prints.
+- **R5.** When `_git_hooks_dir` fails for a repo, `_doctor_check_git_hooks` calls `doctor_fail "<name>" "no hooks directory — remedy: make -C <remedy-dir> install-hooks"`, where `<remedy-dir>` is the directory `_git_hooks_target_dir` prints for that repo, or the repo directory when it prints nothing.
+- **R6.** When any of `pre-commit`, `pre-push`, `commit-msg` is not executable in a repo's hooks directory, `_doctor_check_git_hooks` calls `doctor_fail "<name>" "missing <hooks> — remedy: <per-hook remedy>"`, `<hooks>` being the space-joined names `_git_hooks_check_complete` prints.
 - **R7.** `<per-hook remedy>` is `cd <dir> && pre-commit install` when the repo tracks `.pre-commit-config.yaml` and has no tracked file named `<hook>` or `<hook>-hook.sh`, and `make -C <remedy-dir> install-hooks` otherwise.
 - **R8.** `_git_hooks_identity <repo_dir> <hook_name> <hook_path>` takes as source candidates only tracked paths whose basename is `<hook_name>` or `<hook_name>-hook.sh`, and prints `match` and returns 0 when `hook_path` is a symlink resolving to a source candidate in the main working tree or a regular file `cmp -s`-identical to a source candidate's on-disk content.
-- **R9.** `_git_hooks_identity` judges a regular file whose first five lines contain `# File generated by pre-commit` as a shim only when the repo has no source candidate for `<hook_name>`, reading `INSTALL_PYTHON` (last `INSTALL_PYTHON=` line, single-quote wrapping removed and `'"'"'` turned into `'`) and the `--hook-type=` word of the `ARGS=` line only from between `# start templated` and `# end templated`, without `source` or `eval`; it prints `generated` and returns 0 when the repo tracks `.pre-commit-config.yaml`, the hook type equals `<hook_name>`, `INSTALL_PYTHON` is executable, and `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" "$INSTALL_PYTHON" -c 'import pre_commit' </dev/null` exits 0.
+- **R9.** `_git_hooks_identity` judges a regular file whose first five lines contain `# File generated by pre-commit` as a shim only when the repo has no source candidate for `<hook_name>`, reading `INSTALL_PYTHON` (last `INSTALL_PYTHON=` line, single-quote wrapping removed and `'"'"'` turned into `'`) and the `--hook-type=` word of the `ARGS=` line only from between `# start templated` and `# end templated`, without `source` or `eval`; it prints `generated` and returns 0 when the repo tracks `.pre-commit-config.yaml`, the hook type equals `<hook_name>`, `INSTALL_PYTHON` is executable, and `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" "$INSTALL_PYTHON" -I -c 'import pre_commit' </dev/null` exits 0.
 - **R10.** For a judged shim failing a condition of R9, `_git_hooks_identity` prints `generated-broken` and returns 1 with the reason `no .pre-commit-config.yaml`, `hook type <x>`, `no INSTALL_PYTHON`, `INSTALL_PYTHON <path> missing` or `<path> cannot import pre_commit` (first failing condition, in that order), whatever `pre-commit` resolves to on `PATH`; it prints `generated-unverified` and returns 1 with `probe timed out` when the probe exits 124 and `no timeout binary` when no `timeout` resolves.
 - **R11.** `_git_hooks_identity` prints `worktree` and returns 1 for a symlink resolving inside a linked worktree of the same repo; `foreign` and 1 for a symlink resolving outside the repo and all its worktrees; `stale` and 1 for a non-generated regular file matching no source candidate or a symlink to a non-candidate path in the main working tree.
 - **R12.** `_git_hooks_identity` returns 2 and prints a reason when `git ls-files` fails or `hook_path` is unreadable.
-- **R13.** With every mandated hook executable, `_doctor_check_git_hooks` maps identities to: `foreign` → `doctor_fail "<name>: <hook> is not this repo's <hook> script — remedy: <per-hook remedy>"`; `stale` → `doctor_fail "<name>: <hook> is stale — remedy: <per-hook remedy>"` when `git symbolic-ref --short -q HEAD` prints `master` or `main`, else `doctor_warn "<name>: <hook> differs from <branch> (expected off the default branch)"` with `<branch>` `detached HEAD` when detached; `worktree` → `doctor_warn "<name>: <hook> runs from worktree <path> — remedy: <per-hook remedy>"`.
-- **R14.** `generated-broken` → `doctor_fail "<name>: <hook> is a pre-commit shim that cannot run here (<reason>) — remedy: cd <dir> && pre-commit install"`; `generated-unverified` → `doctor_warn "<name>: <hook> pre-commit shim not verified (<reason>)"`; identity rc 2 → `doctor_fail "<name>: cannot verify hooks (<reason>)"`; all three `match` or `generated` → `doctor_pass "<name>: pre-commit pre-push commit-msg installed"`.
+- **R13.** With every mandated hook executable, `_doctor_check_git_hooks` maps identities to: `foreign` → `doctor_fail "<name>" "<hook> is not this repo's <hook> script — remedy: <per-hook remedy>"`; `stale` → `doctor_fail "<name>" "<hook> is stale — remedy: <per-hook remedy>"` when `git symbolic-ref --short -q HEAD` prints `master` or `main`, else `doctor_warn "<name>" "<hook> differs from <branch> (expected off the default branch)"` with `<branch>` `detached HEAD` when detached; `worktree` → `doctor_warn "<name>" "<hook> runs from worktree <path> — remedy: <per-hook remedy>"`.
+- **R14.** `generated-broken` → `doctor_fail "<name>" "<hook> is a pre-commit shim that cannot run here (<reason>) — remedy: cd <dir> && pre-commit install"`; `generated-unverified` → `doctor_warn "<name>" "<hook> pre-commit shim not verified (<reason>)"`; identity rc 2 → `doctor_fail "<name>" "cannot verify hooks (<reason>)"`; all three `match` or `generated` → `doctor_pass "<name>: pre-commit pre-push commit-msg installed"`.
 - **R15.** `_git_hooks_check_complete` and `scripts/pre-commit-hook.sh` are unchanged.
-- **R16.** `_doctor_check_ggshield` prints the heading `ggshield:` and resolves ggshield in the order `GGSHIELD_BIN`, `command -v ggshield`, then each word of `GGSHIELD_FALLBACK_PATHS` (default `/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield`); a set but non-executable `GGSHIELD_BIN` gives `doctor_fail "GGSHIELD_BIN=<value> is not executable"`, and nothing resolving gives `doctor_fail "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"`.
-- **R17.** When ggshield resolves and no `timeout` binary resolves through `_TIMEOUT_FALLBACK_PATHS` or `PATH`, `_doctor_check_ggshield` calls `doctor_warn "<path>: found; API key not verified (no timeout binary)"` and runs no ggshield command.
-- **R18.** Otherwise `_doctor_check_ggshield` runs `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" <path> quota` with stdin from `/dev/null` and stdout and stderr discarded, and maps rc 0 to `doctor_pass "<path>: authenticated"`, rc 3 to `doctor_fail "<path>: no API key — remedy: ggshield auth login"`, rc 124 to `doctor_warn "<path>: could not verify the API key: no answer in <N>s"`, and any other non-zero rc to `doctor_fail "<path>: API key rejected or check failed (rc <rc>) — remedy: ggshield auth login"`.
+- **R16.** `_doctor_check_ggshield` prints the heading `ggshield:` and resolves ggshield in the order `GGSHIELD_BIN`, `command -v ggshield`, then each word of `GGSHIELD_FALLBACK_PATHS` (default `/opt/homebrew/bin/ggshield /usr/local/bin/ggshield /home/linuxbrew/.linuxbrew/bin/ggshield`); a set but non-executable `GGSHIELD_BIN` gives `doctor_fail "ggshield" "GGSHIELD_BIN=<value> is not executable"`, and nothing resolving gives `doctor_fail "ggshield" "not installed — the pre-commit secret scan cannot run — remedy: brew install ggshield"`.
+- **R17.** When ggshield resolves and no `timeout` binary resolves through `_TIMEOUT_FALLBACK_PATHS` or `PATH`, `_doctor_check_ggshield` calls `doctor_warn "<path>" "found; API key not verified (no timeout binary)"` and runs no ggshield command.
+- **R18.** Otherwise `_doctor_check_ggshield` runs, in a subshell after `cd /`, `<timeout> "${_DOCTOR_PROBE_TIMEOUT:-10}" <path> quota` with stdin from `/dev/null` and stdout and stderr discarded, and maps rc 0 to `doctor_pass "<path>: authenticated"` (`doctor_pass "<path>: authenticated (key from GITGUARDIAN_API_KEY in this shell)"` when that variable is non-empty), rc 3 to `doctor_fail "<path>" "no API key — remedy: ggshield auth login"`, rc 1 and rc 4 to `doctor_warn "<path>" "could not reach GitGuardian (rc <rc>)"`, rc 124 to `doctor_warn "<path>" "could not verify the API key: no answer in <N>s"`, and any other non-zero rc to `doctor_fail "<path>" "API key rejected or check failed (rc <rc>) — remedy: ggshield auth login"`.
 - **R19.** A test extracts the `GGSHIELD_FALLBACK_PATHS` default list from `lib/helpers.sh` and from `scripts/pre-commit-hook.sh`, asserts each is exactly three whitespace-separated absolute paths, and asserts they are identical.
-- **R20.** No test reaches the real `ggshield` binary or the network: every `_doctor_check_ggshield` test sets `GGSHIELD_BIN` or `GGSHIELD_FALLBACK_PATHS` to `tests/stubs/ggshield-stub` or a missing path.
+- **R20.** No test reaches the real `ggshield` binary or the network: every `_doctor_check_ggshield` test either sets `GGSHIELD_BIN` to `tests/stubs/ggshield-stub` or runs the arm under a scoped `PATH` of `/usr/bin:/bin` plus a stub directory, as `tests/scripts/pre_commit_hook.bats` does; one test reaches the `command -v` branch by putting the stub on that scoped `PATH` with `GGSHIELD_BIN` unset.
 - **R21.** A test asserts that the stub recorded its invocation and that a fake key the stub prints on stdout and stderr does not appear in `_doctor_check_ggshield`'s output.
 - **R22.** A test installs a byte-identical copy that `_doctor_check_git_hooks` reports as PASS, edits one byte of the installed copy, and asserts the repo then reports `is stale` as a FAIL.
 - **R23.** A test installs a `pre-commit` holding the bytes of the fixture repo's tracked `scripts/pre-push` and asserts `_git_hooks_identity` prints `stale` for it.
 - **R24.** A test whose shim has `INSTALL_PYTHON='$(touch <canary>)'` asserts the canary does not exist after `_git_hooks_identity` runs.
 - **R25.** A test places a shim with `--hook-type=pre-push` in the `pre-push` slot of a fixture repo that tracks `scripts/pre-push`, and asserts `_git_hooks_identity` prints `stale`.
+- **R26.** When `HOOK_EXPECTED_REPOS` is empty, `_doctor_check_git_hooks` calls `doctor_fail "git hooks" "HOOK_EXPECTED_REPOS is empty — config/hook_repos.sh missing or empty"` and checks no repo.
+- **R27.** When `_git_hooks_hookspath_offenders` prints any line, `_doctor_check_git_hooks` calls `doctor_warn "git hooks" "skipped: core.hooksPath is pinned (see Git hooksPath above)"` and checks no repo.
+- **R28.** A test with a `pre_commit.py` in the probe's working directory and a `pre_commit/` package on `PYTHONPATH` asserts that an interpreter lacking the module still yields `generated-broken`.
 - **V1.** On `claude`, `./setup_env.sh -t doctor` on the finished branch reports exactly one hook FAIL, `state-ledger: pre-commit is a pre-commit shim that cannot run here (INSTALL_PYTHON /Users/bruce/.pyenv/versions/ansible/bin/python missing)`, every other cloned repo PASS, and `ggshield: … authenticated`. With the operator's approval, `cd ~/git-repos/personal/state-ledger && pre-commit install` is then run and doctor re-run: state-ledger reports PASS.
 - **V2.** On `claude`, `GITGUARDIAN_API_KEY=invalid-fixture-key ./setup_env.sh -t doctor` reports the ggshield arm as FAIL with `rc 128`, against the real binary and service.
 - **V3.** On the Studio and `workstation`, the hook arm gives the same verdicts as the Step 8 survey for the repos each has cloned; any difference is explained before merge.
 - **V4.** CI is green on the PR, including all three `test-macos-shard` legs.
+- **V5.** On `claude`, `HTTPS_PROXY=http://127.0.0.1:9 ./setup_env.sh -t doctor` reports the ggshield arm as WARN (`could not reach GitGuardian` or `no answer in`), not FAIL.
 - **N1.** No change to `-t update`, `setup_user`, `install_git_hooks_all_repos`, any repair path, or any hook script.
 - **N2.** No doctor arm writes, removes or reinstalls any file in any repo or under `HOME`.
 - **N3.** `_doctor_check_ggshield` never runs `ggshield secret scan` or any other command that consumes scan quota.
@@ -398,3 +425,24 @@ Disposition: (1)-(5), (7) addressed in this revision (R9, R10, R19, R24, R25, V1
 addressed: no live instance, and any candidate is still a file the repo itself names as that
 hook.
 
+
+## External Review
+
+### Round 1 (reviewed at `9f83fbb2`)
+
+Report: [round1.md](2026-11-22-doctor-hook-and-ggshield-checks-design.external-review/round1.md)
+
+#### Author response
+
+| finding | disposition | evidence | reviewer verdict | operator (Step 9) |
+| ------- | ----------- | -------- | ---------------- | ----------------- |
+| F1.1 | Fixed | ggshield table and R18 map `quota` rc 1 and 4 to `doctor_warn "<path>" "could not reach GitGuardian (rc <rc>)"`; test list expects WARN for 1 and 4; V5 added (dead proxy expects WARN). | unjudged | |
+| F1.2 | Fixed | R20 requires each test to set `GGSHIELD_BIN` to the stub or run under a scoped `/usr/bin:/bin` `PATH`, and adds a test that reaches the `command -v` branch via the stub on that `PATH`. | unjudged | |
+| F1.3 | Fixed | Premise and the rejected `generated-fallback` rationale now say interactive zsh sets `PYENV_VERSION` (`7_final.zsh` `pyenv activate ansible`, `claude` maps to `WORKSTATION`); confirmed by reading both files. Only non-interactive callers fail. Verdict unchanged. | unjudged | |
+| F1.4 | Fixed | Every `doctor_fail`/`doctor_warn` form is now two-argument (`"<name>" "<message>"`, `"ggshield"`, `"git hooks"`); `lib/helpers.sh` `doctor_fail`/`doctor_warn` print `"%s: %s"`, `doctor_pass` one `%s`, confirmed by reading. | unjudged | |
+| F1.5 | Fixed | Probe is `"$INSTALL_PYTHON" -I -c 'import pre_commit'` in the design and R9; R28 adds a test with `pre_commit.py` in the working directory and on `PYTHONPATH`. | unjudged | |
+| F1.6 | Fixed | Not measured here (the agent guard refuses `GIT_CONFIG_*` and `-c core.hooksPath`); ai-config ADR-0055 measured `--git-path hooks` following `core.hooksPath` on git 2.55.0. The arm now skips with one WARN when `_git_hooks_hookspath_offenders` prints anything (R27). | unjudged | |
+| F1.7 | Fixed | Empty `HOOK_EXPECTED_REPOS` gives its own FAIL naming `config/hook_repos.sh` (R26). | unjudged | |
+| F1.8 | Fixed | The probe runs in a subshell after `cd /` so no repo `.env` supplies the key, and the PASS line names `GITGUARDIAN_API_KEY` when it is set (R18). | unjudged | |
+
+Stopped: reviewer recommended stopping in round 1
