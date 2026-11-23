@@ -63,6 +63,7 @@ tests/setup_env/doctor_dev_tools.bats
 tests/setup_env/doctor_flatpak_gl.bats
 tests/setup_env/doctor_ggshield.bats
 tests/setup_env/doctor_git_hooks.bats
+tests/setup_env/doctor_gitguardian_config.bats
 tests/setup_env/doctor_nvidia_driver.bats
 tests/setup_env/doctor_pyenv_shims.bats
 tests/setup_env/extracted_functions.bats
