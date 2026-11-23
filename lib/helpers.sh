@@ -665,6 +665,7 @@ run_doctor() {
   _doctor_check_hooks_path
   _doctor_check_git_hooks
   _doctor_check_ggshield
+  _doctor_check_gitguardian_config
   _doctor_check_versions
   _doctor_check_aws_key_expiry
   _doctor_check_gnu_coreutils
@@ -1669,6 +1670,38 @@ _doctor_check_ggshield() {
     124) doctor_warn "${_gg}" "could not verify the API key: no answer in ${_limit}s" ;;
     *) doctor_fail "${_gg}" "API key rejected or check failed (rc ${_rc}) — remedy: ggshield auth login" ;;
   esac
+  return 0
+}
+
+# _doctor_check_gitguardian_config warns when a .gitguardian config sits where
+# ggshield reads it: ggshield loads ignore rules from `.gitguardian`,
+# `.gitguardian.yml` or `.gitguardian.yaml` in the repo root's working tree
+# (tracked or not) and in $HOME, so one such file can silence the pre-commit
+# secret scan unreported. Checks HOME and each HOOK_EXPECTED_REPOS repo cloned
+# under PERSONAL_GITREPOS. Read-only: it never opens a file, only tests existence.
+_doctor_check_gitguardian_config() {
+  printf "\nGitGuardian config:\n"
+  local -a _dirs=("${HOME}")
+  local _name _dir _file _found=0
+  if [[ -n "${HOOK_EXPECTED_REPOS+x}" ]]; then
+    for _name in "${HOOK_EXPECTED_REPOS[@]}"; do
+      [[ -d "${PERSONAL_GITREPOS}/${_name}" ]] && _dirs+=("${PERSONAL_GITREPOS}/${_name}")
+    done
+  fi
+  for _dir in "${_dirs[@]}"; do
+    for _file in .gitguardian .gitguardian.yml .gitguardian.yaml; do
+      # -L as well as -e: ggshield's own exists() check skips a dangling
+      # link, but a name that is present (even dangling) is worth a look.
+      if [[ -e "${_dir}/${_file}" || -L "${_dir}/${_file}" ]]; then
+        doctor_warn "gitguardian config" "${_dir}/${_file} sets ggshield ignore rules for every scan there — remedy: review it, and remove it unless it is deliberate"
+        _found=1
+      fi
+    done
+  done
+  if [[ ${_found} -eq 0 ]]; then
+    # doctor_pass prints only its first argument, so one string.
+    doctor_pass "gitguardian config: no .gitguardian config in ${HOME} or the listed repos"
+  fi
   return 0
 }
 

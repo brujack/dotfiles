@@ -37,6 +37,7 @@ setup() {
   # its network call are unreachable.
   _doctor_check_git_hooks() { :; }
   _doctor_check_ggshield() { :; }
+  _doctor_check_gitguardian_config() { :; }
 }
 
 teardown() {
