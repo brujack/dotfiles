@@ -1690,8 +1690,8 @@ _doctor_check_gitguardian_config() {
   fi
   for _dir in "${_dirs[@]}"; do
     for _file in .gitguardian .gitguardian.yml .gitguardian.yaml; do
-      # -L as well as -e: -e is false for a dangling symlink, which ggshield
-      # would still trip over, and the finding is that the name is present.
+      # -L as well as -e: ggshield's own exists() check skips a dangling
+      # link, but a name that is present (even dangling) is worth a look.
       if [[ -e "${_dir}/${_file}" || -L "${_dir}/${_file}" ]]; then
         doctor_warn "gitguardian config" "${_dir}/${_file} sets ggshield ignore rules for every scan there — remedy: review it, and remove it unless it is deliberate"
         _found=1
