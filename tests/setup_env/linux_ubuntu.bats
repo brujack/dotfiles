@@ -6795,6 +6795,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _perf_env 1
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
   [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6803,6 +6804,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _perf_env 0
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
   [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6825,6 +6827,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
   cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"perf: applied"* ]]
   [ "$(_perf_apply_calls)" -eq 1 ]
 }
 
@@ -6876,7 +6879,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   run --separate-stderr _install_ubuntu_perf
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"exists but is unparseable; fix by hand"* ]]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} exists but is unparseable; fix by hand"* ]]
   cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6887,7 +6890,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   run --separate-stderr _install_ubuntu_perf
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"holds other keys; fix by hand"* ]]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} holds other keys; fix by hand"* ]]
   cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6898,7 +6901,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   run --separate-stderr _install_ubuntu_perf
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"holds non-text bytes"* ]]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"* ]]
   cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6907,11 +6910,13 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$(id -u)" -ne 0 ] || skip "root reads any file"
   _perf_env 4
   printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   chmod 000 "${_PERF_CONF}"
   run --separate-stderr _install_ubuntu_perf
   chmod 600 "${_PERF_CONF}"
   [ "$status" -eq 1 ]
-  [[ "$stderr" == *"exists but is unreadable; fix by hand"* ]]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} exists but is unreadable; fix by hand"* ]]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
 
@@ -6966,6 +6971,54 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   # The awk/sed classifier mocks also log; the sudo shim's lines are the apply path.
   [ "$(grep '^sudo ' "${MOCK_CALLS_FILE}")" = "sudo sysctl -w kernel.perf_event_paranoid=2" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: sudo sysctl failing reports apply failed without the _SYSCTL_BIN note" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${SHIM_DIR}/sudo"
+  /bin/chmod +x "${SHIM_DIR}/sudo"
+  [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  unset _SYSCTL_BIN
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: apply failed"* ]]
+  [[ "$stderr" != *"_SYSCTL_BIN"* ]]
+}
+
+@test "perf: a failing tee returns 1 naming _PERF_CONF and applies nothing" {
+  _perf_env 4
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: write failed (${_PERF_CONF}; _PERF_CONF set, ran without sudo)"* ]]
+  # The write failure returns at once: no read-back is attempted after it.
+  [[ "$stderr" != *"cannot read back"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: a tee that exits 0 but writes nothing is caught by the read-back" {
+  _perf_env 4
+  # A stale conf above the ceiling keeps the file readable, so the failure is the value check.
+  printf 'kernel.perf_event_paranoid = 3\n' > "${_PERF_CONF}"
+  printf '#!/usr/bin/env bash\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: read-back mismatch (${_PERF_CONF})"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: a tee that writes then locks the conf reports cannot read back" {
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  _perf_env 4
+  printf '#!/usr/bin/env bash\nfor _a in "$@"; do _f="${_a}"; done\ncat > "${_f}"\nchmod 000 "${_f}"\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_perf
+  chmod 600 "${_PERF_CONF}" 2> /dev/null || true
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: cannot read back ${_PERF_CONF}"* ]]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
 
