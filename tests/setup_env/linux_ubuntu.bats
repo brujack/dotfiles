@@ -6969,7 +6969,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   : > "${MOCK_CALLS_FILE}"
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
-  # The awk/sed classifier mocks also log; the sudo shim's lines are the apply path.
+  # The awk classifier mock also logs; the sudo shim's lines are the apply path.
   [ "$(grep '^sudo ' "${MOCK_CALLS_FILE}")" = "sudo sysctl -w kernel.perf_event_paranoid=2" ]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }

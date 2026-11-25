@@ -3314,7 +3314,7 @@ _kkd_env() {
 
 # ── _doctor_check_perf_paranoid ──────────────────────────────────────────────
 # Seams (_PERF_CONF, _PERF_PROC, _SYSTEMD_RUN_DIR) come from load_mocks; the
-# live value starts at 2 and the conf is absent. Every test pins the verdict
+# live value starts at 2 and the conf is absent. Every verdict test pins the verdict
 # text and the presence or absence of its remedy line.
 
 _perf_doctor_setup() {
