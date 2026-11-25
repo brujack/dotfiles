@@ -51,8 +51,14 @@ key gets a fixed value, not a mirrored floor: dotfiles persists exactly 2 and ap
 `_sysctl_read_live` and `_sysctl_conf_value` accept only `0` or a positive integer, which covers
 every value this design writes or leaves alone (0, 1, 2 and above). `-1` is a valid kernel value
 but nothing sets it (math session, 2026-11-25), so a `-1` live or conf value fails closed through the
-existing readers ("cannot read live value" / "unparseable; fix by hand") and nothing is written. The
+existing readers ("live value ... unreadable or below 0" / "unparseable; fix by hand") and nothing is written. The
 operator chose this over a signed parse mode in round 2, which leaves the shared readers unchanged.
+
+The conf-refusal block (unreadable, non-text, other keys, unparseable) already sits inline in both
+`_sysctl_floor_step` and `_doctor_sysctl_floor`; R13 keeps those bodies frozen, so the ceiling step
+and ceiling doctor carry a third and fourth copy (external review F1.2). This spec accepts that to
+keep the floor paths untouched, as approach B was chosen for. Extracting one shared classifier is a
+Backlog row added in the implementation PR.
 
 ## Design
 
@@ -80,7 +86,7 @@ The gate reaches `claude` and `workstation` (`linux_workstation`) and also `wsl2
 2026-11-25): if the proc file is absent the third gate skips; if present, the step writes 2 and
 applies only a value above 2. Either way it never loosens anything.
 
-Then `_sysctl_ceiling_step perf kernel.perf_event_paranoid 2 <conf> <proc> <seam_name>`, where conf
+Then `_sysctl_ceiling_step perf kernel.perf_event_paranoid "${PERF_EVENT_PARANOID_MAX}" <conf> <proc> <seam_name>`, where conf
 is `${_PERF_CONF:-${PERF_SYSCTL_CONF}}`, proc is `${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}`, and
 seam_name is `_PERF_CONF` when that seam is set, else empty.
 
@@ -88,7 +94,7 @@ seam_name is `_PERF_CONF` when that seam is set, else empty.
 
 1. Classify an existing conf exactly as `_sysctl_floor_step` does, with the same messages and rc 1:
    unreadable, non-text bytes, other keys, unparseable (a `-1` value is unparseable and is refused).
-2. Read live with the existing reader (a `-1` fails here); failure prints `<label>: cannot read live value <proc>` and returns 1.
+2. Read live with the existing reader (a `-1` fails here); failure prints `<label>: live value in <proc> unreadable or below 0; fix by hand` and returns 1.
 3. Conf absent, or its value above the ceiling: write `<key> = <ceiling>` through
    `_sysctl_conf_write`, read back (mismatch prints `<label>: read-back mismatch (<conf>)`, rc 1),
    and print `<label>: conf written (<ceiling>)` for a new conf or
@@ -111,14 +117,14 @@ seam_name is `_PERF_CONF` when that seam is set, else empty.
 | 4    | 3           | 2              | `-w …=2` | persisted 2 … (was 3), applied     |
 | 1    | 2           | 2 (untouched)  | no       | already 2 or lower                 |
 | 2    | 2           | 2 (untouched)  | no       | already 2 or lower                 |
-| -1   | absent      | absent         | no       | cannot read live value …, rc 1     |
+| -1   | absent      | absent         | no       | live value … below 0; fix by hand, rc 1 |
 | 4    | -1          | -1 (untouched) | no       | … exists but is unparseable, rc 1  |
 
 ### Doctor: `_doctor_check_perf_paranoid` (`lib/helpers.sh`)
 
 Listed in `run_doctor` after `_doctor_check_kernel_keys`. Gated on `LINUX`, `HAS_DEVTOOLS`, the
 systemd run dir and the proc file existing (all as the step); prints the heading `perf events:` then calls
-`_doctor_sysctl_ceiling perf kernel.perf_event_paranoid 2 <conf> <proc>`.
+`_doctor_sysctl_ceiling perf kernel.perf_event_paranoid "${PERF_EVENT_PARANOID_MAX}" <conf> <proc>`; the ceiling functions take the value as an argument and print it, so no literal `2` appears in either.
 
 `_doctor_sysctl_ceiling` reads live first, as `_doctor_sysctl_floor` does, then classifies the conf as the step does (same FAIL texts). It never prints a
 `tee` remedy for a conf the step would keep, so a hand-set value below 2 gets no overwrite remedy.
@@ -126,7 +132,11 @@ Let tee be `printf 'kernel.perf_event_paranoid = 2\n' | sudo tee '<conf>'`. Firs
 
 | condition    | verdict | message                                             | remedy line                                                              |
 | ------------ | ------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
-| live unreadable | FAIL | `cannot read <proc>` | none |
+| live unreadable | FAIL | `live value in <proc> unreadable or below 0` | none |
+| conf unreadable | FAIL | `<conf> exists but is unreadable; fix by hand` | none |
+| conf non-text | FAIL | `<conf> holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand` | none |
+| conf other keys | FAIL | `<conf> holds other keys; fix by hand` | none |
+| conf unparseable (incl. `-1`) | FAIL | `<conf> exists but is unparseable; fix by hand` | none |
 | conf missing | FAIL    | `<conf> missing; next boot: kernel default; fix:`   | tee, plus ` && sudo sysctl -w kernel.perf_event_paranoid=2` when live > 2 |
 | conf > 2     | FAIL    | `<conf> value <v> above 2; next boot: <v>; fix:`    | same as above                                                            |
 | live > 2     | FAIL    | `live value <live> above 2; fix:`                   | `sudo sysctl -w kernel.perf_event_paranoid=2`                            |
@@ -144,8 +154,17 @@ doctor tests beside the kernel-keys doctor tests. Cases:
 - every row of the step table, asserting the conf bytes, the message, and the exact `sysctl-stub`
   argument or that the stub was never called;
 - both skips; each classifier refusal leaving the conf byte-identical; both apply-failure messages;
-- a live `-1` failing with `cannot read live value` and a conf `-1` refused as unparseable, each
-  leaving the conf byte-identical and the stub uncalled;
+- a live `-1` failing with `live value in <proc> unreadable or below 0; fix by hand` and a conf `-1`
+  refused as unparseable, each leaving the conf byte-identical and the stub uncalled;
+- each doctor conf refusal (unreadable, non-text, other keys, unparseable at conf `-1`), asserting
+  the FAIL text and that no `tee` line is printed;
+- a wiring test that `declare -f _install_ubuntu_perf` and `declare -f _doctor_check_perf_paranoid`
+  each contain `PERF_EVENT_PARANOID_MAX`, as the kernel-keys wiring test does;
+- stubs: `_install_ubuntu_perf() { :; }` in `_stub_ubuntu_steps` (`tests/setup_env/workflows.bats`)
+  and `_doctor_check_perf_paranoid() { :; }` beside every `_doctor_check_kernel_keys() { :; }` stub
+  (three in `tests/setup_env/unit.bats`, one in `tests/setup_env/plugin_node_paths.bats`), with the
+  kernel-keys stub-count test extended to the perf check, so no end-to-end test runs the real step
+  on a host that exports `HAS_DEVTOOLS`;
 - the proc-absent skip, with no conf written;
 - each doctor row. The `conf < 2` WARN runs at conf `1`, live `1`, so the message pins the derived
   value `1`. The `live < 2` WARN is reachable only with conf exactly 2 (first match), so it runs at
@@ -178,17 +197,17 @@ step alone is run on each box (V1), not a full `-t developer`.
 
 ## Requirements
 
-- **R1.** `lib/constants.sh` defines `readonly PERF_EVENT_PARANOID_MAX=2`, `readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf` and `readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid`.
+- **R1.** `lib/constants.sh` defines `readonly PERF_EVENT_PARANOID_MAX=2`, `readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf` and `readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid`, and `_install_ubuntu_perf` and `_doctor_check_perf_paranoid` pass `${PERF_EVENT_PARANOID_MAX}` as the ceiling, with no literal `2` in either.
 - **R2.** `_install_ubuntu_perf` prints `perf: skipped (no <proc>)` and returns 0, writing nothing, when the proc file does not exist; `_doctor_check_perf_paranoid` returns silently in the same case.
 - **R3.** `install_ubuntu_packages`' step loop runs `perf` directly after `kernel_keys`, calling `_install_ubuntu_perf`.
 - **R4.** `_install_ubuntu_perf` prints `perf: skipped (HAS_DEVTOOLS unset)` and returns 0 when `HAS_DEVTOOLS` is empty, and prints `perf: skipped (no systemd at <dir>)` and returns 0 when the systemd run dir is absent, writing nothing in either case.
 - **R5.** `_install_ubuntu_perf` resolves the conf from `_PERF_CONF` else `PERF_SYSCTL_CONF` and the proc file from `_PERF_PROC` else `PERF_EVENT_PARANOID_PROC`, and writes the conf without sudo when `_PERF_CONF` is set.
-- **R6.** `_sysctl_ceiling_step` writes `kernel.perf_event_paranoid = 2` when the conf is absent or holds a value above 2, and leaves a conf holding a value at or below 2 (including `-1`) byte-identical.
+- **R6.** `_sysctl_ceiling_step` writes `kernel.perf_event_paranoid = 2` when the conf is absent or holds a value above 2, and leaves a conf holding a value from 0 to 2 byte-identical.
 - **R7.** `_sysctl_ceiling_step` runs `sysctl -w kernel.perf_event_paranoid=2` only when live is above 2, never `sysctl -p` and never another value, and prints `perf: already 2 or lower` when live is at or below 2 and nothing was written.
-- **R8.** `_sysctl_ceiling_step` refuses an existing conf that is unreadable, holds non-text bytes, holds other keys or is unparseable (a `-1` value included), returning 1 with the same `fix by hand` messages as `_sysctl_floor_step`, and leaves it byte-identical; a live value of `-1` returns 1 with `perf: cannot read live value <proc>` and writes nothing.
+- **R8.** `_sysctl_ceiling_step` refuses an existing conf that is unreadable, holds non-text bytes, holds other keys or is unparseable (a `-1` value included), returning 1 with the same `fix by hand` messages as `_sysctl_floor_step`, and leaves it byte-identical; a live value of `-1` or an unreadable live file returns 1 with `perf: live value in <proc> unreadable or below 0; fix by hand` and writes nothing.
 - **R9.** `_sysctl_ceiling_step` prints `perf: conf written (2)` for a new conf, `perf: persisted 2 to <conf> (was <old>)` for a rewrite, and `perf: applied` after a successful apply.
 - **R10.** `run_doctor` calls `_doctor_check_perf_paranoid` after `_doctor_check_kernel_keys`; it returns silently unless `LINUX` and `HAS_DEVTOOLS` are set and the systemd run dir exists.
-- **R11.** `_doctor_sysctl_ceiling` reports, first match in this order: FAIL `cannot read <proc>`; FAIL `<conf> missing; next boot: kernel default; fix:`; FAIL `<conf> value <v> above 2; next boot: <v>; fix:`; FAIL `live value <live> above 2; fix:`; WARN `<conf> value <v> below 2; set outside dotfiles` with no remedy line; WARN `live value <live> below 2; next boot: <v>; fix:`; else PASS `perf perf_event_paranoid <live>`; every printed `tee` remedy writes `kernel.perf_event_paranoid = 2`.
+- **R11.** `_doctor_sysctl_ceiling` reports, first match in this order: FAIL `live value in <proc> unreadable or below 0`; FAIL `<conf> exists but is unreadable; fix by hand`; FAIL `<conf> holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand`; FAIL `<conf> holds other keys; fix by hand`; FAIL `<conf> exists but is unparseable; fix by hand`; FAIL `<conf> missing; next boot: kernel default; fix:`; FAIL `<conf> value <v> above 2; next boot: <v>; fix:`; FAIL `live value <live> above 2; fix:`; WARN `<conf> value <v> below 2; set outside dotfiles` with no remedy line; WARN `live value <live> below 2; next boot: <v>; fix:`; else PASS `perf perf_event_paranoid <live>`; the five refusal FAILs print no remedy line, and every printed `tee` remedy writes `kernel.perf_event_paranoid = 2`.
 - **R12.** `load_mocks` exports `_PERF_CONF` and `_PERF_PROC` under `BATS_TEST_TMPDIR`.
 - **R13.** `_sysctl_floor_step`, `_doctor_sysctl_floor`, `_sysctl_read_live` and `_sysctl_conf_value` bodies are unchanged by this work.
 - **V1.** On `claude` and on `workstation`, run `_install_ubuntu_perf` alone with real sudo (the plan gives the exact sourcing command), then as the normal user math's own form `perf stat -x, -e cycles,instructions true 2>&1 >/dev/null` prints a count above 0 for both events and no `<not supported>` or `<not counted>` line.
@@ -236,3 +255,23 @@ Stop: round 2's findings all sat in the test plan and wording, and its one desig
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## External Review
+
+### Round 1 (reviewed at `a5903494`)
+
+Report: [round1.md](2026-11-25-perf-event-paranoid-ceiling-design.external-review/round1.md)
+
+#### Author response
+
+| finding | disposition | evidence | reviewer verdict | operator (Step 9) |
+| ------- | ----------- | -------- | ---------------- | ----------------- |
+| F1.1 | Fixed | Doctor table and R11 now list the four conf-refusal FAILs (texts from `_doctor_sysctl_floor`) after the live-unreadable row, with no remedy line; Tests add one doctor case per refusal (unparseable at conf `-1`) asserting no `tee` line. | unjudged | |
+| F1.2 | Rebutted | Approach B was chosen to leave the floor paths untouched; extracting a shared classifier edits both floor bodies that guard three live keys. The trade (four copies) is now recorded in "Why the existing sysctl step cannot be reused", and the extraction goes to the Backlog in the implementation PR. | unjudged | |
+| F1.3 | Fixed | Both call sites pass `"${PERF_EVENT_PARANOID_MAX}"` (R1 extended: no literal `2` in either caller); Tests add a `declare -f` wiring test. | unjudged | |
+| F1.4 | Fixed | Tests name `_install_ubuntu_perf` in `_stub_ubuntu_steps` and `_doctor_check_perf_paranoid` beside all four `_doctor_check_kernel_keys` stubs, and extend the stub-count test. | unjudged | |
+| F1.5 | Fixed | R6 now reads "a value from 0 to 2"; `-1` is covered only by R8's refusal. | unjudged | |
+| F1.6 | Fixed | Step and doctor live-read failure text is now `live value in <proc> unreadable or below 0` (R8, R11, both tables), naming both causes. | unjudged | |
+| F1.7 | Declined to run | Measuring the fallback needs `sudo sysctl -w kernel.perf_event_paranoid=2` on a box running live runners; V1 measures it on both boxes after the step applies 2. | unjudged | |
+
+Stopped: reviewer recommended stopping in round 1
