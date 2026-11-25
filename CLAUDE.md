@@ -39,7 +39,7 @@ When web research (web-research skill) or context-mode fetches produce findings 
 ```
 
 - `setup_user` reads the Claude plugin manifest from ai-config `~/.claude/settings.json` (`extraKnownMarketplaces`, `enabledPlugins`), never a hardcoded list. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
-- `setup` and `developer` on Ubuntu docker hosts persist inotify and kernel-keys sysctl values in `/etc/sysctl.d/90-dotfiles-*.conf`, never lowering a higher conf or live value; a drop-in sorting before `90-` is overridden. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
+- `setup`/`developer` on Ubuntu docker hosts persist inotify and kernel-keys sysctl values in `/etc/sysctl.d/90-dotfiles-*.conf`, never lowering a higher conf or live value; devtools hosts hold `perf_event_paranoid` at exactly 2 in `90-dotfiles-perf.conf`, never loosening a lower one; a drop-in sorting before `90-` is overridden. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - An interrupted `recreate-venv`/`recreate-ruby` leaves the toolchain deleted; re-run the same command, repeating `--venv-name` (a bare re-run rebuilds `ansible`). → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - `-t update` exits 1 on any FAIL section; WARN exits 0 (deliberate rc 2 to 0 mapping); list sections with `git grep -n '_update_warn ' lib/`, never a hand list. → `dotfiles-conventions.md` § `CLAUDE.md relocation: setup_env.sh workflow catalog`
 - `-t update` updates Claude plugins with `-s user`, then prunes project/local install records the user record is at least as new as or whose project directory is gone (backup first, refuses on any doubt; ADR-0055).
@@ -452,7 +452,7 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 
 - Override `_CRATES_API` for any `CARGO_TOOLS` staleness test that needs an unreachable crates.io. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: crates api seam`
 
-- Set the sysctl seams (`_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC`, `_SYSTEMD_RUN_DIR` and `_KEYS_MAXKEYS_CONF`, `_KEYS_MAXKEYS_PROC`, `_KEYS_MAXBYTES_CONF`, `_KEYS_MAXBYTES_PROC`) under `BATS_TEST_TMPDIR` (`load_mocks` does) so `sudo`/`sysctl` never reach the real `/etc/sysctl.d` or kernel; a test reaching the real inotify step sets or unsets `HAS_DOCKER` itself (developer shells export it); no test runs the step with `_SYSCTL_CONF` unset (`_sysctl_conf_write` is tested behind a recording `sudo` shim). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: sysctl and kernel keys seams`
+- Set the sysctl seams (`_SYSCTL_CONF`, `_SYSCTL_BIN`, `_INOTIFY_PROC`, `_SYSTEMD_RUN_DIR`, `_KEYS_MAXKEYS_CONF`, `_KEYS_MAXKEYS_PROC`, `_KEYS_MAXBYTES_CONF`, `_KEYS_MAXBYTES_PROC`, `_PERF_CONF`, `_PERF_PROC`) under `BATS_TEST_TMPDIR` (`load_mocks` does), so `sudo`/`sysctl` never reach `/etc/sysctl.d` or the kernel; a test reaching the inotify step sets or unsets `HAS_DOCKER` (shells export it); none runs the step with `_SYSCTL_CONF` unset (`_sysctl_conf_write` runs behind a `sudo` recording shim). → `dotfiles-test-seams.md` § `CLAUDE.md relocation: sysctl and kernel keys seams`
 
 - `_GITHUB_API` accepts only `https://api.github.com` or `http://127.0.0.1:<port>` (else warns and falls back) so a stray export cannot send the token off-host; every token-bearing curl passes `--noproxy 127.0.0.1` and sends the header via `-H @-` (assert with `MOCK_CURL_STDIN_FILE`); use `tests/helpers/http_listener.bash` for real-curl header tests and call `stop_http_listener` from `teardown()`; `_github_auth_header` refuses a token containing a line break. → `dotfiles-test-seams.md` § `CLAUDE.md relocation: github api seam and http listener`
 
@@ -494,10 +494,6 @@ pwsh -Command "Install-Module PSScriptAnalyzer -Force -Scope CurrentUser"
 - `tests/scripts/makefile_lint_scope.bats` requires every stdout-capturing `make -C` in exactly one category; derive its domain from `git ls-files` with `env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE`, never a hardcoded list. → `dotfiles-bats-test-infrastructure.md` § `Testing: MAKEFLAGS partition detail`
 
 - The partition scanner is blind to recursive `$(MAKE)` calls and `-w`/`--print-directory`, and `powershell/Makefile` is outside its domain; not exploitable today, an accepted boundary. → `dotfiles-bats-test-infrastructure.md` § `Testing: MAKEFLAGS partition detail`
-
-## Committing Work
-
-Invoke `caveman:caveman-commit` skill to generate the commit message before running `git commit`. Full format and rules in `~/.claude/CLAUDE.md`.
 
 ## Key Conventions
 
