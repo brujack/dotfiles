@@ -1,6 +1,7 @@
 # perf_event_paranoid ceiling on the Linux development boxes
 
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-11-25
 - **Requested by:** the math session (2026-11-24), for hardware counters (IPC, cache misses) on zeta runs
 - **Operator decisions:** set the key to 2 (2026-11-24); drop the package half; sibling ceiling functions (approach B) (2026-11-25)
 
@@ -266,12 +267,12 @@ Report: [round1.md](2026-11-25-perf-event-paranoid-ceiling-design.external-revie
 
 | finding | disposition | evidence | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | -------- | ---------------- | ----------------- |
-| F1.1 | Fixed | Doctor table and R11 now list the four conf-refusal FAILs (texts from `_doctor_sysctl_floor`) after the live-unreadable row, with no remedy line; Tests add one doctor case per refusal (unparseable at conf `-1`) asserting no `tee` line. | unjudged | |
-| F1.2 | Rebutted | Approach B was chosen to leave the floor paths untouched; extracting a shared classifier edits both floor bodies that guard three live keys. The trade (four copies) is now recorded in "Why the existing sysctl step cannot be reused", and the extraction goes to the Backlog in the implementation PR. | unjudged | |
-| F1.3 | Fixed | Both call sites pass `"${PERF_EVENT_PARANOID_MAX}"` (R1 extended: no literal `2` in either caller); Tests add a `declare -f` wiring test. | unjudged | |
-| F1.4 | Fixed | Tests name `_install_ubuntu_perf` in `_stub_ubuntu_steps` and `_doctor_check_perf_paranoid` beside all four `_doctor_check_kernel_keys` stubs, and extend the stub-count test. | unjudged | |
-| F1.5 | Fixed | R6 now reads "a value from 0 to 2"; `-1` is covered only by R8's refusal. | unjudged | |
-| F1.6 | Fixed | Step and doctor live-read failure text is now `live value in <proc> unreadable or below 0` (R8, R11, both tables), naming both causes. | unjudged | |
-| F1.7 | Declined to run | Measuring the fallback needs `sudo sysctl -w kernel.perf_event_paranoid=2` on a box running live runners; V1 measures it on both boxes after the step applies 2. | unjudged | |
+| F1.1 | Fixed | Doctor table and R11 now list the four conf-refusal FAILs (texts from `_doctor_sysctl_floor`) after the live-unreadable row, with no remedy line; Tests add one doctor case per refusal (unparseable at conf `-1`) asserting no `tee` line. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.2 | Rebutted | Approach B was chosen to leave the floor paths untouched; extracting a shared classifier edits both floor bodies that guard three live keys. The trade (four copies) is now recorded in "Why the existing sysctl step cannot be reused", and the extraction goes to the Backlog in the implementation PR. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.3 | Fixed | Both call sites pass `"${PERF_EVENT_PARANOID_MAX}"` (R1 extended: no literal `2` in either caller); Tests add a `declare -f` wiring test. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.4 | Fixed | Tests name `_install_ubuntu_perf` in `_stub_ubuntu_steps` and `_doctor_check_perf_paranoid` beside all four `_doctor_check_kernel_keys` stubs, and extend the stub-count test. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.5 | Fixed | R6 now reads "a value from 0 to 2"; `-1` is covered only by R8's refusal. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.6 | Fixed | Step and doctor live-read failure text is now `live value in <proc> unreadable or below 0` (R8, R11, both tables), naming both causes. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
+| F1.7 | Declined to run | Measuring the fallback needs `sudo sysctl -w kernel.perf_event_paranoid=2` on a box running live runners; V1 measures it on both boxes after the step applies 2. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
 
 Stopped: reviewer recommended stopping in round 1
