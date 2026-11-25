@@ -3490,6 +3490,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: live value in ${_PERF_PROC} unreadable or below 0"* ]]
   [[ "${output}" != *"unparseable"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
   _perf_one_verdict FAIL
 }
 
@@ -3563,7 +3564,12 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
     [[ "${_body}" == *PERF_EVENT_PARANOID_MAX* ]]
     [[ "${_body}" == *'${_PERF_CONF:-${PERF_SYSCTL_CONF}}'* ]]
     [[ "${_body}" == *'${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}'* ]]
-    ! printf '%s\n' "${_body}" | command grep -qE 'perf_event_paranoid" *2|paranoid 2 '
+    # Not a bare `! pipeline`: errexit ignores a negated pipeline that is not the
+    # test's last command, so the check would never fail inside this loop.
+    if printf '%s\n' "${_body}" | command grep -qE 'perf_event_paranoid" *2|paranoid 2 '; then
+      printf 'literal 2 in %s\n' "${_fn}" >&2
+      return 1
+    fi
   done
   _body="$(declare -f _doctor_sysctl_ceiling)"
   [ -n "${_body}" ]
