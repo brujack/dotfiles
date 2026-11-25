@@ -56,6 +56,12 @@ if command -v pyenv &> /dev/null; then
     export PATH="$PYENV_ROOT/bin:$PATH"
   fi
 
+  # A non-login interactive shell (a tmux window's `zsh -ic`) never runs
+  # .zprofile's `pyenv init --path`, and the activation below is skipped when
+  # an inherited PYENV_VERSION already names ansible. Put the shims on PATH
+  # here, once, so python3 never falls through to whatever comes next on PATH.
+  path=("${PYENV_ROOT}/shims" ${path:#${PYENV_ROOT}/shims})
+
   eval "$(pyenv virtualenv-init -)"
   if [[ -n ${STUDIO} ]] || [[ -n ${LAPTOP} ]] || [[ -n ${RECEPTION} ]] || [[ -n ${OFFICE} ]] || [[ -n ${HOMES} ]] || [[ -n ${WORKSTATION} ]] || [[ -n ${CRUNCHER} ]] || [[ -n ${RATNA} ]]; then
     if [[ -d "${PYENV_ROOT:-${HOME}/.pyenv}/versions/ansible" ]]; then

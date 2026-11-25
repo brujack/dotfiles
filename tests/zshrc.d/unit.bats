@@ -1513,3 +1513,76 @@ _gcreds_fixture() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"usage: with-gcloud-creds"* ]]
 }
+
+# ── 7_final.zsh: pyenv shims under an inherited environment ─────────────────
+# A tmux window running `zsh -ic` inherits PYENV_VERSION=ansible and
+# VIRTUAL_ENV from the tmux server but starts from a bare system PATH, and it
+# is not a login shell, so .zprofile's `pyenv init --path` never runs. The
+# activation guard sees version-name already `ansible` and skips, so before
+# the fix no shims reached PATH and python3 resolved whatever came next
+# (Linuxbrew's, without the venv's packages). The stub `activate` exits 1,
+# as the real one did when tried under that inherited environment.
+
+_pyenv_shim_stubs() {
+  _STUB_DIR="${BATS_TEST_TMPDIR}/stubs"
+  mkdir -p "${_STUB_DIR}" "${HOME}/.pyenv/versions/ansible"
+  cat > "${_STUB_DIR}/pyenv" <<'STUB'
+#!/bin/sh
+case "$1" in
+  virtualenv-init) exit 0 ;;
+  version-name) printf '%s\n' "${PYENV_VERSION:-system}" ;;
+  activate) printf 'activate\n' >> "${HOME}/pyenv-calls"; exit 1 ;;
+esac
+STUB
+  printf '#!/bin/sh\nexit 0\n' > "${_STUB_DIR}/starship"
+  chmod +x "${_STUB_DIR}/pyenv" "${_STUB_DIR}/starship"
+}
+
+_run_7_final() {
+  # $1: PYENV_VERSION to inherit ('' for unset); $2: times to source the file.
+  run env -u LINUX -u MACOS PYENV_VERSION="$1" WORKSTATION=1 \
+    PATH="${_STUB_DIR}:/usr/bin:/bin" zsh -fc "
+    [[ -z \${PYENV_VERSION} ]] && unset PYENV_VERSION
+    quiet_which() { command -v \"\$1\" >/dev/null 2>&1; }
+    for _i in {1..$2}; do source '${ZSHRC_D}/7_final.zsh'; done
+    print -l -- \$path
+  "
+}
+
+@test "7_final.zsh: inherited PYENV_VERSION=ansible still puts pyenv shims on PATH" {
+  _pyenv_shim_stubs
+  _run_7_final ansible 1
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "${HOME}/.pyenv/shims" ]
+  [ ! -e "${HOME}/pyenv-calls" ]
+}
+
+@test "7_final.zsh: shims precede /usr/bin when activation runs and fails" {
+  _pyenv_shim_stubs
+  _run_7_final '' 1
+  [ "$status" -eq 0 ]
+  [ "$(cat "${HOME}/pyenv-calls")" = "activate" ]
+  local _shims=-1 _usr=-1 _i
+  for _i in "${!lines[@]}"; do
+    [ "${lines[_i]}" = "${HOME}/.pyenv/shims" ] && _shims=${_i}
+    [ "${lines[_i]}" = "/usr/bin" ] && _usr=${_i}
+  done
+  [ "${_shims}" -ge 0 ]
+  [ "${_shims}" -lt "${_usr}" ]
+}
+
+@test "7_final.zsh: sourcing twice leaves exactly one shims entry" {
+  _pyenv_shim_stubs
+  _run_7_final ansible 2
+  [ "$status" -eq 0 ]
+  run grep -cxF "${HOME}/.pyenv/shims" <<< "${output}"
+  [ "$output" = "1" ]
+}
+
+@test "7_final.zsh: no pyenv on PATH adds no shims entry" {
+  _pyenv_shim_stubs
+  rm "${_STUB_DIR}/pyenv"
+  _run_7_final ansible 1
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"/.pyenv/shims"* ]]
+}
