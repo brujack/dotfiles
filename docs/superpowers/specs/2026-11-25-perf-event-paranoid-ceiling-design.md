@@ -172,3 +172,29 @@ step alone is run on each box (V1), not a full `-t developer`.
 - **N1.** No package list, Brewfile or apt install changes; `linux-tools-generic` is not added.
 - **N2.** No write or apply sets `kernel.perf_event_paranoid` above the lower of the live value and the existing conf value (the live value when no conf exists).
 - **N3.** No `sysctl -p` and no write to any conf other than the perf conf.
+
+## Multi-Lens Review
+
+Reviewed at commit: `4986af4e` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: `target = min(live, 2)` mirrors the floor step onto a security knob, so a transient looser value (`sysctl -w kernel.perf_event_paranoid=-1` for `perf record -a`) is persisted by the next `-t setup`/`-t developer`, and the doctor PASSes it ("otherwise PASS"); this contradicts the Exposure section the operator approved 2 against. Simpler design: persist exactly 2, apply when live > 2, flag a conf or live below 2; the signed conf reader, the `min()` target and step-table rows 3, 4, 6 then go. Second: V1's exit status does not prove counters count (`perf stat` exits 0 on `<not supported>`); pin a non-zero `instructions:u` count. Premise verified on both boxes (paranoid 4, bare metal, cpu PMU present, linux-tools -43/-44 installed, both `linux_workstation` with devtools).
+Assumption: the zeta runs needing counters execute on the host as `bruce`, not in a docker container (default seccomp blocks `perf_event_open`) or a runner job; settled by asking the math session where `perf stat` runs (asked 2026-11-25).
+Disposition:
+
+### Ergonomics
+
+Finding: V2's `sudo systemctl restart systemd-sysctl` re-applies every sysctl.d key (the `net.ipv4.conf.*.rp_filter` glob reaches docker bridges and veths, `kernel.core_pattern`, `kptr_restrict`, `sysrq`) under the live runners, which is the whole-system `-p` that N3 exists to avoid; use `sudo /usr/lib/systemd/systemd-sysctl /etc/sysctl.d/90-dotfiles-perf.conf`. V1 needs a pasteable command. Minor: "conf missing" FAILs even when live is already at or below 2, and the `HAS_DEVTOOLS` gate also reaches `wsl2_workstation` (`cruncher`), unnamed in scope. Every step and doctor row pins a derived value; only a test asserting `perf: already 2 or lower` alone would pass on empty output.
+Assumption: same as Goal-Fit (host shell as the login user, not a container or runner job).
+Disposition:
+
+### Risk
+
+Finding: the same `min(live, 2)` loosening ratchet, independently: rows `1/absent -> 1`, `-1/absent -> -1` and `1/2 -> 1` persist a transient value, the last destroying the operator's `2` (and any comments) through the whole-file `_sysctl_conf_write`; the doctor WARN's tee remedy tells the operator to do the same. N2 forbids raising, not loosening, so every requirement passes. Fix: persist 2 when the conf is absent or above 2, read live only to decide the apply, drop the WARN. Exposure correction: `claude` has one runner account (`github-runner:995`, 18 `Runner.Listener`, 66 processes); `ptrace_scope` 1 gates only ATTACH while `perf_event_open` checks READ, so at 2 a job can count events on concurrent jobs' processes under the same uid. Tests: the seeded proc `2` equals the ceiling, so a PASS printing the constant instead of live passes; pin a PASS at live 1 or -1, and add a live 2/conf 2 no-op row asserting no `sysctl-stub` call. WSL scope as Ergonomics.
+Assumption: a live value below 2 is a deliberate, durable choice rather than a transient debugging setting; settled by asking the operator and math whether anyone sets it below 2 by hand.
+Disposition:
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
