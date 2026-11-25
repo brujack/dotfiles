@@ -1,5 +1,7 @@
 # perf_event_paranoid ceiling Implementation Plan
 
+> **Status: DONE** — merged as dotfiles#486 (7efe913f), 2026-11-25.
+
 spec: docs/superpowers/specs/2026-11-25-perf-event-paranoid-ceiling-design.md
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
