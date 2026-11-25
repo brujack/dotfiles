@@ -218,6 +218,10 @@ step alone is run on each box (V1), not a full `-t developer`.
 - **N2.** No write sets the perf conf to any value other than 2, no apply sets the live value to any value other than 2, and no conf holding a value at or below 2 is rewritten.
 - **N3.** No `sysctl -p` and no write to any conf other than the perf conf.
 
+## Amendments
+
+- N2 -> No code this change ships writes the perf conf with any value other than 2, applies any live value other than 2, or rewrites a conf holding a value at or below 2; V2's one-off manual `sysctl -w kernel.perf_event_paranoid=4` on the verification hosts, restored to 2 in the same command, is outside this non-goal. — the plan-time non-goal check found N2 ambiguous over V2's verification step (2026-11-25)
+
 ## Multi-Lens Review
 
 Reviewed at commit: `4986af4e` (Step 7 self-review commit, before Step 8 dispatch)
