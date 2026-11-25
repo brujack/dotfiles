@@ -3539,7 +3539,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   done
   _body="$(declare -f _doctor_sysctl_ceiling)"
   [ -n "${_body}" ]
-  ! printf '%s\n' "${_body}" | command grep -qE '(^|[^0-9A-Za-z_])2([^0-9]|$)'
+  ! printf '%s\n' "${_body}" | command grep -qE '(^|[^0-9A-Za-z_{])2([^0-9}]|$)'
 }
 
 # setup_env.sh resolves its own directory once for the lib block. The guard is
