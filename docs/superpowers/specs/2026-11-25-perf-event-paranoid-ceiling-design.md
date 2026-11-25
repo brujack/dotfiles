@@ -280,3 +280,25 @@ Report: [round1.md](2026-11-25-perf-event-paranoid-ceiling-design.external-revie
 | F1.7 | Declined to run | Measuring the fallback needs `sudo sysctl -w kernel.perf_event_paranoid=2` on a box running live runners; V1 measures it on both boxes after the step applies 2. | unjudged || Accepted — operator, 2026-11-25: "Accept all, approve" |
 
 Stopped: reviewer recommended stopping in round 1
+
+## Spec alignment (2026-11-25)
+
+- spec: docs/superpowers/specs/2026-11-25-perf-event-paranoid-ceiling-design.md
+- anchor: d1411561bf866dcce725bc1504aec64852334bb6
+- in scope: R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13
+- out of scope: none
+
+### Findings
+
+| ID | Reviewer | Verdict | Reason | Amendment |
+| --- | --- | --- | --- | --- |
+
+### Reviewed
+
+- none
+
+### Verifications
+
+- V1: 2026-11-25, branch 09fc2be5. claude: _install_ubuntu_perf printed 'perf: conf written (2)', 'perf: applied', rc 0; perf stat -x, -e cycles,instructions true as bruce: 268480 cycles:u, 176256 instructions:u, no <not supported>/<not counted>. workstation (git archive copy): same messages, 171292 cycles:u, 130841 instructions:u. Re-run on both: 'perf: already 2 or lower', rc 0.
+- V2: 2026-11-25, both boxes: sudo sysctl -w kernel.perf_event_paranoid=4; sudo /usr/lib/systemd/systemd-sysctl /etc/sysctl.d/90-dotfiles-perf.conf rc 0; /proc/sys/kernel/perf_event_paranoid read 2; systemd-sysctl --cat-config lists /etc/sysctl.d/90-dotfiles-perf.conf as the only file setting the key.
+- V3: 2026-11-25: ./setup_env.sh -t doctor printed '[PASS] perf perf_event_paranoid 2' under 'perf events:' on claude (56 passed, 0 failed) and workstation (52 passed, 2 failed: python3 and ruby version drift, identical on master's checkout under the same ssh actor).
