@@ -6756,6 +6756,7 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [[ "$stderr" == *"failed: kernel_keys"* ]]
   [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 16 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "ran kernel_keys" ]
+  [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "ran perf" ]
 }
 
 # ── _install_ubuntu_perf ─────────────────────────────────────────────────────
@@ -6788,6 +6789,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   [ "$status" -eq 0 ]
   [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
   [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
 
@@ -6796,6 +6798,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
   [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
   [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6805,6 +6808,7 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   run _install_ubuntu_perf
   [ "$status" -eq 0 ]
   [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
   [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
   [ "$(_perf_any_sysctl)" -eq 0 ]
 }
@@ -6960,8 +6964,9 @@ _perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 
 @test "perf: _SYSCTL_BIN unset applies through sudo sysctl -w with the ceiling" {
   _perf_env 4
-  # Conf pre-seeded at 2 so no tee call is logged; _PERF_CONF stays set.
-  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  # Conf pre-seeded at 1: kept (no tee call is logged) and below the ceiling, so
+  # applying the conf value instead of the ceiling would show as =1.
+  printf 'kernel.perf_event_paranoid = 1\n' > "${_PERF_CONF}"
   printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${SHIM_DIR}/sudo"
   /bin/chmod +x "${SHIM_DIR}/sudo"
   [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
