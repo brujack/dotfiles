@@ -3324,6 +3324,19 @@ _perf_doctor_setup() {
 
 _perf_doctor_conf() { printf 'kernel.perf_event_paranoid = %s\n' "$1" > "${_PERF_CONF}"; }
 
+# Exactly one verdict line of the given kind and none of the others: pins
+# first-match-wins (a missing return would print a second, contradictory verdict).
+_perf_one_verdict() {
+  local _k _want="${1}"
+  for _k in FAIL WARN PASS; do
+    if [[ ${_k} == "${_want}" ]]; then
+      [ "$(printf '%s\n' "${output}" | command grep -c "\[${_k}\]")" -eq 1 ]
+    else
+      [ "$(printf '%s\n' "${output}" | command grep -c "\[${_k}\]")" -eq 0 ]
+    fi
+  done
+}
+
 _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | sudo tee '%s'" "${_PERF_CONF}"; }
 
 @test "perf doctor: conf unreadable fails by hand with no tee remedy" {
@@ -3337,6 +3350,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"perf events:"* ]]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} exists but is unreadable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf with non-text bytes fails by hand with no tee remedy" {
@@ -3346,6 +3360,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf holding other keys fails by hand with no tee remedy" {
@@ -3355,6 +3370,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} holds other keys; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf -1 fails unparseable with no tee remedy" {
@@ -3364,6 +3380,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} exists but is unparseable; fix by hand"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf missing at live 4 fails with the tee and sysctl -w remedy" {
@@ -3373,6 +3390,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} missing; next boot: kernel default; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee) && sudo sysctl -w kernel.perf_event_paranoid=2"
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf missing at live 2 fails with the tee remedy and no sysctl -w" {
@@ -3382,6 +3400,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} missing; next boot: kernel default; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee)"
   [[ "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf 3 at live 2 fails above 2 with the tee remedy and no sysctl -w" {
@@ -3392,6 +3411,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} value 3 above 2; next boot: 3; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee)"
   [[ "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf 3 at live 4 fails above 2 with the tee and sysctl -w remedy" {
@@ -3402,6 +3422,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} value 3 above 2; next boot: 3; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee) && sudo sysctl -w kernel.perf_event_paranoid=2"
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: live 4 with conf 2 fails above 2 with only the sysctl -w remedy" {
@@ -3413,6 +3434,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[FAIL]"*"perf: live value 4 above 2; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.perf_event_paranoid=2"
   [[ "${output}" != *"sudo tee"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf 1 at live 1 warns set outside dotfiles with no remedy" {
@@ -3424,6 +3446,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[WARN]"*"perf: ${_PERF_CONF} value 1 below 2; set outside dotfiles"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* && "${output}" != *"fix:"* ]]
   [[ "${output}" != *"[FAIL]"* ]]
+  _perf_one_verdict WARN
 }
 
 @test "perf doctor: conf 0 at live 0 warns set outside dotfiles with no remedy" {
@@ -3434,6 +3457,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[WARN]"*"perf: ${_PERF_CONF} value 0 below 2; set outside dotfiles"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict WARN
 }
 
 @test "perf doctor: live 1 with conf 2 warns below 2 and prints the sysctl -w remedy" {
@@ -3445,6 +3469,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[WARN]"*"perf: live value 1 below 2; next boot: 2; fix:"* ]]
   printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.perf_event_paranoid=2"
   [[ "${output}" != *"sudo tee"* && "${output}" != *"[FAIL]"* ]]
+  _perf_one_verdict WARN
 }
 
 @test "perf doctor: live -1 fails unreadable with no remedy" {
@@ -3454,6 +3479,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: live value in ${_PERF_PROC} unreadable or below 0"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: live -1 is reported before a conf refusal" {
@@ -3464,6 +3490,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"[FAIL]"*"perf: live value in ${_PERF_PROC} unreadable or below 0"* ]]
   [[ "${output}" != *"unparseable"* ]]
+  _perf_one_verdict FAIL
 }
 
 @test "perf doctor: conf 2 at live 2 passes naming the live value" {
@@ -3475,6 +3502,7 @@ _perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | 
   [[ "${output}" == *"[PASS]"*"perf perf_event_paranoid 2"* ]]
   [[ "${output}" != *"[FAIL]"* && "${output}" != *"[WARN]"* ]]
   [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict PASS
 }
 
 @test "perf doctor: gate off (LINUX unset) prints nothing" {
