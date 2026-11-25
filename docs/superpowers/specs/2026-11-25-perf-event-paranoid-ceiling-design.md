@@ -147,6 +147,10 @@ with this known.
 Not a new `-t` path: the step runs in `-t setup` and `-t developer` on Ubuntu. For this change the
 step alone is run on each box (V1), not a full `-t developer`.
 
+## Docs
+
+`CLAUDE.md` sits at 84997 of its 85000-byte ceiling (push hook, 2026-11-25), so it gains no new line. The Entry Points sysctl line and the sysctl seams line are reworded in place to name the perf ceiling and `_PERF_CONF`/`_PERF_PROC`, with detail moved to ai-config `docs/knowledge/dotfiles-test-seams.md` (§ `CLAUDE.md relocation: sysctl and kernel keys seams`) after messaging ai-config. The `CLAUDE.md` byte count must not rise above 85000.
+
 ## Requirements
 
 - **R1.** `lib/constants.sh` defines `readonly PERF_EVENT_PARANOID_MAX=2`, `readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf` and `readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid`.
