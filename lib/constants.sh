@@ -40,6 +40,8 @@ FIRECRAWL_CLI_VER="1.26.3"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 FIRECRAWL_MCP_VER="3.38.0"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
+# ai-config pins the same version (_JSCPD_VERSION_EXPECTED in .claude/scripts/duplication_checker.py)
+# for its duplication gate: message the ai-config session before a bump so both pins land together.
 JSCPD_VER="5.4.1"
 # read by lib/workflows.sh:_require_npm_pins and run_developer_or_ansible
 JSON2YAML_VER="1.1.0"
