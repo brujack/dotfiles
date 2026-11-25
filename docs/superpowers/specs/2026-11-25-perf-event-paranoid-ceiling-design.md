@@ -48,9 +48,11 @@ whatever looser value happened to be live when setup ran (a one-off `sysctl -w .
 `perf record -a`), which the operator did not approve (Step 8 round 1, Goal-Fit and Risk). So this
 key gets a fixed value, not a mirrored floor: dotfiles persists exactly 2 and applies exactly 2.
 
-`_sysctl_read_live` and `_sysctl_conf_value` accept only `0` or a positive integer. `-1` is a valid
-`perf_event_paranoid` value. A hand-set `-1` must be read so the step can leave it alone and doctor
-can name it; an unsigned reader would turn it into "cannot read live value" or "unparseable".
+`_sysctl_read_live` and `_sysctl_conf_value` accept only `0` or a positive integer, which covers
+every value this design writes or leaves alone (0, 1, 2 and above). `-1` is a valid kernel value
+but nothing sets it (math session, 2026-11-25), so a `-1` live or conf value fails closed through the
+existing readers ("cannot read live value" / "unparseable; fix by hand") and nothing is written. The
+operator chose this over a signed parse mode in round 2, which leaves the shared readers unchanged.
 
 ## Design
 
@@ -65,23 +67,18 @@ readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf
 readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid
 ```
 
-### Signed parse mode
-
-`_sysctl_read_live <path> [signed]` and `_sysctl_conf_value <conf> <key> [signed]`. With the extra
-argument `signed`, a value matches `-?(0|[1-9][0-9]*)`, at most 10 digits, within
-`-2147483648..2147483647`; `-0` is rejected. Without it both behave exactly as today, so every
-floor caller is unchanged.
-
 ### Install step: `_install_ubuntu_perf` (`lib/linux_ubuntu.sh`)
 
 Runs in `install_ubuntu_packages`' step loop, directly after `kernel_keys`. Gates, in order:
 
 - `HAS_DEVTOOLS` unset: print `perf: skipped (HAS_DEVTOOLS unset)`, return 0.
 - `${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}` not a directory: print `perf: skipped (no systemd at <dir>)`, return 0.
+- The proc file (`${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}`) does not exist: print `perf: skipped (no <proc>)`, return 0. A kernel without perf events has nothing to tune.
 
 The gate reaches `claude` and `workstation` (`linux_workstation`) and also `wsl2_workstation`
-(`cruncher`) when WSL systemd is on; there it writes a conf of 2 and, with a WSL kernel default
-already at or below 2, applies nothing. Harmless, and stated rather than gated.
+(`cruncher`) when WSL systemd is on. Its WSL kernel was not measured (`ssh cruncher` refused,
+2026-11-25): if the proc file is absent the third gate skips; if present, the step writes 2 and
+applies only a value above 2. Either way it never loosens anything.
 
 Then `_sysctl_ceiling_step perf kernel.perf_event_paranoid 2 <conf> <proc> <seam_name>`, where conf
 is `${_PERF_CONF:-${PERF_SYSCTL_CONF}}`, proc is `${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}`, and
@@ -90,8 +87,8 @@ seam_name is `_PERF_CONF` when that seam is set, else empty.
 ### `_sysctl_ceiling_step <label> <key> <ceiling> <conf> <proc> <seam_name>`
 
 1. Classify an existing conf exactly as `_sysctl_floor_step` does, with the same messages and rc 1:
-   unreadable, non-text bytes, other keys, unparseable (value read with `signed`).
-2. Read live with `signed`; failure prints `<label>: cannot read live value <proc>` and returns 1.
+   unreadable, non-text bytes, other keys, unparseable (a `-1` value is unparseable and is refused).
+2. Read live with the existing reader (a `-1` fails here); failure prints `<label>: cannot read live value <proc>` and returns 1.
 3. Conf absent, or its value above the ceiling: write `<key> = <ceiling>` through
    `_sysctl_conf_write`, read back (mismatch prints `<label>: read-back mismatch (<conf>)`, rc 1),
    and print `<label>: conf written (<ceiling>)` for a new conf or
@@ -103,30 +100,33 @@ seam_name is `_PERF_CONF` when that seam is set, else empty.
    that seam is set, else `sudo sysctl`). Never `sysctl -p`. Print `<label>: applied`, or
    `<label>: apply failed` / `<label>: apply failed (_SYSCTL_BIN set, ran without sudo)` with rc 1.
 
-| live | conf before | conf after     | applied  | message                          |
-| ---- | ----------- | -------------- | -------- | -------------------------------- |
-| 4    | absent      | 2              | `-w …=2` | conf written (2), applied        |
-| 2    | absent      | 2              | no       | conf written (2)                 |
-| 1    | absent      | 2              | no       | conf written (2)                 |
-| -1   | absent      | 2              | no       | conf written (2)                 |
-| 4    | 2           | 2 (untouched)  | `-w …=2` | applied                          |
-| 4    | -1          | -1 (untouched) | `-w …=2` | applied                          |
-| 4    | 3           | 2              | `-w …=2` | persisted 2 … (was 3), applied   |
-| 1    | 2           | 2 (untouched)  | no       | already 2 or lower               |
-| 2    | 2           | 2 (untouched)  | no       | already 2 or lower               |
+| live | conf before | conf after     | applied  | message / rc                       |
+| ---- | ----------- | -------------- | -------- | ---------------------------------- |
+| 4    | absent      | 2              | `-w …=2` | conf written (2), applied          |
+| 2    | absent      | 2              | no       | conf written (2)                   |
+| 1    | absent      | 2              | no       | conf written (2)                   |
+| 0    | absent      | 2              | no       | conf written (2)                   |
+| 4    | 2           | 2 (untouched)  | `-w …=2` | applied                            |
+| 4    | 1           | 1 (untouched)  | `-w …=2` | applied                            |
+| 4    | 3           | 2              | `-w …=2` | persisted 2 … (was 3), applied     |
+| 1    | 2           | 2 (untouched)  | no       | already 2 or lower                 |
+| 2    | 2           | 2 (untouched)  | no       | already 2 or lower                 |
+| -1   | absent      | absent         | no       | cannot read live value …, rc 1     |
+| 4    | -1          | -1 (untouched) | no       | … exists but is unparseable, rc 1  |
 
 ### Doctor: `_doctor_check_perf_paranoid` (`lib/helpers.sh`)
 
-Listed in `run_doctor` after `_doctor_check_kernel_keys`. Gated on `LINUX`, `HAS_DEVTOOLS` and the
-systemd run dir; prints the heading `perf events:` then calls
+Listed in `run_doctor` after `_doctor_check_kernel_keys`. Gated on `LINUX`, `HAS_DEVTOOLS`, the
+systemd run dir and the proc file existing (all as the step); prints the heading `perf events:` then calls
 `_doctor_sysctl_ceiling perf kernel.perf_event_paranoid 2 <conf> <proc>`.
 
-`_doctor_sysctl_ceiling` classifies the conf as the step does (same FAIL texts). It never prints a
+`_doctor_sysctl_ceiling` reads live first, as `_doctor_sysctl_floor` does, then classifies the conf as the step does (same FAIL texts). It never prints a
 `tee` remedy for a conf the step would keep, so a hand-set value below 2 gets no overwrite remedy.
 Let tee be `printf 'kernel.perf_event_paranoid = 2\n' | sudo tee '<conf>'`. First match wins:
 
 | condition    | verdict | message                                             | remedy line                                                              |
 | ------------ | ------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
+| live unreadable | FAIL | `cannot read <proc>` | none |
 | conf missing | FAIL    | `<conf> missing; next boot: kernel default; fix:`   | tee, plus ` && sudo sysctl -w kernel.perf_event_paranoid=2` when live > 2 |
 | conf > 2     | FAIL    | `<conf> value <v> above 2; next boot: <v>; fix:`    | same as above                                                            |
 | live > 2     | FAIL    | `live value <live> above 2; fix:`                   | `sudo sysctl -w kernel.perf_event_paranoid=2`                            |
@@ -144,10 +144,13 @@ doctor tests beside the kernel-keys doctor tests. Cases:
 - every row of the step table, asserting the conf bytes, the message, and the exact `sysctl-stub`
   argument or that the stub was never called;
 - both skips; each classifier refusal leaving the conf byte-identical; both apply-failure messages;
-- the signed reader on `-1`, `-2147483648`, `-0` and `-2147483649`, and a floor caller still
-  rejecting `-1`;
-- each doctor row, with the WARN rows run at live `-1` and conf `-1` so the message pins the derived
-  value `-1`, which no constant in the code equals.
+- a live `-1` failing with `cannot read live value` and a conf `-1` refused as unparseable, each
+  leaving the conf byte-identical and the stub uncalled;
+- the proc-absent skip, with no conf written;
+- each doctor row. The `conf < 2` WARN runs at conf `1`, live `1`, so the message pins the derived
+  value `1`. The `live < 2` WARN is reachable only with conf exactly 2 (first match), so it runs at
+  live `1`, conf `2`: its `<live>` field pins the derived value, and its `next boot:` field is the
+  constant 2 by construction.
 
 The existing floor tests run unedited.
 
@@ -176,19 +179,19 @@ step alone is run on each box (V1), not a full `-t developer`.
 ## Requirements
 
 - **R1.** `lib/constants.sh` defines `readonly PERF_EVENT_PARANOID_MAX=2`, `readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf` and `readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid`.
-- **R2.** `_sysctl_read_live` and `_sysctl_conf_value` accept an optional final argument `signed`; with it, `-1` and `-2147483648` parse and `-0` and `-2147483649` do not; without it, `-1` is rejected as before.
+- **R2.** `_install_ubuntu_perf` prints `perf: skipped (no <proc>)` and returns 0, writing nothing, when the proc file does not exist; `_doctor_check_perf_paranoid` returns silently in the same case.
 - **R3.** `install_ubuntu_packages`' step loop runs `perf` directly after `kernel_keys`, calling `_install_ubuntu_perf`.
 - **R4.** `_install_ubuntu_perf` prints `perf: skipped (HAS_DEVTOOLS unset)` and returns 0 when `HAS_DEVTOOLS` is empty, and prints `perf: skipped (no systemd at <dir>)` and returns 0 when the systemd run dir is absent, writing nothing in either case.
 - **R5.** `_install_ubuntu_perf` resolves the conf from `_PERF_CONF` else `PERF_SYSCTL_CONF` and the proc file from `_PERF_PROC` else `PERF_EVENT_PARANOID_PROC`, and writes the conf without sudo when `_PERF_CONF` is set.
 - **R6.** `_sysctl_ceiling_step` writes `kernel.perf_event_paranoid = 2` when the conf is absent or holds a value above 2, and leaves a conf holding a value at or below 2 (including `-1`) byte-identical.
 - **R7.** `_sysctl_ceiling_step` runs `sysctl -w kernel.perf_event_paranoid=2` only when live is above 2, never `sysctl -p` and never another value, and prints `perf: already 2 or lower` when live is at or below 2 and nothing was written.
-- **R8.** `_sysctl_ceiling_step` refuses an existing conf that is unreadable, holds non-text bytes, holds other keys or is unparseable, returning 1 with the same `fix by hand` messages as `_sysctl_floor_step`, and leaves it byte-identical.
+- **R8.** `_sysctl_ceiling_step` refuses an existing conf that is unreadable, holds non-text bytes, holds other keys or is unparseable (a `-1` value included), returning 1 with the same `fix by hand` messages as `_sysctl_floor_step`, and leaves it byte-identical; a live value of `-1` returns 1 with `perf: cannot read live value <proc>` and writes nothing.
 - **R9.** `_sysctl_ceiling_step` prints `perf: conf written (2)` for a new conf, `perf: persisted 2 to <conf> (was <old>)` for a rewrite, and `perf: applied` after a successful apply.
 - **R10.** `run_doctor` calls `_doctor_check_perf_paranoid` after `_doctor_check_kernel_keys`; it returns silently unless `LINUX` and `HAS_DEVTOOLS` are set and the systemd run dir exists.
-- **R11.** `_doctor_sysctl_ceiling` reports, first match in this order: FAIL `<conf> missing; next boot: kernel default; fix:`; FAIL `<conf> value <v> above 2; next boot: <v>; fix:`; FAIL `live value <live> above 2; fix:`; WARN `<conf> value <v> below 2; set outside dotfiles` with no remedy line; WARN `live value <live> below 2; next boot: <v>; fix:`; else PASS `perf perf_event_paranoid <live>`; every printed `tee` remedy writes `kernel.perf_event_paranoid = 2`.
+- **R11.** `_doctor_sysctl_ceiling` reports, first match in this order: FAIL `cannot read <proc>`; FAIL `<conf> missing; next boot: kernel default; fix:`; FAIL `<conf> value <v> above 2; next boot: <v>; fix:`; FAIL `live value <live> above 2; fix:`; WARN `<conf> value <v> below 2; set outside dotfiles` with no remedy line; WARN `live value <live> below 2; next boot: <v>; fix:`; else PASS `perf perf_event_paranoid <live>`; every printed `tee` remedy writes `kernel.perf_event_paranoid = 2`.
 - **R12.** `load_mocks` exports `_PERF_CONF` and `_PERF_PROC` under `BATS_TEST_TMPDIR`.
-- **R13.** `_sysctl_floor_step` and `_doctor_sysctl_floor` bodies are unchanged by this work.
-- **V1.** On `claude` and on `workstation`, run `_install_ubuntu_perf` alone with real sudo (the plan gives the exact sourcing command), then as the normal user `perf stat -x, -e instructions:u true 2>&1 >/dev/null | awk -F, '$3 ~ /instructions/ && $1+0 > 0 {ok=1} END{exit !ok}'` exits 0.
+- **R13.** `_sysctl_floor_step`, `_doctor_sysctl_floor`, `_sysctl_read_live` and `_sysctl_conf_value` bodies are unchanged by this work.
+- **V1.** On `claude` and on `workstation`, run `_install_ubuntu_perf` alone with real sudo (the plan gives the exact sourcing command), then as the normal user math's own form `perf stat -x, -e cycles,instructions true 2>&1 >/dev/null` prints a count above 0 for both events and no `<not supported>` or `<not counted>` line.
 - **V2.** On both boxes, persistence without touching other keys: `sudo sysctl -w kernel.perf_event_paranoid=4`, then `sudo /usr/lib/systemd/systemd-sysctl /etc/sysctl.d/90-dotfiles-perf.conf`, then `/proc/sys/kernel/perf_event_paranoid` reads `2`; `/usr/lib/systemd/systemd-sysctl --cat-config` shows no later file setting the key.
 - **V3.** On both boxes, `./setup_env.sh -t doctor` prints `perf perf_event_paranoid 2` as a PASS.
 - **N1.** No package list, Brewfile or apt install changes; `linux-tools-generic` is not added.
@@ -216,6 +219,19 @@ Disposition: Addressed, operator 2026-11-25: V2 applies only the perf conf via `
 Finding: the same `min(live, 2)` loosening ratchet, independently: rows `1/absent -> 1`, `-1/absent -> -1` and `1/2 -> 1` persist a transient value, the last destroying the operator's `2` (and any comments) through the whole-file `_sysctl_conf_write`; the doctor WARN's tee remedy tells the operator to do the same. N2 forbids raising, not loosening, so every requirement passes. Fix: persist 2 when the conf is absent or above 2, read live only to decide the apply, drop the WARN. Exposure correction: `claude` has one runner account (`github-runner:995`, 18 `Runner.Listener`, 66 processes); `ptrace_scope` 1 gates only ATTACH while `perf_event_open` checks READ, so at 2 a job can count events on concurrent jobs' processes under the same uid. Tests: the seeded proc `2` equals the ceiling, so a PASS printing the constant instead of live passes; pin a PASS at live 1 or -1, and add a live 2/conf 2 no-op row asserting no `sysctl-stub` call. WSL scope as Ergonomics.
 Assumption: a live value below 2 is a deliberate, durable choice rather than a transient debugging setting; settled by asking the operator and math whether anyone sets it below 2 by hand.
 Disposition: Addressed, operator 2026-11-25: fixed value 2 as Goal-Fit; Exposure rewritten with the single runner uid and the ATTACH/READ distinction; doctor WARN rows tested at `-1` to pin a derived value; live 2 / conf 2 no-op row added with no `sysctl-stub` call. Assumption confirmed by the math session 2026-11-25: nothing sets the key below 2.
+
+### Round 2 (re-reviewed at `a48b3546`, all three lenses, after the fixed-value revision)
+
+Goal-Fit (`a48b3546`): no correctness flaw; the signed parse mode serves only `-1`, which nothing sets, while editing two readers every floor caller shares; drop it and let `-1` fail closed. Assumption: perf at 2 still falls back to user-only counting for unmodified events, so math's own `cycles,instructions` form works; V1 should run that form.
+Disposition: Addressed, operator 2026-11-25: signed mode dropped (R2 replaced, R13 widened to the two readers); V1 runs `perf stat -x, -e cycles,instructions true` and requires non-zero counts for both.
+
+Ergonomics (`a48b3546`): the test plan ran the `live < 2` WARN at conf `-1`, unreachable under first-match order; R11 lacked the unreadable-live FAIL row `_doctor_sysctl_floor` has. Assumption: `cruncher`'s WSL kernel exposes `/proc/sys/kernel/perf_event_paranoid`; unmeasured (`ssh cruncher` refused).
+Disposition: Addressed 2026-11-25: test rows corrected; `cannot read <proc>` FAIL added first; a proc-absent skip (new R2) removes the dependence on the cruncher measurement.
+
+Risk (`a48b3546`): no load-bearing issue; same unreachable test row as Ergonomics; `man systemd-sysctl` confirms a path argument applies only that file (V2 sound). No uncertain assumption beyond perf working at 2, which V1 measures.
+Disposition: Addressed 2026-11-25: as Ergonomics.
+
+Stop: round 2's findings all sat in the test plan and wording, and its one design change removed surface (the signed mode); both stop signals agree.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
