@@ -1035,6 +1035,7 @@ EOF
   _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
+  _doctor_check_perf_paranoid() { :; }
   _doctor_check_plugin_node_paths() { :; }
   _doctor_check_brew_links() { :; }
   _doctor_check_renovate_cadence() { :; }
@@ -1449,6 +1450,7 @@ EOF
   _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
+  _doctor_check_perf_paranoid() { :; }
   _doctor_check_plugin_node_paths() { :; }
   export PROFILE="unknown"
   _PROFILES_LOADED=1
@@ -2574,6 +2576,7 @@ STUB
   _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
+  _doctor_check_perf_paranoid() { :; }
   _doctor_check_plugin_node_paths() { :; }
   run_doctor
   [ "${_called}" -eq 1 ]
@@ -2977,6 +2980,10 @@ _keys_doctor_conf() { printf '%s = %s\n' "$2" "$3" > "$1"; }
   [ "${_n_ino}" -gt 0 ]
   [ "${_n_keys}" -gt 0 ]
   [ "${_n_ino}" -eq "${_n_keys}" ]
+  local _n_perf
+  _n_perf="$(PATH="${_clean_path}" env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" grep -c "^ *_doctor_check_perf_paranoid() { :; }" -- tests | awk -F: '{s+=$2} END{print s+0}')"
+  [ "${_n_perf}" -gt 0 ]
+  [ "${_n_perf}" -eq "${_n_ino}" ]
 }
 
 @test "kernel keys doctor: default seeding fails per key naming its own conf, with a per-key remedy" {
@@ -3303,6 +3310,270 @@ _kkd_env() {
     [[ "${_line}" == *'${_KEYS_MAXKEYS_PROC:-${KEYS_MAXKEYS_PROC}}'* ]]
     [[ "${_line}" != *MAXBYTES* ]]
   done
+}
+
+# ── _doctor_check_perf_paranoid ──────────────────────────────────────────────
+# Seams (_PERF_CONF, _PERF_PROC, _SYSTEMD_RUN_DIR) come from load_mocks; the
+# live value starts at 2 and the conf is absent. Every verdict test pins the verdict
+# text and the presence or absence of its remedy line.
+
+_perf_doctor_setup() {
+  export LINUX=1 HAS_DEVTOOLS=1
+  mkdir -p "${_SYSTEMD_RUN_DIR}"
+}
+
+_perf_doctor_conf() { printf 'kernel.perf_event_paranoid = %s\n' "$1" > "${_PERF_CONF}"; }
+
+# Exactly one verdict line of the given kind and none of the others: pins
+# first-match-wins (a missing return would print a second, contradictory verdict).
+_perf_one_verdict() {
+  local _k _want="${1}"
+  for _k in FAIL WARN PASS; do
+    if [[ ${_k} == "${_want}" ]]; then
+      [ "$(printf '%s\n' "${output}" | command grep -c "\[${_k}\]")" -eq 1 ]
+    else
+      [ "$(printf '%s\n' "${output}" | command grep -c "\[${_k}\]")" -eq 0 ]
+    fi
+  done
+}
+
+_perf_doctor_tee() { printf "    printf 'kernel.perf_event_paranoid = 2\\\\n' | sudo tee '%s'" "${_PERF_CONF}"; }
+
+@test "perf doctor: conf unreadable fails by hand with no tee remedy" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads any file"
+  _perf_doctor_setup
+  _perf_doctor_conf 2
+  chmod 000 "${_PERF_CONF}"
+  run _doctor_check_perf_paranoid
+  chmod 600 "${_PERF_CONF}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"perf events:"* ]]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} exists but is unreadable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf with non-text bytes fails by hand with no tee remedy" {
+  _perf_doctor_setup
+  printf 'kernel.perf_event_paranoid = 2\r\n' > "${_PERF_CONF}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf holding other keys fails by hand with no tee remedy" {
+  _perf_doctor_setup
+  printf 'kernel.perf_event_paranoid = 2\nvm.swappiness = 1\n' > "${_PERF_CONF}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} holds other keys; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf -1 fails unparseable with no tee remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf -1
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} exists but is unparseable; fix by hand"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf missing at live 4 fails with the tee and sysctl -w remedy" {
+  _perf_doctor_setup
+  printf '4\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee) && sudo sysctl -w kernel.perf_event_paranoid=2"
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf missing at live 2 fails with the tee remedy and no sysctl -w" {
+  _perf_doctor_setup
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} missing; next boot: kernel default; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee)"
+  [[ "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf 3 at live 2 fails above 2 with the tee remedy and no sysctl -w" {
+  _perf_doctor_setup
+  _perf_doctor_conf 3
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} value 3 above 2; next boot: 3; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee)"
+  [[ "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf 3 at live 4 fails above 2 with the tee and sysctl -w remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf 3
+  printf '4\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} value 3 above 2; next boot: 3; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "$(_perf_doctor_tee) && sudo sysctl -w kernel.perf_event_paranoid=2"
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: live 4 with conf 2 fails above 2 with only the sysctl -w remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf 2
+  printf '4\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: live value 4 above 2; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.perf_event_paranoid=2"
+  [[ "${output}" != *"sudo tee"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf 1 at live 1 warns set outside dotfiles with no remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf 1
+  printf '1\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"perf: ${_PERF_CONF} value 1 below 2; set outside dotfiles"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* && "${output}" != *"fix:"* ]]
+  [[ "${output}" != *"[FAIL]"* ]]
+  _perf_one_verdict WARN
+}
+
+@test "perf doctor: conf 0 at live 0 warns set outside dotfiles with no remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf 0
+  printf '0\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"perf: ${_PERF_CONF} value 0 below 2; set outside dotfiles"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict WARN
+}
+
+@test "perf doctor: live 1 with conf 2 warns below 2 and prints the sysctl -w remedy" {
+  _perf_doctor_setup
+  _perf_doctor_conf 2
+  printf '1\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[WARN]"*"perf: live value 1 below 2; next boot: 2; fix:"* ]]
+  printf '%s\n' "${output}" | grep -qxF "    sudo sysctl -w kernel.perf_event_paranoid=2"
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"[FAIL]"* ]]
+  _perf_one_verdict WARN
+}
+
+@test "perf doctor: live -1 fails unreadable with no remedy" {
+  _perf_doctor_setup
+  printf -- '-1\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: live value in ${_PERF_PROC} unreadable or below 0"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: live -1 is reported before a conf refusal" {
+  _perf_doctor_setup
+  _perf_doctor_conf -1
+  printf -- '-1\n' > "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"[FAIL]"*"perf: live value in ${_PERF_PROC} unreadable or below 0"* ]]
+  [[ "${output}" != *"unparseable"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict FAIL
+}
+
+@test "perf doctor: conf 2 at live 2 passes naming the live value" {
+  _perf_doctor_setup
+  _perf_doctor_conf 2
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"perf events:"* ]]
+  [[ "${output}" == *"[PASS]"*"perf perf_event_paranoid 2"* ]]
+  [[ "${output}" != *"[FAIL]"* && "${output}" != *"[WARN]"* ]]
+  [[ "${output}" != *"sudo tee"* && "${output}" != *"sysctl -w"* ]]
+  _perf_one_verdict PASS
+}
+
+@test "perf doctor: gate off (LINUX unset) prints nothing" {
+  _perf_doctor_setup
+  unset LINUX
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "perf doctor: gate off (HAS_DEVTOOLS unset) prints nothing" {
+  _perf_doctor_setup
+  unset HAS_DEVTOOLS
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "perf doctor: gate off (no systemd run dir) prints nothing" {
+  _perf_doctor_setup
+  rmdir "${_SYSTEMD_RUN_DIR}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "perf doctor: gate off (proc file absent) prints nothing" {
+  _perf_doctor_setup
+  rm -f "${_PERF_PROC}"
+  run _doctor_check_perf_paranoid
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ]
+}
+
+@test "perf doctor: run_doctor calls the perf check" {
+  _perf_doctor_setup
+  local _f
+  for _f in profile symlinks symlink_roots tools dev_tools login_shell cred_dirs hooks_path versions \
+    aws_key_expiry gnu_coreutils pyenv_shims conffile_dist plugin_node_paths \
+    renovate_cadence ledger_drift_cadence inotify_limits kernel_keys; do
+    eval "_doctor_check_${_f}() { :; }"
+  done
+  run run_doctor
+  [[ "${output}" == *"perf events:"* ]]
+  [[ "${output}" == *"[FAIL]"*"perf: ${_PERF_CONF} missing"* ]]
+}
+
+@test "perf doctor: constants derive the proc path and fix the ceiling at 2" {
+  local _key="kernel.perf_event_paranoid"
+  [ "${PERF_EVENT_PARANOID_PROC}" = "/proc/sys/${_key//.//}" ]
+  [ "${PERF_EVENT_PARANOID_MAX}" -eq 2 ]
+}
+
+@test "perf doctor: step and check read the ceiling and seams from the shared names, no literal 2" {
+  local _fn _body
+  for _fn in _install_ubuntu_perf _doctor_check_perf_paranoid; do
+    _body="$(declare -f "${_fn}")"
+    [[ "${_body}" == *PERF_EVENT_PARANOID_MAX* ]]
+    [[ "${_body}" == *'${_PERF_CONF:-${PERF_SYSCTL_CONF}}'* ]]
+    [[ "${_body}" == *'${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}'* ]]
+    # Not a bare `! pipeline`: errexit ignores a negated pipeline that is not the
+    # test's last command, so the check would never fail inside this loop.
+    if printf '%s\n' "${_body}" | command grep -qE 'perf_event_paranoid" *2|paranoid 2 '; then
+      printf 'literal 2 in %s\n' "${_fn}" >&2
+      return 1
+    fi
+  done
+  _body="$(declare -f _doctor_sysctl_ceiling)"
+  [ -n "${_body}" ]
+  ! printf '%s\n' "${_body}" | command grep -qE '(^|[^0-9A-Za-z_{])2([^0-9}]|$)'
 }
 
 # setup_env.sh resolves its own directory once for the lib block. The guard is

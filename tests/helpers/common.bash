@@ -109,6 +109,10 @@ load_mocks() {
     export _KEYS_MAXBYTES_PROC="${BATS_TEST_TMPDIR}/keys_maxbytes"
     printf '2000\n' > "${_KEYS_MAXKEYS_PROC}"
     printf '500000\n' > "${_KEYS_MAXBYTES_PROC}"
+    # perf_event_paranoid step/doctor seams: proc seeded at the ceiling (2), conf absent.
+    export _PERF_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-perf.conf"
+    export _PERF_PROC="${BATS_TEST_TMPDIR}/perf_event_paranoid"
+    printf '2\n' > "${_PERF_PROC}"
   fi
   # tmp_inodes step seams: the real /etc drop-in, systemctl, findmnt and mount must
   # never be reached (tdd.md E2). The stock unit fixture carries systemd's stock line;

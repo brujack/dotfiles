@@ -21,7 +21,7 @@ install_ubuntu_packages() {
   # so nvidia runs after docker and is skipped when docker's core failed (rc 3),
   # driver install included. It would otherwise rewrite a daemon.json docker's own
   # step rejected, then restart docker on a box running live CI runners.
-  for _step in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp \
+  for _step in inotify kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp \
     cloud_tools brew_packages rust gui_tools misc; do
     if [[ ${_step} == nvidia ]] && ((_docker_core == 1)); then
       printf 'ubuntu packages: skipping nvidia because docker failed\n' >&2
@@ -109,6 +109,27 @@ _install_ubuntu_kernel_keys() {
     "${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}" "${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}" \
     "${_KEYS_MAXBYTES_CONF:+_KEYS_MAXBYTES_CONF}" || _rc=1
   return "${_rc}"
+}
+
+# Ubuntu's kernel default perf_event_paranoid (4) blocks unprivileged perf stat.
+# Persist and apply exactly PERF_EVENT_PARANOID_MAX, never loosening a lower value.
+# Spec: docs/superpowers/specs/2026-11-25-perf-event-paranoid-ceiling-design.md
+_install_ubuntu_perf() {
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
+  local _conf="${_PERF_CONF:-${PERF_SYSCTL_CONF}}" _proc="${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}"
+  if [[ -z ${HAS_DEVTOOLS} ]]; then
+    printf 'perf: skipped (HAS_DEVTOOLS unset)\n'
+    return 0
+  fi
+  if [[ ! -d ${_rundir} ]]; then
+    printf 'perf: skipped (no systemd at %s)\n' "${_rundir}"
+    return 0
+  fi
+  if [[ ! -e ${_proc} ]]; then
+    printf 'perf: skipped (no %s)\n' "${_proc}"
+    return 0
+  fi
+  _sysctl_ceiling_step perf kernel.perf_event_paranoid "${PERF_EVENT_PARANOID_MAX}" "${_conf}" "${_proc}" "${_PERF_CONF:+_PERF_CONF}"
 }
 
 # The stand-in for tmpfs's nr_inodes=0 (unlimited): above any real ceiling (2^62).
@@ -299,6 +320,85 @@ _sysctl_floor_step() {
     }
   else
     sudo sysctl -w "${_key}=${_val}" > /dev/null || {
+      printf '%s: apply failed\n' "${_label}" >&2
+      return 1
+    }
+  fi
+  printf '%s: applied\n' "${_label}"
+}
+
+# Persist and apply exactly <ceiling> for one sysctl key, never loosening a lower
+# value. The floor step's max(live, floor) cannot be mirrored as min(live, ceiling):
+# that would persist whatever looser value was live when setup ran (e.g. a one-off
+# `sysctl -w ...=-1`), so this key gets a fixed value. The conf-refusal block below
+# is a deliberate copy of _sysctl_floor_step's: that body is frozen (spec R13) and a
+# shared classifier is a Backlog row (spec external review F1.2). Only this one key
+# is applied (never `sysctl -p`); a set _SYSCTL_BIN runs without sudo, as in the
+# floor step. <seam_name> names the caller's conf seam variable when set, else empty.
+# Spec: docs/superpowers/specs/2026-11-25-perf-event-paranoid-ceiling-design.md
+# Args: <label> <key> <ceiling> <conf> <proc> <seam_name>
+_sysctl_ceiling_step() {
+  local _label="${1}" _key="${2}" _ceiling="${3}" _conf="${4}" _proc="${5}" _seam_name="${6}"
+  local _val="" _wrote=0 _existed=0
+  if [[ -e ${_conf} ]]; then
+    _existed=1
+    if [[ ! -r ${_conf} ]]; then
+      printf '%s: %s exists but is unreadable; fix by hand\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+    if _sysctl_conf_has_nontext "${_conf}"; then
+      printf '%s: %s holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+    # Before the parse check: a conf of only other keys is that case, not unparseable.
+    if _sysctl_conf_has_other_keys "${_conf}" "${_key}"; then
+      printf '%s: %s holds other keys; fix by hand\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+    _val="$(_sysctl_conf_value "${_conf}" "${_key}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
+      printf '%s: %s exists but is unparseable; fix by hand\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+  fi
+
+  local _live
+  _live="$(_sysctl_read_live "${_proc}")" || {
+    printf '%s: live value in %s unreadable or below 0; fix by hand\n' "${_label}" "${_proc}" >&2
+    return 1
+  }
+
+  if [[ -z ${_val} ]] || ((_val > _ceiling)); then
+    _sysctl_conf_write "${_label}" "${_key}" "${_ceiling}" "${_conf}" "${_seam_name}" || return 1
+    if [[ ! -r ${_conf} ]]; then
+      printf '%s: cannot read back %s\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+    local _old="${_val}"
+    _val="$(_sysctl_conf_value "${_conf}" "${_key}")"
+    if [[ ${_val} != "${_ceiling}" ]]; then
+      printf '%s: read-back mismatch (%s)\n' "${_label}" "${_conf}" >&2
+      return 1
+    fi
+    _wrote=1
+    if ((_existed == 1)); then
+      printf '%s: persisted %s to %s (was %s)\n' "${_label}" "${_ceiling}" "${_conf}" "${_old}"
+    else
+      printf '%s: conf written (%s)\n' "${_label}" "${_ceiling}"
+    fi
+  fi
+
+  if ((_live <= _ceiling)); then
+    ((_wrote == 1)) || printf '%s: already %s or lower\n' "${_label}" "${_ceiling}"
+    return 0
+  fi
+  if [[ -n ${_SYSCTL_BIN} ]]; then
+    "${_SYSCTL_BIN}" -w "${_key}=${_ceiling}" > /dev/null || {
+      printf '%s: apply failed (_SYSCTL_BIN set, ran without sudo)\n' "${_label}" >&2
+      return 1
+    }
+  else
+    sudo sysctl -w "${_key}=${_ceiling}" > /dev/null || {
       printf '%s: apply failed\n' "${_label}" >&2
       return 1
     }

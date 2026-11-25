@@ -676,6 +676,7 @@ run_doctor() {
   _doctor_check_dpkg_state
   _doctor_check_inotify_limits
   _doctor_check_kernel_keys
+  _doctor_check_perf_paranoid
   _doctor_check_pyenv_shims
   _doctor_check_plugin_node_paths
   _doctor_check_renovate_cadence
@@ -1337,6 +1338,16 @@ _doctor_check_kernel_keys() {
   _doctor_sysctl_floor kernel-keys kernel.keys.maxbytes "${KEYS_MAXBYTES}" "${_KEYS_MAXBYTES_CONF:-${KEYS_MAXBYTES_CONF}}" "${_KEYS_MAXBYTES_PROC:-${KEYS_MAXBYTES_PROC}}"
 }
 
+# Gated like _install_ubuntu_perf: seams and skips mirror the step.
+_doctor_check_perf_paranoid() {
+  local _rundir="${_SYSTEMD_RUN_DIR:-${SYSTEMD_RUN_DIR}}"
+  local _conf="${_PERF_CONF:-${PERF_SYSCTL_CONF}}" _proc="${_PERF_PROC:-${PERF_EVENT_PARANOID_PROC}}"
+  [[ -n ${LINUX} && -n ${HAS_DEVTOOLS} && -d ${_rundir} && -e ${_proc} ]] || return 0
+
+  printf "\nperf events:\n"
+  _doctor_sysctl_ceiling perf kernel.perf_event_paranoid "${PERF_EVENT_PARANOID_MAX}" "${_conf}" "${_proc}"
+}
+
 # Doctor check for one sysctl floor persisted in its own conf. The remedies
 # touch only this one key (sysctl -w, never -p, which would apply every key in
 # a kept conf).
@@ -1396,6 +1407,70 @@ _doctor_sysctl_floor() {
   if ((_live < _floor)); then
     doctor_fail "${_label}" "live value ${_live} below ${_floor}; fix:"
     printf '    sudo sysctl -w %s=%s\n' "${_key}" "${_val}"
+    return 0
+  fi
+  doctor_pass "${_label} ${_key##*.} ${_live}"
+}
+
+# Doctor check for one sysctl ceiling persisted in its own conf. Mirrors
+# _doctor_sysctl_floor's conf classification; a conf the step keeps (a value
+# at or below the ceiling) is never answered with a tee that would overwrite
+# it. Remedies touch only this one key (sysctl -w, never -p).
+# Args: <label> <key> <ceiling> <conf> <proc>
+_doctor_sysctl_ceiling() {
+  local _label="${1}" _key="${2}" _ceiling="${3}" _conf="${4}" _proc="${5}"
+  local _live _val=""
+  _live="$(_sysctl_read_live "${_proc}")" || {
+    doctor_fail "${_label}" "live value in ${_proc} unreadable or below 0"
+    return 0
+  }
+  if [[ -e ${_conf} ]]; then
+    if [[ ! -r ${_conf} ]]; then
+      doctor_fail "${_label}" "${_conf} exists but is unreadable; fix by hand"
+      return 0
+    fi
+    if _sysctl_conf_has_nontext "${_conf}"; then
+      doctor_fail "${_label}" "${_conf} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"
+      return 0
+    fi
+    if _sysctl_conf_has_other_keys "${_conf}" "${_key}"; then
+      doctor_fail "${_label}" "${_conf} holds other keys; fix by hand"
+      return 0
+    fi
+    _val="$(_sysctl_conf_value "${_conf}" "${_key}")"
+    if [[ ! ${_val} =~ ^[0-9]+$ ]]; then
+      doctor_fail "${_label}" "${_conf} exists but is unparseable; fix by hand"
+      return 0
+    fi
+  fi
+  local _tee _sysctl=""
+  # The live-apply half only matters while the live value is above the ceiling.
+  ((_live > _ceiling)) && _sysctl=" && sudo sysctl -w ${_key}=${_ceiling}"
+  _tee="printf '${_key} = ${_ceiling}\\n' | sudo tee '${_conf}'"
+  # First match wins: a conf above the ceiling is the failure, so it comes
+  # before the live checks.
+  if [[ -z ${_val} ]]; then
+    doctor_fail "${_label}" "${_conf} missing; next boot: kernel default; fix:"
+    printf '    %s\n' "${_tee}${_sysctl}"
+    return 0
+  fi
+  if ((_val > _ceiling)); then
+    doctor_fail "${_label}" "${_conf} value ${_val} above ${_ceiling}; next boot: ${_val}; fix:"
+    printf '    %s\n' "${_tee}${_sysctl}"
+    return 0
+  fi
+  if ((_live > _ceiling)); then
+    doctor_fail "${_label}" "live value ${_live} above ${_ceiling}; fix:"
+    printf '    sudo sysctl -w %s=%s\n' "${_key}" "${_ceiling}"
+    return 0
+  fi
+  if ((_val < _ceiling)); then
+    doctor_warn "${_label}" "${_conf} value ${_val} below ${_ceiling}; set outside dotfiles"
+    return 0
+  fi
+  if ((_live < _ceiling)); then
+    doctor_warn "${_label}" "live value ${_live} below ${_ceiling}; next boot: ${_val}; fix:"
+    printf '    sudo sysctl -w %s=%s\n' "${_key}" "${_ceiling}"
     return 0
   fi
   doctor_pass "${_label} ${_key##*.} ${_live}"

@@ -340,13 +340,13 @@ EOF
   export LINUX=1 UBUNTU=1 NOBLE=1
   _install_ubuntu_base_packages() { return 2; }
   local _s
-  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 16 ]
 }
 
 @test "install_ubuntu_packages: real base with a failed install is named and later steps run" {
@@ -356,20 +356,20 @@ EOF
   cd "${REPO_ROOT}"
   export MOCK_XARGS_EXIT=1
   local _s
-  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"ubuntu packages: failed: base"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 16 ]
 }
 
 @test "install_ubuntu_packages: base rc 1 stops before any later step" {
   unset MACOS NOBLE RESOLUTE
   export LINUX=1 UBUNTU=1
   local _s
-  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   : > "${MOCK_CALLS_FILE}"
@@ -2816,7 +2816,7 @@ STUB
 
 _stub_all_steps_but_docker() {
   local _s
-  for _s in inotify kernel_keys tmp_inodes workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify kernel_keys perf tmp_inodes workstation powershell go nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   _install_ubuntu_base_packages() { return 0; }
@@ -5519,7 +5519,7 @@ _albert_assert_last_good_untouched() {
   export MOCK_CURL_EXIT=22
   _install_ubuntu_base_packages() { :; }
   local _s
-  for _s in inotify kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
+  for _s in inotify kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust misc; do
     eval "_install_ubuntu_${_s}() { :; }"
   done
   run --separate-stderr install_ubuntu_packages
@@ -6188,13 +6188,13 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_inotify() { printf 'ran inotify\n' >> "${MOCK_CALLS_FILE}"; return 1; }
   local _s
-  for _s in kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: inotify"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 16 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | head -1)" = "ran inotify" ]
 }
 
@@ -6748,14 +6748,283 @@ _kk_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_kernel_keys() { printf 'ran kernel_keys\n' >> "${MOCK_CALLS_FILE}"; return 1; }
   local _s
-  for _s in inotify tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
+  for _s in inotify perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools misc; do
     eval "_install_ubuntu_${_s}() { printf 'ran ${_s}\\n' >> \"\${MOCK_CALLS_FILE}\"; }"
   done
   run --separate-stderr install_ubuntu_packages
   [ "$status" -eq 2 ]
   [[ "$stderr" == *"failed: kernel_keys"* ]]
-  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 15 ]
+  [ "$(grep -c '^ran ' "${MOCK_CALLS_FILE}")" -eq 16 ]
   [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 2p)" = "ran kernel_keys" ]
+  [ "$(grep '^ran ' "${MOCK_CALLS_FILE}" | sed -n 3p)" = "ran perf" ]
+}
+
+# ── _install_ubuntu_perf ─────────────────────────────────────────────────────
+# load_mocks points _PERF_CONF (absent) and _PERF_PROC (seeded at 2) at
+# BATS_TEST_TMPDIR. A test never unsets _PERF_CONF: the step would then read
+# the real /etc/sysctl.d path.
+
+_perf_env() {
+  export HAS_DEVTOOLS=1
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/run-systemd"
+  mkdir -p "${_SYSTEMD_RUN_DIR}"
+  printf '%s\n' "${1:-4}" > "${_PERF_PROC}"
+}
+_perf_apply_calls() { grep -c '^sysctl -w kernel.perf_event_paranoid=2$' "${MOCK_CALLS_FILE}" || true; }
+_perf_any_sysctl() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
+
+@test "perf: absent conf at live 4 writes 2 and applies 2" {
+  _perf_env 4
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" == *"perf: applied"* ]]
+  [ "$(_perf_apply_calls)" -eq 1 ]
+}
+
+@test "perf: absent conf at live 2 writes 2 and applies nothing" {
+  _perf_env 2
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: absent conf at live 1 writes 2 and applies nothing" {
+  _perf_env 1
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
+  [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: absent conf at live 0 writes 2 and applies nothing" {
+  _perf_env 0
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: conf written (2)"* ]]
+  [[ "$output" != *"already"* ]]
+  [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: conf 2 at live 4 stays untouched and applies 2" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"perf: applied"* ]]
+  [ "$(_perf_apply_calls)" -eq 1 ]
+}
+
+@test "perf: hand-set conf 1 at live 4 stays untouched and applies 2" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 1\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"perf: applied"* ]]
+  [ "$(_perf_apply_calls)" -eq 1 ]
+}
+
+@test "perf: conf 3 at live 4 is rewritten to 2 and applies 2" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 3\n' > "${_PERF_CONF}"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [ "$(cat "${_PERF_CONF}")" = "kernel.perf_event_paranoid = 2" ]
+  [[ "$output" == *"perf: persisted 2 to ${_PERF_CONF} (was 3)"* ]]
+  [[ "$output" == *"perf: applied"* ]]
+  [ "$(_perf_apply_calls)" -eq 1 ]
+}
+
+@test "perf: conf 2 at live 1 stays untouched, nothing applied, reports already" {
+  _perf_env 1
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"perf: already 2 or lower"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: conf 2 at live 2 stays untouched, nothing applied, reports already" {
+  _perf_env 2
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [[ "$output" == *"perf: already 2 or lower"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: live -1 fails closed, writes nothing and applies nothing" {
+  _perf_env -1
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: live value in ${_PERF_PROC} unreadable or below 0; fix by hand"* ]]
+  [ ! -e "${_PERF_CONF}" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: conf -1 is unparseable, refused byte-identical" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = -1\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} exists but is unparseable; fix by hand"* ]]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: conf with other keys is refused byte-identical" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\nvm.swappiness = 10\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} holds other keys; fix by hand"* ]]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: conf with non-text bytes is refused byte-identical" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\r\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} holds non-text bytes (control or non-ASCII, e.g. CR, NUL); fix by hand"* ]]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: unreadable conf is refused and untouched" {
+  [ "$(id -u)" -ne 0 ] || skip "root reads any file"
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  cp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  chmod 000 "${_PERF_CONF}"
+  run --separate-stderr _install_ubuntu_perf
+  chmod 600 "${_PERF_CONF}"
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: ${_PERF_CONF} exists but is unreadable; fix by hand"* ]]
+  cmp "${_PERF_CONF}" "${BATS_TEST_TMPDIR}/before"
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: HAS_DEVTOOLS unset skips and creates no conf" {
+  _perf_env 4
+  unset HAS_DEVTOOLS
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: skipped (HAS_DEVTOOLS unset)"* ]]
+  [ ! -e "${_PERF_CONF}" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: missing systemd run dir skips and creates no conf" {
+  _perf_env 4
+  export _SYSTEMD_RUN_DIR="${BATS_TEST_TMPDIR}/no-such-run-dir"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: skipped (no systemd at ${_SYSTEMD_RUN_DIR})"* ]]
+  [ ! -e "${_PERF_CONF}" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: absent proc file skips and creates no conf" {
+  _perf_env 4
+  rm -f "${_PERF_PROC}"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"perf: skipped (no ${_PERF_PROC})"* ]]
+  [ ! -e "${_PERF_CONF}" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: failing sysctl stub names the _SYSCTL_BIN apply failure" {
+  _perf_env 4
+  export MOCK_SYSCTL_STUB_EXIT=1
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: apply failed (_SYSCTL_BIN set, ran without sudo)"* ]]
+}
+
+@test "perf: _SYSCTL_BIN unset applies through sudo sysctl -w with the ceiling" {
+  _perf_env 4
+  # Conf pre-seeded at 1: kept (no tee call is logged) and below the ceiling, so
+  # applying the conf value instead of the ceiling would show as =1.
+  printf 'kernel.perf_event_paranoid = 1\n' > "${_PERF_CONF}"
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${SHIM_DIR}/sudo"
+  /bin/chmod +x "${SHIM_DIR}/sudo"
+  [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  unset _SYSCTL_BIN
+  : > "${MOCK_CALLS_FILE}"
+  run _install_ubuntu_perf
+  [ "$status" -eq 0 ]
+  # The awk classifier mock also logs; the sudo shim's lines are the apply path.
+  [ "$(grep '^sudo ' "${MOCK_CALLS_FILE}")" = "sudo sysctl -w kernel.perf_event_paranoid=2" ]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: sudo sysctl failing reports apply failed without the _SYSCTL_BIN note" {
+  _perf_env 4
+  printf 'kernel.perf_event_paranoid = 2\n' > "${_PERF_CONF}"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "${SHIM_DIR}/sudo"
+  /bin/chmod +x "${SHIM_DIR}/sudo"
+  [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
+  unset _SYSCTL_BIN
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: apply failed"* ]]
+  [[ "$stderr" != *"_SYSCTL_BIN"* ]]
+}
+
+@test "perf: a failing tee returns 1 naming _PERF_CONF and applies nothing" {
+  _perf_env 4
+  export MOCK_TEE_EXIT=1
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: write failed (${_PERF_CONF}; _PERF_CONF set, ran without sudo)"* ]]
+  # The write failure returns at once: no read-back is attempted after it.
+  [[ "$stderr" != *"cannot read back"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: a tee that exits 0 but writes nothing is caught by the read-back" {
+  _perf_env 4
+  # A stale conf above the ceiling keeps the file readable, so the failure is the value check.
+  printf 'kernel.perf_event_paranoid = 3\n' > "${_PERF_CONF}"
+  printf '#!/usr/bin/env bash\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_perf
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: read-back mismatch (${_PERF_CONF})"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
+}
+
+@test "perf: a tee that writes then locks the conf reports cannot read back" {
+  [ "$(id -u)" -ne 0 ] || skip "root can read a mode-000 file"
+  _perf_env 4
+  printf '#!/usr/bin/env bash\nfor _a in "$@"; do _f="${_a}"; done\ncat > "${_f}"\nchmod 000 "${_f}"\nexit 0\n' > "${SHIM_DIR}/tee"
+  /bin/chmod +x "${SHIM_DIR}/tee"
+  run --separate-stderr _install_ubuntu_perf
+  chmod 600 "${_PERF_CONF}" 2> /dev/null || true
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"perf: cannot read back ${_PERF_CONF}"* ]]
+  [ "$(_perf_any_sysctl)" -eq 0 ]
 }
 
 # ── kernel-keys: error branches of the shared floor step must carry the kernel-keys label ──
