@@ -1,7 +1,7 @@
 # Doctor check: every jscpd a box can resolve matches the pin
 
 **Date:** 2026-11-24
-**Status:** Draft
+**Status:** Retired 2026-11-24 by the operator after Step 8, before approval. Nothing was built; see Multi-Lens Review.
 **Source:** operator decision 2026-11-24 on the jscpd drift Backlog row (becccf41), relayed
 from ai-config's sub-project 1 spec (`2026-11-24-machine-written-dod-records-design.md`, N9).
 
@@ -105,3 +105,48 @@ output is `cpd 5.0.14`, the real stale binary's form.
 - **N1.** The arm never installs, upgrades, removes or rewrites any file or package.
 - **N2.** No change to how `run_developer_or_ansible` or `-t update` install npm globals.
 - **N3.** No version check for npm globals other than jscpd.
+
+## Multi-Lens Review
+
+Reviewed at commit: `34963939` (Step 7 self-review commit, before Step 8 dispatch)
+
+### Goal-Fit
+
+Finding: The premise is false and the arm cannot carry the goal. ai-config's gate resolves jscpd
+on PATH only (`.claude/scripts/duplication_checker.py` `_find_jscpd`, `shutil.which("jscpd",
+path=env.get("PATH"))` at d564309c, `feat/push-time-gates` and the `ai-config-gates` worktree);
+no ref has a fallback order, so `_DOCTOR_JSCPD_PREFIXES` mirrors nothing. The arm's output is read
+only on a manual `-t doctor` and cannot change a gate verdict. ai-config already reads the version
+of the exact binary the gate runs (`_check_jscpd_version`) and only warns; failing closed there
+removes the box-dependence at the moment of use.
+Assumption: drift reaches a gate verdict only if the pre-push hook's PATH can reach a different
+copy than interactive zsh does; settled by printing `type -ap jscpd` inside a real hook run.
+Disposition: Accepted, operator 2026-11-24: retire this spec; the gate fails closed instead.
+
+### Ergonomics
+
+Finding: R9 classifies the managed copy by the actor's `npm prefix -g`. Under a bare PATH on
+`claude` and `workstation` that is `/usr/bin/npm`, prefix `/usr/local` (measured on `claude`),
+so the remedy would tell the operator to uninstall the Linuxbrew copy and to run `-t update` for
+the `/usr/local` one, recreating the two-copy state. A bare `setup_env.sh -t update` also runs
+the real repo-sync and `rsync --delete` sections. The same mechanism (a bare-PATH setup or
+update installing through the system npm into `/usr/local`) is the likely origin of the stale
+copy.
+Assumption: every jscpd the gate's actor can reach appears in doctor's PATH plus the three
+prefixes; settled by diffing `type -ap jscpd` inside a real hook run against doctor's list.
+Disposition: Accepted, operator 2026-11-24: retire; the likely origin goes to the Backlog.
+
+### Risk
+
+Finding: The candidate set is a sound superset, but a doctor PASS does not mean the gate resolves
+a pinned jscpd: on `claude`, `env -i PATH=/usr/bin:/bin bash -c 'command -v jscpd'` finds none,
+while doctor would PASS through the Linuxbrew prefix. The FAIL policy's "the gate's fallback
+order can reach it" rests on a mechanism that does not exist. The remedy branch is over-built.
+`plugin_node_paths.bats` would run the real arm on fleet boxes (`HAS_DEVTOOLS` inherited).
+Assumption: a doctor PASS means jscpd resolves on the PATH the pre-push gate runs under; refuted
+on `claude` for a bare PATH.
+Disposition: Accepted, operator 2026-11-24: retire.
+
+### Adversarial Spec Review (comparison/judge designs only)
+
+N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
