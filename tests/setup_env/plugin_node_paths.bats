@@ -428,6 +428,7 @@ _make_plugin() {
   _doctor_check_flatpak_gl() { :; }
   _doctor_check_inotify_limits() { :; }
   _doctor_check_kernel_keys() { :; }
+  _doctor_check_perf_paranoid() { :; }
   _doctor_check_renovate_cadence()     { :; }
   _doctor_check_ledger_drift_cadence() { :; }
 
