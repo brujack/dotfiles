@@ -246,6 +246,13 @@ readonly KEYS_MAXKEYS_CONF=/etc/sysctl.d/90-dotfiles-keys-maxkeys.conf
 readonly KEYS_MAXBYTES_CONF=/etc/sysctl.d/90-dotfiles-keys-maxbytes.conf
 readonly KEYS_MAXKEYS_PROC=/proc/sys/kernel/keys/maxkeys
 readonly KEYS_MAXBYTES_PROC=/proc/sys/kernel/keys/maxbytes
+# perf_event_paranoid ceiling: Ubuntu's kernel default (4) blocks unprivileged perf stat; dotfiles
+# persists and applies exactly this value on devtools hosts and never loosens a lower one.
+# See docs/superpowers/specs/2026-11-25-perf-event-paranoid-ceiling-design.md
+# Read by lib/linux_ubuntu.sh:_install_ubuntu_perf and lib/helpers.sh:_doctor_check_perf_paranoid.
+readonly PERF_EVENT_PARANOID_MAX=2
+readonly PERF_SYSCTL_CONF=/etc/sysctl.d/90-dotfiles-perf.conf
+readonly PERF_EVENT_PARANOID_PROC=/proc/sys/kernel/perf_event_paranoid
 # /tmp inode ceiling: systemd's stock tmp.mount caps tmpfs at nr_inodes=1m, which an
 # unreaped scratch pile exhausted on 2026-10-20. The drop-in repeats the stock options
 # with only nr_inodes changed, because a drop-in's Options= replaces the unit's line.

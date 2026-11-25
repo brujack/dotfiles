@@ -910,6 +910,7 @@ _stub_ubuntu_steps() {
   _install_ubuntu_base_packages() { :; }
   _install_ubuntu_inotify() { :; }
   _install_ubuntu_kernel_keys() { :; }
+  _install_ubuntu_perf() { :; }
   _install_ubuntu_tmp_inodes() { :; }
   _install_ubuntu_workstation() { :; }
   _install_ubuntu_powershell() { :; }
@@ -939,7 +940,7 @@ _stub_ubuntu_steps() {
   unset MACOS
   export LINUX=1 UBUNTU=1 NOBLE=1
   local _step
-  for _step in kernel_keys tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
+  for _step in kernel_keys perf tmp_inodes workstation powershell go docker nvidia k8s_tools hashicorp cloud_tools brew_packages rust gui_tools; do
     _stub_ubuntu_steps
     eval "_install_ubuntu_${_step}() { return 1; }"
     run --separate-stderr install_ubuntu_packages
