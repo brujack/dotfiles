@@ -61,7 +61,7 @@ Describe "Install-ChocolateyPackage" {
     Mock choco { @() }
     $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
     Install-ChocolateyPackage
-    Should -Invoke Invoke-Expression -ParameterFilter { $Command -ceq 'Write-Output stub' } -Times 1 -Exactly
+    Should -Invoke Invoke-Expression -ParameterFilter { [string]::Equals($Command, 'Write-Output stub', [StringComparison]::Ordinal) } -Times 1 -Exactly
     Should -Invoke Get-Boxstarter -Times 1 -Exactly
   }
 
@@ -71,7 +71,7 @@ Describe "Install-ChocolateyPackage" {
     $global:bootstrapBytes = [byte[]](0xEF, 0xBB, 0xBF) + [Text.Encoding]::UTF8.GetBytes('Write-Output stub')
     $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
     Install-ChocolateyPackage
-    Should -Invoke Invoke-Expression -ParameterFilter { $Command -ceq 'Write-Output stub' } -Times 1 -Exactly
+    Should -Invoke Invoke-Expression -ParameterFilter { [string]::Equals($Command, 'Write-Output stub', [StringComparison]::Ordinal) } -Times 1 -Exactly
   }
 
   It "throws naming expected and actual hash and never executes on mismatch" {
@@ -619,13 +619,13 @@ Describe "New-SafeLink" {
 
   It "creates a symlink when link does not exist" {
     New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' -and $ErrorAction -eq 'Stop' } -Times 1
     Should -Invoke Remove-Item -Times 0
   }
 
   It "creates a junction when -Junction flag is set" {
     New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
-    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' -and $ErrorAction -eq 'Stop' } -Times 1
     Should -Invoke Remove-Item -Times 0
   }
 

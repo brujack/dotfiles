@@ -59,9 +59,9 @@ function New-SafeLink {
   }
   try {
     if ($Junction) {
-      $null = New-Item -ItemType Junction -Path $Link -Target $Target
+      $null = New-Item -ItemType Junction -Path $Link -Target $Target -ErrorAction Stop
     } else {
-      $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target
+      $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target -ErrorAction Stop
     }
   } catch {
     if ($madeBackup) {
