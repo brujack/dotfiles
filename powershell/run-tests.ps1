@@ -11,7 +11,7 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
     ForEach-Object { $env:PSModulePath = $_ + $sep + $env:PSModulePath }
 
 Import-Module PSScriptAnalyzer
-$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
+$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1, ../install_powershell_modules.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
 if ($r) { $r | Format-Table -AutoSize; exit 1 }
 
 Import-Module Pester
