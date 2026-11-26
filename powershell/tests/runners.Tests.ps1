@@ -34,6 +34,12 @@ BeforeAll {
     $psi.RedirectStandardInput = $true
     $psi.Environment['HOME'] = $emptyHome
     $psi.Environment['PSModulePath'] = $emptyModules
+    # pwsh on Linux and macOS adds $XDG_DATA_HOME/powershell/Modules to the module path
+    # whenever XDG_DATA_HOME is set, so an inherited value would let the child find the
+    # real modules; point every XDG root at the empty home too.
+    foreach ($xdg in @('XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME')) {
+      $psi.Environment[$xdg] = Join-Path $emptyHome $xdg
+    }
     $proc = [System.Diagnostics.Process]::Start($psi)
     $proc.StandardInput.Close()
     $stdout = $proc.StandardOutput.ReadToEndAsync()
@@ -48,7 +54,9 @@ AfterAll {
   Remove-Item function:global:Invoke-RunnerWithoutModules -ErrorAction SilentlyContinue
 }
 
-Describe "runner scripts fail closed when a tool module cannot load" {
+# On Windows the user module path comes from Documents, not HOME, so the fixture cannot
+# hide the installed modules there; CI runs this suite on Linux.
+Describe "runner scripts fail closed when a tool module cannot load" -Skip:$IsWindows {
   It "<runner> exits non-zero, names the remedy and does nothing further" -ForEach @(
     @{ runner = 'run-lint.ps1' }
     @{ runner = 'run-tests.ps1' }
