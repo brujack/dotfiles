@@ -142,18 +142,20 @@ function Install-ChocolateyPackage {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
     $bootstrapperUrl = 'https://boxstarter.org/bootstrapper.ps1'
-    $bootstrapperFile = Join-Path ([IO.Path]::GetTempPath()) "boxstarter-bootstrapper-$([guid]::NewGuid()).ps1"
+    # Hash and execute the same in-memory bytes: no file between check and use.
+    $bootstrapperBytes = (New-Object System.Net.WebClient).DownloadData($bootstrapperUrl)
+    $hasher = [Security.Cryptography.SHA256]::Create()
     try {
-      (New-Object System.Net.WebClient).DownloadFile($bootstrapperUrl, $bootstrapperFile)
-      $actualHash = (Get-FileHash -LiteralPath $bootstrapperFile -Algorithm SHA256).Hash
-      if ($actualHash -ne $BoxstarterBootstrapperSha256) {
-        throw "Boxstarter bootstrapper SHA256 mismatch: expected $BoxstarterBootstrapperSha256, got $actualHash. Read the new bootstrapper, then refresh `$BoxstarterBootstrapperSha256 in setup_windows.ps1. Not executed."
-      }
-      Invoke-Expression (Get-Content -LiteralPath $bootstrapperFile -Raw)
-      Get-Boxstarter -Force
+      $actualHash = [BitConverter]::ToString($hasher.ComputeHash($bootstrapperBytes)).Replace('-', '')
     } finally {
-      Remove-Item -LiteralPath $bootstrapperFile -Force -ErrorAction SilentlyContinue
+      $hasher.Dispose()
     }
+    if ($actualHash -ne $BoxstarterBootstrapperSha256) {
+      throw "Boxstarter bootstrapper SHA256 mismatch: expected $BoxstarterBootstrapperSha256, got $actualHash. Read the new bootstrapper, then refresh `$BoxstarterBootstrapperSha256 in setup_windows.ps1. Not executed."
+    }
+    $bootstrapperText = [Text.Encoding]::UTF8.GetString($bootstrapperBytes).TrimStart([char]0xFEFF)
+    Invoke-Expression $bootstrapperText
+    Get-Boxstarter -Force
   }
 
   $ChocoPackagesToBeInstalled = @(

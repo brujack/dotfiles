@@ -31,61 +31,56 @@ BeforeAll {
 }
 
 Describe "Install-ChocolateyPackage" {
+  BeforeAll {
+    # Lower-case hex SHA256 of the given bytes, in the pin's format.
+    function global:Set-PinFor([byte[]]$Bytes) {
+      $h = [Security.Cryptography.SHA256]::Create()
+      try { $hex = [BitConverter]::ToString($h.ComputeHash($Bytes)).Replace('-', '') } finally { $h.Dispose() }
+      return $hex.ToLower()
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:Set-PinFor -ErrorAction SilentlyContinue
+    Remove-Variable -Name bootstrapBytes -Scope Global -ErrorAction SilentlyContinue
+  }
   BeforeEach {
+    $global:bootstrapBytes = [Text.Encoding]::UTF8.GetBytes('Write-Output stub')
     Mock Invoke-Expression { }
     Mock Get-Boxstarter { }
     Mock Set-ExecutionPolicy { }
     Mock New-Object {
       $fakeWC = [PSCustomObject]@{}
-      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadFile' -Value { param($Url, $Path) $global:BoxstarterDownloadPath = $Path }
+      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadData' -Value { param($Url) , $global:bootstrapBytes }
       return $fakeWC
     } -ParameterFilter { $TypeName -eq 'System.Net.WebClient' }
-    Mock Get-FileHash { [PSCustomObject]@{ Hash = $BoxstarterBootstrapperSha256.ToUpper() } }
-    Mock Get-Content { 'Write-Output stub' }
-    Mock Remove-Item { }
     Mock Write-Output { }
-    $global:BoxstarterDownloadPath = $null
-  }
-  AfterAll {
-    Remove-Variable -Name BoxstarterDownloadPath -Scope Global -ErrorAction SilentlyContinue
   }
 
-  It "runs the bootstrapper when the SHA256 matches the pin" {
+  It "runs exactly the hashed bytes, decoded, when the SHA256 matches the pin" {
     Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
+    $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
     Install-ChocolateyPackage
-    Should -Invoke Get-FileHash -ParameterFilter { $Algorithm -eq 'SHA256' } -Times 1 -Exactly
-    Should -Invoke Invoke-Expression -Times 1 -Exactly
+    Should -Invoke Invoke-Expression -ParameterFilter { $Command -ceq 'Write-Output stub' } -Times 1 -Exactly
     Should -Invoke Get-Boxstarter -Times 1 -Exactly
   }
 
-  It "removes the temp file after a verified run" {
+  It "strips a UTF-8 BOM before executing" {
     Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
+    $global:bootstrapBytes = [byte[]](0xEF, 0xBB, 0xBF) + [Text.Encoding]::UTF8.GetBytes('Write-Output stub')
+    $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
     Install-ChocolateyPackage
-    $global:BoxstarterDownloadPath | Should -Not -BeNullOrEmpty
-    Should -Invoke Remove-Item -ParameterFilter {
-      $LiteralPath -eq $global:BoxstarterDownloadPath -and -not $Recurse
-    } -Times 1 -Exactly
+    Should -Invoke Invoke-Expression -ParameterFilter { $Command -ceq 'Write-Output stub' } -Times 1 -Exactly
   }
 
   It "throws naming expected and actual hash and never executes on mismatch" {
     Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
-    Mock Get-FileHash { [PSCustomObject]@{ Hash = 'DEADBEEF' } }
-    { Install-ChocolateyPackage } | Should -Throw "*$BoxstarterBootstrapperSha256*DEADBEEF*"
+    $actual = (Set-PinFor $global:bootstrapBytes).ToUpper()
+    { Install-ChocolateyPackage } | Should -Throw "*$BoxstarterBootstrapperSha256*$actual*"
     Should -Invoke Invoke-Expression -Times 0
     Should -Invoke Get-Boxstarter    -Times 0
-  }
-
-  It "removes the temp file after a mismatch" {
-    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
-    Mock choco { @() }
-    Mock Get-FileHash { [PSCustomObject]@{ Hash = 'DEADBEEF' } }
-    { Install-ChocolateyPackage } | Should -Throw
-    Should -Invoke Remove-Item -ParameterFilter {
-      $LiteralPath -eq $global:BoxstarterDownloadPath
-    } -Times 1 -Exactly
   }
 
   It "skips the download entirely when choco.exe is already present" {
@@ -94,10 +89,9 @@ Describe "Install-ChocolateyPackage" {
     } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
     Install-ChocolateyPackage
-    Should -Invoke New-Object      -Times 0
-    Should -Invoke Get-FileHash    -Times 0
+    Should -Invoke New-Object        -Times 0
     Should -Invoke Invoke-Expression -Times 0
-    Should -Invoke Get-Boxstarter  -Times 0
+    Should -Invoke Get-Boxstarter    -Times 0
   }
 
   It "calls choco install for packages not in the installed list" {
