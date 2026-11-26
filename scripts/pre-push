@@ -36,6 +36,25 @@ if [[ "${_pcg_hit}" -eq 0 ]]; then
   fi
 fi
 # <<< push-content-gate wiring
+# >>> push-gates wiring
+# ADR-0099 sub-project 2A: load the push gates from ai-config master at one SHA and
+# run them on every pushed ref. Byte-identical in every repo; each repo pins its sha256.
+# shellcheck disable=SC2310,SC2311 # a failed fetch leaves the variable empty, which the checks below block on; set -e must not end the hook first
+_pg_json="$(_pcg_fetch 'repos/brujack/ai-config/commits/master')" || _pg_json=""
+_pg_sha="$(printf '%s' "${_pg_json}" | env -i "PATH=${PATH}" "HOME=${HOME}" ${PYENV_ROOT+"PYENV_ROOT=${PYENV_ROOT}"} ${PYENV_VERSION+"PYENV_VERSION=${PYENV_VERSION}"} python3 -I -c 'import json, sys
+print(json.load(sys.stdin)["sha"])' 2> /dev/null)" || _pg_sha=""
+_pg_src=""
+if [[ "${_pg_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+  # shellcheck disable=SC2310,SC2311 # a failed fetch leaves the variable empty, which the checks below block on; set -e must not end the hook first
+  _pg_src="$(_pcg_fetch "repos/brujack/ai-config/contents/.claude/hooks/push-gates.sh?ref=${_pg_sha}")" || _pg_src=""
+fi
+# shellcheck source=/dev/null
+if [[ -z "${_pg_src}" ]] || ! source <(printf '%s\n' "${_pg_src}") || ! declare -F push_gates_run > /dev/null; then
+  printf 'pre-push: gates: cannot load push gates from GitHub; push blocked\n' >&2
+  exit 1
+fi
+push_gates_run "${2}" "${_pcg_refs}" "${_pg_sha}" || exit 1
+# <<< push-gates wiring
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "${REPO_ROOT}" ]]; then

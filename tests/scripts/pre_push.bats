@@ -9,7 +9,14 @@ setup() {
   MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   MAKE_MOCK_DIR="${BATS_TEST_TMPDIR}/makebin"
   source "${REPO_ROOT}/tests/helpers/new_session.bash"
-  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${BATS_TEST_TMPDIR}/tmp"
+  mkdir -p "${REPO_DIR}" "${MAKE_MOCK_DIR}" "${BATS_TEST_TMPDIR}/tmp" "${BATS_TEST_TMPDIR}/home"
+  export HOME="${BATS_TEST_TMPDIR}/home"
+  unset CLAUDE_CODE_SESSION_ID
+  # Every end-to-end hook run uses PG_HOOK, a line-preserving copy whose _pcg_fetch is a
+  # fake (tests/helpers/push_gates.bash); a missing marker fails setup, not a test body.
+  source "${REPO_ROOT}/tests/helpers/push_gates.bash"
+  pg_env "${BATS_TEST_TMPDIR}/pg" || return 1
+  PG_HOOK="$(pg_hook_copy "${REPO_ROOT}/scripts/pre-push")" || return 1
   # gh stub, first on every hook run's PATH: the wiring's `gh auth token` never
   # reaches the real gh or the network. Exit status via MOCK_GH_EXIT (default 1).
   cat > "${MAKE_MOCK_DIR}/gh" <<GHEOF
@@ -117,7 +124,7 @@ _run_pre_push() {
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${_path_with_make}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
+    cd '${REPO_DIR}' && bash '${PG_HOOK}'
   "
 }
 
@@ -290,7 +297,7 @@ _run_pre_push_leaked() {
     export GIT_WORK_TREE='${REPO_DIR}'
     export GIT_COMMON_DIR='${REPO_DIR}/.git'
     export GIT_INDEX_FILE='${REPO_DIR}/.git/index'
-    cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-push'
+    cd '${REPO_DIR}' && bash '${PG_HOOK}'
   "
 }
 
@@ -1086,7 +1093,7 @@ SHIM
   export PATH="${shim}:${MAKE_MOCK_DIR}:${CLEAN_PATH}"
   unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
   cd "${REPO_DIR}"
-  run bash -c "printf 'refs/heads/feat/x %s refs/heads/feat/x %s\n' '${local_sha}' '${base_sha}' | bash '${REPO_ROOT}/scripts/pre-push'"
+  run bash -c "printf 'refs/heads/feat/x %s refs/heads/feat/x %s\n' '${local_sha}' '${base_sha}' | bash '${PG_HOOK}'"
   [ "$status" -eq 1 ]
   [[ "$output" == *"refs/heads/feat/x"* ]]
 }
@@ -1155,7 +1162,7 @@ _run_pre_push_at() {
     export PATH='${_path_with_make}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
     ${_extra}
-    cd '${_cwd}' && bash '${REPO_ROOT}/scripts/pre-push' ${_hook_args}
+    cd '${_cwd}' && bash '${PG_HOOK}' ${_hook_args}
   "
 }
 
@@ -1648,7 +1655,7 @@ SHIM
 export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
 cd '${REPO_DIR}' || exit 1
-exec bash '${REPO_ROOT}/scripts/pre-push' > '${BATS_TEST_TMPDIR}/hook.out' 2>&1 <<< 'refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}'
+exec bash '${PG_HOOK}' > '${BATS_TEST_TMPDIR}/hook.out' 2>&1 <<< 'refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}'
 WRAP
   run _in_new_session "${_wrapper}"
   [ "$output" = "${_want}" ]  # stdout of the hook goes to a file: bats waits on a pipe the cleanup would hold open
@@ -1677,13 +1684,13 @@ WRAP
 
 # _run_pre_push_wired <stdin> <verdict: permit|refuse>
 #
-# Runs a COPY of scripts/pre-push whose marked _pcg_fetch body is replaced by a
-# function printing a stub push-content-gate library. The wiring calls
-# /usr/bin/curl by absolute path, so the real file's load-success path cannot be
-# stubbed any other way; everything outside the markers is the shipped code. The
-# stub library writes its two arguments to pcg.args and permits or refuses.
+# Runs PG_HOOK, the covalias copy, with the push-content-gate library served from a
+# stub file (PG_PCG_LIB) instead of GitHub. The wiring calls /usr/bin/curl by absolute
+# path, so the real file's load-success path cannot be stubbed any other way; everything
+# outside the _pcg_fetch markers is the shipped code. The stub library writes its two
+# arguments to pcg.args and permits or refuses.
 _run_pre_push_wired() {
-  local _stdin="${1}" _verdict="${2}" _copy="${BATS_TEST_TMPDIR}/pre-push.copy"
+  local _stdin="${1}" _verdict="${2}"
   local _lib="${BATS_TEST_TMPDIR}/pcg.lib"
   {
     printf 'push_content_gate_refs() {\n'
@@ -1695,23 +1702,11 @@ _run_pre_push_wired() {
     fi
     printf '}\n'
   } > "${_lib}"
-  awk -v lib="${_lib}" '
-    /^# >>> _pcg_fetch$/ { print; print "_pcg_fetch() { cat \"" lib "\"; }"; skipping = 1; next }
-    /^# <<< _pcg_fetch$/ { skipping = 0 }
-    !skipping { print }
-  ' "${REPO_ROOT}/scripts/pre-push" > "${_copy}" || return 1
-  if command grep -q 'api.github.com' "${_copy}"; then
-    printf '_run_pre_push_wired: _pcg_fetch markers not found; the copy would reach the network\n' >&2
-    return 1
-  fi
-  if ! command grep -q '^_pcg_fetch() { cat' "${_copy}"; then
-    printf '_run_pre_push_wired: stub _pcg_fetch not installed in the copy\n' >&2
-    return 1
-  fi
+  export PG_PCG_LIB="${_lib}"
   printf "%b" "${_stdin}" | bash -c "
     export PATH='${MAKE_MOCK_DIR}:${CLEAN_PATH}'
     unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
-    cd '${REPO_DIR}' && bash '${_copy}' origin https://example.invalid/r.git
+    cd '${REPO_DIR}' && bash '${PG_HOOK}' origin https://example.invalid/r.git
   "
 }
 
@@ -1872,4 +1867,107 @@ _run_pre_push_wired() {
   local hash
   hash="$(sed -n '/^# >>> push-content-gate wiring$/,/^# <<< push-content-gate wiring$/p' "${REPO_ROOT}/scripts/pre-push" | sha256sum | cut -d' ' -f1)"
   [ "${hash}" = "554c1385d10d77fac177df1a7aefdf6238e12ba009218689b7c5242fa24d4102" ]
+}
+
+# The block must stay byte-identical to ai-config's docs/templates/pre-push-gates
+# (ADR-0099 2A, R8). A template change turns this red until the block is re-synced.
+# The failure message names the template so the fix is not a guess.
+@test "wiring: the push-gates block matches the sha256 pinned to ai-config docs/templates/pre-push-gates" {
+  local hash
+  if ! command grep -q '^# >>> push-gates wiring$' "${REPO_ROOT}/scripts/pre-push" \
+    || ! command grep -q '^# <<< push-gates wiring$' "${REPO_ROOT}/scripts/pre-push"; then
+    printf 'push-gates block missing from scripts/pre-push: paste it from ai-config docs/templates/pre-push-gates\n' >&2
+    return 1
+  fi
+  hash="$(sed -n '/^# >>> push-gates wiring$/,/^# <<< push-gates wiring$/p' "${REPO_ROOT}/scripts/pre-push" | sha256sum | cut -d' ' -f1)"
+  if [[ "${hash}" != "a177991056f5626989d70e9513a7b2531314e87bd5f2eeceee5121e1f1ecd030" ]]; then
+    printf 'push-gates block differs from ai-config docs/templates/pre-push-gates (sha256 %s)\n' "${hash}" >&2
+    return 1
+  fi
+}
+
+# --- push-gates placement (ADR-0099 2A, R16). The block runs on EVERY push, so each
+# path that can end the hook early is pinned: moving the block below an exit leaves the
+# feature-push case green and turns one of these red. ---
+
+_pg_run() { # <stdin> -- hook run with the push URL as argument 2, as git passes it
+  _run_pre_push_at "${REPO_DIR}" "${1}" "" "origin https://example.invalid/r.git"
+}
+
+# The recorder writes `gates` to ORDER_LOG; this make writes `make`, so the file's line
+# order is the call order.
+_write_ordering_make_mock() {
+  cat > "${MAKE_MOCK_DIR}/make" <<MK
+#!/usr/bin/env bash
+printf 'make\n' >> "${ORDER_LOG}"
+exit 0
+MK
+  chmod +x "${MAKE_MOCK_DIR}/make"
+}
+
+@test "wiring: a feature push reaches the recorder with url, refs and master sha before make" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_ordering_make_mock
+  run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  command grep -qxF "url=https://example.invalid/r.git" "${GATES_LOG}"
+  command grep -qxF "sha=${FAKE_MASTER_SHA}" "${GATES_LOG}"
+  command grep -qxF "refs=refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}" "${GATES_LOG}"
+  [ "$(cat "${ORDER_LOG}")" = "$(printf 'gates\nmake')" ]
+}
+
+@test "wiring: a recorder that returns 1 blocks the push and make does not run" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  GATES_RC=1 run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [ -f "${GATES_LOG}" ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a master commit JSON that cannot be read blocks with the exact message" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  FAKE_MASTER_FAIL=1 run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [ "$output" = "pre-push: gates: cannot load push gates from GitHub; push blocked" ]
+  [ ! -f "${GATES_LOG}" ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a docs-only push reaches the recorder" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  _write_make_mock 0
+  run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ -f "${GATES_LOG}" ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a deletion push reaches the recorder" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _write_make_mock 0
+  run _pg_run "(delete) ${ZERO_SHA} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [ -f "${GATES_LOG}" ]
+  [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+@test "wiring: a refused main push fetches the content-gate path and never the driver" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  run _run_pre_push_wired "refs/heads/main ${local_sha} refs/heads/main ${base_sha}\n" refuse
+  [ "$status" -eq 1 ]
+  command grep -qxF "repos/brujack/ai-config/contents/.claude/hooks/push-content-gate.sh?ref=master" "${FETCH_LOG}"
+  if command grep -q 'push-gates' "${FETCH_LOG}" || command grep -q 'commits/master' "${FETCH_LOG}"; then
+    printf 'the gates were fetched after the content gate refused:\n' >&2
+    cat "${FETCH_LOG}" >&2
+    return 1
+  fi
+  [ ! -f "${GATES_LOG}" ]
 }
