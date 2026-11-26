@@ -7,6 +7,9 @@
 # a seam (_SYSTEMCTL_BIN, _LOGINCTL_BIN, _TMUX_BIN) to a recording stub, and
 # tests/mocks/sudo execs the stub path it is given. All stubs append to one calls
 # file (MOCK_CALLS_FILE) so the relative order of calls can be asserted.
+# One exception: "sudo never runs the _LOGINCTL_BIN seam outside bats" blanks
+# BATS_TEST_TMPDIR, so the seam is ignored and loginctl resolves by name to a
+# recorder that test puts first on PATH.
 
 load '../helpers/common.bash'
 
@@ -213,7 +216,7 @@ _set_sessions() { printf '%s\n' "$@" > "${STUB_DIR}/sessions"; }
   export LINUX=1
   # The seam points at a recorder that would log SEAM-RAN. Guard failure
   # (seam honoured under sudo) records that line; the production name must
-  # instead resolve to tests/mocks/loginctl via PATH, never a real loginctl.
+  # instead resolve to the test-local recorder in ${_mockbin}, never a real loginctl.
   local _seam="${BATS_TEST_TMPDIR}/seam-loginctl"
   printf '#!/usr/bin/env bash\nprintf "SEAM-RAN %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_seam}"
   chmod +x "${_seam}"
