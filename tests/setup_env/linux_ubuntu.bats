@@ -2306,18 +2306,18 @@ SHIM
   grep -q "nvidia-ctk runtime configure --runtime=docker" "${MOCK_CALLS_FILE}"
 }
 
-@test "_install_ubuntu_nvidia: _OVERRIDE_DOCKER_DAEMON_JSON is ignored outside bats" {
-  # SAFETY: sudo is shadowed by a recorder, so a failed gate cannot run the real
-  # nvidia-ctk, cat or systemctl; it would only show the seam path in the calls.
+@test "_install_ubuntu_nvidia: reads daemon.json through its resolver" {
+  # SAFETY: sudo is shadowed by a recorder (no real nvidia-ctk, cat or systemctl)
+  # and the resolver by a fixture path.
   export _OVERRIDE_NVIDIA_GPU_PRESENT=0
   export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
   export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
-  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
-  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  local _fx="${BATS_TEST_TMPDIR}/resolved-daemon.json"
+  eval "_docker_nvidia_daemon_json_path() { printf '%s\\n' '${_fx}'; }"
   sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
-  grep -qF "sudo -H cat /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
-  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo -H cat ${_fx}" "${MOCK_CALLS_FILE}"
+  refute_grep "/etc/docker" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_nvidia: restarts docker when runtime configure changes daemon.json" {
@@ -2630,33 +2630,54 @@ _docker_fetch_ok() {
   [ "$(tail -c 1 "${_DOCKER_DAEMON_JSON}" | od -An -c | tr -d ' ')" = "\\n" ]
 }
 
-@test "_install_ubuntu_docker: keyring, source list and daemon.json seams are ignored outside bats" {
-  # SAFETY: tests/mocks/sudo execs the real command, so with a failed gate this
-  # would write the real /etc/apt and /etc/docker. A shell function shadows sudo,
-  # records the call and runs nothing, so no guard failure can reach the system.
-  export HAS_DOCKER=1
-  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
-  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
-  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
-  BATS_TEST_TMPDIR='' run _install_ubuntu_docker
-  # Production /etc paths reach sudo; the seam values never do.
-  grep -qF "sudo mkdir -p /etc/apt/keyrings" "${MOCK_CALLS_FILE}"
-  grep -qF "/etc/apt/keyrings/docker.asc.new" "${MOCK_CALLS_FILE}"
-  refute_grep "${BATS_TEST_TMPDIR}/docker" "${MOCK_CALLS_FILE}"
-  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+@test "_docker_keyring_path: production path outside bats even with the seam set, seam under bats" {
+  export _DOCKER_KEYRING="${BATS_TEST_TMPDIR}/seam-keyring"
+  BATS_TEST_TMPDIR='' run _docker_keyring_path
+  [ "$output" = "/etc/apt/keyrings/docker.asc" ]
+  run _docker_keyring_path
+  [ "$output" = "${BATS_TEST_TMPDIR}/seam-keyring" ]
 }
 
-@test "_install_ubuntu_docker: the production daemon.json path is the one written when absent" {
-  # Only meaningful where /etc/docker/daemon.json is absent; elsewhere the write
-  # branch is not reached and the seam-ignored test above is the evidence.
-  [[ ! -f /etc/docker/daemon.json ]] || skip "/etc/docker/daemon.json exists on this machine"
+@test "_docker_sources_list_path: production path outside bats even with the seam set, seam under bats" {
+  export _DOCKER_SOURCES_LIST="${BATS_TEST_TMPDIR}/seam.list"
+  BATS_TEST_TMPDIR='' run _docker_sources_list_path
+  [ "$output" = "/etc/apt/sources.list.d/docker.list" ]
+  run _docker_sources_list_path
+  [ "$output" = "${BATS_TEST_TMPDIR}/seam.list" ]
+}
+
+@test "_docker_daemon_json_path: production path outside bats even with the seam set, seam under bats" {
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  BATS_TEST_TMPDIR='' run _docker_daemon_json_path
+  [ "$output" = "/etc/docker/daemon.json" ]
+  run _docker_daemon_json_path
+  [ "$output" = "${BATS_TEST_TMPDIR}/seam-daemon.json" ]
+}
+
+@test "_docker_nvidia_daemon_json_path: production path outside bats even with the seam set, seam under bats" {
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  BATS_TEST_TMPDIR='' run _docker_nvidia_daemon_json_path
+  [ "$output" = "/etc/docker/daemon.json" ]
+  run _docker_nvidia_daemon_json_path
+  [ "$output" = "${BATS_TEST_TMPDIR}/seam-daemon.json" ]
+}
+
+@test "_install_ubuntu_docker: routes keyring, list and daemon.json writes through the resolvers" {
+  # SAFETY: sudo is shadowed by a recorder and the resolvers by fixture paths,
+  # so neither the real /etc nor the host's daemon.json is read or written.
   export HAS_DOCKER=1
   MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
-  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  local _fx="${BATS_TEST_TMPDIR}/fx"
+  mkdir -p "${_fx}"
+  eval "_docker_keyring_path() { printf '%s\\n' '${_fx}/keyring/docker.asc'; }"
+  eval "_docker_sources_list_path() { printf '%s\\n' '${_fx}/docker.list'; }"
+  eval "_docker_daemon_json_path() { printf '%s\\n' '${_fx}/daemon.json'; }"
   sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_docker
-  grep -qF "sudo tee /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
-  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo mkdir -p ${_fx}/keyring" "${MOCK_CALLS_FILE}"
+  grep -qF "${_fx}/keyring/docker.asc.new" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo tee ${_fx}/daemon.json" "${MOCK_CALLS_FILE}"
+  refute_grep "/etc/" "${MOCK_CALLS_FILE}"
 }
 
 @test "_install_ubuntu_docker: skips daemon.json when already exists" {
@@ -2870,16 +2891,19 @@ STUB
   printf '#!/usr/bin/env bash\nprintf "SEAM-RAN %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_seam}"
   printf '#!/usr/bin/env bash\nprintf "dockerd %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_mockbin}/dockerd"
   chmod +x "${_seam}" "${_mockbin}/dockerd"
-  # SAFETY: outside bats the keyring, source list and daemon.json seams are
-  # ignored too, so the production /etc paths reach sudo. A shell function
-  # shadows tests/mocks/sudo (which execs the real command) and only records.
+  # SAFETY: outside bats the path seams are ignored, so the resolvers are
+  # overridden with fixtures and sudo is shadowed by a recorder (tests/mocks/sudo
+  # execs the real command); nothing here reads or writes the host's /etc.
+  local _fx="${BATS_TEST_TMPDIR}/fx"
+  mkdir -p "${_fx}"
+  eval "_docker_keyring_path() { printf '%s\\n' '${_fx}/docker.asc'; }"
+  eval "_docker_sources_list_path() { printf '%s\\n' '${_fx}/docker.list'; }"
+  eval "_docker_daemon_json_path() { printf '%s\\n' '${_fx}/daemon.json'; }"
   sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  # No status assertion: the sudo recorder writes no keyring, so the install
+  # legitimately reports a keyring/source failure; the calls are the evidence.
   PATH="${_mockbin}:${PATH}" BATS_TEST_TMPDIR='' _DOCKER_VALIDATE_BIN="${_seam}" run _install_ubuntu_docker
-  [ "$status" -eq 0 ]
-  # The validator is reached only when the real daemon.json is absent.
-  if [[ ! -f /etc/docker/daemon.json ]]; then
-    grep -q "^sudo dockerd --validate --config-file /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
-  fi
+  grep -q "^sudo dockerd --validate --config-file ${_fx}/daemon.json" "${MOCK_CALLS_FILE}"
   run ! grep -q 'SEAM-RAN' "${MOCK_CALLS_FILE}"
   run ! grep -F "sudo ${_seam}" "${MOCK_CALLS_FILE}"
 }

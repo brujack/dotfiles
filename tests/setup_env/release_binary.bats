@@ -801,6 +801,17 @@ EOF
   grep -qF "https://example.invalid/tfsec-override override-sha-tfsec" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_shellcheck: _SHELLCHECK_SHA256 is ignored outside bats, the pinned digest is passed" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=amd64
+  export _SHELLCHECK_SHA256="override-sha-shellcheck"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_shellcheck
+  [ "$status" -eq 0 ]
+  grep -qF " ${SHELLCHECK_SHA256_AMD64} tarxz " "${MOCK_CALLS_FILE}"
+  refute_grep "override-sha-shellcheck" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_tflint: _TFLINT_SHA256 is ignored outside bats, the pinned digest is passed" {
   export HAS_DEVTOOLS=1
   _LINUX_ARCH=amd64
