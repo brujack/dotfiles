@@ -174,7 +174,7 @@ depends_on: [2, 3]
 
 - [ ] Failing tests in `tests/setup_env/pinned_uv.bats`, with `tests/mocks` on `PATH`, `MOCK_CURL_STDOUT` a
       real `.tar.gz` fixture, and the digest override seam the installer exposes
-      (`_UV_PINNED_SHA256`, mirroring `_SHELLCHECK_SHA256`) set to that fixture's real digest:
+      (`_UV_PINNED_SHA256`, mirroring the former shellcheck digest seam) set to that fixture's real digest:
   - test named `install_uv_pinned: Linux x86_64 installs the versioned pinned uv`: `install_uv_pinned` on Linux x86_64 installs to `${HOME}/.local/share/dotfiles/pinned/uv-0.13.0/uv` from
     the `uv-x86_64-unknown-linux-gnu.tar.gz` URL (assert via `MOCK_CURL_*` call log)
   - the same on Darwin arm64 with the darwin URL (`_OVERRIDE_PLATFORM`/`_UNAME_M` seams, whichever the

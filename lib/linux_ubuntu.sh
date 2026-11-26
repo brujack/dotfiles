@@ -2348,10 +2348,6 @@ _install_ubuntu_shellcheck() {
       return 0
       ;;
   esac
-  # Trust anchor for a root-installed binary: honour the seam only under bats.
-  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_SHELLCHECK_SHA256:-} ]]; then
-    _sha="${_SHELLCHECK_SHA256}"
-  fi
   _install_pinned_release_binary shellcheck "${SHELLCHECK_VER}" \
     "${_SHELLCHECK_URL:-https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VER}/shellcheck-v${SHELLCHECK_VER}.linux.${_arch}.tar.xz}" \
     "${_sha}" tarxz "^version: ${SHELLCHECK_VER//./\\.}$"

@@ -2690,10 +2690,15 @@ _docker_fetch_ok() {
   eval "_docker_keyring_path() { printf '%s\\n' '${_fx}/keyring/docker.asc'; }"
   eval "_docker_sources_list_path() { printf '%s\\n' '${_fx}/docker.list'; }"
   eval "_docker_daemon_json_path() { printf '%s\\n' '${_fx}/daemon.json'; }"
+  # A non-empty keyring lets _write_apt_source_list reach its sudo tee (the
+  # recorder installs nothing, so seed it here).
+  mkdir -p "${_fx}/keyring"
+  printf 'key' > "${_fx}/keyring/docker.asc"
   sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_docker
   grep -qF "sudo mkdir -p ${_fx}/keyring" "${MOCK_CALLS_FILE}"
   grep -qF "${_fx}/keyring/docker.asc.new" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo tee ${_fx}/docker.list" "${MOCK_CALLS_FILE}"
   grep -qF "sudo tee ${_fx}/daemon.json" "${MOCK_CALLS_FILE}"
   refute_grep "/etc/" "${MOCK_CALLS_FILE}"
 }
