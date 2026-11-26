@@ -512,8 +512,10 @@ update_gems() {
 install_github_cli_linux() {
   if [[ -n ${UBUNTU} ]]; then
     printf "installing github cli on Ubuntu\\n"
-    local _keyring="${_GH_CLI_KEYRING:-/etc/apt/keyrings/githubcli-archive-keyring.gpg}"
-    local _list="${_GH_CLI_SOURCES_LIST:-/etc/apt/sources.list.d/github-cli.list}"
+    local _keyring
+    _keyring="$(_bats_seam "${_GH_CLI_KEYRING:-}" /etc/apt/keyrings/githubcli-archive-keyring.gpg)"
+    local _list
+    _list="$(_bats_seam "${_GH_CLI_SOURCES_LIST:-}" /etc/apt/sources.list.d/github-cli.list)"
     local _rc=0
     sudo mkdir -p "$(dirname "${_keyring}")"
     # _install_apt_keyring never truncates an existing keyring on a failed fetch.

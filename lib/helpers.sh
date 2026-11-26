@@ -522,11 +522,27 @@ install_uv_pinned() {
   esac
 }
 
+# _bats_seam <seam value> <production default>
+# Prints the seam value only under bats (BATS_TEST_TMPDIR non-empty) and only
+# when the value itself is non-empty; otherwise prints the production default.
+# Use it for any seam that chooses a path read or written as root, or the binary
+# that extracts what lands in a root-owned directory: an exported variable must
+# never steer root outside the test suite. Call it as
+# "$(_bats_seam "${_SEAM_VAR:-}" /production/default)"; printf '%s' keeps the
+# result free of a trailing newline.
+_bats_seam() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${1:-} ]]; then
+    printf '%s' "$1"
+  else
+    printf '%s' "$2"
+  fi
+}
+
 # _install_uv_pinned_for <Linux|Darwin>
 # Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/ (the
 # path resolve_pinned_uv reads) via _install_pinned_release_binary. A platform
-# with no pin warns and returns 0. _RELEASE_BIN_DIR is a command prefix only, so
-# it never leaks into the caller's shell. _UV_PINNED_URL/_UV_PINNED_SHA256 are
+# with no pin warns and returns 0. The destination is passed as an argument, because
+# _RELEASE_BIN_DIR is honoured only under bats and this path must hold outside it. _UV_PINNED_URL/_UV_PINNED_SHA256 are
 # honoured only under bats (the _HASHICORP_SOURCE_DIR precedent): an ambient
 # export must never replace the in-repo digest on a real download.
 _install_uv_pinned_for() {
@@ -542,7 +558,7 @@ _install_uv_pinned_for() {
     _sha="${_UV_PINNED_SHA256:-${_sha}}"
   fi
   local _dir="${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}"
-  _RELEASE_BIN_DIR="${_dir}" _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)"
+  _install_pinned_release_binary uv "${UV_VER}" "${_url}" "${_sha}" targz "$(_uv_pinned_version_regex)" "${_dir}"
 }
 
 # Which shell the ACCOUNT is set to, not which shell is currently running.

@@ -31,6 +31,12 @@ setup() {
   # writes an apt sources dir and a keyring, and tests/mocks/sudo execs real
   # commands, so without these the edge block would touch the real /etc/apt and
   # /usr/share/keyrings. (albert is seamed via the _APT_* variables below.)
+  # _install_ubuntu_nvidia reads daemon.json through sudo cat (tests/mocks/sudo
+  # execs the real cat): without this, every nvidia test that forgets its own
+  # fixture reads the host's real /etc/docker/daemon.json. Setup scope, so a new
+  # test cannot re-arm the trap.
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/nvidia-setup-daemon.json"
+  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
   export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR}/apt-sources"
   export _EDGE_BOOTSTRAP_KEYRING="${BATS_TEST_TMPDIR}/edge-bootstrap.gpg"
   mkdir -p "${_EDGE_SOURCES_DIR}"
