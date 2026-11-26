@@ -2510,3 +2510,130 @@ _add_unterminated_lib() {
   [ "$(printf '%s\n' "${call_lines}" | wc -l)" -eq 1 ]
   [[ "${call_lines}" == *'< /dev/null'* ]]
 }
+
+# ── run-bash-coverage.sh covalias attribution ───────────────────────────────
+# tests/helpers/push_gates.bash runs scripts/pre-push from a line-preserving copy at
+# <tmp>/covalias/scripts/pre-push. The runner attributes a trace under `/covalias/<rel>`
+# to REPO_ROOT/<rel> when <rel> is an instrumented file, and only on a line that is
+# statically coverable in the real file. In the fixture tree lib/tiny.sh has the static
+# coverable lines 1, 2, 3, 5 and 6 (the two closing braces are not).
+
+# _add_alias_bats <name> <call> [<line appended to the copy>] [<src rel>] -- writes
+# tests/<name>.bats, which copies <src rel> (default lib/tiny.sh) to
+# ${BATS_TEST_TMPDIR}/covalias/<src rel>, sources the copy and runs <call>.
+_add_alias_bats() {
+  local _name="${1}" _call="${2}" _suffix="${3:-}" _rel="${4:-lib/tiny.sh}"
+  {
+    printf '@test "alias %s" {\n' "${_name}"
+    printf '  mkdir -p "${BATS_TEST_TMPDIR}/covalias/%s"\n' "${_rel%/*}"
+    printf '  cp "${BATS_TEST_DIRNAME}/../%s" "${BATS_TEST_TMPDIR}/covalias/%s"\n' "${_rel}" "${_rel}"
+    if [[ -n "${_suffix}" ]]; then
+      printf '  printf "%%s\\n" "%s" >> "${BATS_TEST_TMPDIR}/covalias/%s"\n' "${_suffix}" "${_rel}"
+    fi
+    printf '  source "${BATS_TEST_TMPDIR}/covalias/%s"\n' "${_rel}"
+    printf '  %s\n' "${_call}"
+    printf '}\n'
+  } > "${COV_TREE}/tests/${_name}.bats"
+}
+
+# _cov_row <file name> -- the per-file table row of the last `run` output.
+_cov_row() {
+  printf '%s\n' "${output}" | command grep "^${1} "
+}
+
+@test "run-bash-coverage.sh covalias: an alias run scores exactly like a direct run" {
+  _make_cov_tree
+  _add_alias_bats alias_a 'run tiny_add 1'
+  printf 'tests/green_a.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 0 ]
+  local _direct
+  _direct="$(_cov_row tiny.sh)"
+  printf 'tests/alias_a.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list"
+  [ "$status" -eq 0 ]
+  [ "$(_cov_row tiny.sh)" = "${_direct}" ]
+  [[ "${_direct}" =~ tiny.sh[[:space:]]+[1-9] ]]
+}
+
+@test "run-bash-coverage.sh covalias: an untracked file's alias trace is ignored even though the file exists" {
+  _make_cov_tree
+  printf 'untracked_var=1\n' > "${COV_TREE}/lib/untracked.sh"
+  _add_alias_bats alias_u ':' '' lib/untracked.sh
+  printf 'tests/green_a.bats\ntests/alias_u.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 0 ]
+  if command grep -q 'untracked.sh' "${BATS_TEST_TMPDIR}/out/bash_trace.txt"; then
+    printf 'an untracked covalias path reached the trace:\n' >&2
+    cat "${BATS_TEST_TMPDIR}/out/bash_trace.txt" >&2
+    return 1
+  fi
+}
+
+@test "run-bash-coverage.sh covalias: an alias trace on a non-coverable line adds nothing" {
+  _make_cov_tree
+  _add_alias_bats alias_x 'run tiny_add 1' 'tiny_extra=1'
+  printf 'tests/alias_x.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 0 ]
+  if command grep -q 'tiny.sh:8$' "${BATS_TEST_TMPDIR}/out/bash_trace.txt"; then
+    printf 'line 8 exists only in the copy, yet it reached the trace\n' >&2
+    return 1
+  fi
+  command grep -q 'tiny.sh:2$' "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+  [ "$status" -eq 0 ]
+  [[ "$(_cov_row tiny.sh)" =~ tiny.sh[[:space:]]+[0-9]+[[:space:]]+5[[:space:]] ]]
+}
+
+@test "run-bash-coverage.sh covalias: a direct trace and an alias trace both count" {
+  _make_cov_tree
+  _add_alias_bats alias_b 'run tiny_unused'
+  printf 'tests/green_a.bats\ntests/alias_b.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 0 ]
+  command grep -q 'tiny.sh:2$' "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+  command grep -q 'tiny.sh:6$' "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+}
+
+@test "run-bash-coverage.sh covalias: alias traces split across two shard traces score as their union" {
+  _make_cov_tree
+  _add_alias_bats alias_a 'run tiny_add 1'
+  _add_alias_bats alias_b 'run tiny_unused'
+  printf 'tests/alias_a.bats\n' > "${BATS_TEST_TMPDIR}/list_a"
+  printf 'tests/alias_b.bats\n' > "${BATS_TEST_TMPDIR}/list_b"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list_a" --trace-only "${BATS_TEST_TMPDIR}/shard_a"
+  [ "$status" -eq 0 ]
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list_b" --trace-only "${BATS_TEST_TMPDIR}/shard_b"
+  [ "$status" -eq 0 ]
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/shard_a/bash_trace.txt"
+  [ "$status" -eq 0 ]
+  local _one
+  _one="$(_cov_row tiny.sh)"
+  run _run_cov_tree --score "${BATS_TEST_TMPDIR}/shard_a/bash_trace.txt" "${BATS_TEST_TMPDIR}/shard_b/bash_trace.txt"
+  [ "$status" -eq 0 ]
+  [ "$(_cov_row tiny.sh)" != "${_one}" ]
+  # alias_a covers lines 2 and 3, alias_b line 6: the union is 3 of the 5 coverable.
+  [[ "${_one}" =~ tiny.sh[[:space:]]+2[[:space:]]+5[[:space:]] ]]
+  [[ "$(_cov_row tiny.sh)" =~ tiny.sh[[:space:]]+3[[:space:]]+5[[:space:]] ]]
+}
+
+@test "run-bash-coverage.sh covalias: a copy under REPO_ROOT is a direct trace and never an alias" {
+  _make_cov_tree
+  mkdir -p "${COV_TREE}/x/covalias/lib"
+  cp "${COV_TREE}/lib/tiny.sh" "${COV_TREE}/x/covalias/lib/tiny.sh"
+  {
+    printf '@test "alias inside root" {\n'
+    printf '  source "${BATS_TEST_DIRNAME}/../x/covalias/lib/tiny.sh"\n'
+    printf '  run tiny_unused\n'
+    printf '}\n'
+  } > "${COV_TREE}/tests/alias_in.bats"
+  printf 'tests/green_a.bats\ntests/alias_in.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 0 ]
+  command grep -q "x/covalias/lib/tiny.sh:6\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+  if command grep -q "^${COV_TREE}/lib/tiny.sh:6\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"; then
+    printf 'a covalias copy under REPO_ROOT was attributed to lib/tiny.sh\n' >&2
+    return 1
+  fi
+}

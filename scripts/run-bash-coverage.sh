@@ -1141,23 +1141,79 @@ mkdir -p "${OUTPUT_DIR}"
 rm -f "${TRACE_FILE}" "${TRACE_FIFO}"
 mkfifo "${TRACE_FIFO}"
 
+# Hook-copy alias (see the filter below). A trace whose path ends in
+# `/covalias/<rel>`, with <rel> in INCLUDE_FILES, is attributed to
+# `${REPO_ROOT}/<rel>`; any other covalias path is dropped, even if the file
+# exists on disk.
+_covalias_target() { # <normalized path>; prints the REPO_ROOT path it aliases, or nothing
+    local _rel="${1##*/covalias/}" _inc
+    [[ "${_rel}" != "${1}" ]] || return 0
+    for _inc in "${INCLUDE_FILES[@]}"; do
+        [[ "${_inc}" == "${REPO_ROOT}/${_rel}" ]] && { printf '%s\n' "${_inc}"; return 0; }
+    done
+    return 0
+}
+
+# Appends the alias traces to TRACE_FILE, each only if its line is statically
+# coverable in the real file (_count_coverable_lines). Alias traces never add a
+# line to the coverable union that _file_coverage_report builds from the trace:
+# the copy is a stand-in whose line numbers match the real file only by
+# construction, so it must not widen the denominator or add a disagreement.
+# Runs before --trace-only publishes, so a shard's published trace already holds
+# the mapped lines and --score over several shards is a plain union. The allowed
+# set is built with a read loop and printf, not sed, so BSD tools behave the same.
+_merge_alias_traces() {
+    local _mapped="${OUTPUT_DIR}/alias_mapped.txt" _allowed="${OUTPUT_DIR}/alias_allowed.txt"
+    local _p _n _t _file
+    : > "${_mapped}"
+    while IFS=: read -r _p _n; do
+        [[ -z "${_p}" ]] && continue
+        _t="$(_covalias_target "${_p}")"
+        [[ -z "${_t}" ]] && continue
+        printf '%s:%s\n' "${_t}" "${_n}" >> "${_mapped}"
+    done < <(sort -u "${ALIAS_RAW}")
+    while IFS= read -r _file; do
+        [[ -z "${_file}" ]] && continue
+        while IFS= read -r _n; do
+            printf '%s:%s\n' "${_file}" "${_n}"
+        done < <(_count_coverable_lines "${_file}" lines) > "${_allowed}"
+        grep -F "${_file}:" "${_mapped}" | grep -Fxf "${_allowed}" >> "${TRACE_FILE}" || true
+    done < <(cut -d: -f1 "${_mapped}" | sort -u)
+}
+
 # Filter trace in background — only keep lines from our repo files, normalized.
 # Uses python3 normpath to resolve tests/foo/../../lib/bar.sh → lib/bar.sh.
 # Prevents trace file from ballooning to GBs by filtering in real-time.
-grep -F "COVTRACE:${REPO_ROOT}/" "${TRACE_FIFO}" \
+#
+# Hook-copy alias: tests/helpers/push_gates.bash runs scripts/pre-push from a
+# copy at <tmp>/covalias/scripts/pre-push, outside REPO_ROOT, so a REPO_ROOT-only
+# filter would drop every trace of it and the hook would read as untested. The
+# coarse filter therefore also passes `/covalias/`, and the python stage sets a
+# path outside REPO_ROOT that contains `/covalias/` aside in ALIAS_RAW instead of
+# TRACE_FILE. A path under REPO_ROOT is always a direct trace, never an alias.
+# _merge_alias_traces maps and intersects the aside lines after the run.
+ALIAS_RAW="${OUTPUT_DIR}/alias_raw.txt"
+: > "${ALIAS_RAW}"
+grep -F -e "COVTRACE:${REPO_ROOT}/" -e '/covalias/' "${TRACE_FIFO}" \
     | grep -oE 'C*COVTRACE:[^:]+:[0-9]+' \
-    | grep -F "COVTRACE:${REPO_ROOT}/" \
+    | grep -F -e "COVTRACE:${REPO_ROOT}/" -e '/covalias/' \
     | sed 's/^C*COVTRACE://' \
     | python3 -c "
 import sys, os
+alias_out = open(sys.argv[1], 'a')
+root = sys.argv[2] + '/'
 for line in sys.stdin:
     line = line.rstrip()
     if ':' in line:
         p, lineno = line.rsplit(':', 1)
-        print(os.path.normpath(p) + ':' + lineno)
+        p = os.path.normpath(p)
+        if '/covalias/' in p and not p.startswith(root):
+            alias_out.write(p + ':' + lineno + chr(10))
+        else:
+            print(p + ':' + lineno)
     else:
         print(line)
-" >> "${TRACE_FILE}" &
+" "${ALIAS_RAW}" "${REPO_ROOT}" >> "${TRACE_FILE}" &
 grep_pid=$!
 
 test_count=$(grep -rl '^@test' "${REPO_ROOT}/tests/" 2>/dev/null \
@@ -1179,6 +1235,7 @@ tail -3 "${bats_log}"
 # the FIFO is torn down either way.
 rm -f "${TRACE_FIFO}"
 wait "${grep_pid}" 2>/dev/null || true
+_merge_alias_traces
 
 # Piping bats through `tail` (as this line used to) reports `tail`'s exit
 # status, not bats's — a pipeline's status is always its LAST command's, so a
