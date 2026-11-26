@@ -55,7 +55,12 @@ _repo_sessions_install_macos() {
 
 _repo_sessions_install_linux() {
     local _root="$1"
-    local _systemctl="${_SYSTEMCTL_BIN:-systemctl}" _loginctl="${_LOGINCTL_BIN:-loginctl}"
+    local _systemctl="${_SYSTEMCTL_BIN:-systemctl}" _loginctl="loginctl"
+    # _loginctl reaches `sudo` below, so an exported seam must never choose what
+    # runs as root: honour _LOGINCTL_BIN only under bats (BATS_TEST_TMPDIR set).
+    if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+        _loginctl="${_LOGINCTL_BIN:-loginctl}"
+    fi
     local _unit_dir="${_SYSTEMD_USER_DIR:-${HOME}/.config/systemd/user}"
     local _linger
 

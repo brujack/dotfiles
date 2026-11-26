@@ -2780,6 +2780,24 @@ STUB
   grep -q "apt install containerd.io" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_docker: sudo never runs the _DOCKER_VALIDATE_BIN seam outside bats" {
+  export HAS_DOCKER=1
+  _docker_fetch_ok
+  rm -f "${_DOCKER_DAEMON_JSON}"
+  # Guard failure would record SEAM-RAN; the production name `dockerd` must
+  # resolve to this recorder on PATH, so a real dockerd can never run.
+  local _seam="${BATS_TEST_TMPDIR}/seam-dockerd" _mockbin="${BATS_TEST_TMPDIR}/mockbin"
+  mkdir -p "${_mockbin}"
+  printf '#!/usr/bin/env bash\nprintf "SEAM-RAN %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_seam}"
+  printf '#!/usr/bin/env bash\nprintf "dockerd %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_mockbin}/dockerd"
+  chmod +x "${_seam}" "${_mockbin}/dockerd"
+  PATH="${_mockbin}:${PATH}" BATS_TEST_TMPDIR='' _DOCKER_VALIDATE_BIN="${_seam}" run _install_ubuntu_docker
+  [ "$status" -eq 0 ]
+  grep -q "^sudo dockerd --validate --config-file ${_DOCKER_DAEMON_JSON}" "${MOCK_CALLS_FILE}"
+  run ! grep -q 'SEAM-RAN' "${MOCK_CALLS_FILE}"
+  run ! grep -F "sudo ${_seam}" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_docker: a failed daemon.json write with no validator is rc 1, not core" {
   export HAS_DOCKER=1
   _docker_fetch_ok
