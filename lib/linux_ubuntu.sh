@@ -693,7 +693,7 @@ _go_verify() {
 # next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
 # Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN,
-# _GO_SHA256 (overrides the per-arch GO_SHA256_* pin; empty means unset). The
+# _GO_SHA256 (overrides the per-arch GO_SHA256_* pin under bats only; empty means unset). The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
 # No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
 # mktemp reaches the explicit sudo rm -rf below.
@@ -827,7 +827,7 @@ _install_ubuntu_go() {
 # so all of them would otherwise enter this path and reach the network — tdd.md E2.
 # _RUSTUP_INIT_SHA256 is exposed rather than mocking sha256sum: there is no sha256sum
 # mock, and supplying the expected digest keeps the real check running so a mismatch
-# is genuinely exercised instead of stubbed away.
+# is genuinely exercised instead of stubbed away. It is honoured only under bats.
 _install_rustup_rs() {
   local _cargo_bin="${_OVERRIDE_CARGO_BIN_DIR:-${HOME}/.cargo/bin}"
   if [[ -x "${_cargo_bin}/rustup" ]]; then
@@ -888,7 +888,13 @@ _install_rustup_rs() {
     return 1
   }
 
-  if ! "${_RUSTUP_INIT_BIN:-${_tmp}/rustup-init}" -y --no-modify-path; then
+  # Execute exactly the file that was just verified; an exported
+  # _RUSTUP_INIT_BIN would make the digest check pointless, so honour it only under bats.
+  local _init_bin="${_tmp}/rustup-init"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_RUSTUP_INIT_BIN:-} ]]; then
+    _init_bin="${_RUSTUP_INIT_BIN}"
+  fi
+  if ! "${_init_bin}" -y --no-modify-path; then
     log_error "rustup-init failed"
     rm -rf "${_tmp}"
     return 1

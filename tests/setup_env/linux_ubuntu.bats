@@ -1920,6 +1920,24 @@ exit 0'
   grep -q -- "rustup-init .*--no-modify-path" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_rustup_rs: _RUSTUP_INIT_BIN is ignored outside bats, the verified download runs" {
+  # Inert: the download is a recorder script (mock curl writes MOCK_CURL_STDOUT),
+  # the digest check is shadowed (outside bats the seam digest is ignored, so the
+  # pinned one could not match), and no real rustup-init or ~/.cargo is involved.
+  rm -f "${HOME}/.cargo/bin/rustup"
+  export MOCK_CURL_STDOUT="#!/usr/bin/env bash
+printf 'VERIFIED-RAN %s\\n' \"\$*\" >> \"${MOCK_CALLS_FILE}\""
+  local _spy="${BATS_TEST_TMPDIR}/rustup-init-spy"
+  printf '#!/usr/bin/env bash\nprintf "SEAM-RAN\\n" >> "%s"\n' "${MOCK_CALLS_FILE}" > "${_spy}"
+  chmod +x "${_spy}"
+  export _RUSTUP_INIT_BIN="${_spy}"
+  _sha256_check() { return 0; }
+  BATS_TEST_TMPDIR='' run _install_rustup_rs
+  [ "$status" -eq 0 ]
+  grep -qF "VERIFIED-RAN -y --no-modify-path" "${MOCK_CALLS_FILE}"
+  refute_grep "SEAM-RAN" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_rustup_rs: REFUSES to execute on a sha256 mismatch" {
   rm -f "${HOME}/.cargo/bin/rustup"
   local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
