@@ -9,7 +9,7 @@ BeforeAll {
   Mock Install-Module  { }
   Mock Set-PSRepository { }
   Mock Write-Output    { }
-  # Dot-sourcing must only define functions; the guard keeps Install-Mods from running.
+  # Dot-sourcing must only define functions; the guard keeps Install-PinnedModule from running.
   . $script:installScript
 }
 
@@ -20,22 +20,22 @@ Describe "dot-sourcing install_powershell_modules.ps1" {
   }
 }
 
-Describe "Get-ModulePins" {
+Describe "Get-ModulePin" {
   It "pins every module to a version" {
-    foreach ($v in (Get-ModulePins -Unix:$true).Values) {
+    foreach ($v in (Get-ModulePin -Unix:$true).Values) {
       { [version]$v } | Should -Not -Throw
     }
   }
   It "includes UnixTabCompletion only on the Unix list" {
-    (Get-ModulePins -Unix:$true).Keys  | Should -Contain 'Microsoft.PowerShell.UnixTabCompletion'
-    (Get-ModulePins -Unix:$false).Keys | Should -Not -Contain 'Microsoft.PowerShell.UnixTabCompletion'
+    (Get-ModulePin -Unix:$true).Keys  | Should -Contain 'Microsoft.PowerShell.UnixTabCompletion'
+    (Get-ModulePin -Unix:$false).Keys | Should -Not -Contain 'Microsoft.PowerShell.UnixTabCompletion'
   }
   It "no longer lists the renamed UnixCompleters module" {
-    (Get-ModulePins -Unix:$true).Keys | Should -Not -Contain 'Microsoft.PowerShell.UnixCompleters'
+    (Get-ModulePin -Unix:$true).Keys | Should -Not -Contain 'Microsoft.PowerShell.UnixCompleters'
   }
 }
 
-Describe "Install-Mods" {
+Describe "Install-PinnedModule" {
   BeforeEach {
     Mock Install-Module   { }
     Mock Set-PSRepository { }
@@ -44,13 +44,13 @@ Describe "Install-Mods" {
   }
 
   It "never changes PSGallery trust" {
-    Install-Mods
+    Install-PinnedModule
     Should -Invoke Set-PSRepository -Times 0
   }
 
   It "installs every module pinned, from PSGallery, for CurrentUser" {
-    Install-Mods
-    $pins = Get-ModulePins -Unix:($IsLinux -or $IsMacOS)
+    Install-PinnedModule
+    $pins = Get-ModulePin -Unix:($IsLinux -or $IsMacOS)
     Should -Invoke Install-Module -Times $pins.Count -Exactly
     Should -Invoke Install-Module -Times $pins.Count -Exactly -ParameterFilter {
       $Repository -eq 'PSGallery' -and $Scope -eq 'CurrentUser' -and $Force -and
@@ -59,8 +59,8 @@ Describe "Install-Mods" {
   }
 
   It "never installs a name that is not in the pin table" {
-    Install-Mods
-    $pins = Get-ModulePins -Unix:($IsLinux -or $IsMacOS)
+    Install-PinnedModule
+    $pins = Get-ModulePin -Unix:($IsLinux -or $IsMacOS)
     Should -Invoke Install-Module -Times 0 -ParameterFilter { -not $pins.Contains([string]$Name) }
   }
 
@@ -68,7 +68,7 @@ Describe "Install-Mods" {
     Mock Get-Module {
       [PSCustomObject]@{ Name = 'posh-git'; Version = [version]'1.1.0' }
     } -ParameterFilter { $Name -eq 'posh-git' }
-    Install-Mods
+    Install-PinnedModule
     Should -Invoke Install-Module -Times 0 -ParameterFilter { $Name -eq 'posh-git' }
   }
 
@@ -76,7 +76,7 @@ Describe "Install-Mods" {
     Mock Get-Module {
       [PSCustomObject]@{ Name = 'posh-git'; Version = [version]'0.7.3' }
     } -ParameterFilter { $Name -eq 'posh-git' }
-    Install-Mods
+    Install-PinnedModule
     Should -Invoke Install-Module -Times 1 -Exactly -ParameterFilter {
       $Name -eq 'posh-git' -and $RequiredVersion -eq '1.1.0'
     }

@@ -1,5 +1,5 @@
 # Versions looked up 2026-11-26 via Find-Module. Bump by hand after reading the release.
-function Get-ModulePins {
+function Get-ModulePin {
   param([bool]$Unix)
 
   $pins = [ordered]@{
@@ -25,8 +25,8 @@ function Get-ModulePins {
   return $pins
 }
 
-function Install-Mods {
-  $pins = Get-ModulePins -Unix ([bool]($IsLinux -or $IsMacOS))
+function Install-PinnedModule {
+  $pins = Get-ModulePin -Unix ([bool]($IsLinux -or $IsMacOS))
 
   foreach ($name in $pins.Keys) {
     $version = $pins[$name]
@@ -37,13 +37,15 @@ function Install-Mods {
       continue
     }
     Write-Output "Installing '$name' $version"
-    # -Force only skips the untrusted-repository prompt for this one pinned install;
-    # it does not persist trust, so PSGallery stays Untrusted machine-wide.
+    # -Force only skips the untrusted-repository prompt for this one pinned install.
+    # This script never changes PSGallery trust. A host that ran the version before
+    # 2026-11-26 still has PSGallery Trusted until someone runs, by hand:
+    #   Set-PSRepository -Name PSGallery -InstallationPolicy Untrusted
     Install-Module -Name $name -RequiredVersion $version -Repository PSGallery -Scope CurrentUser -Force
   }
 }
 
 # Skip when dot-sourced (tests) so loading the file never installs anything.
 if ($MyInvocation.InvocationName -ne '.') {
-  Install-Mods
+  Install-PinnedModule
 }
