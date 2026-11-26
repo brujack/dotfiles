@@ -1,10 +1,11 @@
-# Versions looked up 2026-11-26 via Find-Module. Bump by hand after reading the release.
+# Versions are the newest at least 14 days old as of 2026-11-26 (ADR-0057 cooldown), via
+# Find-Module. Bump by hand after reading the release.
 function Get-ModulePin {
   param([bool]$Unix)
 
   $pins = [ordered]@{
-    'AWSPowerShell.NetCore' = '5.0.345'
-    'Az'                    = '17.0.0'
+    'AWSPowerShell.NetCore' = '5.0.333'
+    'Az'                    = '16.5.0'
     'Az.Blueprint'          = '0.5.1'
     'Microsoft.Graph'       = '2.41.2'
     'oh-my-posh'            = '7.85.2'
