@@ -693,7 +693,7 @@ _go_verify() {
 # next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
 # Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN,
-# _GO_SHA256 (overrides the per-arch GO_SHA256_* pin; empty means unset). The
+# _GO_SHA256 (overrides the per-arch GO_SHA256_* pin under bats only; empty means unset). The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
 # No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
 # mktemp reaches the explicit sudo rm -rf below.
@@ -707,7 +707,9 @@ _install_go_from_tarball() {
     return 0
   fi
 
-  if [[ -n ${_GO_SHA256:-} ]]; then
+  # A digest is the trust anchor for a root-installed tree: honour the seam only
+  # under bats so an exported variable cannot choose what the download is held to.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_GO_SHA256:-} ]]; then
     _sha="${_GO_SHA256}"; _src="_GO_SHA256"
   else
     case "${_LINUX_ARCH}" in
@@ -825,7 +827,7 @@ _install_ubuntu_go() {
 # so all of them would otherwise enter this path and reach the network — tdd.md E2.
 # _RUSTUP_INIT_SHA256 is exposed rather than mocking sha256sum: there is no sha256sum
 # mock, and supplying the expected digest keeps the real check running so a mismatch
-# is genuinely exercised instead of stubbed away.
+# is genuinely exercised instead of stubbed away. It is honoured only under bats.
 _install_rustup_rs() {
   local _cargo_bin="${_OVERRIDE_CARGO_BIN_DIR:-${HOME}/.cargo/bin}"
   if [[ -x "${_cargo_bin}/rustup" ]]; then
@@ -853,7 +855,8 @@ _install_rustup_rs() {
       return 1
       ;;
   esac
-  if [[ -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
+  # Trust anchor for an executed download: honour the seam only under bats.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" && -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
     _sha="${_RUSTUP_INIT_SHA256}"
     _shavar="_RUSTUP_INIT_SHA256"
   fi
@@ -885,7 +888,13 @@ _install_rustup_rs() {
     return 1
   }
 
-  if ! "${_RUSTUP_INIT_BIN:-${_tmp}/rustup-init}" -y --no-modify-path; then
+  # Execute exactly the file that was just verified; an exported
+  # _RUSTUP_INIT_BIN would make the digest check pointless, so honour it only under bats.
+  local _init_bin="${_tmp}/rustup-init"
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_RUSTUP_INIT_BIN:-} ]]; then
+    _init_bin="${_RUSTUP_INIT_BIN}"
+  fi
+  if ! "${_init_bin}" -y --no-modify-path; then
     log_error "rustup-init failed"
     rm -rf "${_tmp}"
     return 1
@@ -1013,13 +1022,51 @@ _install_ubuntu_nvidia() {
   #
   # Restart only when the config actually changed -- these boxes run GitHub
   # runners, and bouncing docker on every provision would kill a live job.
-  local _daemon="${_OVERRIDE_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  local _daemon
+  _daemon="$(_docker_nvidia_daemon_json_path)"
   local _before _after
   _before="$(sudo -H cat "${_daemon}" 2> /dev/null || true)"
   sudo -H nvidia-ctk runtime configure --runtime=docker || return 1
   _after="$(sudo -H cat "${_daemon}" 2> /dev/null || true)"
   if [[ ${_before} != "${_after}" ]]; then
     sudo -H systemctl restart docker || return 1
+  fi
+}
+
+# Path resolvers for the docker paths that reach sudo mkdir/rm/tee/cat as root.
+# Each honours its test seam only under bats (BATS_TEST_TMPDIR non-empty), so an
+# exported variable cannot choose where root reads or writes; tests that run
+# with BATS_TEST_TMPDIR blank override these functions with fixture paths.
+_docker_keyring_path() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    printf '%s\n' "${_DOCKER_KEYRING:-/etc/apt/keyrings/docker.asc}"
+  else
+    printf '%s\n' "/etc/apt/keyrings/docker.asc"
+  fi
+}
+
+_docker_sources_list_path() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    printf '%s\n' "${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
+  else
+    printf '%s\n' "/etc/apt/sources.list.d/docker.list"
+  fi
+}
+
+_docker_daemon_json_path() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    printf '%s\n' "${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  else
+    printf '%s\n' "/etc/docker/daemon.json"
+  fi
+}
+
+# The nvidia step reads daemon.json through sudo cat; its seam is a separate variable.
+_docker_nvidia_daemon_json_path() {
+  if [[ -n ${BATS_TEST_TMPDIR:-} ]]; then
+    printf '%s\n' "${_OVERRIDE_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  else
+    printf '%s\n' "/etc/docker/daemon.json"
   fi
 }
 
@@ -1030,8 +1077,9 @@ _install_ubuntu_docker() {
   # daemon.json) -- install_ubuntu_packages skips nvidia on exactly that; rc 1
   # for any other failure (keyring, source, plugins, usermod); 0 otherwise.
   local _core=0 _other=0
-  local _keyring="${_DOCKER_KEYRING:-/etc/apt/keyrings/docker.asc}"
-  local _list="${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
+  local _keyring _list
+  _keyring="$(_docker_keyring_path)"
+  _list="$(_docker_sources_list_path)"
   local _pkg
   sudo mkdir -p "$(dirname "${_keyring}")"
   if [[ -f "$(dirname "${_keyring}")/docker.gpg" ]]; then
@@ -1062,7 +1110,8 @@ _install_ubuntu_docker() {
       _other=1
     }
   done
-  local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  local _daemon_json
+  _daemon_json="$(_docker_daemon_json_path)"
   if [[ ! -f ${_daemon_json} ]]; then
     printf "Configuring Docker for cgroup v2\\n"
     # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
@@ -2301,7 +2350,7 @@ _install_ubuntu_shellcheck() {
   esac
   _install_pinned_release_binary shellcheck "${SHELLCHECK_VER}" \
     "${_SHELLCHECK_URL:-https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VER}/shellcheck-v${SHELLCHECK_VER}.linux.${_arch}.tar.xz}" \
-    "${_SHELLCHECK_SHA256:-${_sha}}" tarxz "^version: ${SHELLCHECK_VER//./\\.}$"
+    "${_sha}" tarxz "^version: ${SHELLCHECK_VER//./\\.}$"
 }
 
 # Linux entry for the shared pinned uv installer (_install_uv_pinned_for, lib/helpers.sh).
@@ -2320,9 +2369,13 @@ _install_ubuntu_tflint() {
       return 0
       ;;
   esac
+  # Trust anchor for a root-installed binary: honour the seam only under bats.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TFLINT_SHA256:-} ]]; then
+    _sha="${_TFLINT_SHA256}"
+  fi
   _install_pinned_release_binary tflint "${TFLINT_VER}" \
     "${_TFLINT_URL:-https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_${_LINUX_ARCH}.zip}" \
-    "${_TFLINT_SHA256:-${_sha}}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
+    "${_sha}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
 }
 
 _install_ubuntu_tfsec() {
@@ -2336,9 +2389,13 @@ _install_ubuntu_tfsec() {
       return 0
       ;;
   esac
+  # Trust anchor for a root-installed binary: honour the seam only under bats.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TFSEC_SHA256:-} ]]; then
+    _sha="${_TFSEC_SHA256}"
+  fi
   _install_pinned_release_binary tfsec "${TFSEC_VER}" \
     "${_TFSEC_URL:-https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-${_LINUX_ARCH}}" \
-    "${_TFSEC_SHA256:-${_sha}}" raw "^v${TFSEC_VER//./\\.}$"
+    "${_sha}" raw "^v${TFSEC_VER//./\\.}$"
 }
 
 # terraform on the Mac and on `workstation` comes from tfenv, not a static
