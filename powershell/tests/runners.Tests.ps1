@@ -27,7 +27,13 @@ BeforeAll {
       Set-Content -LiteralPath (Join-Path $stubDir 'PSScriptAnalyzer.psd1') -Value "@{ RootModule = 'PSScriptAnalyzer.psm1'; ModuleVersion = '1.0.0'; GUID = '11111111-2222-3333-4444-555555555555'; FunctionsToExport = @('Invoke-ScriptAnalyzer') }"
     }
     $psi = [System.Diagnostics.ProcessStartInfo]::new($script:pwshExe)
-    foreach ($a in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $script:powershellDir $Runner))) { $psi.ArgumentList.Add($a) }
+    # pwsh always appends the shared AllUsers module path (/usr/local/share/powershell/Modules),
+    # where CI runner images install Pester and PSScriptAnalyzer, so the PSModulePath variable
+    # alone cannot hide them. Reset $env:PSModulePath inside the child before running the
+    # runner: in-session module discovery reads only that value.
+    $q = { param($s) "'" + ($s -replace "'", "''") + "'" }
+    $command = '$env:PSModulePath = {0}; & {1}; exit $LASTEXITCODE' -f (& $q $emptyModules), (& $q (Join-Path $script:powershellDir $Runner))
+    foreach ($a in @('-NoProfile', '-NonInteractive', '-Command', $command)) { $psi.ArgumentList.Add($a) }
     $psi.WorkingDirectory = $script:powershellDir
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
