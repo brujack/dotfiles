@@ -11,5 +11,11 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
     ForEach-Object { $env:PSModulePath = $_ + $sep + $env:PSModulePath }
 
 Import-Module PSScriptAnalyzer
-$r = Invoke-ScriptAnalyzer -Path ./setup_windows.ps1, ../install_powershell_modules.ps1 -Settings ./PSScriptAnalyzerSettings.psd1
-if ($r) { $r | Format-Table -AutoSize; exit 1 }
+# -Path takes one string and a binding error is non-terminating, so analyse each file in
+# its own call with -ErrorAction Stop; a missing path or analyzer failure must not pass silently.
+$r = @()
+foreach ($file in @('./setup_windows.ps1', '../install_powershell_modules.ps1')) {
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Write-Error "lint target missing: $file"; exit 1 }
+    $r += @(Invoke-ScriptAnalyzer -Path $file -Settings ./PSScriptAnalyzerSettings.psd1 -ErrorAction Stop)
+}
+if ($r.Count -gt 0) { $r | Format-Table -AutoSize; exit 1 }
