@@ -344,6 +344,7 @@ dotfiles/
 ├── powershell/
 │   ├── setup_windows.ps1     # Windows/PowerShell bootstrap
 │   └── tests/                # Pester v5 tests
+├── powershell_module_pins.psd1 # PowerShell module versions, read by install/update_powershell_modules.ps1 and profile.ps1
 ├── .zshrc                    # Main zsh config (sources .zshrc.d modules)
 ├── .zprofile                 # Zsh login shell config
 ├── .zshenv                   # Every zsh: CLAUDE_CODE_PLUGIN_DIRS (progress mod); non-interactive: Homebrew python3 first on macOS; sources ~/.zshenv.local
