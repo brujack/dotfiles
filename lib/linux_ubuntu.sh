@@ -1097,7 +1097,12 @@ _install_ubuntu_docker() {
     # the parse error. _DOCKER_VALIDATE_BIN seams it for the suite, which runs
     # on macs where dockerd does not exist -- same absolute-binary problem
     # _OVERRIDE_KEYCHAIN_BIN and _AWS_GPG_BIN carry.
-    local _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
+    local _docker_validate="dockerd"
+    # It is run under `sudo` below, so an exported seam must never choose what
+    # runs as root: honour _DOCKER_VALIDATE_BIN only under bats.
+    if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+      _docker_validate="${_DOCKER_VALIDATE_BIN:-dockerd}"
+    fi
     if command -v "${_docker_validate}" > /dev/null 2>&1; then
       if ! sudo "${_docker_validate}" --validate --config-file "${_daemon_json}" > /dev/null 2>&1; then
         log_error "${_daemon_json} did not validate — refusing to leave a config dockerd cannot parse"
