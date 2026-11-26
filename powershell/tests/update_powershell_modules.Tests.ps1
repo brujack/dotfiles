@@ -1,16 +1,15 @@
 BeforeAll {
-  # Stubs for commands absent on some hosts; nothing here touches PSGallery.
-  foreach ($name in @('Install-Module', 'Update-Module', 'Set-PSRepository')) {
+  # Every command that could install or change repository state is stubbed if absent and
+  # mocked BEFORE any dot-source or script run.
+  foreach ($name in @('Install-Module', 'Update-Module', 'Save-Module', 'Set-PSRepository', 'Install-PSResource')) {
     if (-Not (Get-Command $name -ErrorAction SilentlyContinue)) {
-      Set-Item -Path "function:global:$name" -Value { }
+      Set-Item -Path "function:global:$name" -Value { param($Name, $RequiredVersion, $Repository, $Scope, [switch]$Force, [switch]$AcceptLicense) }
     }
+    Mock $name { }
   }
-  # Mocks first: if the installer's guard ever broke, this load must not reach real cmdlets.
-  Mock Install-Module   { }
-  Mock Set-PSRepository { }
-  Mock Write-Output     { }
-  Mock Get-Module       { $null }
-  # Only to get Get-ModulePin for expectations; the guard stops it installing anything.
+  Mock Write-Output { }
+  Mock Get-Module   { $null }
+  # Only to get Get-ModulePin; the guard stops it installing anything.
   . (Join-Path $PSScriptRoot '..' '..' 'install_powershell_modules.ps1')
   $script:updateScript = Join-Path $PSScriptRoot '..' '..' 'update_powershell_modules.ps1'
 }

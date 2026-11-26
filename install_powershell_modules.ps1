@@ -1,27 +1,12 @@
-# Versions are the newest at least 14 days old as of 2026-11-26 (ADR-0057 cooldown), via
-# Find-Module. Bump by hand after reading the release.
+# Versions live in powershell_module_pins.psd1 (shared with the updater and profile.ps1).
 function Get-ModulePin {
   param([bool]$Unix)
 
-  $pins = [ordered]@{
-    'AWSPowerShell.NetCore' = '5.0.333'
-    'Az'                    = '16.5.0'
-    'Az.Blueprint'          = '0.5.1'
-    'Microsoft.Graph'       = '2.41.2'
-    'oh-my-posh'            = '7.85.2'
-    'posh-awsp'             = '0.9.1'
-    'posh-git'              = '1.1.0'
-    'PSFzf'                 = '2.7.12'
-    'Terminal-Icons'        = '0.11.0'
-  }
+  $data = Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'powershell_module_pins.psd1')
+  $pins = [ordered]@{}
+  foreach ($name in ($data.Common.Keys | Sort-Object)) { $pins[$name] = $data.Common[$name] }
   if ($Unix) {
-    # Successor of Microsoft.PowerShell.UnixCompleters, which is no longer on PSGallery.
-    # Provenance verified 2026-11-26 via Find-Module: owners JamesTruher-MSFT and
-    # stevel-msft (Microsoft PowerShell team), Author Microsoft, ProjectUri
-    # https://github.com/PowerShell/UnixCompleters (same repo as the old module, now
-    # archived), 0.5.0 published 2022-04-20.
-    # Check any new pin the same way (owner + ProjectUri) before adding it.
-    $pins['Microsoft.PowerShell.UnixTabCompletion'] = '0.5.0'
+    foreach ($name in ($data.Unix.Keys | Sort-Object)) { $pins[$name] = $data.Unix[$name] }
   }
   return $pins
 }
@@ -42,9 +27,22 @@ function Install-PinnedModule {
     # This script never changes PSGallery trust. A host that ran the version before
     # 2026-11-26 still has PSGallery Trusted until someone runs, by hand:
     #   Set-PSRepository -Name PSGallery -InstallationPolicy Untrusted
-    # -AcceptLicense: UnixTabCompletion sets RequireLicenseAcceptance (MIT, read 2026-11-26);
-    # without it an unattended install fails.
-    Install-Module -Name $name -RequiredVersion $version -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+    # -AcceptLicense accepts, on the operator's behalf, the licences of: Az and Az.Blueprint
+    # (aka.ms/azps-license), Microsoft.Graph (Microsoft Developer Services Agreement,
+    # aka.ms/devservicesagreement) and Microsoft.PowerShell.UnixTabCompletion (MIT).
+    # Without it an unattended install of those fails. Windows PowerShell 5.1's inbox
+    # PowerShellGet 1.0.0.1 has no -AcceptLicense, so it is passed only where supported.
+    $installArgs = @{
+      Name            = $name
+      RequiredVersion = $version
+      Repository      = 'PSGallery'
+      Scope           = 'CurrentUser'
+      Force           = $true
+    }
+    if ((Get-Command Install-Module).Parameters.ContainsKey('AcceptLicense')) {
+      $installArgs['AcceptLicense'] = $true
+    }
+    Install-Module @installArgs
   }
 }
 

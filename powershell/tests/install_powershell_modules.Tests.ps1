@@ -1,15 +1,16 @@
 BeforeAll {
-  # Stub commands absent on some hosts so mocking works; nothing here touches PSGallery.
-  foreach ($name in @('Install-Module', 'Set-PSRepository')) {
+  # Stubs for commands absent on some hosts; nothing here touches PSGallery. Every command
+  # that could install or change repository state is mocked BEFORE any dot-source, so a
+  # broken guard in the script under test can never reach the real cmdlets.
+  foreach ($name in @('Install-Module', 'Update-Module', 'Save-Module', 'Set-PSRepository', 'Install-PSResource')) {
     if (-Not (Get-Command $name -ErrorAction SilentlyContinue)) {
-      Set-Item -Path "function:global:$name" -Value { }
+      Set-Item -Path "function:global:$name" -Value { param($Name, $RequiredVersion, $Repository, $Scope, [switch]$Force, [switch]$AcceptLicense) }
     }
+    Mock $name { }
   }
+  Mock Write-Output { }
+  Mock Get-Module   { $null }
   $script:installScript = Join-Path $PSScriptRoot '..' '..' 'install_powershell_modules.ps1'
-  Mock Install-Module  { }
-  Mock Set-PSRepository { }
-  Mock Write-Output    { }
-  Mock Get-Module      { $null }
   # Dot-sourcing must only define functions; the guard keeps Install-PinnedModule from running.
   . $script:installScript
 }
@@ -19,11 +20,13 @@ Describe "dot-sourcing install_powershell_modules.ps1" {
     # Mock, dot-source and assert all in this scope so the calls the file makes are counted.
     Mock Install-Module   { }
     Mock Set-PSRepository { }
+    Mock Update-Module    { }
     Mock Write-Output     { }
     Mock Get-Module       { $null }
     . $script:installScript
     Should -Invoke Install-Module   -Times 0 -Exactly
     Should -Invoke Set-PSRepository -Times 0 -Exactly
+    Should -Invoke Update-Module    -Times 0 -Exactly
   }
 }
 
@@ -48,6 +51,8 @@ Describe "Install-PinnedModule" {
     Mock Set-PSRepository { }
     Mock Write-Output     { }
     Mock Get-Module       { $null }
+    # Default: a PowerShellGet that supports -AcceptLicense.
+    Mock Get-Command { [PSCustomObject]@{ Parameters = @{ AcceptLicense = $true } } } -ParameterFilter { $Name -eq 'Install-Module' }
   }
 
   It "never changes PSGallery trust" {
@@ -60,7 +65,7 @@ Describe "Install-PinnedModule" {
     $pins = Get-ModulePin -Unix:($IsLinux -or $IsMacOS)
     Should -Invoke Install-Module -Times $pins.Count -Exactly
     Should -Invoke Install-Module -Times $pins.Count -Exactly -ParameterFilter {
-      $Repository -eq 'PSGallery' -and $Scope -eq 'CurrentUser' -and $Force -and $AcceptLicense -and
+      $Repository -eq 'PSGallery' -and $Scope -eq 'CurrentUser' -and $Force -and
       $RequiredVersion -eq $pins[[string]$Name]
     }
   }
@@ -87,5 +92,18 @@ Describe "Install-PinnedModule" {
     Should -Invoke Install-Module -Times 1 -Exactly -ParameterFilter {
       $Name -eq 'posh-git' -and $RequiredVersion -eq '1.1.0'
     }
+  }
+
+  It "passes -AcceptLicense when Install-Module supports it" {
+    Install-PinnedModule
+    Should -Invoke Install-Module -Times 1 -ParameterFilter { $AcceptLicense }
+    Should -Invoke Install-Module -Times 0 -ParameterFilter { -not $AcceptLicense }
+  }
+
+  It "omits -AcceptLicense when Install-Module lacks it (Windows PowerShell 5.1)" {
+    Mock Get-Command { [PSCustomObject]@{ Parameters = @{} } } -ParameterFilter { $Name -eq 'Install-Module' }
+    Install-PinnedModule
+    $pins = Get-ModulePin -Unix:($IsLinux -or $IsMacOS)
+    Should -Invoke Install-Module -Times $pins.Count -Exactly -ParameterFilter { -not $AcceptLicense }
   }
 }
