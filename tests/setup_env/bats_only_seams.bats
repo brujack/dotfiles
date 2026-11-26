@@ -8,7 +8,7 @@
 # pass through to the real binary, so every outside-bats test shadows sudo (and
 # any other step that could write or fetch) with a recorder FUNCTION. Nothing
 # here reads or writes the host's /etc, /usr/local or /usr/share; host files are
-# never required to exist, so there is no skip. Assertions are on recorded
+# never required to exist. Assertions are on recorded
 # calls: a production path must appear (a path the function builds regardless of
 # what the host holds) and the exported seam path must never appear.
 
