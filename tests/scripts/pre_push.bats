@@ -248,9 +248,12 @@ _run_pre_push() {
 @test "pre-push propagates a make test failure as a non-zero exit" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "deploy.sh" "echo hi" "feat: add deploy script")
-  _write_make_mock 1
+  # Exit 3, not 1: a gate-load failure or a gate refusal also exits 1 before
+  # make runs, so only make can produce this status.
+  _write_make_mock 3
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 3 ]
+  _assert_make_ran
 }
 
 @test "pre-push triggers on a new branch push (remote_sha all zeros) by diffing from the root commit" {
