@@ -707,7 +707,9 @@ _install_go_from_tarball() {
     return 0
   fi
 
-  if [[ -n ${_GO_SHA256:-} ]]; then
+  # A digest is the trust anchor for a root-installed tree: honour the seam only
+  # under bats so an exported variable cannot choose what the download is held to.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_GO_SHA256:-} ]]; then
     _sha="${_GO_SHA256}"; _src="_GO_SHA256"
   else
     case "${_LINUX_ARCH}" in
@@ -853,7 +855,8 @@ _install_rustup_rs() {
       return 1
       ;;
   esac
-  if [[ -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
+  # Trust anchor for an executed download: honour the seam only under bats.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" && -n "${_RUSTUP_INIT_SHA256:-}" ]]; then
     _sha="${_RUSTUP_INIT_SHA256}"
     _shavar="_RUSTUP_INIT_SHA256"
   fi
@@ -1013,7 +1016,11 @@ _install_ubuntu_nvidia() {
   #
   # Restart only when the config actually changed -- these boxes run GitHub
   # runners, and bouncing docker on every provision would kill a live job.
-  local _daemon="${_OVERRIDE_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  local _daemon="/etc/docker/daemon.json"
+  # Read through sudo: honour the path seam only under bats.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    _daemon="${_OVERRIDE_DOCKER_DAEMON_JSON:-${_daemon}}"
+  fi
   local _before _after
   _before="$(sudo -H cat "${_daemon}" 2> /dev/null || true)"
   sudo -H nvidia-ctk runtime configure --runtime=docker || return 1
@@ -1030,8 +1037,13 @@ _install_ubuntu_docker() {
   # daemon.json) -- install_ubuntu_packages skips nvidia on exactly that; rc 1
   # for any other failure (keyring, source, plugins, usermod); 0 otherwise.
   local _core=0 _other=0
-  local _keyring="${_DOCKER_KEYRING:-/etc/apt/keyrings/docker.asc}"
-  local _list="${_DOCKER_SOURCES_LIST:-/etc/apt/sources.list.d/docker.list}"
+  local _keyring="/etc/apt/keyrings/docker.asc"
+  local _list="/etc/apt/sources.list.d/docker.list"
+  # These reach sudo mkdir/rm/tee as root: honour the path seams only under bats.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    _keyring="${_DOCKER_KEYRING:-${_keyring}}"
+    _list="${_DOCKER_SOURCES_LIST:-${_list}}"
+  fi
   local _pkg
   sudo mkdir -p "$(dirname "${_keyring}")"
   if [[ -f "$(dirname "${_keyring}")/docker.gpg" ]]; then
@@ -1062,7 +1074,11 @@ _install_ubuntu_docker() {
       _other=1
     }
   done
-  local _daemon_json="${_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
+  local _daemon_json="/etc/docker/daemon.json"
+  # Written through sudo tee: honour the path seam only under bats.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
+    _daemon_json="${_DOCKER_DAEMON_JSON:-${_daemon_json}}"
+  fi
   if [[ ! -f ${_daemon_json} ]]; then
     printf "Configuring Docker for cgroup v2\\n"
     # SINGLE-quoted, so the escape is \n and not \\n. Every other printf in
@@ -2320,9 +2336,13 @@ _install_ubuntu_tflint() {
       return 0
       ;;
   esac
+  # Trust anchor for a root-installed binary: honour the seam only under bats.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TFLINT_SHA256:-} ]]; then
+    _sha="${_TFLINT_SHA256}"
+  fi
   _install_pinned_release_binary tflint "${TFLINT_VER}" \
     "${_TFLINT_URL:-https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VER}/tflint_linux_${_LINUX_ARCH}.zip}" \
-    "${_TFLINT_SHA256:-${_sha}}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
+    "${_sha}" zip "^TFLint version ${TFLINT_VER//./\\.}$"
 }
 
 _install_ubuntu_tfsec() {
@@ -2336,9 +2356,13 @@ _install_ubuntu_tfsec() {
       return 0
       ;;
   esac
+  # Trust anchor for a root-installed binary: honour the seam only under bats.
+  if [[ -n ${BATS_TEST_TMPDIR:-} && -n ${_TFSEC_SHA256:-} ]]; then
+    _sha="${_TFSEC_SHA256}"
+  fi
   _install_pinned_release_binary tfsec "${TFSEC_VER}" \
     "${_TFSEC_URL:-https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VER}/tfsec-linux-${_LINUX_ARCH}}" \
-    "${_TFSEC_SHA256:-${_sha}}" raw "^v${TFSEC_VER//./\\.}$"
+    "${_sha}" raw "^v${TFSEC_VER//./\\.}$"
 }
 
 # terraform on the Mac and on `workstation` comes from tfenv, not a static

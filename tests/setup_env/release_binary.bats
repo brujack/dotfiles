@@ -801,6 +801,28 @@ EOF
   grep -qF "https://example.invalid/tfsec-override override-sha-tfsec" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_tflint: _TFLINT_SHA256 is ignored outside bats, the pinned digest is passed" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=amd64
+  export _TFLINT_SHA256="override-sha-tflint"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_tflint
+  [ "$status" -eq 0 ]
+  grep -qF " ${TFLINT_SHA256_AMD64} zip " "${MOCK_CALLS_FILE}"
+  refute_grep "override-sha-tflint" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_tfsec: _TFSEC_SHA256 is ignored outside bats, the pinned digest is passed" {
+  export HAS_DEVTOOLS=1
+  _LINUX_ARCH=amd64
+  export _TFSEC_SHA256="override-sha-tfsec"
+  _install_pinned_release_binary() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_tfsec
+  [ "$status" -eq 0 ]
+  grep -qF " ${TFSEC_SHA256_AMD64} raw " "${MOCK_CALLS_FILE}"
+  refute_grep "override-sha-tfsec" "${MOCK_CALLS_FILE}"
+}
+
 # ── _install_ubuntu_misc call sites are advisory ────────────────────────────
 
 @test "linux_ubuntu.sh: every pinned-release wrapper's call site is followed by || log_warn" {

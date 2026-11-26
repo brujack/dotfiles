@@ -1962,6 +1962,28 @@ exit 0'
   [[ "$stderr" == *"sha256 mismatch: RUSTUP_INIT_SHA256_"* ]]
 }
 
+@test "_install_rustup_rs: _RUSTUP_INIT_SHA256 is ignored outside bats, the pinned digest is used" {
+  # If the gate failed the seam digest would match the mock curl bytes and the
+  # spy would run (it only appends to MOCK_CALLS_FILE); nothing else is written.
+  rm -f "${HOME}/.cargo/bin/rustup"
+  export MOCK_CURL_STDOUT='#!/usr/bin/env bash
+exit 0'
+  local _digest
+  _digest="$(printf '%s' "${MOCK_CURL_STDOUT}" | sha256sum | awk '{print $1}')"
+  export _RUSTUP_INIT_SHA256="${_digest}"
+  local _spy="${BATS_TEST_TMPDIR}/rustup-init-spy"
+  printf '#!/usr/bin/env bash\nprintf "SHOULD NOT RUN\\n" >> "%s"\n' "${MOCK_CALLS_FILE}" > "${_spy}"
+  chmod +x "${_spy}"
+  export _RUSTUP_INIT_BIN="${_spy}"
+  # Plain run (stderr merged into $output): --separate-stderr mktemps under the
+  # blanked BATS_TEST_TMPDIR.
+  BATS_TEST_TMPDIR='' run _install_rustup_rs
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sha256 mismatch: RUSTUP_INIT_SHA256_"* ]]
+  [[ "$output" != *"expects ${_digest}"* ]]
+  refute_grep "SHOULD NOT RUN" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_rustup_rs: verify rc 3 and rc 126 print their own message, not mismatch" {
   rm -f "${HOME}/.cargo/bin/rustup"
   local _fixture="${BATS_TEST_TMPDIR}/rustup-init-fixture"
@@ -2284,6 +2306,20 @@ SHIM
   grep -q "nvidia-ctk runtime configure --runtime=docker" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_nvidia: _OVERRIDE_DOCKER_DAEMON_JSON is ignored outside bats" {
+  # SAFETY: sudo is shadowed by a recorder, so a failed gate cannot run the real
+  # nvidia-ctk, cat or systemctl; it would only show the seam path in the calls.
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  printf '{}\n' > "${_OVERRIDE_DOCKER_DAEMON_JSON}"
+  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
+  grep -qF "sudo -H cat /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
+  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_nvidia: restarts docker when runtime configure changes daemon.json" {
   export _OVERRIDE_NVIDIA_GPU_PRESENT=0
   export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR}/nvidia-keyring.gpg"
@@ -2364,6 +2400,20 @@ SHIM
 # ── _install_go_from_tarball: sha256 verify stage and pin selection ──────────
 
 _wrong_sha() { printf 'a%.0s' {1..64}; }
+
+@test "_install_go_from_tarball: _GO_SHA256 is ignored outside bats, the pinned digest is used" {
+  # If the gate failed this would install the fixture tarball into the throwaway
+  # _GO_INSTALL_ROOT (every write is already seamed there) and return 0.
+  _make_go_tarball
+  _seed_go
+  local _fixture_sha="${_GO_SHA256}"
+  BATS_TEST_TMPDIR='' run _install_go_from_tarball
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"go: sha256 mismatch: GO_SHA256_"* ]]
+  [[ "$output" != *"_GO_SHA256 expects"* ]]
+  [[ "$output" != *"expects ${_fixture_sha}"* ]]
+  [ "$(< "${_GO_INSTALL_ROOT}/go/bin/v")" = "old" ]
+}
 
 @test "_install_go_from_tarball: wrong _GO_SHA256 names pin and real hash, keeps the tree" {
   _make_go_tarball
@@ -2580,6 +2630,35 @@ _docker_fetch_ok() {
   [ "$(tail -c 1 "${_DOCKER_DAEMON_JSON}" | od -An -c | tr -d ' ')" = "\\n" ]
 }
 
+@test "_install_ubuntu_docker: keyring, source list and daemon.json seams are ignored outside bats" {
+  # SAFETY: tests/mocks/sudo execs the real command, so with a failed gate this
+  # would write the real /etc/apt and /etc/docker. A shell function shadows sudo,
+  # records the call and runs nothing, so no guard failure can reach the system.
+  export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_docker
+  # Production /etc paths reach sudo; the seam values never do.
+  grep -qF "sudo mkdir -p /etc/apt/keyrings" "${MOCK_CALLS_FILE}"
+  grep -qF "/etc/apt/keyrings/docker.asc.new" "${MOCK_CALLS_FILE}"
+  refute_grep "${BATS_TEST_TMPDIR}/docker" "${MOCK_CALLS_FILE}"
+  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_docker: the production daemon.json path is the one written when absent" {
+  # Only meaningful where /etc/docker/daemon.json is absent; elsewhere the write
+  # branch is not reached and the seam-ignored test above is the evidence.
+  [[ ! -f /etc/docker/daemon.json ]] || skip "/etc/docker/daemon.json exists on this machine"
+  export HAS_DOCKER=1
+  MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR}/seam-daemon.json"
+  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_docker
+  grep -qF "sudo tee /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
+  refute_grep "seam-daemon.json" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_docker: skips daemon.json when already exists" {
   export HAS_DOCKER=1
   MOCK_CURL_STDOUT="docker-key-body"; export MOCK_CURL_STDOUT
@@ -2791,9 +2870,16 @@ STUB
   printf '#!/usr/bin/env bash\nprintf "SEAM-RAN %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_seam}"
   printf '#!/usr/bin/env bash\nprintf "dockerd %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_mockbin}/dockerd"
   chmod +x "${_seam}" "${_mockbin}/dockerd"
+  # SAFETY: outside bats the keyring, source list and daemon.json seams are
+  # ignored too, so the production /etc paths reach sudo. A shell function
+  # shadows tests/mocks/sudo (which execs the real command) and only records.
+  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
   PATH="${_mockbin}:${PATH}" BATS_TEST_TMPDIR='' _DOCKER_VALIDATE_BIN="${_seam}" run _install_ubuntu_docker
   [ "$status" -eq 0 ]
-  grep -q "^sudo dockerd --validate --config-file ${_DOCKER_DAEMON_JSON}" "${MOCK_CALLS_FILE}"
+  # The validator is reached only when the real daemon.json is absent.
+  if [[ ! -f /etc/docker/daemon.json ]]; then
+    grep -q "^sudo dockerd --validate --config-file /etc/docker/daemon.json" "${MOCK_CALLS_FILE}"
+  fi
   run ! grep -q 'SEAM-RAN' "${MOCK_CALLS_FILE}"
   run ! grep -F "sudo ${_seam}" "${MOCK_CALLS_FILE}"
 }
