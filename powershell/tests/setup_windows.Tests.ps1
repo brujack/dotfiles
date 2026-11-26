@@ -37,26 +37,67 @@ Describe "Install-ChocolateyPackage" {
     Mock Set-ExecutionPolicy { }
     Mock New-Object {
       $fakeWC = [PSCustomObject]@{}
-      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadString' -Value { return 'Write-Output stub' }
+      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadFile' -Value { param($Url, $Path) $global:BoxstarterDownloadPath = $Path }
       return $fakeWC
     } -ParameterFilter { $TypeName -eq 'System.Net.WebClient' }
+    Mock Get-FileHash { [PSCustomObject]@{ Hash = $BoxstarterBootstrapperSha256.ToUpper() } }
+    Mock Get-Content { 'Write-Output stub' }
+    Mock Remove-Item { }
     Mock Write-Output { }
+    $global:BoxstarterDownloadPath = $null
+  }
+  AfterAll {
+    Remove-Variable -Name BoxstarterDownloadPath -Scope Global -ErrorAction SilentlyContinue
   }
 
-  It "installs choco bootstrapper when choco.exe is not found" {
+  It "runs the bootstrapper when the SHA256 matches the pin" {
     Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
     Install-ChocolateyPackage
+    Should -Invoke Get-FileHash -ParameterFilter { $Algorithm -eq 'SHA256' } -Times 1 -Exactly
     Should -Invoke Invoke-Expression -Times 1 -Exactly
+    Should -Invoke Get-Boxstarter -Times 1 -Exactly
   }
 
-  It "skips choco bootstrapper when choco.exe is already present" {
+  It "removes the temp file after a verified run" {
+    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
+    Mock choco { @() }
+    Install-ChocolateyPackage
+    $global:BoxstarterDownloadPath | Should -Not -BeNullOrEmpty
+    Should -Invoke Remove-Item -ParameterFilter {
+      $LiteralPath -eq $global:BoxstarterDownloadPath -and -not $Recurse
+    } -Times 1 -Exactly
+  }
+
+  It "throws naming expected and actual hash and never executes on mismatch" {
+    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
+    Mock choco { @() }
+    Mock Get-FileHash { [PSCustomObject]@{ Hash = 'DEADBEEF' } }
+    { Install-ChocolateyPackage } | Should -Throw "*$BoxstarterBootstrapperSha256*DEADBEEF*"
+    Should -Invoke Invoke-Expression -Times 0
+    Should -Invoke Get-Boxstarter    -Times 0
+  }
+
+  It "removes the temp file after a mismatch" {
+    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
+    Mock choco { @() }
+    Mock Get-FileHash { [PSCustomObject]@{ Hash = 'DEADBEEF' } }
+    { Install-ChocolateyPackage } | Should -Throw
+    Should -Invoke Remove-Item -ParameterFilter {
+      $LiteralPath -eq $global:BoxstarterDownloadPath
+    } -Times 1 -Exactly
+  }
+
+  It "skips the download entirely when choco.exe is already present" {
     Mock Get-Command {
       return [PSCustomObject]@{ Name = 'choco.exe' }
     } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
     Install-ChocolateyPackage
+    Should -Invoke New-Object      -Times 0
+    Should -Invoke Get-FileHash    -Times 0
     Should -Invoke Invoke-Expression -Times 0
+    Should -Invoke Get-Boxstarter  -Times 0
   }
 
   It "calls choco install for packages not in the installed list" {

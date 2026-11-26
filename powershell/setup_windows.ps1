@@ -20,6 +20,13 @@ param(
 # tests/scripts/windows_npm_pins.bats fails if the two differ.
 $FirecrawlCliVersion = '1.26.3'
 
+# SHA256 of https://boxstarter.org/bootstrapper.ps1, verified by the operator
+# 2026-11-26 (20190 bytes, Last-Modified 2026-11-20). The URL is unversioned, so
+# any upstream change fails closed until this pin is refreshed by hand after
+# reading the new file. The bootstrapper itself still pipes chocolatey.org/install.ps1
+# to Invoke-Expression unverified; that is out of scope here.
+$BoxstarterBootstrapperSha256 = '24bb07429d03f98657b33fa2bc53b146283b759ffb92f81d9ce65c3c90d6ac76'
+
 function New-SafeLink {
   param(
     [string]$Target,
@@ -134,9 +141,19 @@ function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    $bootstrapScript = (New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')
-    Invoke-Expression $bootstrapScript
-    Get-Boxstarter -Force
+    $bootstrapperUrl = 'https://boxstarter.org/bootstrapper.ps1'
+    $bootstrapperFile = Join-Path ([IO.Path]::GetTempPath()) "boxstarter-bootstrapper-$([guid]::NewGuid()).ps1"
+    try {
+      (New-Object System.Net.WebClient).DownloadFile($bootstrapperUrl, $bootstrapperFile)
+      $actualHash = (Get-FileHash -LiteralPath $bootstrapperFile -Algorithm SHA256).Hash
+      if ($actualHash -ne $BoxstarterBootstrapperSha256) {
+        throw "Boxstarter bootstrapper SHA256 mismatch: expected $BoxstarterBootstrapperSha256, got $actualHash. Read the new bootstrapper, then refresh `$BoxstarterBootstrapperSha256 in setup_windows.ps1. Not executed."
+      }
+      Invoke-Expression (Get-Content -LiteralPath $bootstrapperFile -Raw)
+      Get-Boxstarter -Force
+    } finally {
+      Remove-Item -LiteralPath $bootstrapperFile -Force -ErrorAction SilentlyContinue
+    }
   }
 
   $ChocoPackagesToBeInstalled = @(
