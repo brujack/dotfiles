@@ -53,7 +53,7 @@ Describe "Install-PinnedModule" {
     $pins = Get-ModulePin -Unix:($IsLinux -or $IsMacOS)
     Should -Invoke Install-Module -Times $pins.Count -Exactly
     Should -Invoke Install-Module -Times $pins.Count -Exactly -ParameterFilter {
-      $Repository -eq 'PSGallery' -and $Scope -eq 'CurrentUser' -and $Force -and
+      $Repository -eq 'PSGallery' -and $Scope -eq 'CurrentUser' -and $Force -and $AcceptLicense -and
       $RequiredVersion -eq $pins[[string]$Name]
     }
   }

@@ -41,7 +41,9 @@ function Install-PinnedModule {
     # This script never changes PSGallery trust. A host that ran the version before
     # 2026-11-26 still has PSGallery Trusted until someone runs, by hand:
     #   Set-PSRepository -Name PSGallery -InstallationPolicy Untrusted
-    Install-Module -Name $name -RequiredVersion $version -Repository PSGallery -Scope CurrentUser -Force
+    # -AcceptLicense: UnixTabCompletion sets RequireLicenseAcceptance (MIT, read 2026-11-26);
+    # without it an unattended install fails.
+    Install-Module -Name $name -RequiredVersion $version -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
   }
 }
 
