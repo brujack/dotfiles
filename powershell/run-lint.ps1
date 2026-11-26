@@ -11,11 +11,19 @@ $docs = [Environment]::GetFolderPath('MyDocuments')
     ForEach-Object { $env:PSModulePath = $_ + $sep + $env:PSModulePath }
 
 Import-Module PSScriptAnalyzer
-# -Path takes one string and a binding error is non-terminating, so analyse each file in
-# its own call with -ErrorAction Stop; a missing path or analyzer failure must not pass silently.
+# Fail closed: -ErrorAction Stop does not terminate Invoke-ScriptAnalyzer, so a missing
+# settings file or target would print an error and still exit 0. Check every path up
+# front, analyse each file in its own call (-Path takes one string) and treat any error
+# the analyzer records as a failure.
+$settings = './PSScriptAnalyzerSettings.psd1'
+$targets = @('./setup_windows.ps1', '../install_powershell_modules.ps1', '../update_powershell_modules.ps1')
+foreach ($path in @($settings) + $targets) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Write-Error "lint input missing: $path"; exit 1 }
+}
 $r = @()
-foreach ($file in @('./setup_windows.ps1', '../install_powershell_modules.ps1')) {
-    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Write-Error "lint target missing: $file"; exit 1 }
-    $r += @(Invoke-ScriptAnalyzer -Path $file -Settings ./PSScriptAnalyzerSettings.psd1 -ErrorAction Stop)
+foreach ($file in $targets) {
+    $analyzerErrors = $null
+    $r += @(Invoke-ScriptAnalyzer -Path $file -Settings $settings -ErrorVariable analyzerErrors -ErrorAction SilentlyContinue)
+    if ($analyzerErrors) { Write-Error "PSScriptAnalyzer failed on ${file}: $($analyzerErrors -join '; ')"; exit 1 }
 }
 if ($r.Count -gt 0) { $r | Format-Table -AutoSize; exit 1 }
