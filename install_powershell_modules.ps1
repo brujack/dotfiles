@@ -15,6 +15,11 @@ function Get-ModulePins {
   }
   if ($Unix) {
     # Successor of Microsoft.PowerShell.UnixCompleters, which is no longer on PSGallery.
+    # Provenance verified 2026-11-26 via Find-Module: owners JamesTruher-MSFT and
+    # stevel-msft (Microsoft PowerShell team), Author Microsoft, ProjectUri
+    # https://github.com/PowerShell/UnixCompleters (same repo as the old module, now
+    # archived), 0.5.0 published 2022-04-20.
+    # Check any new pin the same way (owner + ProjectUri) before adding it.
     $pins['Microsoft.PowerShell.UnixTabCompletion'] = '0.5.0'
   }
   return $pins
