@@ -14,6 +14,7 @@ BeforeAll {
   $ast = [System.Management.Automation.Language.Parser]::ParseFile($profilePath, [ref]$null, [ref]$null)
   $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
       $n.Name -in @('Get-ModulePinFile', 'Import-PinnedModule') }, $true)
+  $script:profileFunctionText = @($fns | ForEach-Object { $_.Extent.Text })
   foreach ($fn in $fns) { Invoke-Expression $fn.Extent.Text }
 
   $script:realPinFile = (Resolve-Path (Join-Path $PSScriptRoot '..' '..' 'powershell_module_pins.psd1')).Path
@@ -93,5 +94,30 @@ Describe "Get-ModulePinFile" {
     $link = Join-Path $cfg 'profile.ps1'
     $null = New-Item -ItemType SymbolicLink -Path $link -Target (Join-Path $repo 'profile.ps1')
     Get-ModulePinFile -ProfilePath $link | Should -Be (Join-Path $repo 'powershell_module_pins.psd1')
+  }
+}
+
+Describe "profile reached through a symlink" {
+  It "finds the pin file by default (no -PinFile) via the profile's own path" -Skip:($IsWindows) {
+    Mock Import-Module { }
+    Mock Write-Warning { }
+    Mock Get-Module { [PSCustomObject]@{ Name = $Name; Version = [version]$global:ProfileTestPins[[string]$Name] } }
+
+    $repo = Join-Path $TestDrive 'linkrepo'
+    $cfg  = Join-Path $TestDrive 'linkcfg'
+    $null = New-Item -ItemType Directory -Path $repo, $cfg
+    Copy-Item -LiteralPath $script:realPinFile -Destination (Join-Path $repo 'powershell_module_pins.psd1')
+    # A profile made of the real functions plus the call, so $PSCommandPath is this file's path.
+    $fnText = ($script:profileFunctionText -join [Environment]::NewLine)
+    Set-Content -LiteralPath (Join-Path $repo 'profile.ps1') -Value ($fnText + [Environment]::NewLine + 'Import-PinnedModule')
+    $link = Join-Path $cfg 'profile.ps1'
+    $null = New-Item -ItemType SymbolicLink -Path $link -Target (Join-Path $repo 'profile.ps1')
+
+    . $link
+
+    Should -Invoke Import-Module -Times $script:expectedCount -Exactly -ParameterFilter {
+      $RequiredVersion -eq $global:ProfileTestPins[[string]$Name]
+    }
+    Should -Invoke Write-Warning -Times 0
   }
 }
