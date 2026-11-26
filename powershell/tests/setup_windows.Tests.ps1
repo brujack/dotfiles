@@ -31,32 +31,67 @@ BeforeAll {
 }
 
 Describe "Install-ChocolateyPackage" {
+  BeforeAll {
+    # Lower-case hex SHA256 of the given bytes, in the pin's format.
+    function global:Set-PinFor([byte[]]$Bytes) {
+      $h = [Security.Cryptography.SHA256]::Create()
+      try { $hex = [BitConverter]::ToString($h.ComputeHash($Bytes)).Replace('-', '') } finally { $h.Dispose() }
+      return $hex.ToLower()
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:Set-PinFor -ErrorAction SilentlyContinue
+    Remove-Variable -Name bootstrapBytes -Scope Global -ErrorAction SilentlyContinue
+  }
   BeforeEach {
+    $global:bootstrapBytes = [Text.Encoding]::UTF8.GetBytes('Write-Output stub')
     Mock Invoke-Expression { }
     Mock Get-Boxstarter { }
     Mock Set-ExecutionPolicy { }
     Mock New-Object {
       $fakeWC = [PSCustomObject]@{}
-      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadString' -Value { return 'Write-Output stub' }
+      $fakeWC | Add-Member -MemberType ScriptMethod -Name 'DownloadData' -Value { param($Url) , $global:bootstrapBytes }
       return $fakeWC
     } -ParameterFilter { $TypeName -eq 'System.Net.WebClient' }
     Mock Write-Output { }
   }
 
-  It "installs choco bootstrapper when choco.exe is not found" {
+  It "runs exactly the hashed bytes, decoded, when the SHA256 matches the pin" {
     Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
+    $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
     Install-ChocolateyPackage
-    Should -Invoke Invoke-Expression -Times 1 -Exactly
+    Should -Invoke Invoke-Expression -ParameterFilter { [string]::Equals($Command, 'Write-Output stub', [StringComparison]::Ordinal) } -Times 1 -Exactly
+    Should -Invoke Get-Boxstarter -Times 1 -Exactly
   }
 
-  It "skips choco bootstrapper when choco.exe is already present" {
+  It "strips a UTF-8 BOM before executing" {
+    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
+    Mock choco { @() }
+    $global:bootstrapBytes = [byte[]](0xEF, 0xBB, 0xBF) + [Text.Encoding]::UTF8.GetBytes('Write-Output stub')
+    $BoxstarterBootstrapperSha256 = Set-PinFor $global:bootstrapBytes
+    Install-ChocolateyPackage
+    Should -Invoke Invoke-Expression -ParameterFilter { [string]::Equals($Command, 'Write-Output stub', [StringComparison]::Ordinal) } -Times 1 -Exactly
+  }
+
+  It "throws naming expected and actual hash and never executes on mismatch" {
+    Mock Get-Command { return $null } -ParameterFilter { $Name -eq 'choco.exe' }
+    Mock choco { @() }
+    $actual = (Set-PinFor $global:bootstrapBytes).ToUpper()
+    { Install-ChocolateyPackage } | Should -Throw "*$BoxstarterBootstrapperSha256*$actual*"
+    Should -Invoke Invoke-Expression -Times 0
+    Should -Invoke Get-Boxstarter    -Times 0
+  }
+
+  It "skips the download entirely when choco.exe is already present" {
     Mock Get-Command {
       return [PSCustomObject]@{ Name = 'choco.exe' }
     } -ParameterFilter { $Name -eq 'choco.exe' }
     Mock choco { @() }
     Install-ChocolateyPackage
+    Should -Invoke New-Object        -Times 0
     Should -Invoke Invoke-Expression -Times 0
+    Should -Invoke Get-Boxstarter    -Times 0
   }
 
   It "calls choco install for packages not in the installed list" {
@@ -560,42 +595,140 @@ Describe "COM update wrappers" {
 }
 
 Describe "New-SafeLink" {
+  BeforeAll {
+    # Fake existing item; Delete() records the call instead of touching disk.
+    function global:New-FakeItem {
+      param([string]$LinkType, [string]$Target)
+      $item = [PSCustomObject]@{ LinkType = $LinkType; Target = $Target; Attributes = $null }
+      $item | Add-Member -MemberType ScriptMethod -Name 'Delete' -Value { $global:SafeLinkDeleted++ }
+      return $item
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:New-FakeItem -ErrorAction SilentlyContinue
+    Remove-Variable -Name SafeLinkDeleted -Scope Global -ErrorAction SilentlyContinue
+  }
   BeforeEach {
+    $global:SafeLinkDeleted = 0
     Mock Get-Item     { $null }
     Mock Remove-Item  { }
+    Mock Move-Item    { }
     Mock New-Item     { }
     Mock Write-Output { }
   }
 
   It "creates a symlink when link does not exist" {
     New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' -and $ErrorAction -eq 'Stop' } -Times 1
+    Should -Invoke Remove-Item -Times 0
   }
 
   It "creates a junction when -Junction flag is set" {
     New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
-    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
-  }
-
-  It "skips when link already points to correct target" {
-    Mock Get-Item { [PSCustomObject]@{ Target = "C:/target/file.json" } }
-    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke New-Item    -Times 0
+    Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' -and $ErrorAction -eq 'Stop' } -Times 1
     Should -Invoke Remove-Item -Times 0
   }
 
-  It "replaces symlink when target has changed" {
-    Mock Get-Item { [PSCustomObject]@{ Target = "C:/old/file.json" } }
+  It "skips when symlink already points to correct target" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/target/file.json" }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "skips when junction already points to correct target" {
+    Mock Get-Item { New-FakeItem -LinkType 'Junction' -Target "C:/target/dir" }
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "removes only the link via Delete when symlink target changed" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/old/file.json" }
     New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json"
-    Should -Invoke Remove-Item -Times 1
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
     Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
   }
 
-  It "removes regular file before creating symlink" {
-    Mock Get-Item { [PSCustomObject]@{ Target = $null } }
+  It "removes only the junction via Delete when junction target changed" {
+    Mock Get-Item { New-FakeItem -LinkType 'Junction' -Target "C:/old/dir" }
+    New-SafeLink -Target "C:/new/dir" -Link "C:/link/dir" -Junction
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Remove-Item -Times 0
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+  }
+
+  It "treats a ReparsePoint attribute without LinkType as a link" {
+    Mock Get-Item {
+      $i = New-FakeItem -LinkType $null -Target "C:/old/dir"
+      $i.Attributes = [IO.FileAttributes]::Directory -bor [IO.FileAttributes]::ReparsePoint
+      $i
+    }
+    New-SafeLink -Target "C:/new/dir" -Link "C:/link/dir" -Junction
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "moves a real file to .bak before linking" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
     New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke Remove-Item -Times 1
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json' -and $Destination -eq 'C:/link/file.json.bak'
+    } -Times 1 -Exactly
     Should -Invoke New-Item    -Times 1
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "moves a real directory to .bak before linking a junction" {
+    Mock Get-Item {
+      $i = New-FakeItem -LinkType $null -Target $null
+      $i.Attributes = [IO.FileAttributes]::Directory
+      $i
+    } -ParameterFilter { $LiteralPath -eq 'C:/link/dir' }
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/dir' -and $Destination -eq 'C:/link/dir.bak'
+    } -Times 1 -Exactly
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "throws and changes nothing when .bak already exists" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json.bak' }
+    { New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json" } | Should -Throw "*already exists*"
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "restores the .bak and rethrows when link creation fails" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
+    Mock New-Item { throw "privilege not held" }
+    { New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json" } | Should -Throw "privilege not held"
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json' -and $Destination -eq 'C:/link/file.json.bak'
+    } -Times 1 -Exactly
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json.bak' -and $Destination -eq 'C:/link/file.json'
+    } -Times 1 -Exactly
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "does not restore anything when link creation fails after only a link was removed" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/old/file.json" }
+    Mock New-Item { throw "privilege not held" }
+    { New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json" } | Should -Throw "privilege not held"
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
   }
 }
 

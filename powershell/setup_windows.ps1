@@ -20,24 +20,54 @@ param(
 # tests/scripts/windows_npm_pins.bats fails if the two differ.
 $FirecrawlCliVersion = '1.26.3'
 
+# SHA256 of https://boxstarter.org/bootstrapper.ps1, verified by the operator
+# 2026-11-26 (20190 bytes, Last-Modified 2026-11-20). The URL is unversioned, so
+# any upstream change fails closed until this pin is refreshed by hand after
+# reading the new file. The bootstrapper itself still pipes chocolatey.org/install.ps1
+# to Invoke-Expression unverified; that is out of scope here.
+$BoxstarterBootstrapperSha256 = '24bb07429d03f98657b33fa2bc53b146283b759ffb92f81d9ce65c3c90d6ac76'
+
 function New-SafeLink {
   param(
     [string]$Target,
     [string]$Link,
     [switch]$Junction
   )
-  $existing = Get-Item $Link -ErrorAction SilentlyContinue
+  $backup = "$Link.bak"
+  $madeBackup = $false
+  $existing = Get-Item -LiteralPath $Link -Force -ErrorAction SilentlyContinue
   if ($null -ne $existing) {
-    if ($existing.Target -eq $Target) {
-      Write-Output "Already linked: $Link"
-      return
+    $isReparse = $existing.Attributes -and ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    $isLink = ($existing.LinkType -in @('SymbolicLink', 'Junction')) -or $isReparse
+    if ($isLink) {
+      if ($existing.Target -eq $Target) {
+        Write-Output "Already linked: $Link"
+        return
+      }
+      # Delete() without recursion removes only the reparse point; Remove-Item -Recurse
+      # can walk into a junction's target under Windows PowerShell 5.1 and delete its contents.
+      $existing.Delete()
+    } else {
+      # Real file or directory: keep the user's data, never overwrite an earlier backup.
+      if ($null -ne (Get-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue)) {
+        throw "Cannot back up '$Link': '$backup' already exists; move it aside and re-run"
+      }
+      Move-Item -LiteralPath $Link -Destination $backup
+      $madeBackup = $true
+      Write-Output "Backed up: $Link -> $backup"
     }
-    Remove-Item $Link -Force -Recurse
   }
-  if ($Junction) {
-    $null = New-Item -ItemType Junction -Path $Link -Target $Target
-  } else {
-    $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target
+  try {
+    if ($Junction) {
+      $null = New-Item -ItemType Junction -Path $Link -Target $Target -ErrorAction Stop
+    } else {
+      $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target -ErrorAction Stop
+    }
+  } catch {
+    if ($madeBackup) {
+      Move-Item -LiteralPath $backup -Destination $Link
+    }
+    throw
   }
   Write-Output "Linked: $Link -> $Target"
 }
@@ -111,8 +141,20 @@ function Install-ChocolateyPackage {
   if (-Not (Get-Command "choco.exe" -ErrorAction SilentlyContinue)) {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    $bootstrapScript = (New-Object System.Net.WebClient).DownloadString('https://boxstarter.org/bootstrapper.ps1')
-    Invoke-Expression $bootstrapScript
+    $bootstrapperUrl = 'https://boxstarter.org/bootstrapper.ps1'
+    # Hash and execute the same in-memory bytes: no file between check and use.
+    $bootstrapperBytes = (New-Object System.Net.WebClient).DownloadData($bootstrapperUrl)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+      $actualHash = [BitConverter]::ToString($hasher.ComputeHash($bootstrapperBytes)).Replace('-', '')
+    } finally {
+      $hasher.Dispose()
+    }
+    if ($actualHash -ne $BoxstarterBootstrapperSha256) {
+      throw "Boxstarter bootstrapper SHA256 mismatch: expected $BoxstarterBootstrapperSha256, got $actualHash. Read the new bootstrapper, then refresh `$BoxstarterBootstrapperSha256 in setup_windows.ps1. Not executed."
+    }
+    $bootstrapperText = [Text.Encoding]::UTF8.GetString($bootstrapperBytes).TrimStart([char]0xFEFF)
+    Invoke-Expression $bootstrapperText
     Get-Boxstarter -Force
   }
 

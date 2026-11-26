@@ -1,7 +1,20 @@
-function Import-Modules {
+# powershell_module_pins.psd1 sits next to the real profile.ps1; the profile itself is
+# usually a symlink in ~/.config/powershell, so follow it before looking for the file.
+function Get-ModulePinFile {
+  param([string]$ProfilePath)
+  $item = Get-Item -LiteralPath $ProfilePath
+  $real = $item.ResolveLinkTarget($true)
+  $dir = if ($real) { $real.DirectoryName } else { $item.DirectoryName }
+  return Join-Path $dir 'powershell_module_pins.psd1'
+}
+
+function Import-PinnedModule {
+  param([string]$PinFile)
+  if (-not $PinFile) { $PinFile = Get-ModulePinFile -ProfilePath $PSCommandPath }
+
   $ModulesToBeImported = @(
     "AWSPowerShell.NetCore",
-    "Microsoft.PowerShell.UnixCompleters",
+    "Microsoft.PowerShell.UnixTabCompletion",
     "posh-awsp",
     "posh-git",
     "PSFzf",
@@ -16,18 +29,28 @@ function Import-Modules {
     "Terminal-Icons"
   )
 
-  if ($IsLinux -or $IsMacOS) {
-    foreach ($Mod in $ModulesToBeImported) {
-      if (Get-Module -ListAvailable $Mod) {
-        Import-Module $Mod
-      }
-    }
+  if ($IsLinux -or $IsMacOS) { $wanted = $ModulesToBeImported }
+  elseif ($IsWindows) { $wanted = $ModulesToBeImportedWindows }
+  else { return }
+
+  $data = Import-PowerShellDataFile -LiteralPath $PinFile
+  $pins = @{}
+  foreach ($group in @('Common', 'Unix')) {
+    foreach ($name in $data[$group].Keys) { $pins[$name] = $data[$group][$name] }
   }
-  elseif ($IsWindows) {
-    foreach ($Mod in $ModulesToBeImportedWindows) {
-      if (Get-Module -ListAvailable $Mod) {
-        Import-Module $Mod
-      }
+
+  foreach ($Mod in $wanted) {
+    $version = $pins[$Mod]
+    # Never import an unpinned module or fall back to whatever version is installed.
+    if (-not $version) {
+      Write-Warning "Module '$Mod' has no pin in $PinFile; not imported"
+      continue
+    }
+    if (Get-Module -ListAvailable -Name $Mod | Where-Object { $_.Version -eq [version]$version }) {
+      Import-Module -Name $Mod -RequiredVersion $version
+    }
+    else {
+      Write-Warning "Module '$Mod' $version is not installed; run install_powershell_modules.ps1"
     }
   }
 }
@@ -101,7 +124,7 @@ elseif ($IsWindows) {
   }
 }
 
-Import-Modules
+Import-PinnedModule
 
 Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
 # Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
