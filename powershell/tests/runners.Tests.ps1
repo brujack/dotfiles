@@ -15,10 +15,17 @@ BeforeAll {
   # so PSScriptAnalyzer and Pester cannot load. Bounded by a timeout; a child that overruns
   # it is killed by PID (only the one started here).
   function global:Invoke-RunnerWithoutModules {
-    param([string]$Runner, [string]$FixtureRoot, [int]$TimeoutSeconds = 90)
+    param([string]$Runner, [string]$FixtureRoot, [int]$TimeoutSeconds = 90, [switch]$StubAnalyzer)
     $emptyHome = Join-Path $FixtureRoot 'home'
     $emptyModules = Join-Path $FixtureRoot 'modules'
     $null = New-Item -ItemType Directory -Path $emptyHome, $emptyModules -Force
+    if ($StubAnalyzer) {
+      # A PSScriptAnalyzer that loads and finds nothing, so the runner reaches the Pester check.
+      $stubDir = Join-Path $emptyModules 'PSScriptAnalyzer'
+      $null = New-Item -ItemType Directory -Path $stubDir -Force
+      Set-Content -LiteralPath (Join-Path $stubDir 'PSScriptAnalyzer.psm1') -Value 'function Invoke-ScriptAnalyzer { [CmdletBinding()] param([string]$Path, [string]$Settings) }'
+      Set-Content -LiteralPath (Join-Path $stubDir 'PSScriptAnalyzer.psd1') -Value "@{ RootModule = 'PSScriptAnalyzer.psm1'; ModuleVersion = '1.0.0'; GUID = '11111111-2222-3333-4444-555555555555'; FunctionsToExport = @('Invoke-ScriptAnalyzer') }"
+    }
     $psi = [System.Diagnostics.ProcessStartInfo]::new($script:pwshExe)
     foreach ($a in @('-NoProfile', '-NonInteractive', '-File', (Join-Path $script:powershellDir $Runner))) { $psi.ArgumentList.Add($a) }
     $psi.WorkingDirectory = $script:powershellDir
@@ -52,5 +59,13 @@ Describe "runner scripts fail closed when a tool module cannot load" {
     $r.Output | Should -Match 'cannot be loaded\. Install it'
     # Nothing past the module check may run: no analyzer call, no Pester start.
     $r.Output | Should -Not -Match 'not recognized|Pester returned no CodeCoverage|Describing'
+  }
+
+  It "run-tests.ps1 reaches and fails closed on the Pester check when only the analyzer loads" {
+    $r = Invoke-RunnerWithoutModules -Runner 'run-tests.ps1' -FixtureRoot (Join-Path $TestDrive 'pester-branch') -StubAnalyzer
+    $r.TimedOut | Should -BeFalse
+    $r.ExitCode | Should -Not -Be 0
+    $r.Output | Should -Match 'Pester >= 5\.0 cannot be loaded\. Install it'
+    $r.Output | Should -Not -Match 'PSScriptAnalyzer cannot be loaded|not recognized|Pester returned no CodeCoverage|Describing'
   }
 }
