@@ -1891,7 +1891,7 @@ _run_pre_push_wired() {
     return 1
   fi
   hash="$(sed -n '/^# >>> push-gates wiring$/,/^# <<< push-gates wiring$/p' "${REPO_ROOT}/scripts/pre-push" | sha256sum | cut -d' ' -f1)"
-  if [[ "${hash}" != "a177991056f5626989d70e9513a7b2531314e87bd5f2eeceee5121e1f1ecd030" ]]; then
+  if [[ "${hash}" != "e38c2b5fa6a5de641a421a1e1e71fe10061ab6d6ccf4c7aa4749de9156794689" ]]; then
     printf 'push-gates block differs from ai-config docs/templates/pre-push-gates (sha256 %s)\n' "${hash}" >&2
     return 1
   fi
@@ -1949,23 +1949,109 @@ MK
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "wiring: a docs-only push reaches the recorder" {
+@test "wiring: a docs-only push with no origin remote is not exempt and reaches the recorder" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "README.md" "v2" "docs: v2")
   _write_make_mock 0
+  # Non-exempt by construction: the fixture has no origin remote at all.
+  [ -z "$(_pg_fx remote)" ]
   run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ -f "${GATES_LOG}" ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
 }
 
-@test "wiring: a deletion push reaches the recorder" {
+@test "wiring: a deletion push with no origin remote is not exempt and reaches the recorder" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   _write_make_mock 0
+  # Non-exempt by construction: the fixture has no origin remote at all.
+  [ -z "$(_pg_fx remote)" ]
   run _pg_run "(delete) ${ZERO_SHA} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ -f "${GATES_LOG}" ]
   [ ! -f "${MOCK_CALLS_FILE}" ]
+}
+
+# --- R17 exemption (ADR-0099 2A): offline. The gates fetch always fails here
+# (FAKE_MASTER_FAIL), so an exempt push passes only by not fetching and a non-exempt
+# one blocks with the cannot-load line. ---
+
+_pg_fx() { # git against the fixture repo with the inherited GIT_* variables stripped
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_DIR}" "$@"
+}
+
+# _pg_origin_fixture <default-branch tip sha> -- origin whose only URL is the hook's URL
+# arg, refs/remotes/origin/HEAD at <tip>. Callers add refs/remotes/origin/<b> themselves.
+_pg_origin_fixture() {
+  _pg_fx remote add origin https://example.invalid/r.git
+  _pg_fx update-ref refs/remotes/origin/trunk "${1}"
+  _pg_fx symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk
+}
+
+_pg_assert_not_fetched() {
+  if [[ -f "${FETCH_LOG}" || -f "${GATES_LOG}" ]]; then
+    printf 'a gates fetch or run happened:\n' >&2
+    cat "${FETCH_LOG}" >&2 2> /dev/null || :
+    return 1
+  fi
+}
+
+@test "wiring: a docs-only update of an existing branch on origin passes and fetches nothing" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  _write_make_mock 0
+  _pg_origin_fixture "${base_sha}"
+  _pg_fx update-ref refs/remotes/origin/feat/x "${base_sha}"
+  FAKE_MASTER_FAIL=1 run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pre-push: gates: every pushed ref is a deletion or a docs-only branch; gates not run"* ]]
+  _pg_assert_not_fetched
+}
+
+@test "wiring: a deletion-only push to origin passes and fetches nothing" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  _write_make_mock 0
+  _pg_origin_fixture "${base_sha}"
+  FAKE_MASTER_FAIL=1 run _pg_run "(delete) ${ZERO_SHA} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"gates not run"* ]]
+  _pg_assert_not_fetched
+}
+
+@test "wiring: a docs ref mixed with a code ref blocks with the cannot-load line" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  docs_sha=$(_commit_file "README.md" "v2" "docs: v2")
+  code_sha=$(_commit_file "deploy.sh" "echo hi" "feat: deploy")
+  _write_make_mock 0
+  _pg_origin_fixture "${base_sha}"
+  _pg_fx update-ref refs/remotes/origin/feat/x "${base_sha}"
+  _pg_fx update-ref refs/remotes/origin/feat/y "${base_sha}"
+  FAKE_MASTER_FAIL=1 run _pg_run "refs/heads/feat/x ${docs_sha} refs/heads/feat/x ${base_sha}\nrefs/heads/feat/y ${code_sha} refs/heads/feat/y ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-push: gates: cannot load push gates from GitHub; push blocked"* ]]
+  [[ "$output" != *"gates not run"* ]]
+}
+
+@test "wiring: a .sh under docs/ is not exempt and blocks with the cannot-load line" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "docs/run.sh" "echo hi" "docs: add a runner")
+  _write_make_mock 0
+  _pg_origin_fixture "${base_sha}"
+  _pg_fx update-ref refs/remotes/origin/feat/x "${base_sha}"
+  FAKE_MASTER_FAIL=1 run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-push: gates: cannot load push gates from GitHub; push blocked"* ]]
+}
+
+@test "wiring: a .md that starts with #! is not exempt and blocks with the cannot-load line" {
+  base_sha=$(_commit_file "README.md" "v1" "docs: v1")
+  local_sha=$(_commit_file "README.md" "#!/bin/sh" "docs: script-shaped readme")
+  _write_make_mock 0
+  _pg_origin_fixture "${base_sha}"
+  _pg_fx update-ref refs/remotes/origin/feat/x "${base_sha}"
+  FAKE_MASTER_FAIL=1 run _pg_run "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pre-push: gates: cannot load push gates from GitHub; push blocked"* ]]
 }
 
 @test "wiring: a refused main push fetches the content-gate path and never the driver" {

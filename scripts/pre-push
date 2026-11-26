@@ -38,22 +38,111 @@ fi
 # <<< push-content-gate wiring
 # >>> push-gates wiring
 # ADR-0099 sub-project 2A: load the push gates from ai-config master at one SHA and
-# run them on every pushed ref. Byte-identical in every repo; each repo pins its sha256.
-# shellcheck disable=SC2310,SC2311 # a failed fetch leaves the variable empty, which the checks below block on; set -e must not end the hook first
-_pg_json="$(_pcg_fetch 'repos/brujack/ai-config/commits/master')" || _pg_json=""
-_pg_sha="$(printf '%s' "${_pg_json}" | env -i "PATH=${PATH}" "HOME=${HOME}" ${PYENV_ROOT+"PYENV_ROOT=${PYENV_ROOT}"} ${PYENV_VERSION+"PYENV_VERSION=${PYENV_VERSION}"} python3 -I -c 'import json, sys
-print(json.load(sys.stdin)["sha"])' 2> /dev/null)" || _pg_sha=""
-_pg_src=""
-if [[ "${_pg_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+# run them on every push not exempt under R17. Byte-identical in every repo; each repo pins its sha256.
+# R17: a push whose every ref is a deletion or a docs-only branch skips the gates and
+# reads no GitHub endpoint; the decision uses only the pushed refs and local git, and
+# any doubt (new branch, no origin/HEAD, a merge commit, an unreadable object) loads the
+# gates as before. A docs-only branch is one whose every commit since its merge-base with
+# origin/HEAD, the range the gates judge, changes only inert docs paths. The exemption
+# applies only to a push to the remote named origin whose one fetch URL and one push
+# URL both equal the hook's URL argument: origin/HEAD describes origin's fetch URL and
+# says nothing about any other remote's or push target's default branch. Each non-deleted
+# ref must also be a branch whose tracking ref refs/remotes/origin/<branch>, which must
+# exist as exactly that ref (a tag of a lookalike name does not count), equals the
+# remote sha being replaced: that proves origin/HEAD and the pushed history belong to the
+# remote being pushed to (a set-url without a fetch leaves both describing the old one).
+_pg_git() { # git against the pushing repository, ignoring replace refs and inherited GIT_* repository and object-store variables
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git --no-replace-objects "$@" 2> /dev/null
+}
+# shellcheck disable=SC2310,SC2311,SC2312 # every status here is the answer and is tested explicitly; set -e being off inside the function is intended
+_pg_path_inert() { # <commit> <path>; 0 when the path is on the safe list and is, at <commit>, absent or a plain non-script blob
+  local ent rest blob size head2
+  case "${2}" in
+    *.md | *.txt | *.rst | *.mdc | renovate.json | .gitleaks.toml | .editorconfig | .gitignore | LICENSE) ;;
+    *) return 1 ;;
+  esac
+  ent="$(_pg_git --literal-pathspecs ls-tree --full-tree "${1}" -- "${2}")" || return 1
+  [[ -n "${ent}" ]] || return 0
+  [[ "${ent}" != *$'\n'* ]] || return 1
+  case "${ent%% *}" in 100644 | 100755) ;; *) return 1 ;; esac
+  rest="${ent#* }"
+  rest="${rest#* }"
+  blob="${rest%%$'\t'*}"
+  [[ "${blob}" =~ ^[0-9a-f]{40}$ ]] || return 1
+  _pg_git cat-file -e "${blob}" || return 1
+  size="$(_pg_git cat-file -s "${blob}")" || return 1
+  [[ "${size}" =~ ^[0-9]+$ ]] || return 1
+  [[ "${size}" -ge 2 ]] || return 0
+  IFS= read -r -n 2 -d '' head2 < <(_pg_git cat-file blob "${blob}")
+  [[ -n "${head2}" && "${head2}" != '#!' ]]
+}
+# shellcheck disable=SC2310,SC2311,SC2312 # every status here is the answer and is tested explicitly; set -e being off inside the function is intended
+_pg_commit_inert() { # <commit>; 0 when every path the commit changes is inert at that commit; a failed diff-tree yields one path no safe-list entry matches
+  local path
+  while IFS= read -r -d '' path; do
+    _pg_path_inert "${1}" "${path}" || return 1
+  done < <(_pg_git diff-tree -r -z --name-only --no-renames --no-commit-id --ignore-submodules=none --root "${1}" || printf 'diff-failed\0')
+  return 0
+}
+# shellcheck disable=SC2310,SC2311,SC2312 # every status here is the answer and is tested explicitly; set -e being off inside the function is intended
+_pg_docs_only() { # <local sha>; 0 when no merge commit and only inert commits lie between its merge-base with origin/HEAD and it
+  local base merges commits commit
+  _pg_git rev-parse --verify -q refs/remotes/origin/HEAD > /dev/null || return 1
+  base="$(_pg_git merge-base "${1}" refs/remotes/origin/HEAD)" || return 1
+  merges="$(_pg_git rev-list --min-parents=2 "${base}..${1}")" || return 1
+  [[ -z "${merges}" ]] || return 1
+  commits="$(_pg_git rev-list "${base}..${1}")" || return 1
+  while IFS= read -r commit; do
+    [[ -n "${commit}" ]] || continue
+    _pg_commit_inert "${commit}" || return 1
+  done <<< "${commits}"
+  return 0
+}
+# shellcheck disable=SC2310,SC2311,SC2312 # every status here is the answer and is tested explicitly; set -e being off inside the function is intended
+_pg_exempt() { # <remote name> <url> <refs text>; 0 when the push goes to origin, whose sole fetch and push URL is <url>, and there is at least one ref and each is a deletion or a docs-only branch
+  local lref lsha rref rsha furl purl track tref n=0
+  [[ "${1}" == origin ]] || return 1
+  furl="$(_pg_git remote get-url --all origin)" || return 1
+  purl="$(_pg_git remote get-url --push --all origin)" || return 1
+  [[ "${furl}" != *$'\n'* && "${purl}" != *$'\n'* ]] || return 1
+  [[ "${furl}" == "${2}" && "${purl}" == "${2}" ]] || return 1
+  while IFS=' ' read -r lref lsha rref rsha _; do
+    [[ -n "${lref}${lsha}${rref}${rsha}" ]] || continue
+    n=$((n + 1))
+    [[ "${lsha}" =~ ^[0-9a-f]{40}$ ]] || return 1
+    [[ "${lsha}" =~ ^0{40}$ ]] && continue
+    # A zero remote sha is a new branch; the tracking-ref compare below would also refuse it
+    # (no tracking ref equals zeros), so this check is defence in depth, not the only guard.
+    [[ "${rsha}" =~ ^[0-9a-f]{40}$ && ! "${rsha}" =~ ^0{40}$ ]] || return 1
+    [[ "${rref}" == refs/heads/?* ]] || return 1
+    tref="refs/remotes/origin/${rref#refs/heads/}"
+    _pg_git show-ref --verify -q "${tref}" || return 1
+    track="$(_pg_git rev-parse --verify -q "${tref}^{commit}")" || return 1
+    [[ "${track}" == "${rsha}" ]] || return 1
+    _pg_docs_only "${lsha}" || return 1
+  done <<< "${3}"
+  [[ "${n}" -gt 0 ]]
+}
+# shellcheck disable=SC2310 # a refused exemption must fall through to the gates, so set -e being off inside _pg_exempt is intended
+if _pg_exempt "${1-}" "${2-}" "${_pcg_refs}"; then
+  printf 'pre-push: gates: every pushed ref is a deletion or a docs-only branch; gates not run\n' >&2
+else
   # shellcheck disable=SC2310,SC2311 # a failed fetch leaves the variable empty, which the checks below block on; set -e must not end the hook first
-  _pg_src="$(_pcg_fetch "repos/brujack/ai-config/contents/.claude/hooks/push-gates.sh?ref=${_pg_sha}")" || _pg_src=""
+  _pg_json="$(_pcg_fetch 'repos/brujack/ai-config/commits/master')" || _pg_json=""
+  _pg_sha="$(printf '%s' "${_pg_json}" | env -i "PATH=${PATH}" "HOME=${HOME}" ${PYENV_ROOT+"PYENV_ROOT=${PYENV_ROOT}"} ${PYENV_VERSION+"PYENV_VERSION=${PYENV_VERSION}"} python3 -I -c 'import json, sys
+print(json.load(sys.stdin)["sha"])' 2> /dev/null)" || _pg_sha=""
+  _pg_src=""
+  if [[ "${_pg_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+    # shellcheck disable=SC2310,SC2311 # a failed fetch leaves the variable empty, which the checks below block on; set -e must not end the hook first
+    _pg_src="$(_pcg_fetch "repos/brujack/ai-config/contents/.claude/hooks/push-gates.sh?ref=${_pg_sha}")" || _pg_src=""
+  fi
+  # shellcheck source=/dev/null
+  if [[ -z "${_pg_src}" ]] || ! source <(printf '%s\n' "${_pg_src}") || ! declare -F push_gates_run > /dev/null; then
+    printf 'pre-push: gates: cannot load push gates from GitHub; push blocked\n' >&2
+    exit 1
+  fi
+  push_gates_run "${2}" "${_pcg_refs}" "${_pg_sha}" || exit 1
 fi
-# shellcheck source=/dev/null
-if [[ -z "${_pg_src}" ]] || ! source <(printf '%s\n' "${_pg_src}") || ! declare -F push_gates_run > /dev/null; then
-  printf 'pre-push: gates: cannot load push gates from GitHub; push blocked\n' >&2
-  exit 1
-fi
-push_gates_run "${2}" "${_pcg_refs}" "${_pg_sha}" || exit 1
 # <<< push-gates wiring
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
