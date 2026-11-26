@@ -3,7 +3,7 @@
 help:
 	@printf "Available targets:\n"
 	@printf "  make test   Run PSScriptAnalyzer lint then Pester tests\n"
-	@printf "  make lint   Run PSScriptAnalyzer on setup_windows.ps1\n"
+	@printf "  make lint   Run PSScriptAnalyzer on setup_windows.ps1 and the module install/update scripts\n"
 	@printf "  make help   Show this help\n"
 
 lint:

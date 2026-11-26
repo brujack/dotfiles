@@ -5,6 +5,11 @@ BeforeAll {
       Set-Item -Path "function:global:$name" -Value { }
     }
   }
+  # Mocks first: if the installer's guard ever broke, this load must not reach real cmdlets.
+  Mock Install-Module   { }
+  Mock Set-PSRepository { }
+  Mock Write-Output     { }
+  Mock Get-Module       { $null }
   # Only to get Get-ModulePin for expectations; the guard stops it installing anything.
   . (Join-Path $PSScriptRoot '..' '..' 'install_powershell_modules.ps1')
   $script:updateScript = Join-Path $PSScriptRoot '..' '..' 'update_powershell_modules.ps1'

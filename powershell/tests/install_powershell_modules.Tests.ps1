@@ -9,14 +9,21 @@ BeforeAll {
   Mock Install-Module  { }
   Mock Set-PSRepository { }
   Mock Write-Output    { }
+  Mock Get-Module      { $null }
   # Dot-sourcing must only define functions; the guard keeps Install-PinnedModule from running.
   . $script:installScript
 }
 
 Describe "dot-sourcing install_powershell_modules.ps1" {
   It "does not install anything or touch repository trust" {
-    Should -Invoke Install-Module  -Times 0 -Scope Describe
-    Should -Invoke Set-PSRepository -Times 0 -Scope Describe
+    # Mock, dot-source and assert all in this scope so the calls the file makes are counted.
+    Mock Install-Module   { }
+    Mock Set-PSRepository { }
+    Mock Write-Output     { }
+    Mock Get-Module       { $null }
+    . $script:installScript
+    Should -Invoke Install-Module   -Times 0 -Exactly
+    Should -Invoke Set-PSRepository -Times 0 -Exactly
   }
 }
 
