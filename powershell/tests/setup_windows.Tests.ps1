@@ -560,9 +560,24 @@ Describe "COM update wrappers" {
 }
 
 Describe "New-SafeLink" {
+  BeforeAll {
+    # Fake existing item; Delete() records the call instead of touching disk.
+    function global:New-FakeItem {
+      param([string]$LinkType, [string]$Target)
+      $item = [PSCustomObject]@{ LinkType = $LinkType; Target = $Target; Attributes = $null }
+      $item | Add-Member -MemberType ScriptMethod -Name 'Delete' -Value { $global:SafeLinkDeleted++ }
+      return $item
+    }
+  }
+  AfterAll {
+    Remove-Item function:global:New-FakeItem -ErrorAction SilentlyContinue
+    Remove-Variable -Name SafeLinkDeleted -Scope Global -ErrorAction SilentlyContinue
+  }
   BeforeEach {
+    $global:SafeLinkDeleted = 0
     Mock Get-Item     { $null }
     Mock Remove-Item  { }
+    Mock Move-Item    { }
     Mock New-Item     { }
     Mock Write-Output { }
   }
@@ -570,32 +585,115 @@ Describe "New-SafeLink" {
   It "creates a symlink when link does not exist" {
     New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
     Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
+    Should -Invoke Remove-Item -Times 0
   }
 
   It "creates a junction when -Junction flag is set" {
     New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
     Should -Invoke New-Item -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
-  }
-
-  It "skips when link already points to correct target" {
-    Mock Get-Item { [PSCustomObject]@{ Target = "C:/target/file.json" } }
-    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke New-Item    -Times 0
     Should -Invoke Remove-Item -Times 0
   }
 
-  It "replaces symlink when target has changed" {
-    Mock Get-Item { [PSCustomObject]@{ Target = "C:/old/file.json" } }
+  It "skips when symlink already points to correct target" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/target/file.json" }
+    New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "skips when junction already points to correct target" {
+    Mock Get-Item { New-FakeItem -LinkType 'Junction' -Target "C:/target/dir" }
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "removes only the link via Delete when symlink target changed" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/old/file.json" }
     New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json"
-    Should -Invoke Remove-Item -Times 1
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
     Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'SymbolicLink' } -Times 1
   }
 
-  It "removes regular file before creating symlink" {
-    Mock Get-Item { [PSCustomObject]@{ Target = $null } }
+  It "removes only the junction via Delete when junction target changed" {
+    Mock Get-Item { New-FakeItem -LinkType 'Junction' -Target "C:/old/dir" }
+    New-SafeLink -Target "C:/new/dir" -Link "C:/link/dir" -Junction
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Remove-Item -Times 0
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+  }
+
+  It "treats a ReparsePoint attribute without LinkType as a link" {
+    Mock Get-Item {
+      $i = New-FakeItem -LinkType $null -Target "C:/old/dir"
+      $i.Attributes = [IO.FileAttributes]::Directory -bor [IO.FileAttributes]::ReparsePoint
+      $i
+    }
+    New-SafeLink -Target "C:/new/dir" -Link "C:/link/dir" -Junction
+    $global:SafeLinkDeleted | Should -Be 1
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "moves a real file to .bak before linking" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
     New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json"
-    Should -Invoke Remove-Item -Times 1
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json' -and $Destination -eq 'C:/link/file.json.bak'
+    } -Times 1 -Exactly
     Should -Invoke New-Item    -Times 1
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "moves a real directory to .bak before linking a junction" {
+    Mock Get-Item {
+      $i = New-FakeItem -LinkType $null -Target $null
+      $i.Attributes = [IO.FileAttributes]::Directory
+      $i
+    } -ParameterFilter { $LiteralPath -eq 'C:/link/dir' }
+    New-SafeLink -Target "C:/target/dir" -Link "C:/link/dir" -Junction
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/dir' -and $Destination -eq 'C:/link/dir.bak'
+    } -Times 1 -Exactly
+    Should -Invoke New-Item    -ParameterFilter { $ItemType -eq 'Junction' } -Times 1
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "throws and changes nothing when .bak already exists" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json.bak' }
+    { New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json" } | Should -Throw "*already exists*"
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke New-Item    -Times 0
+    Should -Invoke Remove-Item -Times 0
+    $global:SafeLinkDeleted | Should -Be 0
+  }
+
+  It "restores the .bak and rethrows when link creation fails" {
+    Mock Get-Item { New-FakeItem -LinkType $null -Target $null } -ParameterFilter { $LiteralPath -eq 'C:/link/file.json' }
+    Mock New-Item { throw "privilege not held" }
+    { New-SafeLink -Target "C:/target/file.json" -Link "C:/link/file.json" } | Should -Throw "privilege not held"
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json' -and $Destination -eq 'C:/link/file.json.bak'
+    } -Times 1 -Exactly
+    Should -Invoke Move-Item -ParameterFilter {
+      $LiteralPath -eq 'C:/link/file.json.bak' -and $Destination -eq 'C:/link/file.json'
+    } -Times 1 -Exactly
+    Should -Invoke Remove-Item -Times 0
+  }
+
+  It "does not restore anything when link creation fails after only a link was removed" {
+    Mock Get-Item { New-FakeItem -LinkType 'SymbolicLink' -Target "C:/old/file.json" }
+    Mock New-Item { throw "privilege not held" }
+    { New-SafeLink -Target "C:/new/file.json" -Link "C:/link/file.json" } | Should -Throw "privilege not held"
+    Should -Invoke Move-Item   -Times 0
+    Should -Invoke Remove-Item -Times 0
   }
 }
 

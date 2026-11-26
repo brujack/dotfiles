@@ -26,18 +26,41 @@ function New-SafeLink {
     [string]$Link,
     [switch]$Junction
   )
-  $existing = Get-Item $Link -ErrorAction SilentlyContinue
+  $backup = "$Link.bak"
+  $madeBackup = $false
+  $existing = Get-Item -LiteralPath $Link -Force -ErrorAction SilentlyContinue
   if ($null -ne $existing) {
-    if ($existing.Target -eq $Target) {
-      Write-Output "Already linked: $Link"
-      return
+    $isReparse = $existing.Attributes -and ($existing.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    $isLink = ($existing.LinkType -in @('SymbolicLink', 'Junction')) -or $isReparse
+    if ($isLink) {
+      if ($existing.Target -eq $Target) {
+        Write-Output "Already linked: $Link"
+        return
+      }
+      # Delete() without recursion removes only the reparse point; Remove-Item -Recurse
+      # can walk into a junction's target under Windows PowerShell 5.1 and delete its contents.
+      $existing.Delete()
+    } else {
+      # Real file or directory: keep the user's data, never overwrite an earlier backup.
+      if ($null -ne (Get-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue)) {
+        throw "Cannot back up '$Link': '$backup' already exists; move it aside and re-run"
+      }
+      Move-Item -LiteralPath $Link -Destination $backup
+      $madeBackup = $true
+      Write-Output "Backed up: $Link -> $backup"
     }
-    Remove-Item $Link -Force -Recurse
   }
-  if ($Junction) {
-    $null = New-Item -ItemType Junction -Path $Link -Target $Target
-  } else {
-    $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target
+  try {
+    if ($Junction) {
+      $null = New-Item -ItemType Junction -Path $Link -Target $Target
+    } else {
+      $null = New-Item -ItemType SymbolicLink -Path $Link -Target $Target
+    }
+  } catch {
+    if ($madeBackup) {
+      Move-Item -LiteralPath $backup -Destination $Link
+    }
+    throw
   }
   Write-Output "Linked: $Link -> $Target"
 }
