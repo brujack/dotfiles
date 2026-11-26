@@ -2617,3 +2617,23 @@ _cov_row() {
   [[ "${_one}" =~ tiny.sh[[:space:]]+2[[:space:]]+5[[:space:]] ]]
   [[ "$(_cov_row tiny.sh)" =~ tiny.sh[[:space:]]+3[[:space:]]+5[[:space:]] ]]
 }
+
+@test "run-bash-coverage.sh covalias: a copy under REPO_ROOT is a direct trace and never an alias" {
+  _make_cov_tree
+  mkdir -p "${COV_TREE}/x/covalias/lib"
+  cp "${COV_TREE}/lib/tiny.sh" "${COV_TREE}/x/covalias/lib/tiny.sh"
+  {
+    printf '@test "alias inside root" {\n'
+    printf '  source "${BATS_TEST_DIRNAME}/../x/covalias/lib/tiny.sh"\n'
+    printf '  run tiny_unused\n'
+    printf '}\n'
+  } > "${COV_TREE}/tests/alias_in.bats"
+  printf 'tests/green_a.bats\ntests/alias_in.bats\n' > "${BATS_TEST_TMPDIR}/list"
+  run _run_cov_tree --files "${BATS_TEST_TMPDIR}/list" --trace-only "${BATS_TEST_TMPDIR}/out"
+  [ "$status" -eq 0 ]
+  command grep -q "x/covalias/lib/tiny.sh:6\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"
+  if command grep -q "^${COV_TREE}/lib/tiny.sh:6\$" "${BATS_TEST_TMPDIR}/out/bash_trace.txt"; then
+    printf 'a covalias copy under REPO_ROOT was attributed to lib/tiny.sh\n' >&2
+    return 1
+  fi
+}

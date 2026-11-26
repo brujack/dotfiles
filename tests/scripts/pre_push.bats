@@ -1710,13 +1710,21 @@ _run_pre_push_wired() {
   "
 }
 
-@test "wiring: a feature-only push makes no gh call" {
+@test "wiring: the push-content gate makes no fetch on a feature-only push" {
   base_sha=$(_commit_file "README.md" "v1" "docs: v1")
   local_sha=$(_commit_file "README.md" "v2" "docs: v2")
   _write_make_mock 0
   run _run_pre_push "refs/heads/feat/x ${local_sha} refs/heads/feat/x ${base_sha}\n"
   [ "$status" -eq 0 ]
   [ ! -f "${BATS_TEST_TMPDIR}/gh.calls" ]
+  # The gates paths were fetched (the log exists), the content-gate library was not.
+  [ -f "${FETCH_LOG}" ]
+  command grep -qxF "repos/brujack/ai-config/commits/master" "${FETCH_LOG}"
+  if command grep -q 'push-content-gate.sh' "${FETCH_LOG}"; then
+    printf 'the push-content gate fetched on a feature-only push:\n' >&2
+    cat "${FETCH_LOG}" >&2
+    return 1
+  fi
 }
 
 @test "wiring: a master push whose gate cannot load is refused before the suite" {
@@ -1963,6 +1971,8 @@ MK
   _write_make_mock 0
   run _run_pre_push_wired "refs/heads/main ${local_sha} refs/heads/main ${base_sha}\n" refuse
   [ "$status" -eq 1 ]
+  # The stub library loaded and refused; a gate-load failure prints a different message.
+  [[ "$output" == *"stub gate refused"* ]]
   command grep -qxF "repos/brujack/ai-config/contents/.claude/hooks/push-content-gate.sh?ref=master" "${FETCH_LOG}"
   if command grep -q 'push-gates' "${FETCH_LOG}" || command grep -q 'commits/master' "${FETCH_LOG}"; then
     printf 'the gates were fetched after the content gate refused:\n' >&2
@@ -1970,4 +1980,15 @@ MK
     return 1
   fi
   [ ! -f "${GATES_LOG}" ]
+}
+
+@test "wiring: pg_hook_copy refuses a _pcg_fetch header that carries code after the brace" {
+  local _bad="${BATS_TEST_TMPDIR}/pre-push.bad"
+  sed 's/^_pcg_fetch() {/_pcg_fetch() { : code;/' "${REPO_ROOT}/scripts/pre-push" > "${_bad}"
+  command grep -q '^_pcg_fetch() { : code;' "${_bad}"
+  if pg_hook_copy "${_bad}" 2>/dev/null; then
+    printf 'pg_hook_copy accepted a header with code after the brace\n' >&2
+    return 1
+  fi
+  pg_hook_copy "${REPO_ROOT}/scripts/pre-push" > /dev/null
 }

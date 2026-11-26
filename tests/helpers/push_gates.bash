@@ -43,7 +43,7 @@ pg_hook_copy() {
   start="$(grep -n "^[#] >>> _pcg_fetch\$" "${hook}" | cut -d: -f1)"
   end="$(grep -n "^[#] <<< _pcg_fetch\$" "${hook}" | cut -d: -f1)"
   if [[ ! "${start}" =~ ^[0-9]+$ || ! "${end}" =~ ^[0-9]+$ ]] || (( end <= start + 1 )) \
-    || [[ "$(sed -n "$((start + 1))p" "${hook}")" != '_pcg_fetch() {'* ]]; then
+    || ! [[ "$(sed -n "$((start + 1))p" "${hook}")" =~ ^_pcg_fetch\(\)\ \{(\ \#.*)?$ ]]; then
     printf 'pg_hook_copy: _pcg_fetch markers not found in %s\n' "${hook}" >&2
     return 1
   fi
