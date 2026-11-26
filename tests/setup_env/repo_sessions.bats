@@ -209,6 +209,25 @@ _set_sessions() { printf '%s\n' "$@" > "${STUB_DIR}/sessions"; }
   grep -qx 'loginctl enable-linger tester' "${MOCK_CALLS_FILE}"
 }
 
+@test "install: sudo never runs the _LOGINCTL_BIN seam outside bats" {
+  export LINUX=1
+  # The seam points at a recorder that would log SEAM-RAN. Guard failure
+  # (seam honoured under sudo) records that line; the production name must
+  # instead resolve to tests/mocks/loginctl via PATH, never a real loginctl.
+  local _seam="${BATS_TEST_TMPDIR}/seam-loginctl"
+  printf '#!/usr/bin/env bash\nprintf "SEAM-RAN %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 0\n' > "${_seam}"
+  chmod +x "${_seam}"
+  local _mockbin="${BATS_TEST_TMPDIR}/mockbin"
+  mkdir -p "${_mockbin}"
+  printf '#!/usr/bin/env bash\nprintf "loginctl %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\n[[ "$1" == show-user ]] && printf "Linger=no\\n"\nexit 0\n' > "${_mockbin}/loginctl"
+  chmod +x "${_mockbin}/loginctl"
+  PATH="${_mockbin}:${PATH}" BATS_TEST_TMPDIR='' _LOGINCTL_BIN="${_seam}" run install_repo_sessions
+  [ "$status" -eq 0 ]
+  grep -qx 'sudo loginctl enable-linger tester' "${MOCK_CALLS_FILE}"
+  run ! grep -q 'SEAM-RAN' "${MOCK_CALLS_FILE}"
+  run ! grep -F "sudo ${_seam}" "${MOCK_CALLS_FILE}"
+}
+
 @test "install: leaves linger alone when Linger=yes" {
   export LINUX=1
   printf 'yes\n' > "${STUB_DIR}/linger"
