@@ -1,7 +1,7 @@
 function Import-Modules {
   $ModulesToBeImported = @(
     "AWSPowerShell.NetCore",
-    "Microsoft.PowerShell.UnixCompleters",
+    "Microsoft.PowerShell.UnixTabCompletion",
     "posh-awsp",
     "posh-git",
     "PSFzf",
