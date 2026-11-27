@@ -26,7 +26,7 @@ teardown() {
   assert_no_real_root_paths || return 1
 }
 
-# _signal_fixture <install-handler: 0|1> <INT|TERM> <pipe: 0|1> [wait: 1|0] -- writes a
+# _signal_fixture <install-handler: 0|1> <INT|TERM> <pipe: 0|1> [wait: 1|0|2] -- writes a
 # script that runs one section whose leaf signals the whole process group,
 # then touches an `after` marker. The marker exists only if the run continued.
 # pipe=1 pipes the section through tee, as run_update's sections are; pipe=0
@@ -39,7 +39,10 @@ teardown() {
 # wait4 with its wait handler installed; until then the shell's SIGINT is at
 # the default action. The poll gives up after 500 tries and signals anyway:
 # 5 s of sleep, but each try also forks ps, so wall-clock is several times that.
-# wait=0 drops the poll; only the positive control below uses it.
+# wait=0 drops the poll. wait=2 inverts it, for the negative control below: the
+# leaf is a forked subshell (no exec, so no startup cost to lose the race with)
+# that signals only once its parent is provably inside the gap, i.e. stopped by
+# strace's injected delay (ps state t, tracing stop), and never otherwise.
 _signal_fixture() {
   local _install="$1" _sig="$2" _pipe="$3" _wait="${4:-1}" _f="${BATS_TEST_TMPDIR}/fixture.sh"
   local _poll='_i=0; until [[ $(ps -o stat= -p $PPID) == *S* ]] || (( ++_i > 500 )); do sleep 0.01; done; '
@@ -47,7 +50,13 @@ _signal_fixture() {
   {
     printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
     [[ ${_install} -eq 1 ]] && printf '_update_trap_sigint\n'
-    printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; ${_poll}kill -${_sig} 0; sleep 2"
+    if [[ ${_wait} -eq 2 ]]; then
+      # $$ is the fixture shell inside the subshell. Builtin read, no fork: a
+      # forked ps could itself outlast the delay it is watching for.
+      printf '%s\n' "_leaf() { ( trap 'exit 1' INT TERM; _i=0; until { read -r _ _ _st _ < /proc/\$\$/stat; [[ \${_st} == t ]]; } || (( ++_i > 300000 )); do :; done; [[ \${_st} == t ]] || exit 3; kill -${_sig} 0; sleep 2 ); }"
+    else
+      printf '_leaf() { bash -c %q; }\n' "trap 'exit 1' INT TERM; ${_poll}kill -${_sig} 0; sleep 2"
+    fi
     if [[ ${_pipe} -eq 1 ]]; then
       printf '_leaf 2>&1 | tee %q > /dev/null\n' "${BATS_TEST_TMPDIR}/tee_out"
     else
@@ -69,10 +78,10 @@ _signal_fixture() {
 # handler that lets it outlive a child's SIGINT only after forking that child,
 # just before wait4. A leaf that signals inside that gap kills the fixture
 # shell (130): the CI-only failure of the control above (dotfiles#348). strace
-# delays every rt_sigaction the fixture shell makes, holding the gap open; the
-# leaf must wait it out. The positive control proves the delay opens the gap
-# here, so a pass of the first test is not a pass of a race never run.
-_DELAY_SIGACTION=(strace -I4 -o /dev/null -e trace=rt_sigaction -e inject=rt_sigaction:delay_enter=20000)
+# holds the gap open by delaying the one rt_sigaction call that installs the
+# wait handler, for 300 ms (_gap_delay, below); the leaf must wait it out. Both
+# tests below run under that same delay: the negative control proves it opens
+# the gap here, so a pass of the first test is not a pass of a race never run.
 
 _skip_unless_strace() {
   [[ "$(uname -s)" == Linux ]] || skip "strace delay injection is Linux-only"
@@ -81,22 +90,56 @@ _skip_unless_strace() {
 
 @test "control: the leaf waits for the fixture shell's wait handler before signalling" {
   _skip_unless_strace
-  run _in_new_session "$(_signal_fixture 0 INT 0)" "${_DELAY_SIGACTION[@]}"
+  _gap_delay
+  run _in_new_session "$(_signal_fixture 0 INT 0)" "${_GAP_DELAY[@]}"
   [ "$status" -eq 0 ]
   [ "$output" = "0" ]
   [ -e "${BATS_TEST_TMPDIR}/after" ]
 }
 
-# The delay holds the gap for 20 ms; a leaf starved of CPU for longer misses
-# it, so this control takes up to three tries. The test above needs no retry:
-# its leaf waits for the parent however long scheduling takes.
+# _gap_sigaction_index -- the ordinal of the rt_sigaction call that installs the
+# fixture shell's wait handler for the leaf: the first one after the leaf's fork.
+# Counted from a dry run of the same prelude (source, then one fork), because
+# the fixture shell makes about thirty such calls and delaying them all for
+# long would cost seconds. Prints nothing if the trace has no fork.
+_gap_sigaction_index() {
+  local _probe="${BATS_TEST_TMPDIR}/probe.sh" _log="${BATS_TEST_TMPDIR}/probe.strace"
+  {
+    printf 'source %q\n' "${REPO_ROOT}/setup_env.sh"
+    printf '_leaf() { bash -c true; }\n_leaf > /dev/null 2>&1\n'
+  } > "${_probe}"
+  # Through _in_new_session, as the real run is: a shell that starts with SIGINT
+  # ignored (bats does this) makes more rt_sigaction calls and counts differently.
+  _in_new_session "${_probe}" strace -o "${_log}" -e trace=rt_sigaction,clone,clone3,vfork > /dev/null
+  awk '/^(clone|clone3|vfork)\(/ { at = n; forked = 1 } /^rt_sigaction\(/ { n++ } END { if (forked) print at + 1 }' "${_log}"
+}
+
+# _gap_delay -- sets _GAP_DELAY to the strace argv that holds that one call for
+# 300 ms. A working strace whose dry run shows no fork is an unknown, not a
+# missing tool, so it fails the test rather than skipping it.
+_gap_delay() {
+  local _n
+  _n="$(_gap_sigaction_index)" || _n=""
+  [[ ${_n} =~ ^[0-9]+$ ]] || { printf 'no fork in the dry-run strace of the fixture prelude\n' >&2; return 1; }
+  _GAP_DELAY=(strace -I4 -o /dev/null -e trace=rt_sigaction -e "inject=rt_sigaction:delay_enter=300000:when=${_n}")
+}
+
+# The leaf signals only after reading the fixture shell's state as t (tracing
+# stop) from /proc: positive evidence that the shell sits in the gap before its
+# wait handler. The delay is held on that one rt_sigaction call, for 300 ms: a
+# bound on how late a starved leaf may be, not a race it must win. A fixed 20 ms
+# on every call lost the race on a starved 2-vCPU runner, all three tries
+# (dotfiles#473). Three tries remain as a backstop for a leaf preempted for the
+# whole 300 ms. Mutations: no delay, or a leaf that waits for state S, each
+# leave the shell alive (status 0) and fail the test.
 @test "control: with the delay and no wait, the leaf's SIGINT kills the fixture shell" {
   _skip_unless_strace
   local _fixture _try _rc=""
-  _fixture="$(_signal_fixture 0 INT 0 0)"
+  _gap_delay
+  _fixture="$(_signal_fixture 0 INT 0 2)"
   for _try in 1 2 3; do
     rm -f "${BATS_TEST_TMPDIR}/after"
-    _rc="$(_in_new_session "${_fixture}" "${_DELAY_SIGACTION[@]}")"
+    _rc="$(_in_new_session "${_fixture}" "${_GAP_DELAY[@]}")"
     [[ ${_rc} == 130 ]] && break
   done
   [ "${_rc}" = "130" ]
