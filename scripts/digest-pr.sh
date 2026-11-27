@@ -90,11 +90,16 @@ digest_pr() {
   # `gh pr create --head` opens whatever the branch tip is when it runs, not the
   # commit the scope check read. A push that landed in between must not ride along:
   # refuse unless origin's tip is still exactly _sha (also refuses a deleted branch).
-  _tip="$(git ls-remote origin "refs/heads/${_branch}")" || {
+  # Fetch the exact ref, never `git ls-remote`: ls-remote matches on the tail of the
+  # name, so a decoy refs/heads/a/refs/heads/<branch> would be read in its place.
+  git fetch -q origin "refs/heads/${_branch}" || {
     printf 'Error: cannot read the tip of %s on origin; not opening a PR blind\n' "${_branch}" >&2
     return 1
   }
-  _tip="${_tip%%[[:space:]]*}"
+  _tip="$(git rev-parse --verify -q FETCH_HEAD)" || {
+    printf 'Error: cannot read the tip of %s on origin; not opening a PR blind\n' "${_branch}" >&2
+    return 1
+  }
   if [[ "${_tip}" != "${_sha}" ]]; then
     printf 'Error: refusing %s: its tip on origin is %s, not the checked commit %s\n' "${_branch}" "${_tip:-<absent>}" "${_sha}" >&2
     return 1

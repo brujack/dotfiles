@@ -227,18 +227,34 @@ run_digest_pr() {
   run ! grep -q 'pr create' "${GH_CALLS}"
 }
 
+@test "digest-pr refuses when a decoy ref ending in the branch name points at the checked sha" {
+  commit_file docs/anthropic-new-features/f.md
+  local _checked
+  _checked="$(head_sha)"
+  # A ref whose name ends in refs/heads/<branch> sorts before the real one and
+  # matches a tail-matching lookup (git ls-remote). Only the exact ref may count.
+  git -C "${WORK}" push -q -f origin "HEAD:refs/heads/a/refs/heads/digest/anthropic-2026-11-23"
+  commit_file scripts/evil.sh
+  git -C "${WORK}" push -q -f origin "HEAD:refs/heads/digest/anthropic-2026-11-23"
+  NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23 "${_checked}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"tip"*"${_checked}"* ]]
+  run ! grep -q 'pr create' "${GH_CALLS}"
+}
+
 @test "digest-pr refuses, creating nothing, when the branch is absent from origin" {
   commit_file docs/anthropic-new-features/f.md
   NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23
   [ "${status}" -eq 1 ]
+  [[ "${output}" == *"cannot read the tip of digest/anthropic-2026-11-23"* ]]
   run ! grep -q 'pr create' "${GH_CALLS}"
 }
 
-@test "digest-pr fails closed, creating nothing, when git ls-remote fails" {
+@test "digest-pr fails closed, creating nothing, when the branch tip cannot be fetched" {
   commit_file docs/anthropic-new-features/f.md
   local _real
   _real="$(command -v git)"
-  printf '#!/usr/bin/env bash\n[[ "$1" == ls-remote ]] && exit 128\nexec %q "$@"\n' "${_real}" > "${BATS_TEST_TMPDIR}/bin/git"
+  printf '#!/usr/bin/env bash\n[[ "$1" == fetch && "$*" == *refs/heads/digest/* ]] && exit 128\nexec %q "$@"\n' "${_real}" > "${BATS_TEST_TMPDIR}/bin/git"
   chmod +x "${BATS_TEST_TMPDIR}/bin/git"
   run_digest_pr digest/anthropic-2026-11-23
   [ "${status}" -eq 1 ]
