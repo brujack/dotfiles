@@ -338,50 +338,138 @@ SEED
 # assert_no_real_root_paths (tests/helpers/common.bash) judges a test only when
 # its file's teardown() calls it, so each file that calls load_mocks must.
 
-# The lines of <file>'s teardown() body.
+# The lines of <file>'s teardown() body, without comment and blank lines.
 _teardown_body() {
-  awk '/^teardown\(\) *\{/ { in_body = 1; next } in_body && /^\}/ { exit } in_body' "$1"
+  awk '/^teardown\(\) *\{/ { in_body = 1; next } in_body && /^\}/ { exit } in_body' "$1" \
+    | command grep -vE '^[[:space:]]*(#|$)'
 }
 
-# Print each given file that calls load_mocks but whose teardown() does not call
-# assert_no_real_root_paths on an uncommented line. A file that only mentions
-# load_mocks in a comment or a quoted string is not a caller.
+# True when <file> calls load_mocks as a command: at the start of a line or after
+# `&&`, `||`, `;`, `then`, `do`, `if`, `run`, `!` or `{`, and not on a comment
+# line. A mention in a comment, a test name or a quoted string is not a call.
+_calls_load_mocks() {
+  command grep -vE '^[[:space:]]*#' "$1" \
+    | command grep -qE '(^|&&|\|\||;|\<then|\<do|\<if|\<run|!|\{)[[:space:]]*load_mocks([[:space:];&|)]|$)'
+}
+
+# True when <file>'s teardown() calls assert_no_real_root_paths in a form that
+# fails the test. bats ignores a failing command in teardown unless it is the
+# last one, so the call sits at the body's top level (two-space indent) as
+#   (a) `assert_no_real_root_paths || return 1`,
+#   (b) `assert_no_real_root_paths || _root_paths=1` with a later
+#       `return "${_root_paths}"`, or
+#   (c) a bare call that is the last statement of the body.
+# `|| true`, a quoted mention, a call nested in a conditional and a redefinition
+# of the function in the file all fail. Redefinition and nesting are matched by
+# shape, not parsed; the fixtures below pin each.
+_teardown_guard_effective() {
+  local _f="$1" _line _i _guard_at=-1 _form=""
+  local -a _body=()
+  ! command grep -qE '^[[:space:]]*(function[[:space:]]+)?assert_no_real_root_paths[[:space:]]*(\(\))?[[:space:]]*\{' "${_f}" || return 1
+  mapfile -t _body < <(_teardown_body "${_f}")
+  for _i in "${!_body[@]}"; do
+    _line="${_body[${_i}]}"
+    case "${_line}" in
+      '  assert_no_real_root_paths || return 1') _guard_at="${_i}"; _form=a ;;
+      '  assert_no_real_root_paths || _root_paths=1') _guard_at="${_i}"; _form=b ;;
+      '  assert_no_real_root_paths') _guard_at="${_i}"; _form=c ;;
+    esac
+  done
+  case "${_form}" in
+    a) return 0 ;;
+    c) (( _guard_at == ${#_body[@]} - 1 )) ;;
+    b)
+      for (( _i = _guard_at + 1; _i < ${#_body[@]}; _i++ )); do
+        [[ ${_body[${_i}]} == '  return "${_root_paths}"' ]] && return 0
+      done
+      return 1 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Print each given file that calls load_mocks but whose teardown() lacks an
+# effective guard.
 _files_missing_root_guard() {
   local _f
   for _f in "$@"; do
     [[ -r ${_f} ]] || { printf '_files_missing_root_guard: cannot read %s\n' "${_f}" >&2; return 2; }
-    command grep -qE '^[[:space:]]+(run[[:space:]]+)?load_mocks([[:space:]]|$)' "${_f}" || continue
-    _teardown_body "${_f}" | command grep -qE '^[^#]*assert_no_real_root_paths' || printf '%s\n' "${_f}"
+    _calls_load_mocks "${_f}" || continue
+    _teardown_guard_effective "${_f}" || printf '%s\n' "${_f}"
   done
 }
 
-@test "the root-guard wiring check flags a load_mocks file whose teardown lacks the guard" {
-  local _d="${BATS_TEST_TMPDIR}/wiring"
+# A fixture file: setup calls load_mocks, teardown holds the given body lines.
+_wiring_fixture() {
+  local _name="$1"
+  shift
+  { printf 'setup() {\n  load_mocks\n}\nteardown() {\n'; printf '%s\n' "$@"; printf '}\n'; } \
+    > "${BATS_TEST_TMPDIR}/wiring/${_name}.bats"
+}
+
+@test "the root-guard wiring check passes the three effective forms and flags every other shape" {
+  local _d="${BATS_TEST_TMPDIR}/wiring" _n
   mkdir -p "${_d}"
-  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  assert_no_real_root_paths || return 1\n}\n' > "${_d}/wired.bats"
+  # Effective.
+  _wiring_fixture good_a '  assert_no_real_root_paths || return 1' '  rm -f x'
+  _wiring_fixture good_b '  local _root_paths=0' '  assert_no_real_root_paths || _root_paths=1' '  rm -f x' '  return "${_root_paths}"'
+  _wiring_fixture good_c '  rm -f x' '  # trailing comment' '  assert_no_real_root_paths' ''
+  # Ineffective.
+  _wiring_fixture bare_not_last '  assert_no_real_root_paths' '  rm -f x'
+  _wiring_fixture or_true '  assert_no_real_root_paths || true'
+  _wiring_fixture quoted '  : "assert_no_real_root_paths"'
+  _wiring_fixture comment_only '  # assert_no_real_root_paths || return 1' '  :'
+  _wiring_fixture nested '  if false; then' '    assert_no_real_root_paths || return 1' '  fi'
+  _wiring_fixture b_without_return '  local _root_paths=0' '  assert_no_real_root_paths || _root_paths=1' '  rm -f x'
+  _wiring_fixture teardown_without '  rm -f x'
+  _wiring_fixture redefined '  assert_no_real_root_paths || return 1'
+  printf 'assert_no_real_root_paths() { return 0; }\n' >> "${_d}/redefined.bats"
   printf 'setup() {\n  load_mocks\n}\n' > "${_d}/no_teardown.bats"
-  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  rm -f x\n}\n' > "${_d}/teardown_without.bats"
-  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  # assert_no_real_root_paths\n  :\n}\n' > "${_d}/commented.bats"
   printf 'setup() {\n  load_mocks\n}\nteardown() {\n  :\n}\n@test "x" {\n  assert_no_real_root_paths\n}\n' > "${_d}/in_test_body.bats"
   printf '# load_mocks is not called here\nsetup() {\n  :\n}\n' > "${_d}/mention_only.bats"
   run _files_missing_root_guard "${_d}"/*.bats
   [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 4 ]
-  [[ "${output}" == *"no_teardown.bats"* && "${output}" == *"teardown_without.bats"* ]]
-  [[ "${output}" == *"commented.bats"* && "${output}" == *"in_test_body.bats"* ]]
-  [[ "${output}" != *"/wired.bats"* ]]
+  for _n in bare_not_last or_true quoted comment_only nested b_without_return teardown_without redefined no_teardown in_test_body; do
+    [[ "${output}" == *"/${_n}.bats"* ]] || { printf 'not flagged: %s\n' "${_n}" >&2; return 1; }
+  done
+  for _n in good_a good_b good_c mention_only; do
+    [[ "${output}" != *"/${_n}.bats"* ]] || { printf 'wrongly flagged: %s\n' "${_n}" >&2; return 1; }
+  done
+  [ "${#lines[@]}" -eq 10 ]
   run _files_missing_root_guard "${_d}/absent.bats"
   [ "${status}" -eq 2 ]
+}
+
+@test "the load_mocks detector matches every command position and ignores comments and strings" {
+  local _d="${BATS_TEST_TMPDIR}/detect" _n
+  mkdir -p "${_d}"
+  printf 'setup() {\n  load_mocks\n}\n' > "${_d}/plain.bats"
+  printf 'setup() {\n  load_mocks;\n}\n' > "${_d}/semicolon.bats"
+  printf 'setup() {\n  if load_mocks; then :; fi\n}\n' > "${_d}/if_form.bats"
+  printf 'setup() {\n  true && load_mocks\n}\n' > "${_d}/and_form.bats"
+  printf 'setup() {\n  false || load_mocks\n}\n' > "${_d}/or_form.bats"
+  printf 'setup() {\n  run load_mocks\n}\n' > "${_d}/run_form.bats"
+  printf 'setup() {\n  # load_mocks\n  :\n}\n' > "${_d}/comment.bats"
+  printf '@test "load_mocks writes nothing" {\n  :\n}\n' > "${_d}/test_name.bats"
+  printf 'setup() {\n  printf "%%s\\n" "call load_mocks here"\n}\n' > "${_d}/quoted.bats"
+  for _n in plain semicolon if_form and_form or_form run_form; do
+    _calls_load_mocks "${_d}/${_n}.bats" || { printf 'missed: %s\n' "${_n}" >&2; return 1; }
+  done
+  for _n in comment test_name quoted; do
+    ! _calls_load_mocks "${_d}/${_n}.bats" || { printf 'wrongly matched: %s\n' "${_n}" >&2; return 1; }
+  done
 }
 
 # bats_only_seams.bats proves production paths win outside bats, so its recorder
 # functions (a non-exec sudo, apt and keyring writers) name /etc, /usr/local and
 # /usr/share/keyrings by design on every test; the guard cannot apply there.
+# This file is skipped too: its fixture strings spell out load_mocks calls and it
+# never calls load_mocks itself.
 @test "every bats file that calls load_mocks guards its teardown against real root paths" {
   local -a _files=()
   local _f
   while IFS= read -r -d '' _f; do
-    [[ ${_f} == tests/setup_env/bats_only_seams.bats ]] || _files+=("${REPO_ROOT}/${_f}")
+    [[ ${_f} == tests/setup_env/bats_only_seams.bats || ${_f} == tests/suite_isolation.bats ]] \
+      || _files+=("${REPO_ROOT}/${_f}")
   done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" ls-files -z '*.bats')
   [ "${#_files[@]}" -gt 100 ]
   run _files_missing_root_guard "${_files[@]}"

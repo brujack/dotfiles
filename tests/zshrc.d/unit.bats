@@ -5,6 +5,8 @@ setup() {
   ZSHRC_D="${REPO_ROOT}/.config/.zshrc.d"
   source "${REPO_ROOT}/tests/helpers/common.bash"
   _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
+  # These sites reset PATH to the four system dirs, sbin included.
+  _SYS_PATH_SBIN="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)" || return 1
   # F16 (security audit 2026-11-16; spec docs/superpowers/specs/2026-11-21-bats-sentinel-home-design.md): the sourced zsh config self-heals ~/.oh-my-zsh and runs rbenv init;
   # keep both inside this test's own HOME, never the suite's shared one.
   export HOME="${BATS_TEST_TMPDIR}/home"
@@ -467,7 +469,7 @@ EOF
 
 @test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
   run zsh -c "
-    export PATH='${_SYS_PATH}'
+    export PATH='${_SYS_PATH_SBIN}'
     unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
@@ -572,7 +574,7 @@ EOF
   mkdir -p "${_fake_home}/.local/bin"
 
   run zsh -c "
-    export PATH='${_SYS_PATH}'
+    export PATH='${_SYS_PATH_SBIN}'
     unset MACOS
     export HOME='${_fake_home}'
     export LINUX=1
@@ -607,7 +609,7 @@ EOF
   mkdir -p "${_fake_home}/.local/bin"
 
   run zsh -c "
-    export PATH='${_SYS_PATH}'
+    export PATH='${_SYS_PATH_SBIN}'
     unset LINUX
     export MACOS=1
     export HOME='${_fake_home}'
@@ -626,7 +628,7 @@ EOF
   _fake_home="$(mktemp -d)"
 
   run zsh -c "
-    export PATH='${_SYS_PATH}'
+    export PATH='${_SYS_PATH_SBIN}'
     unset LINUX
     export MACOS=1
     export HOME='${_fake_home}'
@@ -819,7 +821,7 @@ EOF
   [[ -n "${_gnubin:-}" ]] || skip "no GNU sort in: ${_candidates[*]} -- this assertion did not run, so a green suite here is not evidence for it"
 
   run zsh -c "
-    export PATH='${_SYS_PATH}'
+    export PATH='${_SYS_PATH_SBIN}'
     unset MACOS LINUX
     export LINUX=1
     export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
