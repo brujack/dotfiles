@@ -37,6 +37,15 @@ setup_suite() {
     fi
     mkdir -p "${HOME}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}" \
         "${XDG_STATE_HOME}" "${PARALLEL_HOME}"
+    # The real sudo must be unreachable from every test, including files that never
+    # call load_mocks: a lib function writing as root (`_as=(sudo)`, `sudo install`)
+    # otherwise reaches /usr/bin/sudo, which is passwordless on the fleet and
+    # once left root-owned stubs in /usr/local/bin. A refusing stub heads PATH;
+    # tests/mocks (load_mocks) and recorder functions still take precedence.
+    mkdir -p "${_BATS_SENTINEL}/nosudo"
+    printf '#!/bin/sh\necho "REAL SUDO BLOCKED $*" >&2\nexit 97\n' > "${_BATS_SENTINEL}/nosudo/sudo"
+    chmod +x "${_BATS_SENTINEL}/nosudo/sudo"
+    export PATH="${_BATS_SENTINEL}/nosudo:${PATH}"
 }
 
 teardown_suite() {

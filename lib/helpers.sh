@@ -541,9 +541,9 @@ _bats_seam() {
 # _install_uv_pinned_for <Linux|Darwin>
 # Installs the pinned uv under ~/.local/share/dotfiles/pinned/uv-<UV_VER>/ (the
 # path resolve_pinned_uv reads) via _install_pinned_release_binary. A platform
-# with no pin warns and returns 0. The destination is passed as an argument, because
-# _RELEASE_BIN_DIR is honoured only under bats and this path must hold outside it. _UV_PINNED_URL/_UV_PINNED_SHA256 are
-# honoured only under bats (the _HASHICORP_SOURCE_DIR precedent): an ambient
+# with no pin warns and returns 0. The destination is passed as the seventh
+# argument, because _RELEASE_BIN_DIR is honoured only under bats and this path
+# must hold outside it. _UV_PINNED_URL/_UV_PINNED_SHA256 are honoured only under bats (the _HASHICORP_SOURCE_DIR precedent): an ambient
 # export must never replace the in-repo digest on a real download.
 _install_uv_pinned_for() {
   local _os="$1" _asset _sha

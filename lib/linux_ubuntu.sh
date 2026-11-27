@@ -692,7 +692,8 @@ _go_verify() {
 # written only after the swap succeeded, so an interrupted run installs again
 # next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
-# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN,
+# Seams, read at call time: _DL_STAMP_DIR, and _GO_INSTALL_ROOT and _DL_TAR_BIN,
+# which are honoured only under bats (a root path and the extractor), and
 # _GO_SHA256 (overrides the per-arch GO_SHA256_* pin under bats only; empty means unset). The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
 # No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
@@ -1863,8 +1864,9 @@ _release_asset_sha() {
 # Returns 0 installed, up to date, or kept; 1 on bad arguments, a refusal or a
 # failed stage (named in a warning). A stamp that cannot be written warns and
 # still returns 0.
-# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, _DL_BIN_DIR,
-# _DL_UNZIP_BIN, _DL_TAR_BIN. _FETCHED_URL and _FETCHED_SHA256 replace the URL
+# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, and _DL_BIN_DIR,
+# _DL_UNZIP_BIN and _DL_TAR_BIN, which are honoured only under bats (a root
+# path and the extractors). _FETCHED_URL and _FETCHED_SHA256 replace the URL
 # and pin (and skip the _FOR_VER check) but are honoured only under bats, so a
 # stray export in an interactive shell cannot swap these tools' pins. No
 # EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path below
@@ -1963,7 +1965,7 @@ _install_fetched_binary() {
   else
     mkdir -p "${_tmp}/x"
     if [[ ${_kind} == "zip" ]]; then
-      "${_DL_UNZIP_BIN:-unzip}" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
+      "$(_bats_seam "${_DL_UNZIP_BIN:-}" unzip)" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
     else
       "$(_bats_seam "${_DL_TAR_BIN:-}" tar)" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
     fi
