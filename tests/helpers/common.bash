@@ -163,6 +163,20 @@ load_mocks() {
   # them before the step runs sees an empty directory, not a missing one.
   export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
+  # The apt source, trusted-key, edge, docker and daemon.json paths are read and
+  # removed as root (`sudo rm -f`, `sudo tee`, `sudo -H cat`) through the same
+  # exec-ing sudo mock, so an e2e install path would otherwise name the real /etc
+  # and /usr/share/keyrings. Each seam is honoured only under bats. Fixture
+  # directories are created lazily by the code under test, except where a test
+  # reads them first. assert_no_real_root_paths (teardown) enforces all of this.
+  export _APT_SOURCES_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-sources"
+  export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-trusted"
+  export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/edge-sources"
+  export _EDGE_BOOTSTRAP_KEYRING="${BATS_TEST_TMPDIR:-/nonexistent}/edge-bootstrap.gpg"
+  export _DOCKER_KEYRING="${BATS_TEST_TMPDIR:-/nonexistent}/docker/keyrings/docker.asc"
+  export _DOCKER_SOURCES_LIST="${BATS_TEST_TMPDIR:-/nonexistent}/docker/sources.list.d/docker.list"
+  export _DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR:-/nonexistent}/docker/daemon.json"
+  export _OVERRIDE_DOCKER_DAEMON_JSON="${BATS_TEST_TMPDIR:-/nonexistent}/docker/daemon.json"
   # Every run_update/run_setup_user test runs under a redirected HOME with no
   # settings file; point the claude plugin manifest reader at a per-test COPY
   # of the fixture under BATS_TEST_TMPDIR, never the tracked file itself.
@@ -181,6 +195,29 @@ load_mocks() {
   # tee/rm resolve to logging mocks, which append to MOCK_CALLS_FILE (default
   # /tmp/mock_calls, outside the test tmpdir) when a test has not set it yet.
   export PATH="${REPO_ROOT}/tests/mocks:${PATH}"
+}
+
+# Fail when any recorded mock call names a real root-owned path. tests/mocks/sudo
+# and the logging tee/rm/mkdir mocks exec real commands, so such a call either
+# touched the host or only failed because the user cannot write there; neither
+# is acceptable. Point the seam at a fixture under BATS_TEST_TMPDIR instead.
+# Scans ${MOCK_CALLS_FILE}; prints each offending line and returns 1.
+assert_no_real_root_paths() {
+  local _calls="${MOCK_CALLS_FILE:-}" _hits
+  [[ -n ${_calls} && -f ${_calls} ]] || return 0
+  # Allow-list, each entry a read-only probe or an inert argument the code
+  # cannot redirect (no seam exists, and none may be added to production code
+  # for a test):
+  #  - `awk ... /etc/os-release`: read-only OS-name probe (detect_env, helpers).
+  #  - `sudo -H <tmp>/software_downloads/awscli/aws/install --install-dir
+  #    /usr/local/aws-cli --bin-dir /usr/local/bin`: the installer is a path in
+  #    the test HOME that never exists under the mocked unzip, so tests/mocks/sudo
+  #    does not exec it; /usr/local/* are flag values, not read or write targets.
+  local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$'
+  _hits="$(command grep -E '(^|[ =\[])(/etc/|/usr/local/|/usr/share/keyrings/|/opt/)' "${_calls}" | command grep -v -E "${_allow}")" || return 0
+  [[ -n ${_hits} ]] || return 0
+  printf 'mock calls named real root-owned paths:\n%s\n' "${_hits}" >&2
+  return 1
 }
 
 # Assert a pattern is ABSENT from a file.

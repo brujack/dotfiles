@@ -68,7 +68,7 @@ setup() {
 teardown() {
   # Defined only once a test has sourced tests/helpers/http_listener.bash.
   if declare -F stop_http_listener >/dev/null; then stop_http_listener; fi
-  return 0
+  assert_no_real_root_paths
 }
 
 # ── _cheat_fetch ──────────────────────────────────────────────────────────────
@@ -1066,6 +1066,42 @@ nvidia" ]
   [[ "$output" != *"MISC_STEP_RAN"* ]]
 }
 
+# ── no real root-owned paths ──────────────────────────────────────────────────
+# teardown() runs assert_no_real_root_paths after every test in this file; these
+# tests name the representative end-to-end paths explicitly and prove the
+# assertion can fail. Fixtures redirect via load_mocks (tests/helpers/common.bash).
+
+@test "root-path guard: run_setup_or_developer on Ubuntu records no real /etc, /usr or /opt path" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1 SETUP=1 HAS_DOCKER=1
+  run run_setup_or_developer
+  [ -s "${MOCK_CALLS_FILE}" ]
+  assert_no_real_root_paths
+}
+
+@test "root-path guard: install_ubuntu_packages with docker records no real /etc, /usr or /opt path" {
+  unset MACOS
+  export LINUX=1 UBUNTU=1 NOBLE=1 HAS_DOCKER=1
+  run install_ubuntu_packages
+  grep -q "apt update" "${MOCK_CALLS_FILE}"
+  assert_no_real_root_paths
+}
+
+@test "root-path guard: assert_no_real_root_paths fails on a recorded real-path call and names it" {
+  printf 'sudo -H cat /etc/docker/daemon.json\n' >> "${MOCK_CALLS_FILE}"
+  run assert_no_real_root_paths
+  [ "$status" -eq 1 ]
+  [[ $output == *"/etc/docker/daemon.json"* ]]
+  : > "${MOCK_CALLS_FILE}"
+}
+
+@test "root-path guard: the two allow-listed read-only or inert calls pass" {
+  printf 'awk -F= /^NAME/{print $2} /etc/os-release\n' >> "${MOCK_CALLS_FILE}"
+  printf 'sudo -H %s/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin\n' "${HOME}" >> "${MOCK_CALLS_FILE}"
+  run assert_no_real_root_paths
+  [ "$status" -eq 0 ]
+}
+
 # ── install_ubuntu_packages ───────────────────────────────────────────────────
 
 @test "install_ubuntu_packages calls apt update on Ubuntu Noble" {
@@ -1075,8 +1111,6 @@ nvidia" ]
   export NOBLE=1
   # Create mock xargs files to prevent xargs errors
   touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
-  # Create directory for apt sources
-  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
   run install_ubuntu_packages
   grep -q "apt update" "${MOCK_CALLS_FILE}"
 }
@@ -1088,8 +1122,6 @@ nvidia" ]
   export NOBLE=1
   # Create mock xargs files to prevent xargs errors
   touch ubuntu_common_packages.txt ubuntu_2404_packages.txt
-  # Create directory for apt sources
-  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
   run install_ubuntu_packages
   grep -q "nala" "${MOCK_CALLS_FILE}"
 }
@@ -1102,8 +1134,6 @@ nvidia" ]
   export HAS_SNAP=1
   # Create mock xargs files to prevent xargs errors
   touch ubuntu_common_packages.txt ubuntu_2404_packages.txt ubuntu_workstation_packages.txt ubuntu_workstation_snap_packages.txt
-  # Create directory for apt sources
-  mkdir -p /etc/apt/sources.list.d /etc/apt/keyrings /etc/apt/trusted.gpg.d 2>/dev/null || true
   run install_ubuntu_packages
   grep -q "snap" "${MOCK_CALLS_FILE}"
 }
