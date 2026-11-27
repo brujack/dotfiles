@@ -65,8 +65,13 @@ head_sha() {
 }
 
 # run_digest_pr <branch> [<sha>]: run the script from the checkout, as the workflow does.
+# The routine has pushed the branch by then, so HEAD is pushed to origin first
+# (digest/* names only: never master) unless a test sets NO_BRANCH_PUSH=1.
 run_digest_pr() {
   cd "${WORK}" || return 1
+  if [[ -z "${NO_BRANCH_PUSH:-}" && "$1" == digest/* ]]; then
+    git -C "${WORK}" push -q -f origin "HEAD:refs/heads/$1" 2>/dev/null || true
+  fi
   run bash "${SCRIPT}" "$1" "${2:-$(head_sha)}"
 }
 
@@ -207,4 +212,36 @@ run_digest_pr() {
   run bash "${SCRIPT}" digest/anthropic-2026-11-23
   [ "${status}" -eq 2 ]
   [ ! -s "${GH_CALLS}" ]
+}
+
+@test "digest-pr refuses, creating nothing, when the branch tip moved past the checked sha" {
+  commit_file docs/anthropic-new-features/f.md
+  local _checked
+  _checked="$(head_sha)"
+  git -C "${WORK}" push -q -f origin "HEAD:refs/heads/digest/anthropic-2026-11-23"
+  commit_file scripts/evil.sh
+  git -C "${WORK}" push -q -f origin "HEAD:refs/heads/digest/anthropic-2026-11-23"
+  NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23 "${_checked}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"tip"*"${_checked}"* ]]
+  run ! grep -q 'pr create' "${GH_CALLS}"
+}
+
+@test "digest-pr refuses, creating nothing, when the branch is absent from origin" {
+  commit_file docs/anthropic-new-features/f.md
+  NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23
+  [ "${status}" -eq 1 ]
+  run ! grep -q 'pr create' "${GH_CALLS}"
+}
+
+@test "digest-pr fails closed, creating nothing, when git ls-remote fails" {
+  commit_file docs/anthropic-new-features/f.md
+  local _real
+  _real="$(command -v git)"
+  printf '#!/usr/bin/env bash\n[[ "$1" == ls-remote ]] && exit 128\nexec %q "$@"\n' "${_real}" > "${BATS_TEST_TMPDIR}/bin/git"
+  chmod +x "${BATS_TEST_TMPDIR}/bin/git"
+  run_digest_pr digest/anthropic-2026-11-23
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"cannot read"*"origin"* ]]
+  run ! grep -q 'pr create' "${GH_CALLS}"
 }

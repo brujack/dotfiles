@@ -20,7 +20,7 @@ digest_pr() {
     return 2
   fi
   local _branch="$1" _sha="$2" _repo="${GITHUB_REPOSITORY:-}"
-  local _kind _date _dir _name _title _files _f _count
+  local _kind _date _dir _name _title _files _f _count _tip
 
   if [[ ! "${_branch}" =~ ^digest/(anthropic|claude-code)-([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
     printf 'Error: refusing %s: not digest/(anthropic|claude-code)-YYYY-MM-DD\n' "${_branch}" >&2
@@ -84,6 +84,19 @@ digest_pr() {
   if [[ "${_count}" -gt 0 ]]; then
     printf 'A PR for %s is already open; nothing to do\n' "${_branch}"
     return 0
+  fi
+
+  # `gh pr create --head` opens whatever the branch tip is when it runs, not the
+  # commit the scope check read. A push that landed in between must not ride along:
+  # refuse unless origin's tip is still exactly _sha (also refuses a deleted branch).
+  _tip="$(git ls-remote origin "refs/heads/${_branch}")" || {
+    printf 'Error: cannot read the tip of %s on origin; not opening a PR blind\n' "${_branch}" >&2
+    return 1
+  }
+  _tip="${_tip%%[[:space:]]*}"
+  if [[ "${_tip}" != "${_sha}" ]]; then
+    printf 'Error: refusing %s: its tip on origin is %s, not the checked commit %s\n' "${_branch}" "${_tip:-<absent>}" "${_sha}" >&2
+    return 1
   fi
 
   gh pr create --repo "${_repo}" --base master --head "${_branch}" --title "${_title}" \
