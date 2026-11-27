@@ -15,6 +15,10 @@ setup() {
   printf 'W: warn line\nplain line\nE: err line\n' > "${BATS_TEST_TMPDIR}/out.txt"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "apt-get update: unset output knob prints the default line on stdout" {
   run --separate-stderr apt-get update
   [ "$status" -eq 0 ]

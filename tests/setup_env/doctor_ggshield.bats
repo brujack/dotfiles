@@ -4,6 +4,7 @@
 load '../helpers/common.bash'
 
 setup() {
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_setup_env
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}"
@@ -126,7 +127,7 @@ run_arm() {
   ln -s "${STUB}" "${_bin}/ggshield"
   unset GGSHIELD_BIN
   _DOCTOR_PASS=0; _DOCTOR_FAIL=0; _DOCTOR_WARN=0; _DOCTOR_FAILED=0
-  PATH="${_bin}:/usr/bin:/bin" _doctor_check_ggshield > "${OUT}" 2>&1
+  PATH="${_bin}:${_SYS_PATH}" _doctor_check_ggshield > "${OUT}" 2>&1
   grep -qF "${_bin}/ggshield: authenticated" "${OUT}"
   [ "${_DOCTOR_PASS}" -eq 1 ]
 }

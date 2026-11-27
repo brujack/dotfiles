@@ -32,6 +32,10 @@ setup() {
   update_rust() { printf 'update_rust\n' >> "${CALLS}"; return 0; }
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 _status() { cat "${_DOTFILES_RUN_TMPDIR}/status_$1"; }
 _result() { cat "${_DOTFILES_RUN_TMPDIR}/result_$1"; }
 

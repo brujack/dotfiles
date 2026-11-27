@@ -6,6 +6,8 @@
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   FX_HOME="${BATS_TEST_TMPDIR}/home"
   FX_ZDOT="${BATS_TEST_TMPDIR}/zdot"
   FX_PREFIX="${BATS_TEST_TMPDIR}/brew"
@@ -20,7 +22,7 @@ setup() {
 # CLAUDE_CODE_PLUGIN_DIRS is always dropped; set PLUGIN_DIRS to hand zsh one.
 _zsh() {
   env -u CLAUDE_CODE_PLUGIN_DIRS ${PLUGIN_DIRS+CLAUDE_CODE_PLUGIN_DIRS="${PLUGIN_DIRS}"} \
-    HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH=/usr/bin:/bin \
+    HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${_SYS_PATH}" \
     _OVERRIDE_HOMEBREW_PREFIX_ARM="${ARM:-${FX_PREFIX}}" \
     _OVERRIDE_HOMEBREW_PREFIX_INTEL="${INTEL:-${BATS_TEST_TMPDIR}/nonexistent}" \
     zsh "$@"
@@ -48,7 +50,7 @@ _zsh() {
   rm -rf "${FX_BIN}"
   run _zsh -c 'print -r -- $PATH'
   [ "$status" -eq 0 ]
-  [ "$output" = "/usr/bin:/bin" ]
+  [ "$output" = "${_SYS_PATH}" ]
 }
 
 @test "INTEL prefix is used when ARM prefix is absent" {
@@ -79,13 +81,13 @@ _zsh() {
   mkdir -p "${BATS_TEST_TMPDIR}/shims"
   printf '#!/bin/sh\necho INHERITED_PY3\n' > "${BATS_TEST_TMPDIR}/shims/python3"
   chmod +x "${BATS_TEST_TMPDIR}/shims/python3"
-  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:/usr/bin:/bin" \
+  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:${_SYS_PATH}" \
     _OVERRIDE_HOMEBREW_PREFIX_ARM="${FX_PREFIX}" \
     _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
     zsh -c 'python3'
   [ "$status" -eq 0 ]
   [ "$output" = "INHERITED_PY3" ]
-  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:/usr/bin:/bin" \
+  run env HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${BATS_TEST_TMPDIR}/shims:${_SYS_PATH}" \
     _OVERRIDE_HOMEBREW_PREFIX_ARM="${FX_PREFIX}" \
     _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
     zsh -c 'print -r -- $PATH'

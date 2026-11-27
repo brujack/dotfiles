@@ -3,6 +3,7 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_mocks
   load_setup_env
   TMPDIR_TEST="$(mktemp -d)"
@@ -43,6 +44,8 @@ setup() {
 teardown() {
   # Defined only once a test has sourced tests/helpers/http_listener.bash.
   declare -F stop_http_listener >/dev/null && stop_http_listener
+  local _root_paths=0
+  assert_no_real_root_paths || _root_paths=1
   rm -rf "${TMPDIR_TEST}"
   # _aws_key_make_fixture (below) spawns a real gpg-agent/scdaemon bound to
   # each homedir it creates via --quick-generate-key; kill them here rather
@@ -53,6 +56,7 @@ teardown() {
       gpgconf --homedir "${_gpg_homedir}" --kill all >/dev/null 2>&1
     done < "${BATS_TEST_TMPDIR}/_gpg_homedirs"
   fi
+  return "${_root_paths}"
 }
 
 # Real gpg is needed to read a fixture key's expiry field; tests/mocks/gpg
@@ -2078,7 +2082,7 @@ STUB
   chmod +x "${_tmp}/python3"
 
   local _saved_path="$PATH"
-  export PATH="${_tmp}:/usr/bin:/bin"
+  export PATH="${_tmp}:${_SYS_PATH}"
   local _out
   _out="$(_doctor_check_versions 2>&1)"
   export PATH="${_saved_path}"
@@ -3643,7 +3647,7 @@ _constants_arch_for() {
   mkdir -p "${d}"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "%s"\n' "$1" > "${d}/uname"
   chmod +x "${d}/uname"
-  PATH="${d}:/usr/bin:/bin" bash -c 'source "$1/lib/constants.sh"; printf "%s %s %s\n" "${_LINUX_ARCH}" "${_RUSTUP_TRIPLE}" "${_UNAME_M}"' _ "${REPO_ROOT}"
+  PATH="${d}:${_SYS_PATH}" bash -c 'source "$1/lib/constants.sh"; printf "%s %s %s\n" "${_LINUX_ARCH}" "${_RUSTUP_TRIPLE}" "${_UNAME_M}"' _ "${REPO_ROOT}"
 }
 
 @test "constants: x86_64 maps to amd64 and keeps the kernel name in the rustup triple" {

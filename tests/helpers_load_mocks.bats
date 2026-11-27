@@ -15,6 +15,10 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "load_mocks writes no mock log and leaves tests/mocks first on PATH" {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/calls"
   : > "${MOCK_CALLS_FILE}"
@@ -24,6 +28,25 @@ setup() {
     return 1
   fi
   [ "${PATH%%:*}" = "${REPO_ROOT}/tests/mocks" ]
+}
+
+# A file that never sets MOCK_CALLS_FILE inherits the suite-wide ledger that
+# setup_suite exports, shared by every file of the run, so a root-path hit in one
+# file would fail (or hide behind) another's teardown guard. load_mocks gives the
+# test its own ledger unless the caller already put one under the test tmpdir.
+@test "load_mocks: a ledger outside the test tmpdir is replaced by a per-test one" {
+  export MOCK_CALLS_FILE="${BATS_RUN_TMPDIR}/shared-suite-ledger"
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/mock_calls" ]
+  unset MOCK_CALLS_FILE
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/mock_calls" ]
+}
+
+@test "load_mocks: a ledger already under the test tmpdir is kept" {
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/calls"
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/calls" ]
 }
 
 @test "load_mocks: the five stub seams point at tracked, executable files under tests/stubs" {
@@ -252,4 +275,25 @@ _guard_scan() {
   load_mocks
   [[ ${_NVIDIA_LIBCUDA} == "${BATS_TEST_TMPDIR}/"* ]]
   [[ ! -e ${_NVIDIA_LIBCUDA} && ! -L ${_NVIDIA_LIBCUDA} ]]
+}
+
+# On a CI runner nothing sits at the real /usr/local/bin/tfenv, so an unset link
+# or release-bin seam attempts a write that `claude` (which has the file) skips.
+@test "load_mocks: the tfenv link dir and release bin dir seams are fixtures under the test tmpdir" {
+  load_mocks
+  [ "${_TFENV_LINK_DIR}" = "${BATS_TEST_TMPDIR}/tfenv-links" ]
+  [ "${_RELEASE_BIN_DIR}" = "${BATS_TEST_TMPDIR}/release-bin" ]
+  [ -d "${_TFENV_LINK_DIR}" ]
+  [ -d "${_RELEASE_BIN_DIR}" ]
+}
+
+@test "link_real_tool links a real binary without recording an ln call, unlike plain ln" {
+  load_mocks
+  : > "${MOCK_CALLS_FILE}"
+  link_real_tool "$(command -p -v env)" "${BATS_TEST_TMPDIR}/real-link"
+  [ -L "${BATS_TEST_TMPDIR}/real-link" ]
+  [ ! -s "${MOCK_CALLS_FILE}" ]
+  ln -sf "$(command -p -v env)" "${BATS_TEST_TMPDIR}/mock-link"
+  grep -q "^ln .*mock-link" "${MOCK_CALLS_FILE}"
+  : > "${MOCK_CALLS_FILE}"
 }

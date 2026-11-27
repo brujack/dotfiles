@@ -57,8 +57,12 @@ setup() {
   [[ -n "${_real_git}" ]]
   local _git_shim="${BATS_TEST_TMPDIR}/git-shim"
   mkdir -p "${_git_shim}"
-  ln -sf "${_real_git}" "${_git_shim}/git"
+  link_real_tool "${_real_git}" "${_git_shim}/git"
   export _CLAUDE_GUARD_GIT="${_git_shim}/git"
+}
+
+teardown() {
+  assert_no_real_root_paths || return 1
 }
 
 # Builds ${BATS_TEST_TMPDIR}/repo as a real git repo tracking sub/settings.json
@@ -436,8 +440,8 @@ JSON
   # _CLAUDE_GUARD_GIT seam, so it is unaffected.
   local _shim="${BATS_TEST_TMPDIR}/no-python3"
   mkdir -p "${_shim}"
-  ln -sf "$(command -v env)" "${_shim}/env"
-  ln -sf "$(command -v dirname)" "${_shim}/dirname"
+  link_real_tool "$(command -v env)" "${_shim}/env"
+  link_real_tool "$(command -v dirname)" "${_shim}/dirname"
   PATH="${_shim}" run _claude_settings_git_state
   [ "$status" -eq 0 ]
   # The path is reported unresolved -- the symlink, not its target -- because

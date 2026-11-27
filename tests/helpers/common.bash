@@ -100,7 +100,8 @@ load_mocks() {
     # directories _HASHICORP_SOURCE_DIR and _APT_KEYRINGS_DIR name below.
     mkdir -p "${BATS_TEST_TMPDIR}/sysctl.d" "${BATS_TEST_TMPDIR}/run-systemd" \
       "${BATS_TEST_TMPDIR}/tmp-mount.d" "${BATS_TEST_TMPDIR}/hashicorp-source" \
-      "${BATS_TEST_TMPDIR}/apt-keyrings"
+      "${BATS_TEST_TMPDIR}/apt-keyrings" "${BATS_TEST_TMPDIR}/tfenv-links" \
+      "${BATS_TEST_TMPDIR}/release-bin"
     export _SYSCTL_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-inotify.conf"
     export _INOTIFY_PROC="${BATS_TEST_TMPDIR}/inotify_max_user_instances"
     printf '1024\n' > "${_INOTIFY_PROC}"
@@ -163,6 +164,17 @@ load_mocks() {
   # them before the step runs sees an empty directory, not a missing one.
   export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
+  # The tfenv symlinks and the pinned release binaries land in /usr/local/bin by
+  # default, through `ln` and `install` (pass-through mocks) or `sudo` (exec-ing).
+  # Both seams are honoured only under bats; a CI runner has no real tfenv link
+  # there, so an unset seam attempts the write where `claude` skips it.
+  export _TFENV_LINK_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/tfenv-links"
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/release-bin"
+  # _install_ubuntu_nvidia reads and replaces these through sudo (`sudo rm -f
+  # <keyring>.new`), which the exec-ing mock runs for real; tests of the nvidia
+  # step set their own, but the run_* workflow tests in workflows.bats do not.
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR:-/nonexistent}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR:-/nonexistent}/nvidia-container-toolkit.list"
   # The apt source, trusted-key, edge, docker and daemon.json paths are read and
   # removed as root (`sudo rm -f`, `sudo tee`, `sudo -H cat`) through the same
   # exec-ing sudo mock, so an e2e install path would otherwise name the real /etc
@@ -198,6 +210,12 @@ load_mocks() {
   # fixture and repoint _OVERRIDE_CLAUDE_PLUGINS_FILE.
   export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-such-installed_plugins.json"
   export _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/plugin-backups"
+  # setup_suite exports one MOCK_CALLS_FILE shared by every file of the run. Give
+  # the test its own ledger unless the caller already chose one under the test
+  # tmpdir, so assert_no_real_root_paths judges this test's calls alone.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" && ${MOCK_CALLS_FILE:-} != "${BATS_TEST_TMPDIR}"/* ]]; then
+    export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  fi
   # Keep this the last statement: once tests/mocks leads PATH, chmod/cp/ln/mv/
   # tee/rm resolve to logging mocks, which append to MOCK_CALLS_FILE (default
   # /tmp/mock_calls, outside the test tmpdir) when a test has not set it yet.
@@ -208,10 +226,27 @@ load_mocks() {
 # and the logging tee/rm/mkdir mocks exec real commands, so such a call either
 # touched the host or only failed because the user cannot write there; neither
 # is acceptable. Point the seam at a fixture under BATS_TEST_TMPDIR instead.
-# Scans ${MOCK_CALLS_FILE}; prints each offending line and returns 1.
+# Scans every ledger the test could have written to: ${MOCK_CALLS_FILE}, the
+# per-test ${BATS_TEST_TMPDIR}/mock_calls load_mocks defaults to, and the
+# suite-wide ${_SUITE_MOCK_CALLS_FILE} (setup_suite) that a mock writes to when
+# MOCK_CALLS_FILE was never repointed. Prints each offending line and returns 1.
+# A test that must record a real path on purpose records it in a ledger of its
+# own, which none of these name (linux_ubuntu.bats, "inotify_conf_write: seam
+# unset ...").
 assert_no_real_root_paths() {
-  local _calls="${MOCK_CALLS_FILE:-}" _hits
-  [[ -n ${_calls} && -f ${_calls} ]] || return 0
+  local _ledger _seen=" " _rc=0
+  for _ledger in "${MOCK_CALLS_FILE:-}" "${BATS_TEST_TMPDIR:+${BATS_TEST_TMPDIR}/mock_calls}" "${_SUITE_MOCK_CALLS_FILE:-}"; do
+    [[ -n ${_ledger} && ${_seen} != *" ${_ledger} "* ]] || continue
+    _seen+="${_ledger} "
+    _root_paths_in_ledger "${_ledger}" || _rc=1
+  done
+  return "${_rc}"
+}
+
+# _root_paths_in_ledger <file> -- one ledger's scan for assert_no_real_root_paths.
+_root_paths_in_ledger() {
+  local _calls="$1" _hits
+  [[ -f ${_calls} ]] || return 0
   # Allow-list, each entry a read-only probe or an inert argument the code
   # cannot redirect (no seam exists, and none may be added to production code
   # for a test):
@@ -243,7 +278,7 @@ assert_no_real_root_paths() {
     return 1
   fi
   (( _rc == 1 )) && return 0
-  printf 'mock calls named real root-owned paths:\n%s\n' "${_hits}" >&2
+  printf 'mock calls named real root-owned paths (%s):\n%s\n' "${_calls}" "${_hits}" >&2
   return 1
 }
 
@@ -397,6 +432,17 @@ track_ai_config_fixture() {
   done < <(find "${_dir}/.claude" "${_dir}/.cursor" -type d -empty -print0)
   "${_git[@]}" init -q || return 1
   "${_git[@]}" add -A || return 1
+}
+
+# link_real_tool <target> <link> -- symlink a real binary into a shim directory.
+# Plain `ln` resolves to tests/mocks/ln once load_mocks ran, which records its
+# argv in MOCK_CALLS_FILE; on a macOS runner the real git, sleep and timeout live
+# under /opt/homebrew, so the record would name a real root-owned path and trip
+# assert_no_real_root_paths. The absolute /bin/ln skips PATH and the mock; unlike
+# `command -p ln` it leaves bash's command hash alone, which would otherwise send
+# every later plain `ln` in the test to the real binary and bypass the mock.
+link_real_tool() {
+  /bin/ln -sf "$1" "$2"
 }
 
 # refusing_sudo_path <dirs> -- echo <dirs> with the suite's refusing sudo stub

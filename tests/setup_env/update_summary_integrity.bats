@@ -15,6 +15,10 @@ setup() {
   export UPDATE_LOG_PATH="${BATS_TEST_TMPDIR}/update.log"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 _status() { cat "${_DOTFILES_RUN_TMPDIR}/status_$1"; }
 
 # ── started but never finished ───────────────────────────────────────────────

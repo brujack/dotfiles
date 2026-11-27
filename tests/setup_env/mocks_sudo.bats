@@ -14,6 +14,10 @@ setup() {
   REAL_SH=/bin/sh
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 _probe_frontend='printf "%s" "${DEBIAN_FRONTEND:-<unset>}"'
 
 @test "sudo mock: caller-environment DEBIAN_FRONTEND does not reach the child" {

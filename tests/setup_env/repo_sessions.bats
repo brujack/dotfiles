@@ -56,6 +56,10 @@ EOF
   : > "${MOCK_CALLS_FILE}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # Recording stubs. systemctl state lives in files under STUB_DIR: `enabled` exists
 # once `enable` ran, `failed` makes is-failed report failed. STUB_FAIL_ARGS is a
 # substring of the joined argv; a matching call records itself then exits 1.

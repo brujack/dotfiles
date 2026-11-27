@@ -1150,7 +1150,8 @@ _guard_verdict() {
     'awk -F= /^NAME/{print $2} /etc/os-release extra' \
     "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin /etc/x" \
     "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update /etc/x" \
-    'sudo -H /usr/local/bin/other --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin'; do
+    'sudo -H /usr/local/bin/other --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin' \
+    'sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf'; do
     _guard_verdict "${_line}"
     [ "${status}" -eq 1 ] || { printf 'allow-list too wide: %s\n' "${_line}" >&2; return 1; }
   done
@@ -1165,6 +1166,30 @@ _guard_verdict() {
     _guard_verdict "${_line}"
     [ "${status}" -eq 0 ] || { printf 'wrongly caught: %s\n' "${_line}" >&2; return 1; }
   done
+}
+
+# The guard reads every ledger a test could have written to, not only the one
+# MOCK_CALLS_FILE names now. Both seeded ledgers live under the test tmpdir, so
+# the suite's real shared ledger is never touched.
+@test "root-path guard: a root path in the suite ledger fails the guard" {
+  local _suite="${BATS_TEST_TMPDIR}/suite-ledger"
+  printf 'sudo rm -f /etc/x\n' > "${_suite}"
+  _SUITE_MOCK_CALLS_FILE="${_suite}" run assert_no_real_root_paths
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"${_suite}"* && "${output}" == *"sudo rm -f /etc/x"* ]]
+}
+
+@test "root-path guard: a root path in the per-test ledger fails it after MOCK_CALLS_FILE is repointed" {
+  printf 'sudo rm -f /etc/x\n' > "${BATS_TEST_TMPDIR}/mock_calls"
+  MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/elsewhere" run assert_no_real_root_paths
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"sudo rm -f /etc/x"* ]]
+  : > "${BATS_TEST_TMPDIR}/mock_calls"
+}
+
+@test "root-path guard: the inotify constant line is no longer allow-listed" {
+  _guard_verdict 'sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf'
+  [ "${status}" -eq 1 ]
 }
 
 @test "root-path guard: a scan failure fails the guard instead of passing" {

@@ -3,11 +3,13 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -441,7 +443,7 @@ teardown() {
   # `git`, ahead of the still-mocked PATH.
   local _shim="${BATS_TEST_TMPDIR}/realgit"
   mkdir -p "${_shim}"
-  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  link_real_tool "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
   local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"
@@ -493,7 +495,7 @@ teardown() {
   # `git`, ahead of the still-mocked PATH.
   local _shim="${BATS_TEST_TMPDIR}/realgit"
   mkdir -p "${_shim}"
-  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  link_real_tool "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
   local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"
@@ -614,7 +616,7 @@ teardown() {
   # makes it absent: /opt/homebrew/bin/ggshield resolves anyway and the real
   # binary runs against a directory that is not a git repo. Measured: this
   # test failed for exactly that reason before the seams were added here.
-  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:/usr/bin:/bin' \
+  run bash -c "MOCK_GIT_TOPLEVEL='${tmpdir}' PATH='${tmpdir}:${_SYS_PATH}' \
     GGSHIELD_BIN='' GGSHIELD_FALLBACK_PATHS='${tmpdir}/nowhere' \
     bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"
   [ "$status" -eq 0 ]

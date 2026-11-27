@@ -14,6 +14,10 @@ setup() {
   mkdir -p "${HOME}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "load_mocks: _BREW_BIN is an executable tracked stub under tests/stubs" {
   [[ -x "${_BREW_BIN}" ]]
   [[ "${_BREW_BIN}" == "${REPO_ROOT}/tests/stubs/brew-stub" ]]
@@ -126,7 +130,7 @@ _run_check() {
 _make_bin_dir() {
   _BIN_DIR="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${_BIN_DIR}"
-  ln -s "$(_real_sleep)" "${_BIN_DIR}/sleep"
+  link_real_tool "$(_real_sleep)" "${_BIN_DIR}/sleep"
 }
 
 @test "brew links: no brew anywhere prints the skip line and changes no counter" {

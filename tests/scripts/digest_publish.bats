@@ -38,6 +38,10 @@ setup() {
   source "${REPO_ROOT}/scripts/digest-publish.sh"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 remote_tip() {
   PATH="${REAL_PATH}" git -C "${REMOTE}" rev-parse --verify -q "refs/heads/$1"
 }

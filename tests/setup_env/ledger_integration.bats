@@ -36,6 +36,7 @@ setup() {
 
 teardown() {
     export PATH="${ORIGINAL_PATH}"
+  assert_no_real_root_paths || return 1
 }
 
 _make_mock_ledger() {

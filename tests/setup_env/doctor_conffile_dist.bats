@@ -26,6 +26,7 @@ setup() {
 teardown() {
   # Restore mode so bats can remove the fixture even after a failed assertion.
   chmod -R u+rwx "${FAKE_ETC}" 2>/dev/null || true
+  assert_no_real_root_paths || return 1
 }
 
 @test "nested .dpkg-dist is reported with its path and a diff remedy naming the live file" {

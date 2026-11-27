@@ -18,6 +18,10 @@ setup() {
     MOCK_CLAUDE_EDIT_SETTINGS MOCK_CLAUDE_EXIT MOCK_CLAUDE_STDOUT
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "claude mock: plugins list --json defaults to []" {
   run "${CLAUDE_MOCK}" plugins list --json
   [ "$status" -eq 0 ]

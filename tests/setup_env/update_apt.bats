@@ -15,6 +15,10 @@ setup() {
   CLEAN="${REPO_ROOT}/tests/fixtures/apt/update-clean-resolute.txt"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "run_update apt section: stale signer is WARN, package result kept, detail names host and remedy" {
   setup_run_update_linux
   MOCK_APT_STDOUT_FILE="${CLEAN}" run_update

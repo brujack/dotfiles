@@ -36,7 +36,7 @@ setup() {
 }
 
 teardown() {
-  :
+  assert_no_real_root_paths || return 1
 }
 
 # ── run_update: cargo-tools section ────────────────────────────────────────

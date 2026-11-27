@@ -16,6 +16,10 @@ setup() {
   export TMPDIR="${BATS_TEST_TMPDIR}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "_dotfiles_run_tmpdir_setup leaves the caller's EXIT INT TERM traps unchanged" {
   # Bare call, never `run`: `run` executes in a subshell, so a trap the callee
   # installed would be confined there and this test could not observe it.

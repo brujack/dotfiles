@@ -35,6 +35,9 @@ setup_suite() {
     if [[ -z "${MOCK_CALLS_FILE:-}" ]]; then
         export MOCK_CALLS_FILE="${_BATS_SENTINEL}/mock_calls"
     fi
+    # The ledger every mock writes to until a test repoints MOCK_CALLS_FILE; the
+    # root-path guard (tests/helpers/common.bash) scans it as well as the per-test one.
+    export _SUITE_MOCK_CALLS_FILE="${MOCK_CALLS_FILE}"
     mkdir -p "${HOME}" "${XDG_CONFIG_HOME}" "${XDG_CACHE_HOME}" "${XDG_DATA_HOME}" \
         "${XDG_STATE_HOME}" "${PARALLEL_HOME}"
     # The real sudo must be unreachable from every test, including files that never

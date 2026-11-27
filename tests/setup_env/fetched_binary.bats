@@ -53,6 +53,7 @@ setup() {
 teardown() {
   # Restore anything a test made read-only so bats can clean the tmpdir.
   chmod -R u+rwx "${BATS_TEST_TMPDIR}" 2> /dev/null || :
+  assert_no_real_root_paths || return 1
 }
 
 _wget_count() {

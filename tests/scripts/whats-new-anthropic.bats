@@ -13,6 +13,7 @@ FAKE_SDK_CHANGELOG="## 0.100.0 (2026-05-06)
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_mocks
 
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -31,7 +32,7 @@ setup() {
 }
 
 teardown() {
-  true
+  assert_no_real_root_paths || return 1
 }
 
 # ── strip_html ───────────────────────────────────────────────────────────────
@@ -402,7 +403,7 @@ print(text)
     _OVERRIDE_FEATURES_DIR="${_OVERRIDE_FEATURES_DIR}" \
     _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
     MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
-    PATH="/usr/bin:/bin" \
+    PATH="${_SYS_PATH}" \
     bash "${REPO_ROOT}/scripts/whats-new-anthropic.sh" --dry-run
   [ "$status" -eq 1 ]
   [[ "$output" == *"claude CLI not found"* ]]

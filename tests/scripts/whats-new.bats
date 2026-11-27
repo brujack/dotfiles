@@ -15,6 +15,7 @@ FAKE_CHANGELOG="## [1.0.1] - 2026-05-08
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_mocks
 
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -32,7 +33,7 @@ setup() {
 }
 
 teardown() {
-  true
+  assert_no_real_root_paths || return 1
 }
 
 # ── extract_new_content ──────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ existing content"
     _OVERRIDE_DOTFILES_ROOT="${_OVERRIDE_DOTFILES_ROOT}" \
     MOCK_CALLS_FILE="${MOCK_CALLS_FILE}" \
     MOCK_CURL_STDOUT="${MOCK_CURL_STDOUT}" \
-    PATH="/usr/bin:/bin" \
+    PATH="${_SYS_PATH}" \
     bash "${REPO_ROOT}/scripts/whats-new-claude-code.sh" --dry-run
   [ "$status" -eq 1 ]
   [[ "$output" == *"claude CLI not found"* ]]

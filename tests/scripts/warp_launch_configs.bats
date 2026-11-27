@@ -5,6 +5,8 @@
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   WARP_DIR="${REPO_ROOT}/.warp/launch_configurations"
   CONFIGS=(studio laptop reception)
 }
@@ -90,7 +92,7 @@ expected_pairs() {
   mkdir -p "${fixture}/.local/bin"
   printf '#!/bin/sh\nprintf "stub-marker\\n"\n' > "${fixture}/.local/bin/repo-session"
   chmod +x "${fixture}/.local/bin/repo-session"
-  run env -i HOME="${fixture}" PATH=/usr/bin:/bin zsh -c 'cd && .local/bin/repo-session dotfiles'
+  run env -i HOME="${fixture}" PATH="${_SYS_PATH}" zsh -c 'cd && .local/bin/repo-session dotfiles'
   [ "${status}" -eq 0 ]
   [ "${output}" = "stub-marker" ]
 }

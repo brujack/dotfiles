@@ -175,6 +175,7 @@ SHIM
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -2350,10 +2351,16 @@ SHIM
   # keyring step ran the mock gpg and returned before the daemon.json read.
   # The keyring is not under test here.
   _install_apt_keyring() { return 0; }
-  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  # The recorder writes to a ledger of its own, not MOCK_CALLS_FILE: with the
+  # list seam falling back to the real /etc/apt path, it records
+  # `sudo -H tee /etc/apt/sources.list.d/nvidia-container-toolkit.list` on a
+  # runner, and that line must not reach the root-path guard's ledgers.
+  local _ledger="${BATS_TEST_TMPDIR}/nvidia-resolver-ledger"
+  : > "${_ledger}"
+  sudo() { printf 'sudo %s\n' "$*" >> "${_ledger}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
-  grep -qF "sudo -H cat ${_fx}" "${MOCK_CALLS_FILE}"
-  refute_grep "/etc/docker" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo -H cat ${_fx}" "${_ledger}"
+  refute_grep "/etc/docker" "${_ledger}"
 }
 
 @test "_install_ubuntu_nvidia: restarts docker when runtime configure changes daemon.json" {
@@ -5346,7 +5353,9 @@ _misc_env() {
   printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
   chmod +x "${_bin_dir}/go"
   export _GO_BIN="${_bin_dir}/go"
-  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" bash -c "
+  local _sys
+  _sys="$(refusing_sudo_path /usr/bin:/bin)" || return 1
+  run env PATH="${_sys}" bash -c "
     source '${REPO_ROOT}/lib/constants.sh' 2>/dev/null
     source '${REPO_ROOT}/lib/linux_ubuntu.sh'
     _install_go_from_tarball() { :; }
@@ -6070,17 +6079,23 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 
 @test "inotify_conf_write: seam unset pipes to sudo tee on the constant path" {
   # A recording shim that drains stdin and runs nothing: the real path is /etc.
-  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
+  # It records into its own ledger, not MOCK_CALLS_FILE: the line names the real
+  # /etc on purpose, so assert_no_real_root_paths must not scan it.
+  local _ledger="${BATS_TEST_TMPDIR}/inotify-const-ledger"
+  export INOTIFY_CONST_LEDGER="${_ledger}"
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${INOTIFY_CONST_LEDGER}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
   /bin/chmod +x "${SHIM_DIR}/sudo"
   [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
   # If the else branch ever lost sudo, plain tee would write the real /etc as
   # root in a root container (tdd.md E2); a failing tee keeps that path inert.
   export MOCK_TEE_EXIT=1
   unset _SYSCTL_CONF
-  : > "${MOCK_CALLS_FILE}"
+  : > "${MOCK_CALLS_FILE}" "${_ledger}"
   run _sysctl_conf_write inotify fs.inotify.max_user_instances 4096 "${INOTIFY_SYSCTL_CONF}" ""
   [ "$status" -eq 0 ]
-  [ "$(cat "${MOCK_CALLS_FILE}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+  [ "$(cat "${_ledger}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+  # Nothing reached the shared ledger the guard scans.
+  [ ! -s "${MOCK_CALLS_FILE}" ]
 }
 
 @test "inotify_conf_write: seam set and tee failing returns 1 naming _SYSCTL_CONF" {

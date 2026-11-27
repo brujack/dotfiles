@@ -3,6 +3,7 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_setup_env
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -22,6 +23,7 @@ setup() {
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -236,7 +238,7 @@ _stub_bats_present() {
     cp "${_f}" "${_no_brew}/$(basename "${_f}")"
   done
   local _saved_path="${PATH}"
-  export PATH="${_no_brew}:/usr/bin:/bin"
+  export PATH="${_no_brew}:${_SYS_PATH}"
   export MOCK_WHICH_MISSING=bats
   install_homebrew() { return 0; }
   export -f install_homebrew
@@ -425,7 +427,7 @@ _stub_bats_present() {
     cp "${_f}" "${_no_brew}/$(basename "${_f}")"
   done
   local _saved_path="${PATH}"
-  export PATH="${_no_brew}:/usr/bin:/bin"
+  export PATH="${_no_brew}:${_SYS_PATH}"
   install_homebrew() { return 0; }
   export -f install_homebrew
   local _rc=0
@@ -445,7 +447,7 @@ _stub_bats_present() {
     cp "${_f}" "${_no_brew}/$(basename "${_f}")"
   done
   local _saved_path="${PATH}"
-  export PATH="${_no_brew}:/usr/bin:/bin"
+  export PATH="${_no_brew}:${_SYS_PATH}"
   install_homebrew() { return 0; }
   export -f install_homebrew
   local _rc=0
@@ -472,7 +474,7 @@ _stub_bats_present() {
     cp "${_f}" "${_no_brew}/$(basename "${_f}")"
   done
   local _saved_path="${PATH}"
-  export PATH="${_no_brew}:/usr/bin:/bin"
+  export PATH="${_no_brew}:${_SYS_PATH}"
   install_homebrew() { return 1; }
   local _rc=0
   install_macos_packages 2>/dev/null || _rc=$?
