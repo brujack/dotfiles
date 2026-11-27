@@ -179,6 +179,11 @@ mean removing `/opt/homebrew/bin`, which also holds `git` and `make` — the sam
 seam is read unconditionally in production and grants nothing beyond what editing `PATH`
 already grants.
 
+> **Amended 2026-11-27 (dotfiles#496):** `_AWS_GPG_BIN`, `_AWS_PKGUTIL_BIN` and `_AWS_KEY_PATH` are now
+> honoured only when `BATS_TEST_TMPDIR` is non-empty (`_bats_seam`), so an exported value cannot
+> substitute a verifier or key in production. `_AWS_BIN` is still read unconditionally: it only chooses
+> between the already-installed branch and an install that still passes through the verifier.
+
 **18 pre-existing tests had to be updated** because gating the installer on verification
 changed `update_aws_cli` and `install_aws_tools`'s contract for every existing caller,
 including test callers. `tests/setup_env/extracted_functions.bats` carried tests asserting
