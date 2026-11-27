@@ -1755,7 +1755,8 @@ _build_pinned_keyring() {
 # failure leaves the existing <keyring> untouched and no .new behind.
 # Usage: _install_apt_keyring <url> <keyring> <armored|binary>
 # Returns 0 installed; 1 on bad arguments or any failed stage (named in a warning).
-# gpg is _APT_KEY_GPG_BIN (default gpg). No EXIT/RETURN trap, for the reason
+# gpg is _APT_KEY_GPG_BIN (default gpg), honoured only under bats (_bats_seam):
+# it produces the keyring `sudo install` places. No EXIT/RETURN trap, for the reason
 # given above _build_pinned_keyring.
 _install_apt_keyring() {
   local _url="$1" _ring="$2" _kind="$3" _dir _src _stage="" _gpg

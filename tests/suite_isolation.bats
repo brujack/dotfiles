@@ -228,9 +228,37 @@ _uv_ver() {
   [[ "${output}" == *"no refusing sudo stub"* ]]
 }
 
-@test "no test in the sudo-reaching setup files resets PATH to bare system dirs" {
+# Lines of the given files that set PATH to a value with a /usr/bin or /bin
+# element without going through refusing_sudo_path. Exempt: a value built from
+# the current ${PATH} (it keeps the stub) and one naming tests/mocks.
+_unguarded_path_resets() {
+  command grep -nE 'PATH=' "$@" \
+    | command grep -E "[=:\"']/(usr/)?bin([:\"'[:space:]]|\$)" \
+    | command grep -vE 'refusing_sudo_path|\$\{?PATH\}?|tests/mocks'
+}
+
+@test "the PATH-reset guard flags every unguarded form and passes the allowed ones" {
+  local _f="${BATS_TEST_TMPDIR}/seed.bats"
+  cat > "${_f}" << 'SEED'
+  export PATH="${X}:/usr/bin:/bin"
+  PATH="/bin:/usr/bin"
+  PATH='/usr/bin:/bin'
+  run env PATH=/usr/bin:/bin bash -c true
+  run env PATH="/bin" bash -c true
+  PATH=/usr/bin
+  _ok="$(PATH="$(refusing_sudo_path /usr/bin:/bin)" cmd)"
+  PATH="/usr/bin:${PATH}" cmd
+  PATH="${HOME}/mocks/tests/mocks:/usr/bin" cmd
+SEED
+  run _unguarded_path_resets "${_f}"
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 6 ]
+  [[ "${lines[0]}" == 1:* && "${lines[5]}" == 6:* ]]
+}
+
+@test "no test in the sudo-reaching setup files resets PATH without refusing_sudo_path" {
   # A raw reset drops the refusing stub; refusing_sudo_path is the only route.
-  run ! command grep -nE '(PATH=|PATH=")/usr/bin' \
+  run ! _unguarded_path_resets \
     "${REPO_ROOT}/tests/setup_env/developer.bats" \
     "${REPO_ROOT}/tests/setup_env/install_functions.bats" \
     "${REPO_ROOT}/tests/setup_env/linux_ubuntu.bats"
