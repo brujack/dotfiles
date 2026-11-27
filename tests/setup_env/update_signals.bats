@@ -119,7 +119,7 @@ _gap_sigaction_index() {
 # missing tool, so it fails the test rather than skipping it.
 _gap_delay() {
   local _n
-  _n="$(_gap_sigaction_index)"
+  _n="$(_gap_sigaction_index)" || _n=""
   [[ ${_n} =~ ^[0-9]+$ ]] || { printf 'no fork in the dry-run strace of the fixture prelude\n' >&2; return 1; }
   _GAP_DELAY=(strace -I4 -o /dev/null -e trace=rt_sigaction -e "inject=rt_sigaction:delay_enter=300000:when=${_n}")
 }
