@@ -638,7 +638,7 @@ _albert_mismatch_setup() {
 # _AWS_GPG_BIN, _AWS_KEY_PATH and _AWS_PKGUTIL_BIN choose the verifier or the key
 # ahead of `sudo ./aws/install` / `sudo installer`. Same contract as above: the
 # real tool and the vendored key decide outside bats. The _make_gpg_stub stand-in
-# records every call; here it also reports a good signature on --verify.
+# records every call; _make_forging_gpg_stub also reports a good signature on --verify.
 
 # A pkgutil stand-in that vouches for AWS's team ID and records the call.
 _make_pkgutil_stub() {
@@ -733,6 +733,7 @@ _aws_payload() {
   _need_real_gpg
   _AWS_KEY_PATH="${_SEAM}/absent.asc" BATS_TEST_TMPDIR='' run _doctor_check_aws_key_expiry
   [[ "${output}" != *"vendored key not found"* ]]
+  [[ "${output}" == *"expires in"* ]]
   _assert_seam_unused
 }
 
@@ -748,5 +749,8 @@ _aws_payload() {
   _need_real_gpg
   _make_gpg_stub
   _AWS_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _doctor_check_aws_key_expiry
+  # Positive control: only a gpg that read the key reaches either expiry branch
+  # (a past expiry prints a negative count), so a missing default cannot pass.
+  [[ "${output}" == *"expires in"* ]]
   run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
 }

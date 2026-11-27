@@ -60,8 +60,8 @@ _aws_verify_zip() {
 
   # _AWS_KEY_PATH: honoured only under bats (_bats_seam), defaults to the repo's
   # vendored key: an exported value must never substitute a key the caller
-  # controls. Without this seam only the vendored key could ever be exercised and the
-  # fingerprint-mismatch branch would be unreachable.
+  # controls. Without this seam only the vendored key could ever be exercised and
+  # the fingerprint-mismatch branch would be unreachable.
   #
   # The default is DOTFILES_REPO_ROOT (lib/constants.sh), resolved at source time.
   # Do not inline the derivation here: update_aws_cli cd's away before calling
