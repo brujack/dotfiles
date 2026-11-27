@@ -532,7 +532,7 @@ teardown() {
   unset LINUX
   export HAS_DEVTOOLS=1
   local _saved_path="$PATH"
-  export PATH="/usr/bin:/bin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin)"
   local _rc=0
   recreate_python_venv "ansible" || _rc=$?
   export PATH="${_saved_path}"
@@ -658,7 +658,7 @@ teardown() {
   export HOME="${BATS_TEST_TMPDIR}"
   export RUBY_VER="4.0.5"
   local _saved_path="$PATH"
-  export PATH="/usr/bin:/bin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin)"
   mkdir -p "${HOME}/.rubies/ruby-${RUBY_VER}/bin"
   local _rc=0
   recreate_ruby || _rc=$?
@@ -689,7 +689,7 @@ teardown() {
   export HOME="${BATS_TEST_TMPDIR}"
   export RUBY_VER="4.0.5"
   local _saved_path="$PATH"
-  export PATH="/usr/bin:/bin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin)"
   local _rc=0
   recreate_ruby || _rc=$?
   export PATH="${_saved_path}"

@@ -47,7 +47,10 @@ setup_suite() {
     mkdir -p "${_BATS_SENTINEL}/nosudo" || return 1
     printf '#!/bin/sh\necho "REAL SUDO BLOCKED $*" >&2\nexit 97\n' > "${_BATS_SENTINEL}/nosudo/sudo" || return 1
     chmod +x "${_BATS_SENTINEL}/nosudo/sudo" || return 1
-    export PATH="${_BATS_SENTINEL}/nosudo:${PATH}"
+    # Exported so a test that resets PATH wholesale can keep the stub first
+    # (refusing_sudo_path, tests/helpers/common.bash).
+    export _BATS_NOSUDO_DIR="${_BATS_SENTINEL}/nosudo"
+    export PATH="${_BATS_NOSUDO_DIR}:${PATH}"
 }
 
 teardown_suite() {

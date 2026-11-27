@@ -477,7 +477,7 @@ teardown() {
   export UBUNTU=1
   export HAS_RUST=1
   # Restrict PATH so command -v rustup fails (no mocks, no ~/.cargo/bin/rustup)
-  export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)"
   run update_rust
   [ "$status" -eq 0 ]
   [[ "$output" == *"rustup not found"* ]]
@@ -501,7 +501,7 @@ teardown() {
 @test "update_rust: skips nextest update when rustup not found" {
   export UBUNTU=1
   export HAS_RUST=1
-  export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)"
   run update_rust
   [ "$status" -eq 0 ]
   ! grep -q "get.nexte.st" "${MOCK_CALLS_FILE:-/dev/null}"
@@ -544,7 +544,7 @@ _rustup_mock_in() {
 
 _rust_mock() {
   _rustup_mock_in "${BATS_TEST_TMPDIR}/bin" "$1"
-  export PATH="${BATS_TEST_TMPDIR}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  PATH="${BATS_TEST_TMPDIR}/bin:$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)"
   export HOME="${BATS_TEST_TMPDIR}"
   export UBUNTU=1 HAS_RUST=1
 }
@@ -635,7 +635,7 @@ component add rust-analyzer" ]
 
 _macos_rust_env() {
   export HOME="${BATS_TEST_TMPDIR}"
-  export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+  PATH="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)"
   export MACOS=1 HAS_RUST=1
   unset UBUNTU
 }
@@ -1194,7 +1194,7 @@ _clone_fails_for() {
   # `command -v` branch answers first and this path never runs.
   unset UV_BIN
   local _found
-  _found="$(PATH="/usr/bin:/bin" resolve_uv)" || _found=""
+  _found="$(PATH="$(refusing_sudo_path /usr/bin:/bin)" resolve_uv)" || _found=""
   if [[ -z "${_found}" ]]; then
     printf "resolve_uv found nothing with a bare PATH; the prefix fallback is dead\n" >&2
     return 1
@@ -1727,7 +1727,7 @@ _dev_probe_gpg_status() {
   printf '#!/usr/bin/env bash\nprintf "ruby 4.0.5 (2026-01-01) [x86_64-linux]\\n"\n' > "${_bin}/ruby"
   chmod +x "${_bin}/ruby"
   # PATH deliberately carries NO ruby -- that is the provision condition.
-  run env PATH="/usr/bin:/bin" HOME="${HOME}" _RUBY_BIN="${_bin}/ruby" bash -c "
+  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" HOME="${HOME}" _RUBY_BIN="${_bin}/ruby" bash -c "
     source '${REPO_ROOT}/lib/constants.sh' 2>/dev/null
     source '${REPO_ROOT}/lib/developer.sh'
     LINUX=1 RUBY_VER='4.0.5' install_ruby"
@@ -2083,7 +2083,7 @@ _npm_fixture() {
 @test "_resolve_npm: never picks /usr/bin/npm, even listed first or on PATH" {
   unset _NPM_BIN
   local _c; _c="$(_npm_fixture cand)"
-  PATH="/usr/bin:${PATH}" _NPM_FALLBACK_PATHS="/usr/bin/npm ${_c}" run _resolve_npm
+  PATH="$(refusing_sudo_path "/usr/bin:${PATH}")" _NPM_FALLBACK_PATHS="/usr/bin/npm ${_c}" run _resolve_npm
   [ "$status" -eq 0 ]
   [ "$output" = "${_c}" ]
   _NPM_FALLBACK_PATHS="/usr/bin/npm" run _resolve_npm

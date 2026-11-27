@@ -510,19 +510,23 @@ _pwsh_probe_runs() {
 # against the vendored Microsoft key with the pinned fingerprint, else 1.
 # packages-microsoft-prod.deb is installed as root, and Microsoft rewrites it
 # in place per release, so a sha256 pin cannot work; the signature can.
-# Seams: _MS_GPG_BIN, _MS_AR_BIN, _MS_KEY_PATH (defaults gpg, ar, the vendored
-# key). Mirrors lib/developer.sh:_aws_verify_zip.
+# Seams (honoured only under bats): _MS_GPG_BIN, _MS_AR_BIN, _MS_KEY_PATH
+# (defaults gpg, ar, the vendored key). Mirrors lib/developer.sh:_aws_verify_zip.
 _ms_verify_deb() {
-  local _deb="$1"
-  command -v "${_MS_GPG_BIN:-gpg}" > /dev/null 2>&1 || {
+  local _deb="$1" _gpg _ar _key
+  # Verifier seams: honoured only under bats, so an exported variable cannot
+  # swap in a verifier that always says "good" ahead of a root dpkg -i.
+  _gpg="$(_bats_seam "${_MS_GPG_BIN:-}" gpg)"
+  _ar="$(_bats_seam "${_MS_AR_BIN:-}" ar)"
+  _key="$(_bats_seam "${_MS_KEY_PATH:-}" "${DOTFILES_REPO_ROOT}/keys/microsoft.asc")"
+  command -v "${_gpg}" > /dev/null 2>&1 || {
     log_error "gpg not found; cannot verify packages-microsoft-prod.deb"
     return 1
   }
-  command -v "${_MS_AR_BIN:-ar}" > /dev/null 2>&1 || {
+  command -v "${_ar}" > /dev/null 2>&1 || {
     log_error "ar not found (binutils); cannot verify packages-microsoft-prod.deb"
     return 1
   }
-  local _key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}"
   local _abs_deb
   _abs_deb="$(cd "$(dirname "${_deb}")" && pwd)/$(basename "${_deb}")"
 
@@ -537,7 +541,7 @@ _ms_verify_deb() {
     # data.tar.xz, or evil members ahead of repeated genuine ones, would
     # otherwise verify here and install something else.
     local _members
-    _members="$("${_MS_AR_BIN:-ar}" t "${_abs_deb}" 2> /dev/null | sed 's|/$||' | tr '\n' ' ')"
+    _members="$("${_ar}" t "${_abs_deb}" 2> /dev/null | sed 's|/$||' | tr '\n' ' ')"
     case "${_members}" in
       "debian-binary control.tar.gz data.tar.gz _gpgorigin ") ;;
       "debian-binary control.tar.gz data.tar.gz ")
@@ -553,15 +557,15 @@ _ms_verify_deb() {
     # The member list is already known good, so this fails only when extraction
     # itself breaks: an I/O error, or an ar that exits 0 having extracted
     # nothing (Apple's, on GNU member names). cat catches the second.
-    { (cd "${_ring}/deb" && "${_MS_AR_BIN:-ar}" x "${_abs_deb}") &&
+    { (cd "${_ring}/deb" && "${_ar}" x "${_abs_deb}") &&
       cat "${_ring}/deb/debian-binary" "${_ring}/deb/control.tar.gz" \
         "${_ring}/deb/data.tar.gz" > "${_ring}/signed"; } 2> /dev/null || {
       log_error "could not extract packages-microsoft-prod.deb; not installing"
       exit 1
     }
-    "${_MS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+    "${_gpg}" --homedir "${_ring}" --batch --import "${_key}" \
       > /dev/null 2>&1 || { log_error "could not import ${_key}"; exit 1; }
-    "${_MS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+    "${_gpg}" --homedir "${_ring}" --batch --status-fd 1 \
       --verify "${_ring}/deb/_gpgorigin" "${_ring}/signed" > "${_ring}/status" 2> /dev/null
     # Reject before accepting: VALIDSIG is emitted for a revoked or expired key
     # too, and gpg exits 0 for both.
@@ -1689,9 +1693,10 @@ _is_system_az_path() {
 # argument). <home> is a throwaway gpg homedir the caller owns and removes; an
 # empty one would make gpg use the operator's ~/.gnupg.
 _keyring_has_pinned_fpr() {
-  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary
+  local _ring="$1" _fpr="$2" _home="$3" _listing _rc _pubs _primary _gpg
   [[ -n ${_home} ]] || return 2
-  _listing="$("${_MS_GPG_BIN:-gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
+  _gpg="$(_bats_seam "${_MS_GPG_BIN:-}" gpg)"
+  _listing="$("${_gpg}" --homedir "${_home}" --batch --show-keys --with-colons "${_ring}" 2> /dev/null)"
   _rc=$?
   [[ ${_rc} -eq 0 ]] || return 2
   _pubs="$(printf '%s\n' "${_listing}" | grep -c '^pub:')"
@@ -1716,14 +1721,15 @@ _keyring_has_pinned_fpr() {
 # in lib/, and a RETURN trap is not function-scoped (shell.md), so every path
 # below reaches the single rm -rf instead.
 _build_pinned_keyring() {
-  local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc
+  local _key="$1" _ring="$2" _fpr="$3" _dir _gpg_rc _rc _gpg
   [[ -n ${_key} && -n ${_ring} && -n ${_fpr} ]] || return 3
+  _gpg="$(_bats_seam "${_MS_GPG_BIN:-}" gpg)"
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 3
   if ! mkdir -m 700 "${_dir}/home"; then
     rm -rf "${_dir}"
     return 3
   fi
-  { "${_MS_GPG_BIN:-gpg}" --dearmor < "${_key}" > "${_dir}/k.gpg"; } 2> /dev/null
+  { "${_gpg}" --dearmor < "${_key}" > "${_dir}/k.gpg"; } 2> /dev/null
   _gpg_rc=$?
   if [[ ${_gpg_rc} -ne 0 ]]; then
     _rc=2
@@ -1749,11 +1755,13 @@ _build_pinned_keyring() {
 # failure leaves the existing <keyring> untouched and no .new behind.
 # Usage: _install_apt_keyring <url> <keyring> <armored|binary>
 # Returns 0 installed; 1 on bad arguments or any failed stage (named in a warning).
-# gpg is _APT_KEY_GPG_BIN (default gpg). No EXIT/RETURN trap, for the reason
+# gpg is _APT_KEY_GPG_BIN (default gpg), honoured only under bats (_bats_seam):
+# it produces the keyring `sudo install` places. No EXIT/RETURN trap, for the reason
 # given above _build_pinned_keyring.
 _install_apt_keyring() {
-  local _url="$1" _ring="$2" _kind="$3" _dir _src _stage=""
+  local _url="$1" _ring="$2" _kind="$3" _dir _src _stage="" _gpg
   [[ -n ${_url} && -n ${_ring} ]] || return 1
+  _gpg="$(_bats_seam "${_APT_KEY_GPG_BIN:-}" gpg)"
   [[ ${_kind} == "armored" || ${_kind} == "binary" ]] || return 1
   _dir="$(mktemp -d "${_APT_KEY_TMP_ROOT:-${TMPDIR:-/tmp}}/apt-key.XXXXXXXX")" || return 1
   if ! sudo rm -f "${_ring}.new"; then
@@ -1769,7 +1777,7 @@ _install_apt_keyring() {
   _src="${_dir}/key"
   if [[ ${_kind} == "armored" ]]; then
     _src="${_dir}/ring"
-    "${_APT_KEY_GPG_BIN:-gpg}" --batch --yes --dearmor -o "${_src}" < "${_dir}/key" || _stage="conversion"
+    "${_gpg}" --batch --yes --dearmor -o "${_src}" < "${_dir}/key" || _stage="conversion"
   fi
   if [[ -z ${_stage} && ! -s ${_src} ]]; then
     _stage="conversion"
@@ -2016,7 +2024,8 @@ _install_ubuntu_edge_source() {
     && ! grep -iE '^Enabled:' "${_edge_src}" | grep -qviE '^Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$'; then
     sudo rm -f "${_edge_list}" "${_edge_keyring}"
   else
-    local _edge_key="${_MS_KEY_PATH:-${DOTFILES_REPO_ROOT}/keys/microsoft.asc}" _brc
+    local _edge_key _brc
+    _edge_key="$(_bats_seam "${_MS_KEY_PATH:-}" "${DOTFILES_REPO_ROOT}/keys/microsoft.asc")"
     _build_pinned_keyring "${_edge_key}" "${_edge_keyring}" "${MS_GPG_FPR}"
     _brc=$?
     if [[ ${_brc} -eq 0 ]]; then
@@ -2060,7 +2069,8 @@ _install_ubuntu_albert() {
   _trusted="$(_bats_seam "${_APT_TRUSTED_DIR:-}" /etc/apt/trusted.gpg.d)"
   local _list="${_sources}/albert.list"
   local _ring="${_keyrings}/albert-obs.gpg"
-  local _release _url _dir _brc _keep_note _fprs _npub _f
+  local _release _url _dir _brc _keep_note _fprs _npub _f _gpg
+  _gpg="$(_bats_seam "${_MS_GPG_BIN:-}" gpg)"
   _keep_note="keeping last verified source"
 
   _release="$(lsb_release -rs)"
@@ -2090,7 +2100,7 @@ _install_ubuntu_albert() {
       _fprs=""
       _npub=0
       if mkdir -m 700 "${_dir}/gh"; then
-        _fprs="$("${_MS_GPG_BIN:-gpg}" --homedir "${_dir}/gh" --batch --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null \
+        _fprs="$("${_gpg}" --homedir "${_dir}/gh" --batch --show-keys --with-colons "${_dir}/albert-key.asc" 2> /dev/null \
           | awk -F: '$1 == "pub" {want = 1; next} $1 == "fpr" && want {printf "%s ", $10; want = 0}')"
       fi
       for _f in ${_fprs}; do _npub=$((_npub + 1)); done
