@@ -491,8 +491,8 @@ teardown() {
   assert_no_real_root_paths || return 1
   : cleanup that follows the guard
 }
-@test "clean" { printf 'ls /tmp\n' > "\${MOCK_CALLS_FILE}"; }
-@test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
+ @test "clean" { printf 'ls /tmp\n' > "\${MOCK_CALLS_FILE}"; }
+ @test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
 FIXTURE
   run bats "${FX}/a.bats" < /dev/null
   [ "${status}" -eq 1 ]
@@ -512,7 +512,7 @@ teardown() {
   assert_no_real_root_paths
   :
 }
-@test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
+ @test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
 FIXTURE
   run bats "${FX}/a.bats" < /dev/null
   # This is why every wiring line ends in `|| return 1`: without it the hit is lost.
