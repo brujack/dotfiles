@@ -192,3 +192,18 @@ _zsh() {
   [ "$status" -eq 0 ]
   [ "$output" = "mark=1 dirs=${FX_HOME}/.claude/mods/progress" ]
 }
+
+@test "nounset zsh with no python3 on PATH still reaches .zshenv.local" {
+  # /usr/bin:/bin hold python3, which hides an unguarded ${commands[python3]}; a PATH
+  # holding only zsh has none.
+  local nobin="${BATS_TEST_TMPDIR}/nopy"
+  mkdir -p "${nobin}"
+  ln -s "$(command -v zsh)" "${nobin}/zsh"
+  printf 'export ZSHENV_LOCAL_MARK=1\n' > "${FX_HOME}/.zshenv.local"
+  run env -u CLAUDE_CODE_PLUGIN_DIRS HOME="${FX_HOME}" ZDOTDIR="${FX_ZDOT}" PATH="${nobin}" \
+    _OVERRIDE_HOMEBREW_PREFIX_ARM="${BATS_TEST_TMPDIR}/nonexistent" \
+    _OVERRIDE_HOMEBREW_PREFIX_INTEL="${BATS_TEST_TMPDIR}/nonexistent" \
+    "${nobin}/zsh" -u -c 'print -r -- "mark=${ZSHENV_LOCAL_MARK-missing}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "mark=1" ]
+}
