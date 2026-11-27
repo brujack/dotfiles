@@ -35,6 +35,10 @@ setup() {
   _CLEAN_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # Mode `frontend` (see _dpkg_sudo_calls) prints `<file>:<line>:ok` or
 # `<file>:<line>:bad` for every dpkg-running sudo call in the given files, one record per call (a line holding two calls yields
 # two records). A logical command is a run of physical lines joined by trailing

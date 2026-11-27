@@ -49,6 +49,7 @@ setup() {
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 

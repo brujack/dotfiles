@@ -12,6 +12,10 @@ setup() {
   mkdir -p "${_OVERRIDE_GIT_REPOS_SRC}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "_is_legacy_sync_host is true on studio" {
   export MOCK_HOSTNAME_OUTPUT=studio
   run _is_legacy_sync_host

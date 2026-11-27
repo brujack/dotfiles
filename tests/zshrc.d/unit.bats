@@ -4,6 +4,7 @@ setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   ZSHRC_D="${REPO_ROOT}/.config/.zshrc.d"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   # F16 (security audit 2026-11-16; spec docs/superpowers/specs/2026-11-21-bats-sentinel-home-design.md): the sourced zsh config self-heals ~/.oh-my-zsh and runs rbenv init;
   # keep both inside this test's own HOME, never the suite's shared one.
   export HOME="${BATS_TEST_TMPDIR}/home"
@@ -466,7 +467,7 @@ EOF
 
 @test "6_path.zsh adds no gnubin entry when neither Homebrew prefix has it" {
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH='${_SYS_PATH}'
     unset MACOS LINUX
     export MACOS=1
     export _OVERRIDE_GNUBIN_ARM='/nonexistent/gnubin-arm'
@@ -571,7 +572,7 @@ EOF
   mkdir -p "${_fake_home}/.local/bin"
 
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH='${_SYS_PATH}'
     unset MACOS
     export HOME='${_fake_home}'
     export LINUX=1
@@ -606,7 +607,7 @@ EOF
   mkdir -p "${_fake_home}/.local/bin"
 
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH='${_SYS_PATH}'
     unset LINUX
     export MACOS=1
     export HOME='${_fake_home}'
@@ -625,7 +626,7 @@ EOF
   _fake_home="$(mktemp -d)"
 
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH='${_SYS_PATH}'
     unset LINUX
     export MACOS=1
     export HOME='${_fake_home}'
@@ -818,7 +819,7 @@ EOF
   [[ -n "${_gnubin:-}" ]] || skip "no GNU sort in: ${_candidates[*]} -- this assertion did not run, so a green suite here is not evidence for it"
 
   run zsh -c "
-    export PATH=/usr/bin:/bin:/usr/sbin:/sbin
+    export PATH='${_SYS_PATH}'
     unset MACOS LINUX
     export LINUX=1
     export _OVERRIDE_GNUBIN_LINUX='${_gnubin}'
@@ -1394,7 +1395,7 @@ EOF
 
   run bash -c "
     cd / &&
-    env -i HOME='${_fixture}' ZDOTDIR='${_fixture}' TERM=dumb PATH=/usr/bin:/bin \
+    env -i HOME='${_fixture}' ZDOTDIR='${_fixture}' TERM=dumb PATH='${_SYS_PATH}' \
       zsh -l -c 'printf \"%s\n\" \"\${PROFILE:-unset}\"'
   "
   rm -rf "${_fixture}"
@@ -1541,7 +1542,7 @@ STUB
 _run_7_final() {
   # $1: PYENV_VERSION to inherit ('' for unset); $2: times to source the file.
   run env -u LINUX -u MACOS PYENV_VERSION="$1" WORKSTATION=1 \
-    PATH="${_STUB_DIR}:/usr/bin:/bin" zsh -fc "
+    PATH="${_STUB_DIR}:${_SYS_PATH}" zsh -fc "
     [[ -z \${PYENV_VERSION} ]] && unset PYENV_VERSION
     quiet_which() { command -v \"\$1\" >/dev/null 2>&1; }
     for _i in {1..$2}; do source '${ZSHRC_D}/7_final.zsh'; done

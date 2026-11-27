@@ -26,6 +26,10 @@ setup() {
   export _APT_KEY_GPG_BIN="${REPO_ROOT}/tests/mocks/gpg-dearmor"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # The real gpg, resolved with the mocks directory stripped from PATH.
 _real_gpg() {
   PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')" command -v gpg

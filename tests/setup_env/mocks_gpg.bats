@@ -25,6 +25,7 @@ setup() {
 
 teardown() {
   exec 7>&- 8<&-
+  assert_no_real_root_paths || return 1
 }
 
 _open_fifo() {

@@ -175,6 +175,7 @@ SHIM
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -5346,7 +5347,9 @@ _misc_env() {
   printf '#!/usr/bin/env bash\nprintf "go version go1.26 linux/amd64\\n"\n' > "${_bin_dir}/go"
   chmod +x "${_bin_dir}/go"
   export _GO_BIN="${_bin_dir}/go"
-  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" bash -c "
+  local _sys
+  _sys="$(refusing_sudo_path /usr/bin:/bin)" || return 1
+  run env PATH="${_sys}" bash -c "
     source '${REPO_ROOT}/lib/constants.sh' 2>/dev/null
     source '${REPO_ROOT}/lib/linux_ubuntu.sh'
     _install_go_from_tarball() { :; }

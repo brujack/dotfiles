@@ -1150,16 +1150,22 @@ _guard_verdict() {
     'awk -F= /^NAME/{print $2} /etc/os-release extra' \
     "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin /etc/x" \
     "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update /etc/x" \
-    'sudo -H /usr/local/bin/other --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin'; do
+    'sudo -H /usr/local/bin/other --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin' \
+    'sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf /etc/x' \
+    'sudo tee /etc/sysctl.d/90-dotfiles-other.conf' \
+    'sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf.bak' \
+    'tee /etc/sysctl.d/90-dotfiles-inotify.conf' \
+    'sudo rm -f /etc/sysctl.d/90-dotfiles-inotify.conf'; do
     _guard_verdict "${_line}"
     [ "${status}" -eq 1 ] || { printf 'allow-list too wide: %s\n' "${_line}" >&2; return 1; }
   done
 }
 
-@test "root-path guard: the allow-listed read-only probe and both aws installer forms pass" {
+@test "root-path guard: the allow-listed read-only probe, both aws installer forms and the inotify recorder line pass" {
   local _line _aws="sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin"
   for _line in \
     'awk -F= /^NAME/{print $2} /etc/os-release' \
+    'sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf' \
     "${_aws}" \
     "${_aws} --update"; do
     _guard_verdict "${_line}"

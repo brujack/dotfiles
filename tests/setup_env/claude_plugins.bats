@@ -61,6 +61,10 @@ setup() {
   export _CLAUDE_GUARD_GIT="${_git_shim}/git"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # Builds ${BATS_TEST_TMPDIR}/repo as a real git repo tracking sub/settings.json
 # (a SUBDIRECTORY, deliberately -- see the GIT_DIR-decoy test below, which
 # needs the tracked file's directory to differ from the repo's top-level so

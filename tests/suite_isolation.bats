@@ -215,8 +215,10 @@ _uv_ver() {
 # refusing_sudo_path; the path it builds must still resolve sudo to the stub.
 @test "refusing_sudo_path: a system-only PATH still resolves sudo to the refusing stub" {
   source "${REPO_ROOT}/tests/helpers/common.bash"
-  [[ "$(PATH="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)" command -v sudo)" == */bats-sentinel.*/nosudo/sudo ]]
-  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" sudo touch "${BATS_TEST_TMPDIR}/must-not-exist"
+  local _sys
+  _sys="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)" || return 1
+  [[ "$(PATH="${_sys}" command -v sudo)" == */bats-sentinel.*/nosudo/sudo ]]
+  run env PATH="${_sys}" sudo touch "${BATS_TEST_TMPDIR}/must-not-exist"
   [ "${status}" -eq 97 ]
   [ ! -e "${BATS_TEST_TMPDIR}/must-not-exist" ]
 }
@@ -228,13 +230,37 @@ _uv_ver() {
   [[ "${output}" == *"no refusing sudo stub"* ]]
 }
 
-# Lines of the given files that set PATH to a value with a /usr/bin or /bin
-# element without going through refusing_sudo_path. Exempt: a value built from
-# the current ${PATH} (it keeps the stub) and one naming tests/mocks.
+# Lines of the given files that either set PATH to a value with a /usr/bin or
+# /bin element without going through refusing_sudo_path, or build PATH from
+# refusing_sudo_path in a form that loses its fail-closed status. Single-line
+# assignments only. Returns 0 with the findings on stdout, 1 when there are none,
+# 2 when a file cannot be read (a scan that read nothing must not read as clean).
+#
+# Raw reset exemptions, each limited to the PATH value itself (a word starting at
+# `PATH=` and ending at the first blank, `;`, `|` or `&`), so a `$PATH` printed
+# elsewhere on the line exempts nothing:
+#  - the value holds ${PATH}/$PATH (it keeps the stub), tests/mocks (holds the
+#    sudo mock) or $(refusing_sudo_path ...);
+#  - `PATH=<value> command -v ...` is a lookup and runs nothing.
+# Fail-open forms: a command substitution's status is dropped by a prefix
+# assignment (`PATH="$(f)" cmd`), by `env PATH="$(f)"` and by export/local/readonly,
+# so a missing stub leaves PATH empty; assign to a variable on its own line first.
 _unguarded_path_resets() {
-  command grep -nE 'PATH=' "$@" \
+  local _f _raw _open _rc=1
+  local _exempt='PATH=[^[:space:];|&]*(\$\{?PATH\}?|tests/mocks|\$\(refusing_sudo_path)|PATH=[^[:space:]]+[[:space:]]+command -v '
+  local _open_forms='PATH="\$\(refusing_sudo_path[^)]*\)"[[:space:]]+[^[:space:]|&;#]|(^|[[:space:]])env[[:space:]].*PATH="?\$\(refusing_sudo_path|(export|local|readonly|declare)[[:space:]]+PATH=.*\$\(refusing_sudo_path'
+  for _f in "$@"; do
+    [[ -r ${_f} ]] || { printf '_unguarded_path_resets: cannot read %s\n' "${_f}" >&2; return 2; }
+  done
+  # grep rc 1 here means "no line", which is the clean answer; unreadable input
+  # was ruled out above.
+  _raw="$(command grep -nE 'PATH=' "$@" \
     | command grep -E "[=:\"']/(usr/)?bin([:\"'[:space:]]|\$)" \
-    | command grep -vE 'refusing_sudo_path|\$\{?PATH\}?|tests/mocks'
+    | command grep -vE "${_exempt}")" || true
+  _open="$(command grep -nE "${_open_forms}" "$@")" || true
+  if [[ -n ${_raw} ]]; then printf '%s\n' "${_raw}"; _rc=0; fi
+  if [[ -n ${_open} ]]; then printf '%s\n' "${_open}"; _rc=0; fi
+  return "${_rc}"
 }
 
 @test "the PATH-reset guard flags every unguarded form and passes the allowed ones" {
@@ -249,17 +275,147 @@ _unguarded_path_resets() {
   _ok="$(PATH="$(refusing_sudo_path /usr/bin:/bin)" cmd)"
   PATH="/usr/bin:${PATH}" cmd
   PATH="${HOME}/mocks/tests/mocks:/usr/bin" cmd
+  PATH="/usr/bin:/bin"; echo "$PATH"
+  PATH=/usr/bin:/bin echo "${PATH}"
+  PATH=/usr/bin:/bin command -v git
+  _p="$(PATH="/usr/bin:/bin" command -v "${_c}")"
+  PATH="${d}:$(refusing_sudo_path /usr/bin:/bin)"
+  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" cmd
+  PATH="$(refusing_sudo_path /usr/bin:/bin)" X=y run cmd
+  export PATH="$(refusing_sudo_path /usr/bin:/bin)"
+  local PATH="$(refusing_sudo_path /usr/bin:/bin)"
+  _s="$(refusing_sudo_path /usr/bin:/bin)" || return 1
+  PATH="${_s}" run cmd
 SEED
   run _unguarded_path_resets "${_f}"
   [ "${status}" -eq 0 ]
-  [ "${#lines[@]}" -eq 6 ]
-  [[ "${lines[0]}" == 1:* && "${lines[5]}" == 6:* ]]
+  # Raw resets: 1-6, then the $PATH-printed-elsewhere lines 10 and 11. Fail-open
+  # forms: 7 (prefix assignment in a substitution), 15 (env), 16 (prefix), 17
+  # (export) and 18 (local).
+  [ "${#lines[@]}" -eq 13 ]
+  local _n _got
+  _got=" $(printf '%s ' "${lines[@]%%:*}") "
+  for _n in 1 2 3 4 5 6 7 10 11 15 16 17 18; do
+    [[ "${_got}" == *" ${_n} "* ]] || { printf 'not flagged: line %s\n' "${_n}" >&2; return 1; }
+  done
+  for _n in 8 9 12 13 14 19 20; do
+    [[ "${_got}" != *" ${_n} "* ]] || { printf 'wrongly flagged: line %s\n' "${_n}" >&2; return 1; }
+  done
 }
 
-@test "no test in the sudo-reaching setup files resets PATH without refusing_sudo_path" {
+@test "the PATH-reset guard fails on an unreadable file instead of reading clean" {
+  run _unguarded_path_resets "${BATS_TEST_TMPDIR}/does-not-exist.bats"
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"cannot read"* ]]
+}
+
+@test "no tracked bats file resets PATH without refusing_sudo_path or builds it fail-open" {
   # A raw reset drops the refusing stub; refusing_sudo_path is the only route.
-  run ! _unguarded_path_resets \
-    "${REPO_ROOT}/tests/setup_env/developer.bats" \
-    "${REPO_ROOT}/tests/setup_env/install_functions.bats" \
-    "${REPO_ROOT}/tests/setup_env/linux_ubuntu.bats"
+  # This file is skipped: its seed cases above are deliberate violations.
+  local -a _files=()
+  local _f
+  while IFS= read -r -d '' _f; do
+    [[ ${_f} == tests/suite_isolation.bats ]] || _files+=("${REPO_ROOT}/${_f}")
+  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" ls-files -z '*.bats')
+  # An empty list would pass vacuously.
+  [ "${#_files[@]}" -gt 100 ]
+  run _unguarded_path_resets "${_files[@]}"
+  [ "${status}" -eq 1 ] || { printf '%s\n' "${output}" >&2; return 1; }
+}
+
+# ── root-path guard wiring ────────────────────────────────────────────────────
+# assert_no_real_root_paths (tests/helpers/common.bash) judges a test only when
+# its file's teardown() calls it, so each file that calls load_mocks must.
+
+# The lines of <file>'s teardown() body.
+_teardown_body() {
+  awk '/^teardown\(\) *\{/ { in_body = 1; next } in_body && /^\}/ { exit } in_body' "$1"
+}
+
+# Print each given file that calls load_mocks but whose teardown() does not call
+# assert_no_real_root_paths on an uncommented line. A file that only mentions
+# load_mocks in a comment or a quoted string is not a caller.
+_files_missing_root_guard() {
+  local _f
+  for _f in "$@"; do
+    [[ -r ${_f} ]] || { printf '_files_missing_root_guard: cannot read %s\n' "${_f}" >&2; return 2; }
+    command grep -qE '^[[:space:]]+(run[[:space:]]+)?load_mocks([[:space:]]|$)' "${_f}" || continue
+    _teardown_body "${_f}" | command grep -qE '^[^#]*assert_no_real_root_paths' || printf '%s\n' "${_f}"
+  done
+}
+
+@test "the root-guard wiring check flags a load_mocks file whose teardown lacks the guard" {
+  local _d="${BATS_TEST_TMPDIR}/wiring"
+  mkdir -p "${_d}"
+  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  assert_no_real_root_paths || return 1\n}\n' > "${_d}/wired.bats"
+  printf 'setup() {\n  load_mocks\n}\n' > "${_d}/no_teardown.bats"
+  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  rm -f x\n}\n' > "${_d}/teardown_without.bats"
+  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  # assert_no_real_root_paths\n  :\n}\n' > "${_d}/commented.bats"
+  printf 'setup() {\n  load_mocks\n}\nteardown() {\n  :\n}\n@test "x" {\n  assert_no_real_root_paths\n}\n' > "${_d}/in_test_body.bats"
+  printf '# load_mocks is not called here\nsetup() {\n  :\n}\n' > "${_d}/mention_only.bats"
+  run _files_missing_root_guard "${_d}"/*.bats
+  [ "${status}" -eq 0 ]
+  [ "${#lines[@]}" -eq 4 ]
+  [[ "${output}" == *"no_teardown.bats"* && "${output}" == *"teardown_without.bats"* ]]
+  [[ "${output}" == *"commented.bats"* && "${output}" == *"in_test_body.bats"* ]]
+  [[ "${output}" != *"/wired.bats"* ]]
+  run _files_missing_root_guard "${_d}/absent.bats"
+  [ "${status}" -eq 2 ]
+}
+
+# bats_only_seams.bats proves production paths win outside bats, so its recorder
+# functions (a non-exec sudo, apt and keyring writers) name /etc, /usr/local and
+# /usr/share/keyrings by design on every test; the guard cannot apply there.
+@test "every bats file that calls load_mocks guards its teardown against real root paths" {
+  local -a _files=()
+  local _f
+  while IFS= read -r -d '' _f; do
+    [[ ${_f} == tests/setup_env/bats_only_seams.bats ]] || _files+=("${REPO_ROOT}/${_f}")
+  done < <(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_INDEX_FILE git -C "${REPO_ROOT}" ls-files -z '*.bats')
+  [ "${#_files[@]}" -gt 100 ]
+  run _files_missing_root_guard "${_files[@]}"
+  [ "${status}" -eq 0 ]
+  [ -z "${output}" ] || { printf 'teardown lacks assert_no_real_root_paths:\n%s\n' "${output}" >&2; return 1; }
+}
+
+# bats ignores a failing command in teardown() unless it is the last one, so the
+# wiring must be `|| return 1` (or the last statement). Run it for real.
+@test "a teardown wired with assert_no_real_root_paths fails the test that recorded a root path" {
+  mkdir -p "${FX}"
+  printf 'source "%s"\n' "${HELPER}" > "${FX}/setup_suite.bash"
+  cat > "${FX}/a.bats" << FIXTURE
+setup() {
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  export MOCK_CALLS_FILE="\${BATS_TEST_TMPDIR}/mock_calls"
+}
+teardown() {
+  assert_no_real_root_paths || return 1
+  : cleanup that follows the guard
+}
+@test "clean" { printf 'ls /tmp\n' > "\${MOCK_CALLS_FILE}"; }
+@test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
+FIXTURE
+  run bats "${FX}/a.bats" < /dev/null
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"ok 1 clean"* ]]
+  [[ "${output}" == *"not ok 2 dirty"* ]]
+}
+
+@test "a bare guard call that is not the last statement of teardown does not fail the test" {
+  mkdir -p "${FX}"
+  printf 'source "%s"\n' "${HELPER}" > "${FX}/setup_suite.bash"
+  cat > "${FX}/a.bats" << FIXTURE
+setup() {
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  export MOCK_CALLS_FILE="\${BATS_TEST_TMPDIR}/mock_calls"
+}
+teardown() {
+  assert_no_real_root_paths
+  :
+}
+@test "dirty" { printf 'sudo rm -f /etc/x\n' > "\${MOCK_CALLS_FILE}"; }
+FIXTURE
+  run bats "${FX}/a.bats" < /dev/null
+  # This is why every wiring line ends in `|| return 1`: without it the hit is lost.
+  [ "${status}" -eq 0 ]
 }

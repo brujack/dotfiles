@@ -198,6 +198,12 @@ load_mocks() {
   # fixture and repoint _OVERRIDE_CLAUDE_PLUGINS_FILE.
   export _OVERRIDE_CLAUDE_PLUGINS_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/no-such-installed_plugins.json"
   export _OVERRIDE_CLAUDE_PLUGIN_BACKUP_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/plugin-backups"
+  # setup_suite exports one MOCK_CALLS_FILE shared by every file of the run. Give
+  # the test its own ledger unless the caller already chose one under the test
+  # tmpdir, so assert_no_real_root_paths judges this test's calls alone.
+  if [[ -n "${BATS_TEST_TMPDIR:-}" && ${MOCK_CALLS_FILE:-} != "${BATS_TEST_TMPDIR}"/* ]]; then
+    export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
+  fi
   # Keep this the last statement: once tests/mocks leads PATH, chmod/cp/ln/mv/
   # tee/rm resolve to logging mocks, which append to MOCK_CALLS_FILE (default
   # /tmp/mock_calls, outside the test tmpdir) when a test has not set it yet.
@@ -220,7 +226,11 @@ assert_no_real_root_paths() {
   #    /usr/local/aws-cli --bin-dir /usr/local/bin`: the installer is a path in
   #    the test HOME that never exists under the mocked unzip, so tests/mocks/sudo
   #    does not exec it; /usr/local/* are flag values, not read or write targets.
-  local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$'
+  #  - `sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf`: linux_ubuntu.bats
+  #    "inotify_conf_write: seam unset pipes to sudo tee on the constant path"
+  #    deliberately unsets the seam to pin the production constant. Its sudo is a
+  #    recording shim that drains stdin and runs nothing, so only the argv lands.
+  local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$|^sudo tee /etc/sysctl[.]d/90-dotfiles-inotify[.]conf$'
   # A prefix is named when a non-path character (or line start) precedes it and
   # a slash, whitespace or line end follows, which covers `--x=/etc/y`, `[/etc/y`,
   # `>/etc/y`, `-a/etc/y` and a bare `/etc` but not `<tmp>/etc/y` or `/etcetera`.

@@ -36,6 +36,7 @@ setup() {
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
   unset MOCK_DEFAULTS_EXIT MOCK_CHFLAGS_EXIT MOCK_KILLALL_EXIT MOCK_SUDO_EXIT
 }

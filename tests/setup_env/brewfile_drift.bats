@@ -29,6 +29,7 @@ teardown() {
   unset HAS_K8S
   unset HAS_DOCKER
   unset HAS_RUST
+  assert_no_real_root_paths || return 1
 }
 
 # ── skip gates ────────────────────────────────────────────────────────────────

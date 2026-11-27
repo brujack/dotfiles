@@ -26,6 +26,10 @@ setup() {
   unset DRY_RUN _DOTFILES_RUN_TMPDIR
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # _fake_run_dir: what _dotfiles_run_tmpdir_setup leaves behind, without its
 # ensure_state_ledger side effects.
 _fake_run_dir() {

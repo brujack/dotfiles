@@ -14,6 +14,10 @@ setup() {
   export _NVIDIA_MODULE_VERSION_FILE="${BATS_TEST_TMPDIR}/nvidia-version"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "_nvidia_loaded_version: dotted version becomes dashed" {
   printf '615.71.09\n' > "${_NVIDIA_MODULE_VERSION_FILE}"
   run _nvidia_loaded_version

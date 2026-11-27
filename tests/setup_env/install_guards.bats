@@ -5,6 +5,7 @@ bats_require_minimum_version 1.5.0
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_setup_env
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -16,8 +17,11 @@ setup() {
 }
 
 teardown() {
+  local _root_paths=0
+  assert_no_real_root_paths || _root_paths=1
   rm -f "${MOCK_CALLS_FILE:-}"
   rm -rf "/tmp/bats-core-${BATS_VER}" "/tmp/bats.tar.gz"
+  return "${_root_paths}"
 }
 
 # ── brew_formula_installed ───────────────────────────────────────────────────
@@ -438,7 +442,7 @@ _gnubin_present() {
   # install_homebrew (curl | bash, sudo xcodebuild) cannot touch the
   # operator's real $HOME even though install_homebrew is stubbed below.
   local _saved_path="${PATH}" _saved_home="${HOME}"
-  export PATH="${_no_brew}:/usr/bin:/bin"
+  export PATH="${_no_brew}:${_SYS_PATH}"
   export HOME="${BATS_TEST_TMPDIR}"
   _gnubin_absent
   install_homebrew() { return 0; }

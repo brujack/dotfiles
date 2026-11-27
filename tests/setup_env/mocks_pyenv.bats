@@ -6,6 +6,7 @@
 load '../helpers/common.bash'
 
 setup() {
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   MOCK="${BATS_TEST_DIRNAME}/../mocks/pyenv"
   export HOME="${BATS_TEST_TMPDIR}/home"
   mkdir -p "${HOME}"
@@ -79,7 +80,7 @@ teardown() {
 }
 
 @test "pyenv mock: works under env -i (HOME-keyed, not PATH or PYENV_ROOT)" {
-  run env -i HOME="${HOME}" PATH=/usr/bin:/bin "${MOCK}" install -s -v 3.99.1
+  run env -i HOME="${HOME}" PATH="${_SYS_PATH}" "${MOCK}" install -s -v 3.99.1
   [ "$status" -eq 0 ]
   [ -x "${HOME}/.pyenv/versions/3.99.1/bin/python" ]
 }
@@ -97,7 +98,7 @@ teardown() {
 }
 
 @test "pyenv mock: env -i without MOCK_CALLS_FILE logs under the bats HOME" {
-  run env -i HOME="${HOME}" PATH=/usr/bin:/bin "${MOCK}" install -s -v 3.99.1
+  run env -i HOME="${HOME}" PATH="${_SYS_PATH}" "${MOCK}" install -s -v 3.99.1
   [ "$status" -eq 0 ]
   grep -q 'pyenv install -s -v 3.99.1' "${HOME}/.mock_calls"
 }

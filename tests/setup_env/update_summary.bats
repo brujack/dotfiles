@@ -18,7 +18,7 @@ setup() {
 }
 
 teardown() {
-  :
+  assert_no_real_root_paths || return 1
 }
 
 # ── _update_diff_lines ────────────────────────────────────────────────────────

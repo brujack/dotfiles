@@ -22,6 +22,10 @@ setup() {
   touch "${MOCK_CALLS_FILE}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # _signal_fixture <install-handler: 0|1> <INT|TERM> <pipe: 0|1> [wait: 1|0] -- writes a
 # script that runs one section whose leaf signals the whole process group,
 # then touches an `after` marker. The marker exists only if the run continued.

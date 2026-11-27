@@ -57,6 +57,7 @@ teardown() {
   # cleanup itself, but leaving a read-only directory behind is still worth
   # not doing.
   chmod u+w "${_TFENV_LINK_DIR:-}" 2> /dev/null || true
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}" "${TFENV_CALLS_FILE:-}"
 }
 

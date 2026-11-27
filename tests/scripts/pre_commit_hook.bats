@@ -4,6 +4,8 @@ bats_require_minimum_version 1.5.0
 
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  MINIMAL_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   # Use real git (exclude git mock from PATH so `git rev-parse --show-toplevel` works)
   CLEAN_PATH="$(printf "%s" "${PATH}" | tr ':' '\n' | grep -v "tests/mocks" | tr '\n' ':' | sed 's/:$//')"
   REPO_DIR="${BATS_TEST_TMPDIR}/repo"
@@ -55,7 +57,8 @@ _run_hook() {
 # contains ggshield: /opt/homebrew/bin also holds the toolchain, so removing it
 # to remove one binary takes git, make and friends with it -- the "delete a
 # directory to delete one binary" trap this repo has paid for before.
-MINIMAL_PATH="/usr/bin:/bin"
+# Built in setup() with the suite's refusing sudo stub first (refusing_sudo_path),
+# so a hook run under it can never reach the real passwordless sudo.
 
 _run_hook_no_ggshield_on_path() {
   run bash -c "export PATH='${MINIMAL_PATH}'; $* cd '${REPO_DIR}' && bash '${REPO_ROOT}/scripts/pre-commit-hook.sh'"

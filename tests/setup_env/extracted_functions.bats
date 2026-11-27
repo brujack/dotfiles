@@ -3,6 +3,7 @@
 setup() {
   REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
   source "${REPO_ROOT}/tests/helpers/common.bash"
+  _SYS_PATH="$(refusing_sudo_path /usr/bin:/bin)" || return 1
   load_setup_env
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
@@ -21,6 +22,7 @@ setup() {
 }
 
 teardown() {
+  assert_no_real_root_paths || return 1
   rm -f "${MOCK_CALLS_FILE:-}"
 }
 
@@ -445,7 +447,7 @@ _make_fake_dotfiles() {
     [[ "$(basename "$f")" == "cursor" ]] && continue
     ln -sf "$f" "${_tmp}/$(basename "$f")"
   done
-  export PATH="${_tmp}:/usr/bin:/bin"
+  export PATH="${_tmp}:${_SYS_PATH}"
   run setup_dotfile_symlinks
   [ "$status" -eq 0 ]
   [[ "$output" == *"Cursor is not installed"* ]]

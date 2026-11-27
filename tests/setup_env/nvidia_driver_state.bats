@@ -18,6 +18,10 @@ setup() {
     > "${MOCK_SYSTEMCTL_ACTIVE_STATE_FILE}"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "systemctl stub: a listed unit prints its ActiveState" {
   run "${_SYSTEMCTL_BIN}" show -P ActiveState nvidia-cdi-refresh.path
   [ "${status}" -eq 0 ]

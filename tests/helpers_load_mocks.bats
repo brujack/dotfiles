@@ -15,6 +15,10 @@ setup() {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 @test "load_mocks writes no mock log and leaves tests/mocks first on PATH" {
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/calls"
   : > "${MOCK_CALLS_FILE}"
@@ -24,6 +28,25 @@ setup() {
     return 1
   fi
   [ "${PATH%%:*}" = "${REPO_ROOT}/tests/mocks" ]
+}
+
+# A file that never sets MOCK_CALLS_FILE inherits the suite-wide ledger that
+# setup_suite exports, shared by every file of the run, so a root-path hit in one
+# file would fail (or hide behind) another's teardown guard. load_mocks gives the
+# test its own ledger unless the caller already put one under the test tmpdir.
+@test "load_mocks: a ledger outside the test tmpdir is replaced by a per-test one" {
+  export MOCK_CALLS_FILE="${BATS_RUN_TMPDIR}/shared-suite-ledger"
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/mock_calls" ]
+  unset MOCK_CALLS_FILE
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/mock_calls" ]
+}
+
+@test "load_mocks: a ledger already under the test tmpdir is kept" {
+  export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/calls"
+  load_mocks
+  [ "${MOCK_CALLS_FILE}" = "${BATS_TEST_TMPDIR}/calls" ]
 }
 
 @test "load_mocks: the five stub seams point at tracked, executable files under tests/stubs" {

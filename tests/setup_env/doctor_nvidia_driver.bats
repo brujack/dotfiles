@@ -17,6 +17,10 @@ setup() {
   OUT="${BATS_TEST_TMPDIR}/out"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # Stub the state function with the given printf format and arguments.
 stub_state() {
   _STUB_STATE="$(printf "$@")"

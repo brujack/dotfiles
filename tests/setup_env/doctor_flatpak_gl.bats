@@ -27,6 +27,10 @@ setup() {
   OUT="${BATS_TEST_TMPDIR}/out"
 }
 
+teardown() {
+  assert_no_real_root_paths || return 1
+}
+
 # Run the check in the current shell so the counters are observable. Bare call:
 # under bats' errexit the check must survive _flatpak_has_apps returning non-zero.
 run_check() {
