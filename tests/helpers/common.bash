@@ -214,10 +214,27 @@ load_mocks() {
 # and the logging tee/rm/mkdir mocks exec real commands, so such a call either
 # touched the host or only failed because the user cannot write there; neither
 # is acceptable. Point the seam at a fixture under BATS_TEST_TMPDIR instead.
-# Scans ${MOCK_CALLS_FILE}; prints each offending line and returns 1.
+# Scans every ledger the test could have written to: ${MOCK_CALLS_FILE}, the
+# per-test ${BATS_TEST_TMPDIR}/mock_calls load_mocks defaults to, and the
+# suite-wide ${_SUITE_MOCK_CALLS_FILE} (setup_suite) that a mock writes to when
+# MOCK_CALLS_FILE was never repointed. Prints each offending line and returns 1.
+# A test that must record a real path on purpose records it in a ledger of its
+# own, which none of these name (linux_ubuntu.bats, "inotify_conf_write: seam
+# unset ...").
 assert_no_real_root_paths() {
-  local _calls="${MOCK_CALLS_FILE:-}" _hits
-  [[ -n ${_calls} && -f ${_calls} ]] || return 0
+  local _ledger _seen=" " _rc=0
+  for _ledger in "${MOCK_CALLS_FILE:-}" "${BATS_TEST_TMPDIR:+${BATS_TEST_TMPDIR}/mock_calls}" "${_SUITE_MOCK_CALLS_FILE:-}"; do
+    [[ -n ${_ledger} && ${_seen} != *" ${_ledger} "* ]] || continue
+    _seen+="${_ledger} "
+    _root_paths_in_ledger "${_ledger}" || _rc=1
+  done
+  return "${_rc}"
+}
+
+# _root_paths_in_ledger <file> -- one ledger's scan for assert_no_real_root_paths.
+_root_paths_in_ledger() {
+  local _calls="$1" _hits
+  [[ -f ${_calls} ]] || return 0
   # Allow-list, each entry a read-only probe or an inert argument the code
   # cannot redirect (no seam exists, and none may be added to production code
   # for a test):
@@ -226,11 +243,7 @@ assert_no_real_root_paths() {
   #    /usr/local/aws-cli --bin-dir /usr/local/bin`: the installer is a path in
   #    the test HOME that never exists under the mocked unzip, so tests/mocks/sudo
   #    does not exec it; /usr/local/* are flag values, not read or write targets.
-  #  - `sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf`: linux_ubuntu.bats
-  #    "inotify_conf_write: seam unset pipes to sudo tee on the constant path"
-  #    deliberately unsets the seam to pin the production constant. Its sudo is a
-  #    recording shim that drains stdin and runs nothing, so only the argv lands.
-  local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$|^sudo tee /etc/sysctl[.]d/90-dotfiles-inotify[.]conf$'
+  local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$'
   # A prefix is named when a non-path character (or line start) precedes it and
   # a slash, whitespace or line end follows, which covers `--x=/etc/y`, `[/etc/y`,
   # `>/etc/y`, `-a/etc/y` and a bare `/etc` but not `<tmp>/etc/y` or `/etcetera`.
@@ -253,7 +266,7 @@ assert_no_real_root_paths() {
     return 1
   fi
   (( _rc == 1 )) && return 0
-  printf 'mock calls named real root-owned paths:\n%s\n' "${_hits}" >&2
+  printf 'mock calls named real root-owned paths (%s):\n%s\n' "${_calls}" "${_hits}" >&2
   return 1
 }
 

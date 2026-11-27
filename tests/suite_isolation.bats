@@ -44,6 +44,17 @@ _uv_ver() {
   [[ "${HOME}" == */bats-sentinel.*/home ]]
 }
 
+@test "setup_suite exports the suite ledger the root-path guard scans" {
+  mkfx '[ -n "${_SUITE_MOCK_CALLS_FILE}" ] && [ "${_SUITE_MOCK_CALLS_FILE}" = "${MOCK_CALLS_FILE}" ] && printf "%s\n" "${_SUITE_MOCK_CALLS_FILE}" > "${OUT}"'
+  run env -u MOCK_CALLS_FILE -u _SUITE_MOCK_CALLS_FILE OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
+  [ "${status}" -eq 0 ]
+  [[ "$(< "${OUT}")" == */bats-sentinel.*/mock_calls ]]
+  # A caller's ledger is the suite ledger too.
+  run env -u _SUITE_MOCK_CALLS_FILE MOCK_CALLS_FILE=/caller/calls OUT="${OUT}" bats "${FX}/a.bats" < /dev/null
+  [ "${status}" -eq 0 ]
+  [ "$(< "${OUT}")" = "/caller/calls" ]
+}
+
 @test "setup_suite exports the R2 values" {
   mkfx 'env > "${OUT}"; for _d in HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME PARALLEL_HOME; do [ -d "${!_d}" ] && printf "dir-ok:%s\n" "${_d}" >> "${OUT}"; done'
   run env -u MOCK_CALLS_FILE OUT="${OUT}" bats "${FX}/a.bats" < /dev/null

@@ -6073,17 +6073,23 @@ _inotify_sysctl_calls() { grep -c '^sysctl ' "${MOCK_CALLS_FILE}" || true; }
 
 @test "inotify_conf_write: seam unset pipes to sudo tee on the constant path" {
   # A recording shim that drains stdin and runs nothing: the real path is /etc.
-  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
+  # It records into its own ledger, not MOCK_CALLS_FILE: the line names the real
+  # /etc on purpose, so assert_no_real_root_paths must not scan it.
+  local _ledger="${BATS_TEST_TMPDIR}/inotify-const-ledger"
+  export INOTIFY_CONST_LEDGER="${_ledger}"
+  printf '#!/usr/bin/env bash\nprintf "sudo %%s\\n" "$*" >> "${INOTIFY_CONST_LEDGER}"\ncat > /dev/null\nexit 0\n' > "${SHIM_DIR}/sudo"
   /bin/chmod +x "${SHIM_DIR}/sudo"
   [ "$(command -v sudo)" = "${SHIM_DIR}/sudo" ]
   # If the else branch ever lost sudo, plain tee would write the real /etc as
   # root in a root container (tdd.md E2); a failing tee keeps that path inert.
   export MOCK_TEE_EXIT=1
   unset _SYSCTL_CONF
-  : > "${MOCK_CALLS_FILE}"
+  : > "${MOCK_CALLS_FILE}" "${_ledger}"
   run _sysctl_conf_write inotify fs.inotify.max_user_instances 4096 "${INOTIFY_SYSCTL_CONF}" ""
   [ "$status" -eq 0 ]
-  [ "$(cat "${MOCK_CALLS_FILE}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+  [ "$(cat "${_ledger}")" = "sudo tee /etc/sysctl.d/90-dotfiles-inotify.conf" ]
+  # Nothing reached the shared ledger the guard scans.
+  [ ! -s "${MOCK_CALLS_FILE}" ]
 }
 
 @test "inotify_conf_write: seam set and tee failing returns 1 naming _SYSCTL_CONF" {
