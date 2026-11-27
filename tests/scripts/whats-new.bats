@@ -20,6 +20,13 @@ setup() {
 
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
+  # A recording gh first on PATH: the publish path must never call gh, and the
+  # "no PR" assertions below can only fail if a call is recorded. Exits 1 so a
+  # regression can never reach the real gh.
+  mkdir -p "${BATS_TEST_TMPDIR}/ghbin"
+  printf '#!/usr/bin/env bash\nprintf "gh %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${BATS_TEST_TMPDIR}/ghbin/gh"
+  chmod +x "${BATS_TEST_TMPDIR}/ghbin/gh"
+  export PATH="${BATS_TEST_TMPDIR}/ghbin:${PATH}"
 
   export MOCK_CURL_STDOUT="${FAKE_CHANGELOG}"
   export MOCK_CLAUDE_STDOUT="## New Features
