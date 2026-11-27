@@ -1219,31 +1219,31 @@ _doctor_check_aws_key_expiry() {
   printf "\nAWS CLI signing key:\n"
 
   # _AWS_KEY_PATH / _AWS_GPG_BIN: the same seams lib/developer.sh's
-  # _aws_verify_zip reads, read here unconditionally for the same reason --
-  # a test must be able to point this at a fixture key with a controlled
-  # expiry, and at a gpg binary that isn't tests/mocks/gpg (which prints
-  # nothing and would make every expiry unparseable).
+  # _aws_verify_zip reads, honoured only under bats (_bats_seam) for the same
+  # reason -- an exported value must not steer the key or the binary in
+  # production, while a test can still point this at a fixture key with a
+  # controlled expiry, and at a gpg binary that isn't tests/mocks/gpg (which
+  # prints nothing and would make every expiry unparseable).
   #
   # The default is DOTFILES_REPO_ROOT (lib/constants.sh), for the same reason
   # _aws_verify_zip reads it -- latent here, since run_doctor does not cd, but a
   # defect fixed in one of its two copies is not fixed.
-  local _key="${_AWS_KEY_PATH:-}"
-  if [[ -z "${_key}" ]]; then
-    _key="${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc"
-  fi
+  local _key _gpg
+  _key="$(_bats_seam "${_AWS_KEY_PATH:-}" "${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc")"
+  _gpg="$(_bats_seam "${_AWS_GPG_BIN:-}" gpg)"
 
   if [[ ! -f "${_key}" ]]; then
     doctor_warn "AWS CLI signing key" "vendored key not found at ${_key}"
     return 0
   fi
 
-  if ! command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1; then
+  if ! command -v "${_gpg}" >/dev/null 2>&1; then
     doctor_warn "AWS CLI signing key" "gpg not found; cannot check expiry"
     return 0
   fi
 
   local _expiry_epoch
-  _expiry_epoch="$("${_AWS_GPG_BIN:-gpg}" --show-keys --with-colons "${_key}" 2>/dev/null \
+  _expiry_epoch="$("${_gpg}" --show-keys --with-colons "${_key}" 2>/dev/null \
     | awk -F: '/^pub/{print $7; exit}')"
 
   if [[ -z "${_expiry_epoch}" ]] || ! [[ "${_expiry_epoch}" =~ ^[0-9]+$ ]]; then

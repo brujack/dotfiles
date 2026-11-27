@@ -633,3 +633,120 @@ _albert_mismatch_setup() {
   [ "${status}" -eq 2 ]
   command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
 }
+
+# ── AWS installer verifiers and trust anchor ─────────────────────────────────
+# _AWS_GPG_BIN, _AWS_KEY_PATH and _AWS_PKGUTIL_BIN choose the verifier or the key
+# ahead of `sudo ./aws/install` / `sudo installer`. Same contract as above: the
+# real tool and the vendored key decide outside bats. The _make_gpg_stub stand-in
+# records every call; here it also reports a good signature on --verify.
+
+# A pkgutil stand-in that vouches for AWS's team ID and records the call.
+_make_pkgutil_stub() {
+  printf '#!/usr/bin/env bash\nprintf "SEAM-PKGUTIL %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nprintf "Developer ID Installer: AMZN Mobile LLC (%s)\\n" "%s"\n' \
+    "%s" "${AWSCLI_APPLE_TEAM_ID}" > "${_SEAM}/pkgutil-stub"
+  /bin/chmod +x "${_SEAM}/pkgutil-stub"
+}
+
+# A gpg that accepts any import and reports VALIDSIG for the pinned fingerprint.
+_make_forging_gpg_stub() {
+  cat > "${_SEAM}/gpg-forge" << STUB
+#!/usr/bin/env bash
+printf 'SEAM-GPG %s\n' "\$*" >> "\${MOCK_CALLS_FILE}"
+case " \$* " in
+  *" --verify "*) printf '[GNUPG:] VALIDSIG ${AWSCLI_GPG_FPR} x\n' ;;
+esac
+exit 0
+STUB
+  /bin/chmod +x "${_SEAM}/gpg-forge"
+}
+
+_aws_payload() {
+  printf 'payload\n' > "${_WORK}/awscli.zip"
+  printf 'not a signature\n' > "${_WORK}/awscli.zip.sig"
+}
+
+@test "_aws_verify_zip: _AWS_GPG_BIN is honoured under bats" {
+  _make_forging_gpg_stub
+  _aws_payload
+  _AWS_GPG_BIN="${_SEAM}/gpg-forge" run _aws_verify_zip "${_WORK}/awscli.zip" "${_WORK}/awscli.zip.sig"
+  [ "${status}" -eq 0 ]
+  command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_aws_verify_zip: a forging _AWS_GPG_BIN is ignored outside bats, real gpg rejects" {
+  _need_real_gpg
+  _make_forging_gpg_stub
+  _aws_payload
+  _AWS_GPG_BIN="${_SEAM}/gpg-forge" BATS_TEST_TMPDIR='' run _aws_verify_zip "${_WORK}/awscli.zip" "${_WORK}/awscli.zip.sig"
+  [ "${status}" -ne 0 ]
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_aws_verify_zip: _AWS_KEY_PATH is honoured under bats" {
+  _need_real_gpg
+  _aws_payload
+  printf 'not a key\n' > "${_SEAM}/bad.asc"
+  _AWS_KEY_PATH="${_SEAM}/bad.asc" run _aws_verify_zip "${_WORK}/awscli.zip" "${_WORK}/awscli.zip.sig"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"could not import the vendored key"* ]]
+}
+
+@test "_aws_verify_zip: _AWS_KEY_PATH is ignored outside bats, the vendored key is imported" {
+  _need_real_gpg
+  _aws_payload
+  printf 'not a key\n' > "${_SEAM}/bad.asc"
+  _AWS_KEY_PATH="${_SEAM}/bad.asc" BATS_TEST_TMPDIR='' run _aws_verify_zip "${_WORK}/awscli.zip" "${_WORK}/awscli.zip.sig"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" != *"could not import the vendored key"* ]]
+  [[ "${output}" == *"did not verify"* ]]
+  _assert_seam_unused
+}
+
+@test "_aws_verify_pkg: _AWS_PKGUTIL_BIN is honoured under bats" {
+  _make_pkgutil_stub
+  _AWS_PKGUTIL_BIN="${_SEAM}/pkgutil-stub" run _aws_verify_pkg "${_WORK}/AWSCLIV2.pkg"
+  [ "${status}" -eq 0 ]
+  command grep -q '^SEAM-PKGUTIL ' "${MOCK_CALLS_FILE}"
+}
+
+# A recording pkgutil first on PATH stands for the default `pkgutil` on any OS
+# (Linux has none; the suite's tests/mocks/pkgutil would otherwise decide).
+@test "_aws_verify_pkg: a forging _AWS_PKGUTIL_BIN is ignored outside bats, PATH pkgutil decides" {
+  _make_pkgutil_stub
+  mkdir -p "${_WORK}/pk-bin"
+  printf '#!/usr/bin/env bash\nprintf "PATH-PKGUTIL %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${_WORK}/pk-bin/pkgutil"
+  /bin/chmod +x "${_WORK}/pk-bin/pkgutil"
+  PATH="${_WORK}/pk-bin:${PATH}" _AWS_PKGUTIL_BIN="${_SEAM}/pkgutil-stub" BATS_TEST_TMPDIR='' run _aws_verify_pkg "${_WORK}/AWSCLIV2.pkg"
+  [ "${status}" -ne 0 ]
+  command grep -q '^PATH-PKGUTIL ' "${MOCK_CALLS_FILE}"
+  run ! command grep -q '^SEAM-PKGUTIL ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_doctor_check_aws_key_expiry: _AWS_KEY_PATH is honoured under bats" {
+  export HAS_AWS=1
+  _AWS_KEY_PATH="${_SEAM}/absent.asc" run _doctor_check_aws_key_expiry
+  [[ "${output}" == *"vendored key not found at ${_SEAM}/absent.asc"* ]]
+}
+
+@test "_doctor_check_aws_key_expiry: _AWS_KEY_PATH is ignored outside bats, the vendored key is read" {
+  export HAS_AWS=1
+  _need_real_gpg
+  _AWS_KEY_PATH="${_SEAM}/absent.asc" BATS_TEST_TMPDIR='' run _doctor_check_aws_key_expiry
+  [[ "${output}" != *"vendored key not found"* ]]
+  _assert_seam_unused
+}
+
+@test "_doctor_check_aws_key_expiry: _AWS_GPG_BIN is honoured under bats" {
+  export HAS_AWS=1
+  _make_gpg_stub
+  _AWS_GPG_BIN="${_SEAM}/gpg-stub" run _doctor_check_aws_key_expiry
+  command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_doctor_check_aws_key_expiry: _AWS_GPG_BIN is ignored outside bats, real gpg reads the key" {
+  export HAS_AWS=1
+  _need_real_gpg
+  _make_gpg_stub
+  _AWS_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _doctor_check_aws_key_expiry
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}

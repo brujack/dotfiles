@@ -46,27 +46,28 @@ _aws_gpg_fail() {
 _aws_verify_zip() {
   local _zip="$1" _sig="$2"
 
-  # _AWS_GPG_BIN: read unconditionally, defaults to `gpg`. Without this seam
-  # the verifier-absent branch is unreachable -- a PATH strip that removes
-  # /opt/homebrew/bin takes git and make with it.
-  command -v "${_AWS_GPG_BIN:-gpg}" >/dev/null 2>&1 || {
+  # _AWS_GPG_BIN: honoured only under bats (_bats_seam), defaults to `gpg`: an
+  # exported value must never swap in a verifier that always passes. Without
+  # this seam the verifier-absent branch is unreachable -- a PATH strip that
+  # removes /opt/homebrew/bin takes git and make with it.
+  local _gpg
+  _gpg="$(_bats_seam "${_AWS_GPG_BIN:-}" gpg)"
+  command -v "${_gpg}" >/dev/null 2>&1 || {
     log_error "gpg not found; cannot verify the awscli signature"
     log_error "install: brew install gnupg  /  apt-get install gnupg"
     return 1
   }
 
-  # _AWS_KEY_PATH: read unconditionally, defaults to the repo's vendored key.
-  # Without this seam only the vendored key could ever be exercised and the
+  # _AWS_KEY_PATH: honoured only under bats (_bats_seam), defaults to the repo's
+  # vendored key: an exported value must never substitute a key the caller
+  # controls. Without this seam only the vendored key could ever be exercised and the
   # fingerprint-mismatch branch would be unreachable.
   #
   # The default is DOTFILES_REPO_ROOT (lib/constants.sh), resolved at source time.
   # Do not inline the derivation here: update_aws_cli cd's away before calling
   # this function, and a relative BASH_SOURCE[0] then resolves to nothing.
   local _key
-  _key="${_AWS_KEY_PATH:-}"
-  if [[ -z "${_key}" ]]; then
-    _key="${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc"
-  fi
+  _key="$(_bats_seam "${_AWS_KEY_PATH:-}" "${DOTFILES_REPO_ROOT}/keys/aws-cli-team.asc")"
 
   (
     _ring="$(mktemp -d)" || exit 1
@@ -79,10 +80,10 @@ _aws_verify_zip() {
     _status="${_ring}/status"
     _err="${_ring}/err"
 
-    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --import "${_key}" \
+    "${_gpg}" --homedir "${_ring}" --batch --import "${_key}" \
       >/dev/null 2>"${_err}" || { _aws_gpg_fail "${_err}" "could not import the vendored key"; exit 1; }
 
-    "${_AWS_GPG_BIN:-gpg}" --homedir "${_ring}" --batch --status-fd 1 \
+    "${_gpg}" --homedir "${_ring}" --batch --status-fd 1 \
       --verify "${_sig}" "${_zip}" >"${_status}" 2>"${_err}"
 
     # Reject BEFORE accepting, and split the two causes: they demand opposite
@@ -116,18 +117,21 @@ _aws_verify_zip() {
 _aws_verify_pkg() {
   local _pkg="$1"
 
-  # _AWS_PKGUTIL_BIN: read unconditionally, defaults to `pkgutil`. Without
-  # this seam the verifier-absent branch is unreachable -- a PATH strip that
-  # removes /usr/sbin (where pkgutil lives) takes the rest of the toolchain
-  # with it.
-  command -v "${_AWS_PKGUTIL_BIN:-pkgutil}" >/dev/null 2>&1 || {
+  # _AWS_PKGUTIL_BIN: honoured only under bats (_bats_seam), defaults to
+  # `pkgutil`: an exported value must never swap in a verifier that always
+  # passes. Without this seam the verifier-absent branch is unreachable -- a
+  # PATH strip that removes /usr/sbin (where pkgutil lives) takes the rest of
+  # the toolchain with it.
+  local _pkgutil
+  _pkgutil="$(_bats_seam "${_AWS_PKGUTIL_BIN:-}" pkgutil)"
+  command -v "${_pkgutil}" >/dev/null 2>&1 || {
     log_error "pkgutil not found; cannot verify the awscli package signature"
     log_error "pkgutil ships with macOS at /usr/sbin/pkgutil -- if it is missing something is very wrong"
     return 1
   }
 
   local _sig_output
-  _sig_output="$("${_AWS_PKGUTIL_BIN:-pkgutil}" --check-signature "${_pkg}" 2>&1)"
+  _sig_output="$("${_pkgutil}" --check-signature "${_pkg}" 2>&1)"
 
   if ! grep -q "Developer ID Installer: AMZN Mobile LLC (${AWSCLI_APPLE_TEAM_ID})" <<< "${_sig_output}"; then
     log_error "awscli package signature did not verify against AWS's team ID (${AWSCLI_APPLE_TEAM_ID})"
