@@ -4756,8 +4756,8 @@ _make_fixture_npm() {
 @test "run_update records npm FAIL with the remedy when no npm resolves, and keeps going" {
   export MACOS=1
   unset LINUX UBUNTU _NPM_BIN
-  export UPDATE_CLAUDE=1
-  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export UPDATE_CLAUDE=1 UPDATE_PIP=1
+  unset UPDATE_BREW UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
   export _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-npm"
   local _rc=0
   run_update > "${BATS_TEST_TMPDIR}/out" 2>&1 || _rc=$?
@@ -4766,6 +4766,6 @@ _make_fixture_npm() {
   grep -q "brew install node" "${BATS_TEST_TMPDIR}/out"
   run grep -q "^npm install -g" "${MOCK_CALLS_FILE}"
   [ "${status}" -ne 0 ]
-  # Later sections still ran: the failure did not abort run_update.
-  grep -q "Summary\|npm" "${BATS_TEST_TMPDIR}/out"
+  # pip runs after npm in run_update: its status file proves the failure did not abort.
+  [ -s "${_DOTFILES_RUN_TMPDIR}/status_pip" ]
 }
