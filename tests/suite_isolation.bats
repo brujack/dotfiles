@@ -210,3 +210,28 @@ _uv_ver() {
   [[ "${output}" == *"REAL SUDO BLOCKED"* ]]
   [ ! -e "${BATS_TEST_TMPDIR}/must-not-exist" ]
 }
+
+# Tests that replace PATH with system directories build it with
+# refusing_sudo_path; the path it builds must still resolve sudo to the stub.
+@test "refusing_sudo_path: a system-only PATH still resolves sudo to the refusing stub" {
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  [[ "$(PATH="$(refusing_sudo_path /usr/bin:/bin:/usr/sbin:/sbin)" command -v sudo)" == */bats-sentinel.*/nosudo/sudo ]]
+  run env PATH="$(refusing_sudo_path /usr/bin:/bin)" sudo touch "${BATS_TEST_TMPDIR}/must-not-exist"
+  [ "${status}" -eq 97 ]
+  [ ! -e "${BATS_TEST_TMPDIR}/must-not-exist" ]
+}
+
+@test "refusing_sudo_path: fails closed when the stub is missing" {
+  source "${REPO_ROOT}/tests/helpers/common.bash"
+  _BATS_NOSUDO_DIR="${BATS_TEST_TMPDIR}/absent" run refusing_sudo_path /usr/bin
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"no refusing sudo stub"* ]]
+}
+
+@test "no test in the sudo-reaching setup files resets PATH to bare system dirs" {
+  # A raw reset drops the refusing stub; refusing_sudo_path is the only route.
+  run ! command grep -nE '(PATH=|PATH=")/usr/bin' \
+    "${REPO_ROOT}/tests/setup_env/developer.bats" \
+    "${REPO_ROOT}/tests/setup_env/install_functions.bats" \
+    "${REPO_ROOT}/tests/setup_env/linux_ubuntu.bats"
+}

@@ -398,3 +398,16 @@ track_ai_config_fixture() {
   "${_git[@]}" init -q || return 1
   "${_git[@]}" add -A || return 1
 }
+
+# refusing_sudo_path <dirs> -- echo <dirs> with the suite's refusing sudo stub
+# (tests/helpers/suite_isolation.bash) first. A test that replaces PATH with
+# system directories would otherwise reach the real, passwordless /usr/bin/sudo.
+# Fails closed when the stub is missing.
+refusing_sudo_path() {
+  local _d="${_BATS_NOSUDO_DIR:-}"
+  if [[ -z ${_d} || ! -x ${_d}/sudo ]]; then
+    printf 'refusing_sudo_path: no refusing sudo stub (suite setup did not run)\n' >&2
+    return 1
+  fi
+  printf '%s:%s' "${_d}" "$1"
+}
