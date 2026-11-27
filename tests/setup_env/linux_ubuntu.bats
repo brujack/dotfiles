@@ -2351,10 +2351,16 @@ SHIM
   # keyring step ran the mock gpg and returned before the daemon.json read.
   # The keyring is not under test here.
   _install_apt_keyring() { return 0; }
-  sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
+  # The recorder writes to a ledger of its own, not MOCK_CALLS_FILE: with the
+  # list seam falling back to the real /etc/apt path, it records
+  # `sudo -H tee /etc/apt/sources.list.d/nvidia-container-toolkit.list` on a
+  # runner, and that line must not reach the root-path guard's ledgers.
+  local _ledger="${BATS_TEST_TMPDIR}/nvidia-resolver-ledger"
+  : > "${_ledger}"
+  sudo() { printf 'sudo %s\n' "$*" >> "${_ledger}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
-  grep -qF "sudo -H cat ${_fx}" "${MOCK_CALLS_FILE}"
-  refute_grep "/etc/docker" "${MOCK_CALLS_FILE}"
+  grep -qF "sudo -H cat ${_fx}" "${_ledger}"
+  refute_grep "/etc/docker" "${_ledger}"
 }
 
 @test "_install_ubuntu_nvidia: restarts docker when runtime configure changes daemon.json" {

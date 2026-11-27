@@ -67,7 +67,7 @@ _claude_guard_repo_setup() {
   _real_git="$(PATH="${_clean_path}" command -v git)"
   local _git_shim="${BATS_TEST_TMPDIR}/git-shim"
   mkdir -p "${_git_shim}"
-  ln -sf "${_real_git}" "${_git_shim}/git"
+  link_real_tool "${_real_git}" "${_git_shim}/git"
   export _CLAUDE_GUARD_GIT="${_git_shim}/git"
 
   GUARD_REPO="${BATS_TEST_TMPDIR}/guard-repo"

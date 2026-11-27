@@ -130,7 +130,7 @@ _run_check() {
 _make_bin_dir() {
   _BIN_DIR="${BATS_TEST_TMPDIR}/bin"
   mkdir -p "${_BIN_DIR}"
-  ln -s "$(_real_sleep)" "${_BIN_DIR}/sleep"
+  link_real_tool "$(_real_sleep)" "${_BIN_DIR}/sleep"
 }
 
 @test "brew links: no brew anywhere prints the skip line and changes no counter" {

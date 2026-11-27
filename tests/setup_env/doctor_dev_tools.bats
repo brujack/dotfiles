@@ -51,12 +51,12 @@ setup() {
   if [[ -z "${_real_sleep}" ]]; then
     skip "no 'sleep' binary on PATH"
   fi
-  ln -s "${_real_timeout}" "${_BIN_DIR}/timeout"
+  link_real_tool "${_real_timeout}" "${_BIN_DIR}/timeout"
   # The timeout-warning test's stub sleeps past the deadline; an absolute
   # shebang alone does not make `sleep` resolvable from inside the stub's
   # OWN PATH-scoped invocation, since a bare `sleep 3` in the stub body is
   # still a PATH lookup.
-  ln -s "${_real_sleep}" "${_BIN_DIR}/sleep"
+  link_real_tool "${_real_sleep}" "${_BIN_DIR}/sleep"
 
   _DOCTOR_PASS=0
   _DOCTOR_FAIL=0

@@ -150,10 +150,22 @@ _install_ubuntu_tfenv_outside_bats() {
 }
 
 @test "_install_ubuntu_tfenv: an exported repo URL is ignored outside bats, so it cannot redirect a real clone" {
+  # Outside bats the link dir is the real /usr/local/bin, which holds no tfenv
+  # link on a CI runner (it does on `claude`), so the function reaches `ln -s`
+  # or `sudo ln -s` there. tests/mocks/ln and tests/mocks/sudo exec the real
+  # command, so both are shadowed by recorders writing to a ledger the root-path
+  # guard does not scan.
+  local _ledger="${BATS_TEST_TMPDIR}/outside-bats-ledger"
+  : > "${_ledger}"
+  ln() { printf 'ln %s\n' "$*" >> "${_ledger}"; }
+  sudo() { printf 'sudo %s\n' "$*" >> "${_ledger}"; }
   run _install_ubuntu_tfenv_outside_bats
   [ "$status" -eq 0 ]
   grep -q "^git clone -- https://github.com/tfutils/tfenv.git ${_TFENV_ROOT}\$" "${MOCK_CALLS_FILE}"
   refute_grep "sentinel" "${MOCK_CALLS_FILE}"
+  # The exported link-dir seam must not have been honoured. Which link calls ran
+  # depends on the host's real /usr/local/bin, so only the seam is asserted.
+  refute_grep "${_TFENV_LINK_DIR}" "${_ledger}"
 }
 
 @test "_install_ubuntu_tfenv: a repo URL starting with - reaches git after --, as a URL and not an option" {

@@ -276,3 +276,24 @@ _guard_scan() {
   [[ ${_NVIDIA_LIBCUDA} == "${BATS_TEST_TMPDIR}/"* ]]
   [[ ! -e ${_NVIDIA_LIBCUDA} && ! -L ${_NVIDIA_LIBCUDA} ]]
 }
+
+# On a CI runner nothing sits at the real /usr/local/bin/tfenv, so an unset link
+# or release-bin seam attempts a write that `claude` (which has the file) skips.
+@test "load_mocks: the tfenv link dir and release bin dir seams are fixtures under the test tmpdir" {
+  load_mocks
+  [ "${_TFENV_LINK_DIR}" = "${BATS_TEST_TMPDIR}/tfenv-links" ]
+  [ "${_RELEASE_BIN_DIR}" = "${BATS_TEST_TMPDIR}/release-bin" ]
+  [ -d "${_TFENV_LINK_DIR}" ]
+  [ -d "${_RELEASE_BIN_DIR}" ]
+}
+
+@test "link_real_tool links a real binary without recording an ln call, unlike plain ln" {
+  load_mocks
+  : > "${MOCK_CALLS_FILE}"
+  link_real_tool "$(command -p -v env)" "${BATS_TEST_TMPDIR}/real-link"
+  [ -L "${BATS_TEST_TMPDIR}/real-link" ]
+  [ ! -s "${MOCK_CALLS_FILE}" ]
+  ln -sf "$(command -p -v env)" "${BATS_TEST_TMPDIR}/mock-link"
+  grep -q "^ln .*mock-link" "${MOCK_CALLS_FILE}"
+  : > "${MOCK_CALLS_FILE}"
+}

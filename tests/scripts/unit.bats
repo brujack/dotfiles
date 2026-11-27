@@ -443,7 +443,7 @@ teardown() {
   # `git`, ahead of the still-mocked PATH.
   local _shim="${BATS_TEST_TMPDIR}/realgit"
   mkdir -p "${_shim}"
-  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  link_real_tool "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
   local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"
@@ -495,7 +495,7 @@ teardown() {
   # `git`, ahead of the still-mocked PATH.
   local _shim="${BATS_TEST_TMPDIR}/realgit"
   mkdir -p "${_shim}"
-  ln -sf "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
+  link_real_tool "$(PATH=/usr/bin:/bin:/opt/homebrew/bin command -v git)" "${_shim}/git"
   local _clean_path="${_shim}:${PATH}"
 
   local origin="${HOME}/origin.git"

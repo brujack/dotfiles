@@ -100,7 +100,8 @@ load_mocks() {
     # directories _HASHICORP_SOURCE_DIR and _APT_KEYRINGS_DIR name below.
     mkdir -p "${BATS_TEST_TMPDIR}/sysctl.d" "${BATS_TEST_TMPDIR}/run-systemd" \
       "${BATS_TEST_TMPDIR}/tmp-mount.d" "${BATS_TEST_TMPDIR}/hashicorp-source" \
-      "${BATS_TEST_TMPDIR}/apt-keyrings"
+      "${BATS_TEST_TMPDIR}/apt-keyrings" "${BATS_TEST_TMPDIR}/tfenv-links" \
+      "${BATS_TEST_TMPDIR}/release-bin"
     export _SYSCTL_CONF="${BATS_TEST_TMPDIR}/sysctl.d/90-dotfiles-inotify.conf"
     export _INOTIFY_PROC="${BATS_TEST_TMPDIR}/inotify_max_user_instances"
     printf '1024\n' > "${_INOTIFY_PROC}"
@@ -163,6 +164,17 @@ load_mocks() {
   # them before the step runs sees an empty directory, not a missing one.
   export _HASHICORP_SOURCE_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/hashicorp-source"
   export _APT_KEYRINGS_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-keyrings"
+  # The tfenv symlinks and the pinned release binaries land in /usr/local/bin by
+  # default, through `ln` and `install` (pass-through mocks) or `sudo` (exec-ing).
+  # Both seams are honoured only under bats; a CI runner has no real tfenv link
+  # there, so an unset seam attempts the write where `claude` skips it.
+  export _TFENV_LINK_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/tfenv-links"
+  export _RELEASE_BIN_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/release-bin"
+  # _install_ubuntu_nvidia reads and replaces these through sudo (`sudo rm -f
+  # <keyring>.new`), which the exec-ing mock runs for real; tests of the nvidia
+  # step set their own, but the run_* workflow tests in workflows.bats do not.
+  export _OVERRIDE_NVIDIA_KEYRING="${BATS_TEST_TMPDIR:-/nonexistent}/nvidia-keyring.gpg"
+  export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR:-/nonexistent}/nvidia-container-toolkit.list"
   # The apt source, trusted-key, edge, docker and daemon.json paths are read and
   # removed as root (`sudo rm -f`, `sudo tee`, `sudo -H cat`) through the same
   # exec-ing sudo mock, so an e2e install path would otherwise name the real /etc
@@ -420,6 +432,17 @@ track_ai_config_fixture() {
   done < <(find "${_dir}/.claude" "${_dir}/.cursor" -type d -empty -print0)
   "${_git[@]}" init -q || return 1
   "${_git[@]}" add -A || return 1
+}
+
+# link_real_tool <target> <link> -- symlink a real binary into a shim directory.
+# Plain `ln` resolves to tests/mocks/ln once load_mocks ran, which records its
+# argv in MOCK_CALLS_FILE; on a macOS runner the real git, sleep and timeout live
+# under /opt/homebrew, so the record would name a real root-owned path and trip
+# assert_no_real_root_paths. The absolute /bin/ln skips PATH and the mock; unlike
+# `command -p ln` it leaves bash's command hash alone, which would otherwise send
+# every later plain `ln` in the test to the real binary and bypass the mock.
+link_real_tool() {
+  /bin/ln -sf "$1" "$2"
 }
 
 # refusing_sudo_path <dirs> -- echo <dirs> with the suite's refusing sudo stub
