@@ -1,0 +1,69 @@
+name: digest-pr
+
+# Opens the PR for a weekly digest branch. The scheduled routines
+# (scripts/whats-new-anthropic.sh, scripts/whats-new-claude-code.sh) run in a
+# Claude Code cloud session whose proxy lets `git push` through but refuses every
+# GitHub API write, so `gh pr create` there fails with HTTP 403. The routine
+# therefore only pushes digest/<anthropic|claude-code>-<YYYY-MM-DD>, and this
+# workflow opens the PR with GITHUB_TOKEN.
+#
+# The logic lives in scripts/digest-pr.sh (tested in tests/scripts/digest_pr.bats):
+# it fails closed unless the branch name has the digest shape and every file the
+# push adds to master is under that digest's own directory, and it does nothing
+# when a same-repo PR is already open. The job checks out master, not the pushed
+# commit, so a pushed branch cannot change the script that judges it.
+#
+# A PR opened with GITHUB_TOKEN starts no CI until the operator closes and
+# reopens it, and the auto-merge gate holds bot PRs without `automerge-ok`
+# (ai-config ADR-0085), so the operator still merges it, as for
+# chore/uv-lock-refresh. This workflow adds no label.
+
+on:
+  push:
+    branches: ["digest/**"]
+
+# The repo's default workflow permission is write, so this line is load-bearing.
+permissions: {}
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# A same-day re-push must not race its predecessor into two PRs.
+concurrency:
+  group: digest-pr-${{ github.ref }}
+  cancel-in-progress: false
+
+# Load-bearing: bash runs with pipefail.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  open-pr:
+    # A push that deletes a digest branch fires this workflow too.
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Fetch the pushed commit
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          git fetch -q origin "${SHA}"
+
+      - name: Open the digest PR
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          bash scripts/digest-pr.sh "${BRANCH}" "${SHA}"
