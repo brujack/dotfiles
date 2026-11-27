@@ -397,3 +397,165 @@ _release_shadows() {
   run ! command grep -q "SEAM-UNZIP" "${MOCK_CALLS_FILE}"
   _assert_seam_unused
 }
+
+# ── signature verifiers and trust anchors ────────────────────────────────────
+# _MS_GPG_BIN, _MS_AR_BIN, _MS_KEY_PATH and _APT_KEY_GPG_BIN choose the verifier
+# or the key ahead of a root `dpkg -i` / `sudo install`. An exported variable
+# must not swap in a verifier that says "good" or a key the caller controls.
+# Each outside-bats test points the seam at something that would CHANGE the
+# verdict or record a call, then asserts the real tool decided. The real gpg and
+# ar are read-only here (throwaway --homedir, HOME is a bats temp dir).
+
+_ms_fixture_deb() { printf '%s' "${REPO_ROOT}/tests/fixtures/packages-microsoft-prod.deb"; }
+
+# tests/mocks/gpg shadows the real gpg on PATH, so a bare `gpg` default would
+# resolve to the mock; put the real gpg, gpgconf and ar first instead.
+_need_real_gpg_ar() {
+  local _t _p _sys="/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin"
+  mkdir -p "${_WORK}/real-bin"
+  for _t in gpg gpgconf ar; do
+    _p="$(PATH="${_sys}" command -v "${_t}")" || skip "${_t} not installed"
+    ln -sf "${_p}" "${_WORK}/real-bin/${_t}"
+  done
+  export PATH="${_WORK}/real-bin:${PATH}"
+}
+
+# A gpg stand-in that records every call. --show-keys lists a primary key whose
+# fingerprint is STUB_FPR; --dearmor copies stdin to -o <file> or stdout; every
+# other call fails.
+_make_gpg_stub() {
+  cat > "${_SEAM}/gpg-stub" << 'STUB'
+#!/usr/bin/env bash
+printf 'SEAM-GPG %s\n' "$*" >> "${MOCK_CALLS_FILE}"
+_out=""
+_prev=""
+for _a in "$@"; do
+  [[ ${_prev} == -o ]] && _out="${_a}"
+  _prev="${_a}"
+done
+case " $* " in
+  *" --show-keys "*) printf 'pub:u:255:22:AAAA:1:::::\nfpr:::::::::%s:\n' "${STUB_FPR:-0}" ;;
+  *" --dearmor "*) if [[ -n ${_out} ]]; then cat > "${_out}"; else cat; fi ;;
+  *) exit 1 ;;
+esac
+STUB
+  /bin/chmod +x "${_SEAM}/gpg-stub"
+}
+
+_make_ar_stub() {
+  printf '#!/usr/bin/env bash\nprintf "SEAM-AR %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${_SEAM}/ar-stub"
+  /bin/chmod +x "${_SEAM}/ar-stub"
+}
+
+@test "_ms_verify_deb: _MS_GPG_BIN is honoured under bats" {
+  _need_real_gpg_ar
+  _make_gpg_stub
+  _MS_GPG_BIN="${_SEAM}/gpg-stub" run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -ne 0 ]
+  command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_ms_verify_deb: _MS_GPG_BIN is ignored outside bats, real gpg verifies" {
+  _need_real_gpg_ar
+  _make_gpg_stub
+  _MS_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -eq 0 ]
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_ms_verify_deb: _MS_AR_BIN is honoured under bats" {
+  _need_real_gpg_ar
+  _make_ar_stub
+  _MS_AR_BIN="${_SEAM}/ar-stub" run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -ne 0 ]
+  command grep -q '^SEAM-AR ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_ms_verify_deb: _MS_AR_BIN is ignored outside bats, real ar extracts" {
+  _need_real_gpg_ar
+  _make_ar_stub
+  _MS_AR_BIN="${_SEAM}/ar-stub" BATS_TEST_TMPDIR='' run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -eq 0 ]
+  run ! command grep -q '^SEAM-AR ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_ms_verify_deb: _MS_KEY_PATH is honoured under bats" {
+  _need_real_gpg_ar
+  printf 'not a key\n' > "${_SEAM}/bad.asc"
+  _MS_KEY_PATH="${_SEAM}/bad.asc" run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -ne 0 ]
+  [[ "${output}" == *"could not import ${_SEAM}/bad.asc"* ]]
+}
+
+@test "_ms_verify_deb: _MS_KEY_PATH is ignored outside bats, the vendored key verifies" {
+  _need_real_gpg_ar
+  printf 'not a key\n' > "${_SEAM}/bad.asc"
+  _MS_KEY_PATH="${_SEAM}/bad.asc" BATS_TEST_TMPDIR='' run _ms_verify_deb "$(_ms_fixture_deb)"
+  [ "${status}" -eq 0 ]
+  _assert_seam_unused
+}
+
+@test "_keyring_has_pinned_fpr: _MS_GPG_BIN is honoured under bats" {
+  _make_gpg_stub
+  printf 'junk\n' > "${_WORK}/ring"
+  mkdir -p "${_WORK}/home"
+  STUB_FPR=PINNED _MS_GPG_BIN="${_SEAM}/gpg-stub" run _keyring_has_pinned_fpr "${_WORK}/ring" PINNED "${_WORK}/home"
+  [ "${status}" -eq 0 ]
+  command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_keyring_has_pinned_fpr: a forging _MS_GPG_BIN is ignored outside bats" {
+  _need_real_gpg_ar
+  _make_gpg_stub
+  printf 'junk\n' > "${_WORK}/ring"
+  mkdir -p "${_WORK}/home"
+  STUB_FPR=PINNED _MS_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _keyring_has_pinned_fpr "${_WORK}/ring" PINNED "${_WORK}/home"
+  [ "${status}" -ne 0 ]
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_build_pinned_keyring: a forging _MS_GPG_BIN installs nothing outside bats" {
+  _need_real_gpg_ar
+  _make_gpg_stub
+  printf 'junk\n' > "${_WORK}/key"
+  STUB_FPR=PINNED _MS_GPG_BIN="${_SEAM}/gpg-stub" run _build_pinned_keyring "${_WORK}/key" "${_WORK}/ring" PINNED
+  [ "${status}" -eq 0 ]
+  command grep -q '^sudo install ' "${MOCK_CALLS_FILE}"
+  : > "${MOCK_CALLS_FILE}"
+  STUB_FPR=PINNED _MS_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _build_pinned_keyring "${_WORK}/key" "${_WORK}/ring" PINNED
+  [ "${status}" -ne 0 ]
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+  run ! command grep -q '^sudo install ' "${MOCK_CALLS_FILE}"
+}
+
+# The suite's setup() replaces _install_apt_keyring with a recorder; re-source the
+# real one here (the recorders for sudo and the others stay).
+_load_real_apt_keyring() {
+  source "${REPO_ROOT}/lib/linux_ubuntu.sh"
+  curl() {
+    local _o
+    while (($#)); do
+      [[ $1 == -o ]] && _o="$2"
+      shift
+    done
+    printf 'key' > "${_o}"
+  }
+}
+
+@test "_install_apt_keyring: _APT_KEY_GPG_BIN is honoured under bats" {
+  _make_gpg_stub
+  _load_real_apt_keyring
+  _APT_KEY_GPG_BIN="${_SEAM}/gpg-stub" run _install_apt_keyring https://example.invalid/k "${_WORK}/ring" armored
+  [ "${status}" -eq 0 ]
+  command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_apt_keyring: _APT_KEY_GPG_BIN is ignored outside bats, real gpg converts" {
+  _need_real_gpg_ar
+  _make_gpg_stub
+  _load_real_apt_keyring
+  _APT_KEY_GPG_BIN="${_SEAM}/gpg-stub" BATS_TEST_TMPDIR='' run _install_apt_keyring https://example.invalid/k "${_WORK}/ring" armored
+  [ "${status}" -ne 0 ]
+  run ! command grep -q '^SEAM-GPG ' "${MOCK_CALLS_FILE}"
+  run ! command grep -q '^sudo install ' "${MOCK_CALLS_FILE}"
+}
