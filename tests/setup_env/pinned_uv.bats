@@ -274,18 +274,20 @@ SHIM
 }
 
 # Both platforms run the shared body; each is driven so a gate or leak in it is
-# caught whichever entry point is mutated.
-@test "install_uv_pinned: leaves _RELEASE_BIN_DIR unset in the caller's shell on Linux and Darwin" {
-  local _pair _os _m
+# caught whichever entry point is mutated. _RELEASE_BIN_DIR is honoured under
+# bats, so the decoy proves the destination argument wins over the seam.
+@test "install_uv_pinned: lands in its own pinned dir, not a _RELEASE_BIN_DIR decoy, on Linux and Darwin" {
+  local _pair _os _m _decoy="${BATS_TEST_TMPDIR}/decoy-bin"
   for _pair in Linux:x86_64 Darwin:arm64; do
     _os="${_pair%%:*}" _m="${_pair##*:}"
     _install_fixture_setup
-    unset _RELEASE_BIN_DIR
-    rm -rf "${HOME}/.local"
+    rm -rf "${HOME}/.local" "${_decoy}"
+    mkdir -p "${_decoy}"
+    export _RELEASE_BIN_DIR="${_decoy}"
     # shellcheck disable=SC2218 # the real function is sourced by load_setup_env; later tests redefine it as a stub
     _OVERRIDE_PLATFORM="${_os}" _UNAME_M="${_m}" install_uv_pinned
-    [[ -z ${_RELEASE_BIN_DIR+x} ]]
     [ -x "${_PINNED_DIR}/uv" ]
+    [ -z "$(ls -A "${_decoy}")" ]
   done
 }
 

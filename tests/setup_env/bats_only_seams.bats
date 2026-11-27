@@ -6,11 +6,15 @@
 #
 # SAFETY. tests/mocks/sudo EXECS real commands, and `install`, `ln` and `mv`
 # pass through to the real binary, so every outside-bats test shadows sudo (and
-# any other step that could write or fetch) with a recorder FUNCTION. Nothing
-# here reads or writes the host's /etc, /usr/local or /usr/share; host files are
-# never required to exist. Assertions are on recorded
-# calls: a production path must appear (a path the function builds regardless of
-# what the host holds) and the exported seam path must never appear.
+# any other step that could write or fetch) with a recorder FUNCTION; the suite
+# hook (tests/helpers/suite_isolation.bash) also puts a refusing sudo stub first
+# on PATH. Nothing here WRITES to the host's /etc, /usr/local or /usr/share, and
+# no test needs a host file to exist. The functions under test still make
+# read-only existence probes of production paths (`[[ -f ]]`, `[[ -L ]]`, a
+# glob), so a host file can steer which branch runs; assertions are therefore
+# on recorded calls that every branch makes: a production path must appear and
+# the exported seam path must never appear. Production DEFAULTS are pinned by
+# recording each _bats_seam call (_spy_bats_seam), which needs no host file.
 
 bats_require_minimum_version 1.5.0
 
@@ -50,6 +54,10 @@ setup() {
   export _GH_CLI_KEYRING="${_SEAM}/gh.gpg"
   export _GH_CLI_SOURCES_LIST="${_SEAM}/gh.list"
   export _DL_TAR_BIN="${_SEAM}/tar-seam"
+  export _DL_UNZIP_BIN="${_SEAM}/unzip-seam"
+  export _APT_SOURCES_LIST="${_WORK}/no-sources.list"
+  printf '#!/usr/bin/env bash\nprintf "SEAM-UNZIP %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${_DL_UNZIP_BIN}"
+  /bin/chmod +x "${_DL_UNZIP_BIN}"
   printf '#!/usr/bin/env bash\nprintf "SEAM-TAR %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${_DL_TAR_BIN}"
   /bin/chmod +x "${_DL_TAR_BIN}"
   : > "${MOCK_CALLS_FILE}"
@@ -66,8 +74,19 @@ _rec() { printf '%s\n' "$*" >> "${MOCK_CALLS_FILE}"; }
 
 # No recorded call and no output line may name a path under the seam directory.
 _assert_seam_unused() {
-  run ! grep -qF -- "${_SEAM}" "${MOCK_CALLS_FILE}"
-  [[ "${output}" != *"${_SEAM}"* ]]
+  local _out="${output}"
+  ! command grep -qF -- "${_SEAM}" "${MOCK_CALLS_FILE}" || {
+    printf 'seam path recorded in calls:\n%s\n' "$(< "${MOCK_CALLS_FILE}")" >&2
+    return 1
+  }
+  [[ "${_out}" != *"${_SEAM}"* ]]
+}
+
+# Record every _bats_seam call as "SEAM <seam value> | <default>", then run the
+# real helper, so a test can pin the default a call site passes.
+_spy_bats_seam() {
+  eval "$(declare -f _bats_seam | sed '1s/_bats_seam/_real_bats_seam/')"
+  _bats_seam() { _rec "SEAM $1 | $2"; _real_bats_seam "$@"; }
 }
 
 # ── _bats_seam ────────────────────────────────────────────────────────────────
@@ -290,10 +309,13 @@ _release_shadows() {
 
 @test "_install_ubuntu_edge_source: sources dir and bootstrap keyring are the production ones outside bats" {
   _build_pinned_keyring() { _rec "bpk $*"; return 1; }
+  # The live-source probe reads the production .sources file; shadowing grep
+  # fixes the branch (no live source) and records which file it would read.
+  grep() { _rec "grep $*"; return 1; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_edge_source
-  # Whichever branch the host's real edge .sources file selects, the keyring
-  # named is the production one.
-  grep -qF "/usr/share/keyrings/microsoft-edge-bootstrap.gpg" "${MOCK_CALLS_FILE}"
+  command grep -qF "grep -q ^URIs: /etc/apt/sources.list.d/microsoft-edge.sources" "${MOCK_CALLS_FILE}"
+  command grep -qF "/usr/share/keyrings/microsoft-edge-bootstrap.gpg" "${MOCK_CALLS_FILE}"
+  command grep -qF "sudo rm -f /etc/apt/sources.list.d/microsoft-edge.list /usr/share/keyrings/microsoft-edge-bootstrap.gpg" "${MOCK_CALLS_FILE}"
   _assert_seam_unused
 }
 
@@ -321,4 +343,57 @@ _release_shadows() {
   run install_github_cli_linux
   grep -qF "${_SEAM}/gh.gpg" "${MOCK_CALLS_FILE}"
   grep -qF "${_SEAM}/gh.list" "${MOCK_CALLS_FILE}"
+}
+
+# ── production defaults, pinned at the call site ─────────────────────────────
+
+@test "_install_ubuntu_go: the version probe's default root is /usr/local" {
+  _spy_bats_seam
+  unset _GO_BIN
+  _install_go_from_tarball() { return 0; }
+  go() { return 0; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_go
+  command grep -qxF "SEAM ${_GO_INSTALL_ROOT} | /usr/local" "${MOCK_CALLS_FILE}"
+}
+
+@test "_install_ubuntu_nvidia: the keyring and list defaults are the production paths" {
+  _spy_bats_seam
+  export _OVERRIDE_NVIDIA_GPU_PRESENT=0
+  curl() { return 1; }
+  dpkg() { return 1; }
+  BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
+  command grep -qxF "SEAM ${_OVERRIDE_NVIDIA_KEYRING} | ${NVIDIA_CONTAINER_KEYRING}" "${MOCK_CALLS_FILE}"
+  command grep -qxF "SEAM ${_OVERRIDE_NVIDIA_LIST} | /etc/apt/sources.list.d/nvidia-container-toolkit.list" "${MOCK_CALLS_FILE}"
+}
+
+@test "_hashicorp_warn_handwritten_source: the default sources dir is /etc/apt/sources.list.d" {
+  _spy_bats_seam
+  BATS_TEST_TMPDIR='' run _hashicorp_warn_handwritten_source
+  [ "$(command grep -cxF "SEAM ${_APT_SOURCES_DIR} | /etc/apt/sources.list.d" "${MOCK_CALLS_FILE}")" -eq 2 ]
+}
+
+@test "_hashicorp_warn_handwritten_source: a HashiCorp source in the seam dir is named under bats" {
+  mkdir -p "${_APT_SOURCES_DIR}"
+  printf 'deb https://apt.releases.hashicorp.com noble main\n' > "${_APT_SOURCES_DIR}/hand.list"
+  run _hashicorp_warn_handwritten_source
+  [[ "${output}" == *"${_APT_SOURCES_DIR}/hand.list also configures apt.releases.hashicorp.com"* ]]
+}
+
+@test "_install_fetched_binary: _DL_UNZIP_BIN is ignored outside bats, real unzip extracts" {
+  wget() { _rec "wget $*"; : > "$2"; }
+  unzip() {
+    local _d
+    while (($#)); do
+      if [[ $1 == -d ]]; then _d="$2"; shift; fi
+      shift
+    done
+    _rec "unzip -d ${_d}"
+    printf 'payload' > "${_d}/kind"
+  }
+  _sha256_check() { return 0; }
+  BATS_TEST_TMPDIR='' run _install_fetched_binary kind zip kind
+  command grep -q "^unzip -d " "${MOCK_CALLS_FILE}"
+  command grep -qF " /usr/local/bin/kind.new" "${MOCK_CALLS_FILE}"
+  run ! command grep -q "SEAM-UNZIP" "${MOCK_CALLS_FILE}"
+  _assert_seam_unused
 }
