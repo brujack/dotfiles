@@ -2120,15 +2120,17 @@ _npm_fixture() {
   [[ "$output" == *"_NPM_BIN"* ]]
 }
 
-@test "_resolve_npm: an empty _NPM_FALLBACK_PATHS means no candidates, not the defaults" {
-  unset _NPM_BIN
-  _NPM_FALLBACK_PATHS="" run _resolve_npm
-  [ "$status" -eq 1 ]
+@test "_npm_default_candidates: empty under bats, the Homebrew list outside it" {
+  # Pure: prints paths, never runs npm, so it needs no npm on the host.
+  run _npm_default_candidates /x/intel-npm
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run env -u BATS_TEST_TMPDIR bash -c 'source "$1"; _npm_default_candidates /x/intel-npm' _ "${REPO_ROOT}/lib/helpers.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "/home/linuxbrew/.linuxbrew/bin/npm /opt/homebrew/bin/npm /x/intel-npm" ]
 }
 
-@test "_resolve_npm: under bats the built-in default list is empty, so the real Homebrew npm is unreachable" {
-  # Positive control: the real candidate exists on claude-class boxes, so this
-  # proves the gate rather than the machine's absence of npm.
+@test "_resolve_npm: under bats with no candidates named, the real Homebrew npm is unreachable" {
   unset _NPM_BIN _NPM_FALLBACK_PATHS _NPM_INTEL_BREW_PATH
   [ -n "${BATS_TEST_TMPDIR}" ]
   run _resolve_npm
