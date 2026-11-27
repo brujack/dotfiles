@@ -2046,3 +2046,82 @@ _guard_old_venv() {
   [ "$(command grep -cx "pyenv update" "${MOCK_CALLS_FILE}")" -eq 0 ]
   [ -x "${HOME}/.pyenv/versions/${PYTHON_VER}/bin/python" ]
 }
+
+# _resolve_npm: every case sets _NPM_FALLBACK_PATHS and _NPM_INTEL_BREW_PATH to
+# fixtures so the real linuxbrew or /usr/local npm on the host is never reached.
+_npm_fixture() {
+  mkdir -p "${BATS_TEST_TMPDIR}/npmfx/$1"
+  printf '#!/bin/sh\nexit 0\n' > "${BATS_TEST_TMPDIR}/npmfx/$1/npm"
+  chmod +x "${BATS_TEST_TMPDIR}/npmfx/$1/npm"
+  printf '%s\n' "${BATS_TEST_TMPDIR}/npmfx/$1/npm"
+}
+
+@test "_resolve_npm: _NPM_BIN wins over every candidate" {
+  local _o _c
+  _o="$(_npm_fixture override)"; _c="$(_npm_fixture cand)"
+  _NPM_BIN="${_o}" _NPM_FALLBACK_PATHS="${_c}" run _resolve_npm
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_o}" ]
+}
+
+@test "_resolve_npm: a non-executable _NPM_BIN is an error, not a fall-through" {
+  local _c; _c="$(_npm_fixture cand)"
+  _NPM_BIN="${BATS_TEST_TMPDIR}/missing" _NPM_FALLBACK_PATHS="${_c}" run _resolve_npm
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not executable"* ]]
+}
+
+@test "_resolve_npm: finds the first executable candidate" {
+  local _a _b
+  _a="$(_npm_fixture a)"; _b="$(_npm_fixture b)"
+  unset _NPM_BIN
+  _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/none ${_a} ${_b}" run _resolve_npm
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_a}" ]
+}
+
+@test "_resolve_npm: never picks /usr/bin/npm, even listed first or on PATH" {
+  unset _NPM_BIN
+  local _c; _c="$(_npm_fixture cand)"
+  PATH="/usr/bin:${PATH}" _NPM_FALLBACK_PATHS="/usr/bin/npm ${_c}" run _resolve_npm
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_c}" ]
+  _NPM_FALLBACK_PATHS="/usr/bin/npm" run _resolve_npm
+  [ "$status" -eq 1 ]
+}
+
+@test "_resolve_npm: never falls back to a PATH lookup" {
+  unset _NPM_BIN
+  local _p; _p="$(_npm_fixture onpath)"
+  PATH="${_p%/npm}:${PATH}" _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/none" run _resolve_npm
+  [ "$status" -eq 1 ]
+}
+
+@test "_resolve_npm: Linux skips the /usr/local/bin candidate" {
+  unset _NPM_BIN
+  local _i; _i="$(_npm_fixture intel)"
+  _OVERRIDE_PLATFORM=Linux _NPM_INTEL_BREW_PATH="${_i}" _NPM_FALLBACK_PATHS="${_i}" run _resolve_npm
+  [ "$status" -eq 1 ]
+}
+
+@test "_resolve_npm: macOS accepts the /usr/local/bin candidate" {
+  unset _NPM_BIN
+  local _i; _i="$(_npm_fixture intel)"
+  _OVERRIDE_PLATFORM=Darwin _NPM_INTEL_BREW_PATH="${_i}" _NPM_FALLBACK_PATHS="${_i}" run _resolve_npm
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_i}" ]
+}
+
+@test "_resolve_npm: nothing found returns 1 naming the remedy" {
+  unset _NPM_BIN
+  _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/none" run _resolve_npm
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"brew install node"* ]]
+  [[ "$output" == *"_NPM_BIN"* ]]
+}
+
+@test "_resolve_npm: an empty _NPM_FALLBACK_PATHS means no candidates, not the defaults" {
+  unset _NPM_BIN
+  _NPM_FALLBACK_PATHS="" run _resolve_npm
+  [ "$status" -eq 1 ]
+}

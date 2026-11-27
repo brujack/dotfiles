@@ -2527,16 +2527,25 @@ _stub_refresher_fail() {
 
 # ── return-code propagation: run_developer_or_ansible ────────────────────────
 
+# An npm at the _NPM_BIN seam that fails only the jscpd install and records every
+# other call as "npm <args>" in MOCK_CALLS_FILE, like tests/mocks/npm.
+_make_jscpd_failing_npm() {
+  local _bin="${BATS_TEST_TMPDIR}/jscpdfail/npm"
+  mkdir -p "${_bin%/*}"
+  cat > "${_bin}" <<'NPM'
+#!/bin/sh
+case "$*" in *jscpd@*) exit 1 ;; esac
+printf 'npm %s\n' "$*" >> "${MOCK_CALLS_FILE}"
+exit 0
+NPM
+  chmod +x "${_bin}"
+  export _NPM_BIN="${_bin}"
+}
+
 @test "run_developer_or_ansible returns non-zero when jscpd npm install fails" {
   export MACOS=1
   unset LINUX UBUNTU
-  npm() {
-    if [[ "$*" == *"jscpd@"* ]]; then
-      return 1
-    fi
-    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
-    return 0
-  }
+  _make_jscpd_failing_npm
   run run_developer_or_ansible
   [ "$status" -ne 0 ]
 }
@@ -2544,13 +2553,7 @@ _stub_refresher_fail() {
 @test "run_developer_or_ansible does not install firecrawl-cli when jscpd npm install fails" {
   export MACOS=1
   unset LINUX UBUNTU
-  npm() {
-    if [[ "$*" == *"jscpd@"* ]]; then
-      return 1
-    fi
-    printf "npm %s\n" "$*" >> "${MOCK_CALLS_FILE}"
-    return 0
-  }
+  _make_jscpd_failing_npm
   run run_developer_or_ansible
   ! grep -q "firecrawl-cli" "${MOCK_CALLS_FILE}"
 }
@@ -4690,4 +4693,79 @@ _pinned_uv_installer_calls() {
 @test "_UPDATE_SECTION_ORDER lists pinned-uv immediately after cargo-tools" {
   local _joined=" ${_UPDATE_SECTION_ORDER[*]} "
   [[ "${_joined}" == *" cargo-tools pinned-uv "* ]]
+}
+
+# A fixture npm at a path no PATH lookup finds, so a call site that went back to a
+# bare `npm` reaches tests/mocks/npm (first on PATH) and logs to MOCK_CALLS_FILE
+# instead of here.
+_make_fixture_npm() {
+  FX_NPM="${BATS_TEST_TMPDIR}/fxnpm/npm"
+  FX_NPM_LOG="${BATS_TEST_TMPDIR}/fxnpm.log"
+  mkdir -p "${FX_NPM%/*}"
+  printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexit "${FX_NPM_EXIT:-0}"\n' "${FX_NPM_LOG}" > "${FX_NPM}"
+  chmod +x "${FX_NPM}"
+  export _NPM_BIN="${FX_NPM}"
+}
+
+@test "run_developer_or_ansible installs every npm global through the resolved npm" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  _make_fixture_npm
+  run run_developer_or_ansible
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^install -g ' "${FX_NPM_LOG}")" -eq 6 ]
+  run grep -q "^npm install -g" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+}
+
+@test "run_developer_or_ansible returns 1 without installing when no npm resolves" {
+  export MACOS=1
+  unset LINUX UBUNTU _NPM_BIN
+  export _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-npm"
+  run run_developer_or_ansible
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew npm not found"* ]]
+  run grep -q "^npm install -g" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+}
+
+@test "run_update installs npm globals through the resolved npm" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  _make_fixture_npm
+  run_update || true
+  grep -q "^install -g jscpd@5.4.1 " "${FX_NPM_LOG}"
+  run grep -q "^npm install -g" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "OK" ]
+}
+
+@test "run_update records the npm failure from the resolved npm's own exit" {
+  export MACOS=1
+  unset LINUX UBUNTU
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  _make_fixture_npm
+  export FX_NPM_EXIT=3
+  run_update || true
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
+}
+
+@test "run_update records npm FAIL with the remedy when no npm resolves, and keeps going" {
+  export MACOS=1
+  unset LINUX UBUNTU _NPM_BIN
+  export UPDATE_CLAUDE=1
+  unset UPDATE_BREW UPDATE_PIP UPDATE_GEMS UPDATE_MAS UPDATE_PKGS
+  export _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-npm"
+  local _rc=0
+  run_update > "${BATS_TEST_TMPDIR}/out" 2>&1 || _rc=$?
+  [ "${_rc}" -ne 0 ]
+  [ "$(cat "${_DOTFILES_RUN_TMPDIR}/status_npm")" = "FAIL" ]
+  grep -q "brew install node" "${BATS_TEST_TMPDIR}/out"
+  run grep -q "^npm install -g" "${MOCK_CALLS_FILE}"
+  [ "${status}" -ne 0 ]
+  # Later sections still ran: the failure did not abort run_update.
+  grep -q "Summary\|npm" "${BATS_TEST_TMPDIR}/out"
 }

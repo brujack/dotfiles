@@ -684,23 +684,27 @@ run_developer_or_ansible() {
     install_github_cli_linux || _gh_rc=2
   fi
   _require_npm_pins || return 1
+  # The resolved Homebrew npm, never a bare one: a run without the Linuxbrew PATH
+  # prefix would reach /usr/bin/npm and install the pins into /usr/local.
+  local _npm
+  _npm="$(_resolve_npm)" || return 1
   printf "Installing json2yaml via npm\n"
-  npm install -g "json2yaml@${JSON2YAML_VER}" || return 1
+  "${_npm}" install -g "json2yaml@${JSON2YAML_VER}" || return 1
 
   printf "Installing jscpd via npm\n"
-  npm install -g "jscpd@${JSCPD_VER}" || return 1
+  "${_npm}" install -g "jscpd@${JSCPD_VER}" || return 1
 
   printf "Installing firecrawl-cli via npm\n"
-  npm install -g "firecrawl-cli@${FIRECRAWL_CLI_VER}" || return 1
+  "${_npm}" install -g "firecrawl-cli@${FIRECRAWL_CLI_VER}" || return 1
 
   printf "Installing exa-mcp-server via npm\n"
-  npm install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
+  "${_npm}" install -g "exa-mcp-server@${EXA_MCP_SERVER_VER}" || return 1
 
   printf "Installing firecrawl-mcp via npm\n"
-  npm install -g "firecrawl-mcp@${FIRECRAWL_MCP_VER}" || return 1
+  "${_npm}" install -g "firecrawl-mcp@${FIRECRAWL_MCP_VER}" || return 1
 
   printf "Installing context7-mcp via npm\n"
-  npm install -g "@upstash/context7-mcp@${CONTEXT7_MCP_VER}" || return 1
+  "${_npm}" install -g "@upstash/context7-mcp@${CONTEXT7_MCP_VER}" || return 1
 
   install_ruby || return 1
   setup_ansible || return 1
@@ -1136,8 +1140,9 @@ run_update() {
     printf "Updating npm global packages\\n"
     # Record FAIL rather than returning: run_update reports per-section status and
     # continues. Silently installing latest would defeat the pins entirely.
-    if _require_npm_pins; then
-      npm install -g "jscpd@${JSCPD_VER}" "json2yaml@${JSON2YAML_VER}" \
+    local _npm_bin=""
+    if _require_npm_pins && _npm_bin="$(_resolve_npm 2> "${_DOTFILES_RUN_TMPDIR}/err_npm")"; then
+      "${_npm_bin}" install -g "jscpd@${JSCPD_VER}" "json2yaml@${JSON2YAML_VER}" \
         "firecrawl-cli@${FIRECRAWL_CLI_VER}" \
         "exa-mcp-server@${EXA_MCP_SERVER_VER}" \
         "firecrawl-mcp@${FIRECRAWL_MCP_VER}" \
@@ -1145,6 +1150,8 @@ run_update() {
         | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
       _update_record_end "npm" "${PIPESTATUS[0]}"
     else
+      # The resolver's remedy (kept in err_npm for the summary) is also shown now.
+      [[ -s "${_DOTFILES_RUN_TMPDIR}/err_npm" ]] && cat "${_DOTFILES_RUN_TMPDIR}/err_npm" >&2
       _update_record_end "npm" 1
     fi
   else

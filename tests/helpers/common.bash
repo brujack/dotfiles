@@ -55,6 +55,14 @@ load_mocks() {
   # and a suite that never calls load_mocks at all (e.g.
   # tests/setup_env/git_sync.bats) gets no protection from this seam.
   export _CARGO_BIN="${REPO_ROOT}/tests/mocks/cargo"
+  # Every npm call site resolves through _resolve_npm, which tries the real
+  # /home/linuxbrew/.linuxbrew/bin/npm (claude, GitHub's ubuntu image) and
+  # /opt/homebrew/bin/npm (macOS) by absolute path, where PATH mocking cannot
+  # reach. Default to the recording mock, and point the candidate list at a missing
+  # path so a test that unsets _NPM_BIN fails rather than finding a real npm
+  # (tdd.md E2).
+  export _NPM_BIN="${REPO_ROOT}/tests/mocks/npm"
+  export _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR:-/nonexistent}/no-npm"
   # run_update's pinned-uv section runs install_uv_pinned on any HAS_DEVTOOLS
   # profile, which a developer shell exports and CI does not. Without this
   # default a full run_update test would download uv for real on a dev box
