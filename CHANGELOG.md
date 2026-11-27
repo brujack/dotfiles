@@ -3,110 +3,116 @@
 
 ## Bug Fixes
 
-- open a scoped PR instead of a bare push (#469)
+- drop unused gitleaks path allowlists (#480)
 
-- offer id_rsa after home on the direct route (#470)
+- load Google Cloud creds per command (#481)
+
+- account for every cloned repo in the hook config (#482)
+
+- put pyenv shims on PATH without activation (#485)
+
+- gate sudo seams on BATS_TEST_TMPDIR (#489)
+
+- harden Windows PowerShell setup (#490)
+
+- honour checksum and root-path seams only under bats (#491)
+
+- honour root-path and install seams only under bats (#492)
+
+- install pinned globals through Homebrew npm, never the system npm (#493)
+
+- honour verifier and trust-anchor seams only under bats (#495)
 
 
 
 ## Documentation
 
-- approve the plugin prune gone-path spec
+- doctor checks for installed hooks and ggshield auth
 
-- plugin prune gone-path implementation plan
+- revise doctor hook checks after Step 8 round 1
 
-- use the list-item approval line spec_contract reads
+- revise doctor hook checks after Step 8 round 2
 
-- mark the plugin prune gone-path plan done
+- doctor hook checks external review round 1
 
-- record the auto-merge V1 ready-half result
+- approve doctor hook and ggshield checks design
 
-- record the auto-merge V1 draft-half result
+- doctor hook and ggshield checks
 
-- remove the wall-clock bound from the pre-push signal cases
+- mark doctor hook/ggshield plan done, update audit rows
 
-- record round 1 multi-lens review of the signal-case bound spec
+- doctor check for hooks that drift from HEAD
 
-- address round 1 review of the signal-case bound spec
+- revise hook drift spec after round-1 lenses
 
-- record round 2 review of the signal-case bound spec
+- scope hook drift check to symlinks after round 2
 
-- approve the signal-case bound spec
+- make hook drift requirements self-contained
 
-- pre-push signal-case bound removal plan
+- 2026-11-22-doctor-hook-drift-design external review round 1
 
-- mark the pre-push signal-case bound plan done
+- approve hook drift spec
 
-- trace all 30 Dependabot alerts to checkov's pins
+- doctor hook drift check
 
-- Renovate Python security PRs leave renderings stale
+- mark doctor hook drift plan done
 
-- pin uv for requirements renderings and lock check
+- record jscpd version drift across boxes
 
-- revise pinned-uv spec after round-1 lens review
+- doctor jscpd version check
 
-- record round-1 lens dispositions for pinned uv
+- retire doctor jscpd check after Step 8
 
-- revise pinned-uv spec after round-2 lens review
+- perf_event_paranoid ceiling design
 
-- fold round-3 risk findings into pinned-uv spec
+- perf spec notes CLAUDE.md byte ceiling
 
-- approve pinned-uv spec
+- perf spec multi-lens review round 1
 
-- pinned uv renderings implementation plan
+- perf spec persists exactly 2 after lens round 1
 
-- mark the pinned uv renderings plan done
+- perf spec round 2 revisions
 
-- document make install-pinned-uv and the pinned uv
+- 2026-11-25-perf-event-paranoid-ceiling-design external review round 1
 
-- move the crates.io contact out of the update source
+- approve perf_event_paranoid ceiling spec
 
-- repo session management design
+- perf_event_paranoid ceiling plan
 
-- repo session Multi-Lens Review round 1
+- mark perf ceiling done and list it in doctor
 
-- repo session revision 1 after Multi-Lens Review
+- note JSCPD_VER bump needs ai-config (#487)
 
-- repo session revision 2 after round 2
+- add manifest link drift and dir mode race
 
-- repo session: Linux hosts plain ssh, work macs via Cloudflare
+- add link-helper recurse, PSGallery trust, sudo seam
 
-- repo session: work LAN is 192.168.10/24, drop hostname rule
+- list the PowerShell pin table, note Boxstarter drift gap
 
-- repo session: probe host identity, not reachability
+- close security audit F1 and F3/F4/F7/F12 rows
 
-- repo session revision 3, drop home-ssh
+- describe the push gates and what skipping hooks skips
 
-- repo session revision 4, HostKeyAlias and macOS-only aliases
-
-- repo-session-management external review round 1
-
-- approve repo session management design
-
-- repo session management implementation plan
-
-- mark repo session management done
-
-- ADR-0059 repo sessions, README host-key boundary
-
-- add Anthropic weekly features digest 2026-11-16 (#467)
-
-- add Claude Code weekly features digest 2026-11-16 (#468)
+- extend the real-root-path guard beyond workflows.bats
 
 
 
 ## Features
 
-- prune plugin records whose project directory is gone (#459)
+- check installed hooks and ggshield authentication (#479)
 
-- pin uv for the requirements renderings and lock check (#463)
+- flag symlinked hooks that drift from the default branch (#483)
 
-- per-repo tmux sessions, boot unit, LAN-aware ssh (#466)
+- warn on .gitguardian config that sets ggshield ignore rules (#484)
+
+- hold perf_event_paranoid at 2 on devtools hosts (#486)
+
+- run the push-time gates through ai-config's stub (#488)
 
 
 
 ## Testing
 
-- drop wall-clock bound from signal cases (#461)
+- keep workflows e2e tests off real /etc paths (#494)
 
 
