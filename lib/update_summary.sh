@@ -60,8 +60,10 @@ _update_claude_list() {
 # non-zero on harmless peer-dependency warnings, so success is judged by output:
 # a listing with no package line failed.
 _update_npm_list() {
-  local _pkgs
-  _pkgs="$(npm list -g --depth=0 2> /dev/null | grep -v '^/')"
+  local _pkgs _npm
+  # The npm the installs ran through, so the pre/post diff reads the same prefix.
+  _npm="$(_resolve_npm 2> /dev/null)" || return 1
+  _pkgs="$("${_npm}" list -g --depth=0 2> /dev/null | grep -v '^/')"
   [[ -n ${_pkgs} ]] || return 1
   printf '%s\n' "${_pkgs}"
 }

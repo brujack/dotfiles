@@ -1900,3 +1900,30 @@ _mk_failing_python3_stub() {
   [[ "$output" =~ \[OK\][[:space:]]+brew([[:space:]]|$) ]]
   [ -z "$stderr" ]
 }
+
+# ── _update_npm_list uses the resolved npm ────────────────────────────────────
+
+@test "_update_npm_list lists through the resolved npm, not a PATH npm" {
+  local _fx="${BATS_TEST_TMPDIR}/fxnpm" _other="${BATS_TEST_TMPDIR}/pathnpm"
+  mkdir -p "${_fx}" "${_other}"
+  printf '#!/bin/sh\nprintf "/prefix\\n+-- resolved-pkg@1.0.0\\n"\n' > "${_fx}/npm"
+  printf '#!/bin/sh\nprintf "/prefix\\n+-- path-pkg@9.9.9\\n"\n' > "${_other}/npm"
+  chmod +x "${_fx}/npm" "${_other}/npm"
+  export _NPM_BIN="${_fx}/npm"
+  PATH="${_other}:${PATH}" run _update_npm_list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"resolved-pkg@1.0.0"* ]]
+  [[ "$output" != *"path-pkg"* ]]
+}
+
+@test "_update_npm_list returns 1 when no npm resolves, even with an npm on PATH" {
+  local _other="${BATS_TEST_TMPDIR}/pathnpm"
+  mkdir -p "${_other}"
+  printf '#!/bin/sh\nprintf "+-- path-pkg@9.9.9\\n"\n' > "${_other}/npm"
+  chmod +x "${_other}/npm"
+  unset _NPM_BIN
+  export _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/no-npm"
+  PATH="${_other}:${PATH}" run _update_npm_list
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"path-pkg"* ]]
+}

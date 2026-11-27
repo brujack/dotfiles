@@ -271,6 +271,54 @@ resolve_uv() {
   printf "%s\n" "${_uv}"
 }
 
+# _resolve_npm
+# Prints the absolute path of the Homebrew npm, or fails with a remedy. Never a
+# PATH lookup and never /usr/bin/npm: a run without the Linuxbrew PATH prefix
+# would otherwise reach the system npm, whose global prefix is /usr/local, and
+# leave a stale copy of a pinned tool (jscpd) that wins on PATH.
+# _NPM_BIN is the operator/test override, checked first; npm runs as the user,
+# so it is not bats-gated. Set but not executable is a hard error.
+# _NPM_FALLBACK_PATHS is a space-separated candidate list; unset or empty uses
+# _npm_default_candidates, which is EMPTY under bats, so a test that names no
+# fixture candidates finds nothing and fails closed instead of running the
+# machine's real npm (a real `npm install -g` once broke a global that way).
+# /usr/local/bin/npm is Intel Homebrew on macOS but, on Linux, the very
+# system-prefix copy this function exists to avoid, so only Darwin accepts it;
+# _NPM_INTEL_BREW_PATH moves it under bats only, so a fixture can reach the
+# Darwin branch.
+# _npm_default_candidates INTEL_PATH -- the built-in npm candidates: Linuxbrew,
+# Apple-silicon Homebrew and INTEL_PATH; nothing at all under bats.
+_npm_default_candidates() {
+  [[ -n ${BATS_TEST_TMPDIR:-} ]] && return 0
+  printf '%s\n' "/home/linuxbrew/.linuxbrew/bin/npm /opt/homebrew/bin/npm ${1}"
+}
+
+_resolve_npm() {
+  local _cand _os="${_OVERRIDE_PLATFORM:-$(uname -s)}"
+  local _intel _defaults
+  _intel="$(_bats_seam "${_NPM_INTEL_BREW_PATH:-}" /usr/local/bin/npm)"
+  _defaults="$(_npm_default_candidates "${_intel}")"
+  if [[ -n "${_NPM_BIN:-}" ]]; then
+    if [[ -x "${_NPM_BIN}" ]]; then
+      printf "%s\n" "${_NPM_BIN}"
+      return 0
+    fi
+    log_error "_NPM_BIN is set to '${_NPM_BIN}' but that is not executable"
+    return 1
+  fi
+  # shellcheck disable=SC2086 # deliberate word split of a space-separated path list
+  for _cand in ${_NPM_FALLBACK_PATHS:-${_defaults}}; do
+    [[ ${_cand} == /usr/bin/npm ]] && continue
+    [[ ${_cand} == "${_intel}" && ${_os} != Darwin ]] && continue
+    if [[ -x "${_cand}" ]]; then
+      printf "%s\n" "${_cand}"
+      return 0
+    fi
+  done
+  log_error "Homebrew npm not found (the system npm is never used) -- install node with 'brew install node', or set _NPM_BIN"
+  return 1
+}
+
 # uv_sync_venv UV_BIN PYTHON_BIN VENV_PATH
 # Installs VENV_PATH from the committed lock. One definition rather than three:
 # every call site needs the identical --frozen/--project/--group set and differs
