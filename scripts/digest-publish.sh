@@ -6,14 +6,18 @@
 # worked there; each run's model improvised instead (a direct push to master that
 # bypassed the required checks, or a branch with no PR). publish_digest pushes the
 # committed digest to its own branch and returns non-zero when any step fails.
-# It opens no PR: the sandbox's proxy permits git push but refuses every GitHub
-# API write (gh pr create got HTTP 403 on 2026-11-23), so the digest-pr workflow
-# (.github/workflows/digest-pr.yml, scripts/digest-pr.sh) opens the PR on the push.
+# It opens no PR: the sandbox's proxy permits git push, but on 2026-11-23 its run
+# logs showed `gh pr create` failing with HTTP 403 (GraphQL) and REST contents-API
+# PUTs refused ("Write access to this GitHub API path is not permitted through this
+# proxy"), so the digest-pr workflow (.github/workflows/digest-pr.yml,
+# scripts/digest-pr.sh) opens the PR on the push.
 
 # publish_digest <branch> <title> <dir>
 #   Run from the repo root after the digest commit. Refuses unless every file
 #   HEAD changes relative to origin's master lies under <dir>, so a sandbox branch
-#   carrying other commits cannot ride an auto-merged digest PR into master.
+#   carrying other commits cannot reach master through the digest PR (the workflow
+#   opens it with GITHUB_TOKEN, so it gets no CI until closed and reopened and is
+#   held as a bot PR for the operator to merge).
 #   0 = pushed; 1 = refused or push failed (stderr says which); 2 = bad usage.
 publish_digest() {
   if [[ $# -ne 3 ]]; then

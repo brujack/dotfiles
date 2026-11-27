@@ -3,8 +3,8 @@
 # Tests for scripts/digest-publish.sh: publish_digest pushes the committed
 # digest to its own branch, refuses anything outside the digest's directory,
 # and fails loudly when it cannot publish. It never calls gh: the cloud
-# session's proxy refuses PR creation, so .github/workflows/digest-pr.yml
-# opens the PR from the push (scripts/digest-pr.sh).
+# session's proxy failed `gh pr create` with HTTP 403 on 2026-11-23, so
+# .github/workflows/digest-pr.yml opens the PR from the push (scripts/digest-pr.sh).
 # Real git against a local bare remote (the git mock cannot fail push alone).
 # MOCK_CALLS_FILE records any gh call; the tests assert there is none.
 

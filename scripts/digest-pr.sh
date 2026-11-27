@@ -3,8 +3,9 @@
 #
 # Run by .github/workflows/digest-pr.yml when a scheduled routine pushes
 # digest/<anthropic|claude-code>-<YYYY-MM-DD>. The routine's cloud session can
-# push a branch but cannot create a PR (its proxy refuses every GitHub API write),
-# so the PR is opened here, with the workflow's GITHUB_TOKEN.
+# push a branch but cannot create a PR (on 2026-11-23 its run logs showed
+# `gh pr create` failing with HTTP 403 (GraphQL) and REST contents-API PUTs refused
+# by the proxy), so the PR is opened here, with the workflow's GITHUB_TOKEN.
 #
 # Fails closed: it opens nothing unless the branch name has exactly the digest
 # shape and every file the pushed commit adds to origin master lies under that
