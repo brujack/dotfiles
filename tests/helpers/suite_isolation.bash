@@ -42,9 +42,11 @@ setup_suite() {
     # otherwise reaches /usr/bin/sudo, which is passwordless on the fleet and
     # once left root-owned stubs in /usr/local/bin. A refusing stub heads PATH;
     # tests/mocks (load_mocks) and recorder functions still take precedence.
-    mkdir -p "${_BATS_SENTINEL}/nosudo"
-    printf '#!/bin/sh\necho "REAL SUDO BLOCKED $*" >&2\nexit 97\n' > "${_BATS_SENTINEL}/nosudo/sudo"
-    chmod +x "${_BATS_SENTINEL}/nosudo/sudo"
+    # Each step fails the suite: a missing or non-executable stub would let PATH fall
+    # through to the real sudo, so the guard must fail closed.
+    mkdir -p "${_BATS_SENTINEL}/nosudo" || return 1
+    printf '#!/bin/sh\necho "REAL SUDO BLOCKED $*" >&2\nexit 97\n' > "${_BATS_SENTINEL}/nosudo/sudo" || return 1
+    chmod +x "${_BATS_SENTINEL}/nosudo/sudo" || return 1
     export PATH="${_BATS_SENTINEL}/nosudo:${PATH}"
 }
 

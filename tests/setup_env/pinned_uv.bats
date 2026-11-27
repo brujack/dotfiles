@@ -286,6 +286,8 @@ SHIM
     export _RELEASE_BIN_DIR="${_decoy}"
     # shellcheck disable=SC2218 # the real function is sourced by load_setup_env; later tests redefine it as a stub
     _OVERRIDE_PLATFORM="${_os}" _UNAME_M="${_m}" install_uv_pinned
+    # R19: nothing reassigns _RELEASE_BIN_DIR in the caller's shell.
+    [ "${_RELEASE_BIN_DIR}" = "${_decoy}" ]
     [ -x "${_PINNED_DIR}/uv" ]
     [ -z "$(ls -A "${_decoy}")" ]
   done
