@@ -278,12 +278,21 @@ resolve_uv() {
 # leave a stale copy of a pinned tool (jscpd) that wins on PATH.
 # _NPM_BIN is the operator/test override, checked first; npm runs as the user,
 # so it is not bats-gated. Set but not executable is a hard error.
-# _NPM_FALLBACK_PATHS is a space-separated candidate list (set but empty means none). /usr/local/bin/npm
-# (_NPM_INTEL_BREW_PATH) is Intel Homebrew on macOS but, on Linux, the very
-# system-prefix copy this function exists to avoid, so only Darwin accepts it.
+# _NPM_FALLBACK_PATHS is a space-separated candidate list (set but empty means
+# none). Under bats the built-in default list is EMPTY, so a test that names no
+# fixture candidates finds nothing and fails closed instead of running the
+# machine's real npm (a real `npm install -g` once broke a global that way).
+# /usr/local/bin/npm is Intel Homebrew on macOS but, on Linux, the very
+# system-prefix copy this function exists to avoid, so only Darwin accepts it;
+# _NPM_INTEL_BREW_PATH moves it under bats only, so a fixture can reach the
+# Darwin branch.
 _resolve_npm() {
   local _cand _os="${_OVERRIDE_PLATFORM:-$(uname -s)}"
-  local _intel="${_NPM_INTEL_BREW_PATH:-/usr/local/bin/npm}"
+  local _intel _defaults=""
+  _intel="$(_bats_seam "${_NPM_INTEL_BREW_PATH:-}" /usr/local/bin/npm)"
+  if [[ -z ${BATS_TEST_TMPDIR:-} ]]; then
+    _defaults="/home/linuxbrew/.linuxbrew/bin/npm /opt/homebrew/bin/npm ${_intel}"
+  fi
   if [[ -n "${_NPM_BIN:-}" ]]; then
     if [[ -x "${_NPM_BIN}" ]]; then
       printf "%s\n" "${_NPM_BIN}"
@@ -293,7 +302,7 @@ _resolve_npm() {
     return 1
   fi
   # shellcheck disable=SC2086 # deliberate word split of a space-separated path list
-  for _cand in ${_NPM_FALLBACK_PATHS-/home/linuxbrew/.linuxbrew/bin/npm /opt/homebrew/bin/npm /usr/local/bin/npm}; do
+  for _cand in ${_NPM_FALLBACK_PATHS-${_defaults}}; do
     [[ ${_cand} == /usr/bin/npm ]] && continue
     [[ ${_cand} == "${_intel}" && ${_os} != Darwin ]] && continue
     if [[ -x "${_cand}" ]]; then

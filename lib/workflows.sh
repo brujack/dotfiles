@@ -1150,8 +1150,7 @@ run_update() {
         | tee "${_DOTFILES_RUN_TMPDIR}/err_npm"
       _update_record_end "npm" "${PIPESTATUS[0]}"
     else
-      # The resolver's remedy (kept in err_npm for the summary) is also shown now.
-      [[ -s "${_DOTFILES_RUN_TMPDIR}/err_npm" ]] && cat "${_DOTFILES_RUN_TMPDIR}/err_npm" >&2
+      # The resolver's remedy is in err_npm, which the summary prints for a FAIL.
       _update_record_end "npm" 1
     fi
   else

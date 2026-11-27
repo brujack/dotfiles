@@ -1728,6 +1728,13 @@ EOF
   refute_grep "brew install go-task/tap/go-task" "${MOCK_CALLS_FILE}"
 }
 
+@test "_install_ubuntu_brew_packages: installs node, the Linuxbrew npm the pinned globals resolve to" {
+  # _resolve_npm never uses the system npm, so node must be an explicit formula here
+  # rather than a transitive dependency of something else.
+  run _install_ubuntu_brew_packages
+  grep -q "brew install node$" "${MOCK_CALLS_FILE}"
+}
+
 @test "_install_ubuntu_brew_packages: installs claude plugins at USER scope with a marketplace" {
   # Task 7 of docs/superpowers/plans/2026-09-19-claude-plugin-provisioning.md:
   # the hardcoded 4-plugin loop is gone -- provision_claude_plugins reconciles

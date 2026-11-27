@@ -2125,3 +2125,33 @@ _npm_fixture() {
   _NPM_FALLBACK_PATHS="" run _resolve_npm
   [ "$status" -eq 1 ]
 }
+
+@test "_resolve_npm: under bats the built-in default list is empty, so the real Homebrew npm is unreachable" {
+  # Positive control: the real candidate exists on claude-class boxes, so this
+  # proves the gate rather than the machine's absence of npm.
+  unset _NPM_BIN _NPM_FALLBACK_PATHS _NPM_INTEL_BREW_PATH
+  [ -n "${BATS_TEST_TMPDIR}" ]
+  run _resolve_npm
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Homebrew npm not found"* ]]
+}
+
+@test "_resolve_npm: an existing but non-executable _NPM_BIN is a hard error" {
+  local _c; _c="$(_npm_fixture cand)"
+  printf '#!/bin/sh\n' > "${BATS_TEST_TMPDIR}/noexec"
+  chmod -x "${BATS_TEST_TMPDIR}/noexec"
+  [ -e "${BATS_TEST_TMPDIR}/noexec" ]
+  _NPM_BIN="${BATS_TEST_TMPDIR}/noexec" _NPM_FALLBACK_PATHS="${_c}" run _resolve_npm
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not executable"* ]]
+}
+
+@test "_resolve_npm: an existing but non-executable candidate is skipped" {
+  unset _NPM_BIN
+  local _c; _c="$(_npm_fixture cand)"
+  printf '#!/bin/sh\n' > "${BATS_TEST_TMPDIR}/noexec"
+  chmod -x "${BATS_TEST_TMPDIR}/noexec"
+  _NPM_FALLBACK_PATHS="${BATS_TEST_TMPDIR}/noexec ${_c}" run _resolve_npm
+  [ "$status" -eq 0 ]
+  [ "$output" = "${_c}" ]
+}

@@ -1595,7 +1595,7 @@ _install_ubuntu_brew_packages() {
   local _f
   for _f in \
     argocd bat cargo-nextest cargo-cyclonedx cyclonedx-python git-lfs fzf gh \
-    hadolint helm k9s kustomize lazydocker linkerd mongosh mongodb-atlas neovim \
+    hadolint helm k9s kustomize lazydocker linkerd mongosh mongodb-atlas neovim node \
     pyenv pyenv-virtualenv rbenv ripgrep rustup \
     starship tgenv uv zig zoxide redpanda-data/tap/redpanda \
     git-cliff kcov mdbook bun getagentseal/codeburn/codeburn \
