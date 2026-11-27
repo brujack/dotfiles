@@ -2,16 +2,21 @@ name: digest-pr
 
 # Opens the PR for a weekly digest branch. The scheduled routines
 # (scripts/whats-new-anthropic.sh, scripts/whats-new-claude-code.sh) run in a
-# Claude Code cloud session whose proxy lets `git push` through but refuses every
-# GitHub API write, so `gh pr create` there fails with HTTP 403. The routine
-# therefore only pushes digest/<anthropic|claude-code>-<YYYY-MM-DD>, and this
+# Claude Code cloud session whose proxy lets `git push` through; the 2026-11-23 run
+# logs showed `gh pr create` failing with HTTP 403 (GraphQL) and REST contents-API
+# PUTs refused ("Write access to this GitHub API path is not permitted through this
+# proxy"). The routine therefore only pushes digest/<anthropic|claude-code>-<YYYY-MM-DD>, and this
 # workflow opens the PR with GITHUB_TOKEN.
 #
 # The logic lives in scripts/digest-pr.sh (tested in tests/scripts/digest_pr.bats):
 # it fails closed unless the branch name has the digest shape and every file the
 # push adds to master is under that digest's own directory, and it does nothing
-# when a same-repo PR is already open. The job checks out master, not the pushed
-# commit, so a pushed branch cannot change the script that judges it.
+# when a same-repo PR is already open. The job checks out master, so a branch that
+# edits only the script cannot change the script that judges it. The workflow file
+# itself is different: on `push` GitHub runs it from the pushed commit, so a branch
+# can edit this workflow. What keeps a routine push from carrying a workflow edit is
+# publish_digest's refusal to push any file outside the digest dir. Anyone with push
+# access could add a workflow anyway, so this grants no new privilege.
 #
 # A PR opened with GITHUB_TOKEN starts no CI until the operator closes and
 # reopens it, and the auto-merge gate holds bot PRs without `automerge-ok`
@@ -33,7 +38,8 @@ concurrency:
   group: digest-pr-${{ github.ref }}
   cancel-in-progress: false
 
-# Load-bearing: bash runs with pipefail.
+# `shell: bash` makes each run step fail on the first failing command (-e). The
+# steps are single commands, so nothing here depends on pipefail.
 defaults:
   run:
     shell: bash
@@ -54,6 +60,9 @@ jobs:
         with:
           ref: master
           fetch-depth: 0
+          # The repo is public, so fetching the pushed sha needs no credential, and
+          # the script's gh calls use GH_TOKEN. No later step pushes.
+          persist-credentials: false
 
       - name: Fetch the pushed commit
         env:

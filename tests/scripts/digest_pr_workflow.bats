@@ -3,9 +3,10 @@
 # Structure tests for .github/workflows/digest-pr.yml. The workflow cannot run
 # here, so these pin its shape: the push-only trigger, empty top-level
 # permissions, the one job's write scope, pins, the checkout of master (so a
-# pushed branch cannot change the script that judges it), and the absence of
-# anything that would label, merge or run on another event. The logic is
-# tested in digest_pr.bats.
+# branch that edits only the script cannot change the script that judges it; the
+# workflow file itself comes from the pushed commit), no persisted checkout
+# credentials, and the absence of anything that would label, merge or run on
+# another event. The logic is tested in digest_pr.bats.
 
 bats_require_minimum_version 1.5.0
 
@@ -65,9 +66,13 @@ _jobs() {
   [ "${_uses}" = "${_pin}" ]
 }
 
-@test "checks out master, so the script that judges the branch is master's" {
+@test "checks out master, so a branch that edits only the script does not change the script that judges it" {
   _jobs | command grep -qxF '          ref: master'
   _jobs | command grep -qxF '          fetch-depth: 0'
+}
+
+@test "checkout persists no credentials" {
+  _jobs | command grep -qxF '          persist-credentials: false'
 }
 
 @test "fetches the pushed sha and runs scripts/digest-pr.sh with branch and sha from env" {
