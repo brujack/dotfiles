@@ -21,7 +21,7 @@ digest_pr() {
     return 2
   fi
   local _branch="$1" _sha="$2" _repo="${GITHUB_REPOSITORY:-}"
-  local _kind _date _dir _name _title _files _f _count _tip
+  local _kind _date _dir _name _title _files _f _count _tip _refs
 
   if [[ ! "${_branch}" =~ ^digest/(anthropic|claude-code)-([0-9]{4}-[0-9]{2}-[0-9]{2})$ ]]; then
     printf 'Error: refusing %s: not digest/(anthropic|claude-code)-YYYY-MM-DD\n' "${_branch}" >&2
@@ -90,16 +90,16 @@ digest_pr() {
   # `gh pr create --head` opens whatever the branch tip is when it runs, not the
   # commit the scope check read. A push that landed in between must not ride along:
   # refuse unless origin's tip is still exactly _sha (also refuses a deleted branch).
-  # Fetch the exact ref, never `git ls-remote`: ls-remote matches on the tail of the
-  # name, so a decoy refs/heads/a/refs/heads/<branch> would be read in its place.
-  git fetch -q origin "refs/heads/${_branch}" || {
+  # List every ref and match the full name as a string. Both shortcuts read the
+  # wrong ref: `git ls-remote origin <pattern>` matches on the tail of the name
+  # (a decoy refs/heads/a/refs/heads/<branch> is read first), and `git fetch
+  # origin refs/heads/<branch>` expands the name, so with the branch absent it
+  # takes refs/tags/refs/heads/<branch> or refs/heads/refs/heads/<branch>.
+  _refs="$(git ls-remote origin)" || {
     printf 'Error: cannot read the tip of %s on origin; not opening a PR blind\n' "${_branch}" >&2
     return 1
   }
-  _tip="$(git rev-parse --verify -q FETCH_HEAD)" || {
-    printf 'Error: cannot read the tip of %s on origin; not opening a PR blind\n' "${_branch}" >&2
-    return 1
-  }
+  _tip="$(awk -v r="refs/heads/${_branch}" '$2 == r { print $1 }' <<< "${_refs}")"
   if [[ "${_tip}" != "${_sha}" ]]; then
     printf 'Error: refusing %s: its tip on origin is %s, not the checked commit %s\n' "${_branch}" "${_tip:-<absent>}" "${_sha}" >&2
     return 1

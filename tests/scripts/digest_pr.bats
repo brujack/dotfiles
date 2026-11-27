@@ -246,15 +246,30 @@ run_digest_pr() {
   commit_file docs/anthropic-new-features/f.md
   NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"cannot read the tip of digest/anthropic-2026-11-23"* ]]
+  [[ "${output}" == *"tip on origin is <absent>"* ]]
   run ! grep -q 'pr create' "${GH_CALLS}"
 }
 
-@test "digest-pr fails closed, creating nothing, when the branch tip cannot be fetched" {
+@test "digest-pr refuses when the branch is absent and refs named like it point at the checked sha" {
+  commit_file docs/anthropic-new-features/f.md
+  local _checked _decoy
+  _checked="$(head_sha)"
+  # A fetch of refs/heads/<branch> expands the name and, with the branch absent,
+  # takes any of these instead. Only refs/heads/<branch> itself may count.
+  for _decoy in refs/tags/refs/heads refs/heads/refs/heads refs/remotes/refs/heads refs/refs/heads; do
+    git -C "${WORK}" push -q -f origin "HEAD:${_decoy}/digest/anthropic-2026-11-23"
+  done
+  NO_BRANCH_PUSH=1 run_digest_pr digest/anthropic-2026-11-23 "${_checked}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"tip on origin is <absent>"* ]]
+  run ! grep -q 'pr create' "${GH_CALLS}"
+}
+
+@test "digest-pr fails closed, creating nothing, when origin's refs cannot be listed" {
   commit_file docs/anthropic-new-features/f.md
   local _real
   _real="$(command -v git)"
-  printf '#!/usr/bin/env bash\n[[ "$1" == fetch && "$*" == *refs/heads/digest/* ]] && exit 128\nexec %q "$@"\n' "${_real}" > "${BATS_TEST_TMPDIR}/bin/git"
+  printf '#!/usr/bin/env bash\n[[ "$1" == ls-remote ]] && exit 128\nexec %q "$@"\n' "${_real}" > "${BATS_TEST_TMPDIR}/bin/git"
   chmod +x "${BATS_TEST_TMPDIR}/bin/git"
   run_digest_pr digest/anthropic-2026-11-23
   [ "${status}" -eq 1 ]
