@@ -169,6 +169,13 @@ load_mocks() {
   # and /usr/share/keyrings. Each seam is honoured only under bats. Fixture
   # directories are created lazily by the code under test, except where a test
   # reads them first. assert_no_real_root_paths (teardown) enforces all of this.
+  # setup_zsh_as_default_shell reads the account's login shell, then runs
+  # `sudo -n chsh` and a bare `chsh`. Default to "already /bin/zsh" so a run_*
+  # test never reaches either; a test of the change path sets its own value
+  # (and _OVERRIDE_ZSH_PATH). strace of workflows.bats showed the sudo mock
+  # never execs chsh anyway (`-n` is not dropped, so it exits 0), but that is
+  # an accident of the mock, not a guard.
+  export _OVERRIDE_CURRENT_LOGIN_SHELL="/bin/zsh"
   export _APT_SOURCES_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-sources"
   export _APT_TRUSTED_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/apt-trusted"
   export _EDGE_SOURCES_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/edge-sources"
@@ -214,8 +221,28 @@ assert_no_real_root_paths() {
   #    the test HOME that never exists under the mocked unzip, so tests/mocks/sudo
   #    does not exec it; /usr/local/* are flag values, not read or write targets.
   local _allow='^awk -F= /\^NAME/\{print [$]2\} /etc/os-release$|^sudo -H [^ ]+/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin( --update)?$'
-  _hits="$(command grep -E '(^|[ =\[])(/etc/|/usr/local/|/usr/share/keyrings/|/opt/)' "${_calls}" | command grep -v -E "${_allow}")" || return 0
-  [[ -n ${_hits} ]] || return 0
+  # A prefix is named when a non-path character (or line start) precedes it and
+  # a slash, whitespace or line end follows, which covers `--x=/etc/y`, `[/etc/y`,
+  # `>/etc/y`, `-a/etc/y` and a bare `/etc` but not `<tmp>/etc/y` or `/etcetera`.
+  local _prefix='(^|[^[:alnum:]_.-]|[[:space:]]-[[:alpha:]])(/etc|/usr/local|/usr/share/keyrings|/opt)(/|$|[[:space:]])'
+  local _rc
+  # `|| _rc=$?` keeps a no-match rc 1 from tripping the errexit bats runs under.
+  _rc=0
+  _hits="$(command grep -E "${_prefix}" "${_calls}")" || _rc=$?
+  # grep rc 1 is "no match" (clean); anything above 1 is a scan failure, which
+  # must not read as clean.
+  if (( _rc > 1 )); then
+    printf 'assert_no_real_root_paths: scanning %s failed (grep rc %d)\n' "${_calls}" "${_rc}" >&2
+    return 1
+  fi
+  (( _rc == 1 )) && return 0
+  _rc=0
+  _hits="$(command grep -v -E "${_allow}" <<< "${_hits}")" || _rc=$?
+  if (( _rc > 1 )); then
+    printf 'assert_no_real_root_paths: allow-list filter failed (grep rc %d)\n' "${_rc}" >&2
+    return 1
+  fi
+  (( _rc == 1 )) && return 0
   printf 'mock calls named real root-owned paths:\n%s\n' "${_hits}" >&2
   return 1
 }

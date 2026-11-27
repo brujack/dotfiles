@@ -1084,22 +1084,101 @@ nvidia" ]
   export LINUX=1 UBUNTU=1 NOBLE=1 HAS_DOCKER=1
   run install_ubuntu_packages
   grep -q "apt update" "${MOCK_CALLS_FILE}"
+  # The docker step wrote its daemon.json fixture, so the seam is live; without
+  # this a host with a real /etc/docker/daemon.json could mask a dropped export.
+  [ -f "${_DOCKER_DAEMON_JSON}" ]
   assert_no_real_root_paths
 }
 
-@test "root-path guard: assert_no_real_root_paths fails on a recorded real-path call and names it" {
-  printf 'sudo -H cat /etc/docker/daemon.json\n' >> "${MOCK_CALLS_FILE}"
+# Seed one line into the calls ledger, run the guard, and leave the ledger clean
+# so teardown's own pass does not re-fail on the seeded line.
+_guard_verdict() {
+  printf '%s\n' "$1" > "${MOCK_CALLS_FILE}"
   run assert_no_real_root_paths
-  [ "$status" -eq 1 ]
-  [[ $output == *"/etc/docker/daemon.json"* ]]
+  local _status="${status}"
   : > "${MOCK_CALLS_FILE}"
+  status="${_status}"
 }
 
-@test "root-path guard: the two allow-listed read-only or inert calls pass" {
-  printf 'awk -F= /^NAME/{print $2} /etc/os-release\n' >> "${MOCK_CALLS_FILE}"
-  printf 'sudo -H %s/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin\n' "${HOME}" >> "${MOCK_CALLS_FILE}"
+@test "root-path guard: every prefix is caught and named" {
+  local _line
+  for _line in \
+    'sudo rm -f /etc/x' \
+    'sudo rm -f /usr/local/bin/x' \
+    'sudo rm -f /usr/share/keyrings/x' \
+    'sudo rm -f /opt/x'; do
+    _guard_verdict "${_line}"
+    [ "${status}" -eq 1 ] || { printf 'not caught: %s\n' "${_line}" >&2; return 1; }
+    [[ ${output} == *"${_line}"* ]] || { printf 'not named: %s\n' "${_line}" >&2; return 1; }
+  done
+}
+
+@test "root-path guard: every delimiter form is caught" {
+  local _line
+  for _line in \
+    'tee --x=/etc/y' \
+    'cat [/etc/y' \
+    'tee >/etc/y' \
+    'ls /etc' \
+    '/etc/y' \
+    'cat -a/etc/y' \
+    'cat b:/etc/y' \
+    'ls /usr/local' \
+    'ls /opt'; do
+    _guard_verdict "${_line}"
+    [ "${status}" -eq 1 ] || { printf 'not caught: %s\n' "${_line}" >&2; return 1; }
+  done
+}
+
+@test "root-path guard: a path merely containing a prefix, or a longer name, passes" {
+  local _line
+  for _line in \
+    "rm -f ${BATS_TEST_TMPDIR}/etc/x" \
+    'rm -f /etcetera/x' \
+    'rm -f /optical/x' \
+    'rm -f /usr/localfoo/x'; do
+    _guard_verdict "${_line}"
+    [ "${status}" -eq 0 ] || { printf 'wrongly caught: %s\n' "${_line}" >&2; return 1; }
+  done
+}
+
+@test "root-path guard: near-miss allow-list lines still fail" {
+  local _line
+  for _line in \
+    'awk -F= /^NAME/{print $2} /etc/shadow' \
+    'awk -F= /^NAME/{print $2} /etc/os-release /etc/shadow' \
+    'awk -F= /^NAME/{print $2} /etc/os-release extra' \
+    "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin /etc/x" \
+    "sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update /etc/x" \
+    'sudo -H /usr/local/bin/other --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin'; do
+    _guard_verdict "${_line}"
+    [ "${status}" -eq 1 ] || { printf 'allow-list too wide: %s\n' "${_line}" >&2; return 1; }
+  done
+}
+
+@test "root-path guard: the allow-listed read-only probe and both aws installer forms pass" {
+  local _line _aws="sudo -H ${HOME}/software_downloads/awscli/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin"
+  for _line in \
+    'awk -F= /^NAME/{print $2} /etc/os-release' \
+    "${_aws}" \
+    "${_aws} --update"; do
+    _guard_verdict "${_line}"
+    [ "${status}" -eq 0 ] || { printf 'wrongly caught: %s\n' "${_line}" >&2; return 1; }
+  done
+}
+
+@test "root-path guard: a scan failure fails the guard instead of passing" {
+  # An unreadable ledger makes grep exit 2, which must not read as clean.
+  local _saved="${MOCK_CALLS_FILE}" _unreadable="${BATS_TEST_TMPDIR}/calls-unreadable"
+  printf 'sudo rm -f /etc/x\n' > "${_unreadable}"
+  chmod 000 "${_unreadable}"
+  [ ! -r "${_unreadable}" ] || skip "running with privileges that ignore file modes"
+  export MOCK_CALLS_FILE="${_unreadable}"
   run assert_no_real_root_paths
-  [ "$status" -eq 0 ]
+  export MOCK_CALLS_FILE="${_saved}"
+  chmod 600 "${_unreadable}"
+  [ "$status" -eq 1 ]
+  [[ $output == *"failed"* ]]
 }
 
 # ── install_ubuntu_packages ───────────────────────────────────────────────────
