@@ -200,3 +200,13 @@ _uv_ver() {
   [[ "${output}" == *"chmod -R u+w"* ]]
   /bin/rm -rf "${_s}"
 }
+
+@test "sudo resolves to the refusing stub when a test loads no mocks" {
+  # No load_mocks here, so this is the path release_binary.bats and
+  # pinned_uv.bats take: the real /usr/bin/sudo must be unreachable.
+  [[ "$(command -v sudo)" == */bats-sentinel.*/nosudo/sudo ]]
+  run sudo touch "${BATS_TEST_TMPDIR}/must-not-exist"
+  [ "${status}" -eq 97 ]
+  [[ "${output}" == *"REAL SUDO BLOCKED"* ]]
+  [ ! -e "${BATS_TEST_TMPDIR}/must-not-exist" ]
+}

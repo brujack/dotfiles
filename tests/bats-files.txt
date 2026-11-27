@@ -49,6 +49,7 @@ tests/scripts/whats-new.bats
 tests/scripts/windows_npm_pins.bats
 tests/setup_env/ai_config_sync.bats
 tests/setup_env/apt_keyring.bats
+tests/setup_env/bats_only_seams.bats
 tests/setup_env/brewfile_drift.bats
 tests/setup_env/cadence_doctor.bats
 tests/setup_env/cargo_tools.bats

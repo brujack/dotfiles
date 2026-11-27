@@ -324,6 +324,8 @@ Disposition: Addressed (operator, 2026-11-19): all four folded into the spec at 
 
 - finding R6 (2026-11-19, reviewer both): DIFFERS — _install_ubuntu_uv_pinned -> _install_uv_pinned_for Linux selects the asset by `_uv_pinned_asset Linux "${_UNAME_M}"` matching `Linux/x86_64` (lib/helpers.sh:248,284), not by `_LINUX_ARCH` being amd64 as the requirement states; path, asset, digest and warn-and-return-0 otherwise match.
 - R6 -> On Linux with `HAS_DEVTOOLS` set, `_install_ubuntu_uv_pinned` installs `uv` into `${HOME}/.local/share/dotfiles/pinned/uv-${UV_VER}/` from `uv-x86_64-unknown-linux-gnu.tar.gz` with `UV_SHA256_LINUX_AMD64` when `_uv_pinned_asset Linux "${_UNAME_M}"` resolves (`_UNAME_M` is `x86_64`), and on any other machine type it logs a warning and returns 0. — `_LINUX_ARCH` is derived from `_UNAME_M` in lib/constants.sh, and one asset table keyed on `uname -s`/`uname -m` serves both platforms and the make target, where only lib/constants.sh is sourced.
+- finding R19 (2026-11-26, dotfiles root-path seam gating): DIFFERS — the uv installer no longer passes `_RELEASE_BIN_DIR` as a command prefix; `_install_uv_pinned_for` passes the destination as `_install_pinned_release_binary`'s optional seventh argument, because `_RELEASE_BIN_DIR` is now honoured only under bats (`_bats_seam`, lib/helpers.sh) and a prefix would have sent a real install to `/usr/local/bin`.
+- R19 -> The uv installer call passes its destination as the seventh argument of `_install_pinned_release_binary`, and no code assigns `_RELEASE_BIN_DIR` in the calling shell. — the seam is a test-only override of a root-writable path, so the production destination cannot ride on it.
 
 ## Spec alignment (2026-11-19)
 

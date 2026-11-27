@@ -680,7 +680,7 @@ _go_verify() {
   return 1
 }
 
-# Install the pinned Go tarball into ${_GO_INSTALL_ROOT:-/usr/local}/go. The
+# Install the pinned Go tarball into /usr/local/go (_GO_INSTALL_ROOT, honoured only under bats). The
 # tarball is extracted in a throwaway directory under _DL_TMP_ROOT, chowned to
 # root:root (tar ran as the user and a rename keeps ownership), then swapped in.
 # The moves are renames only because ~/software_downloads and /usr/local share a
@@ -692,13 +692,15 @@ _go_verify() {
 # written only after the swap succeeded, so an interrupted run installs again
 # next time.
 # Returns 0 installed or up to date; 1 on a failed stage (named in a warning).
-# Seams, read at call time: _GO_INSTALL_ROOT, _DL_STAMP_DIR, _DL_TAR_BIN,
+# Seams, read at call time: _DL_STAMP_DIR, and _GO_INSTALL_ROOT and _DL_TAR_BIN,
+# which are honoured only under bats (a root path and the extractor), and
 # _GO_SHA256 (overrides the per-arch GO_SHA256_* pin under bats only; empty means unset). The
 # owner is hardcoded root:root so an inherited variable cannot choose it.
 # No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path after
 # mktemp reaches the explicit sudo rm -rf below.
 _install_go_from_tarball() {
-  local _root="${_GO_INSTALL_ROOT:-/usr/local}"
+  local _root
+  _root="$(_bats_seam "${_GO_INSTALL_ROOT:-}" /usr/local)"
   local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/go"
   local _tmp _stage="" _moved=0 _sha="" _src=""
 
@@ -739,7 +741,7 @@ _install_go_from_tarball() {
     _stage="download"
   elif ! _go_verify "${_tmp}/go.tgz" "${_sha}" "${_src}"; then
     _stage="verify"
-  elif ! "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/go.tgz" -C "${_tmp}"; then
+  elif ! "$(_bats_seam "${_DL_TAR_BIN:-}" tar)" -xzf "${_tmp}/go.tgz" -C "${_tmp}"; then
     _stage="extract"
   elif ! [[ -f ${_tmp}/go/bin/go && ! -L ${_tmp}/go/bin/go && -s ${_tmp}/go/bin/go ]]; then
     _stage="extract"
@@ -803,7 +805,9 @@ _install_ubuntu_go() {
   # fall back to PATH so an existing `go` (and the suite's mock) still drives it.
   local _go_bin="${_GO_BIN:-}"
   if [[ -z "${_go_bin}" ]]; then
-    if [[ -x ${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go ]]; then _go_bin="${_GO_INSTALL_ROOT:-/usr/local}/go/bin/go"; else _go_bin=go; fi
+    local _go_root
+    _go_root="$(_bats_seam "${_GO_INSTALL_ROOT:-}" /usr/local)"
+    if [[ -x ${_go_root}/go/bin/go ]]; then _go_bin="${_go_root}/go/bin/go"; else _go_bin=go; fi
   fi
   INSTALLED_GO_VER=$("${_go_bin}" version 2>/dev/null | awk '{print $3}' | sed 's/go//g')
   # GO_VER is a series ("1.27") while the toolchain reports a patch ("1.27.1").
@@ -978,8 +982,10 @@ _install_ubuntu_nvidia() {
     sudo -H apt-mark manual "${_driver}" || return 1
   fi
 
-  local _keyring="${_OVERRIDE_NVIDIA_KEYRING:-${NVIDIA_CONTAINER_KEYRING}}"
-  local _list="${_OVERRIDE_NVIDIA_LIST:-/etc/apt/sources.list.d/nvidia-container-toolkit.list}"
+  local _keyring
+  _keyring="$(_bats_seam "${_OVERRIDE_NVIDIA_KEYRING:-}" "${NVIDIA_CONTAINER_KEYRING}")"
+  local _list
+  _list="$(_bats_seam "${_OVERRIDE_NVIDIA_LIST:-}" /etc/apt/sources.list.d/nvidia-container-toolkit.list)"
 
   if [[ ! -f ${_keyring} ]]; then
     _install_apt_keyring "${NVIDIA_CONTAINER_GPGKEY_URL}" "${_keyring}" armored || {
@@ -1180,8 +1186,10 @@ _install_ubuntu_k8s_tools() {
   # rc 1 when any tool failed; each is named in a warning. Every tool is
   # attempted regardless of an earlier failure.
   local _k8s_rc=0
-  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  local _keyring="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}/kubernetes-apt-keyring.gpg"
+  local _sources
+  _sources="$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
+  local _keyring
+  _keyring="$(_bats_seam "${_APT_KEYRINGS_DIR:-}" /etc/apt/keyrings)/kubernetes-apt-keyring.gpg"
   if [[ -n ${HAS_K8S} ]]; then
     printf "Installing kind\\n"
     _install_fetched_binary kind bin kind || {
@@ -1225,7 +1233,7 @@ _install_ubuntu_k8s_tools() {
   return 0
 }
 
-# Remove a binary dotfiles used to install into ${_DL_BIN_DIR}, once the apt copy
+# Remove a binary dotfiles used to install into /usr/local/bin, once the apt copy
 # (or the decision not to have one) makes it redundant. The stamp is the proof
 # dotfiles wrote that path: binary first, then stamp, because a stamp removed
 # after a failed binary removal would leave the binary unstamped and so never
@@ -1235,7 +1243,8 @@ _install_ubuntu_k8s_tools() {
 _hashicorp_retire_stamped() {
   local _tool="$1" _shadows="${2:-}"
   local _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_tool}"
-  local _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_tool}"
+  local _bin
+  _bin="$(_bats_seam "${_DL_BIN_DIR:-}" /usr/local/bin)/${_tool}"
   if [[ -e ${_stamp} ]]; then
     local _had_bin=0
     [[ -e ${_bin} || -L ${_bin} ]] && _had_bin=1
@@ -1323,8 +1332,8 @@ _hashicorp_install_hint() {
 _hashicorp_warn_handwritten_source() {
   local _f
   for _f in "${_APT_SOURCES_LIST:-/etc/apt/sources.list}" \
-    "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"/*.list \
-    "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"/*.sources; do
+    "$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"/*.list \
+    "$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"/*.sources; do
     [[ -f ${_f} ]] || continue
     if [[ ${_f} == *.sources ]]; then
       # deb822 field names start in column 0; an indented line continues the
@@ -1482,8 +1491,10 @@ _install_ubuntu_cloud_tools() {
   # rc 1 when any tool failed; each is named in a warning. Every tool is
   # attempted regardless of an earlier failure.
   local _cloud_rc=0
-  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _sources
+  _sources="$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
+  local _keyrings
+  _keyrings="$(_bats_seam "${_APT_KEYRINGS_DIR:-}" /usr/share/keyrings)"
   local _ring _list
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing cloudflared\\n"
@@ -1491,7 +1502,8 @@ _install_ubuntu_cloud_tools() {
     _cf_codename="$(lsb_release -cs)"
     # Cloudflare WARP has no Ubuntu 26.04 packages yet; fall back to noble
     [[ -n "${RESOLUTE:-}" ]] && _cf_codename="noble"
-    local _cf_sources="${_CF_SOURCES_LIST:-${_sources}/cloudflare-client.list}"
+    local _cf_sources
+    _cf_sources="$(_bats_seam "${_CF_SOURCES_LIST:-}" "${_sources}/cloudflare-client.list")"
     _ring="${_keyrings}/cloudflare-warp-archive-keyring.gpg"
     _install_apt_keyring "https://pkg.cloudflareclient.com/pubkey.gpg" "${_ring}" armored || {
       log_warn "cloud_tools: cloudflared: keyring install failed"
@@ -1522,8 +1534,10 @@ _install_ubuntu_cloud_tools() {
   # azure-cli now comes from linuxbrew (see _install_ubuntu_brew_packages). Remove
   # the legacy Microsoft key and source files an earlier version of this function
   # left behind; the glob stays outside the quotes and an unmatched one is harmless.
-  local _apt_sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  local _apt_trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  local _apt_sources
+  _apt_sources="$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
+  local _apt_trusted
+  _apt_trusted="$(_bats_seam "${_APT_TRUSTED_DIR:-}" /etc/apt/trusted.gpg.d)"
   sudo rm -f "${_apt_trusted}/microsoft.asc.gpg" \
     "${_apt_sources}"/archive_uri-http_packages_microsoft_com_repos_azure-cli_-*.list \
     "${_apt_sources}/packages.microsoft.com_repos_azure-cli.list" \
@@ -1850,8 +1864,9 @@ _release_asset_sha() {
 # Returns 0 installed, up to date, or kept; 1 on bad arguments, a refusal or a
 # failed stage (named in a warning). A stamp that cannot be written warns and
 # still returns 0.
-# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, _DL_BIN_DIR,
-# _DL_UNZIP_BIN, _DL_TAR_BIN. _FETCHED_URL and _FETCHED_SHA256 replace the URL
+# Seams, read at call time: _DL_STAMP_DIR, _DL_TMP_ROOT, and _DL_BIN_DIR,
+# _DL_UNZIP_BIN and _DL_TAR_BIN, which are honoured only under bats (a root
+# path and the extractors). _FETCHED_URL and _FETCHED_SHA256 replace the URL
 # and pin (and skip the _FOR_VER check) but are honoured only under bats, so a
 # stray export in an interactive shell cannot swap these tools' pins. No
 # EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every path below
@@ -1924,7 +1939,7 @@ _install_fetched_binary() {
   fi
   _stamp_text="${_url} ${_sha}"
   _stamp="${_DL_STAMP_DIR:-${HOME}/.local/share/dotfiles/installed}/${_name}"
-  _bin="${_DL_BIN_DIR:-/usr/local/bin}/${_dest_name}"
+  _bin="$(_bats_seam "${_DL_BIN_DIR:-}" /usr/local/bin)/${_dest_name}"
 
   if [[ -f ${_stamp} && -x ${_bin} && "$(< "${_stamp}")" == "${_stamp_text}" ]]; then
     printf '%s: up to date (stamp %s); rm it to force a re-install\n' "${_name}" "${_stamp}"
@@ -1950,9 +1965,9 @@ _install_fetched_binary() {
   else
     mkdir -p "${_tmp}/x"
     if [[ ${_kind} == "zip" ]]; then
-      "${_DL_UNZIP_BIN:-unzip}" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
+      "$(_bats_seam "${_DL_UNZIP_BIN:-}" unzip)" -o -q "${_tmp}/dl" -d "${_tmp}/x" || _stage="extract"
     else
-      "${_DL_TAR_BIN:-tar}" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
+      "$(_bats_seam "${_DL_TAR_BIN:-}" tar)" -xzf "${_tmp}/dl" -C "${_tmp}/x" || _stage="extract"
     fi
     _src="${_tmp}/x/${_member}"
   fi
@@ -1991,10 +2006,12 @@ _install_ubuntu_edge_source() {
   # rule lists the affirmative values and treats anything else as inert; the
   # harmless direction to err in is a duplicate source. Only a live one retires the
   # bootstrap .list and keyring.
-  local _edge_dir="${_EDGE_SOURCES_DIR:-/etc/apt/sources.list.d}"
+  local _edge_dir
+  _edge_dir="$(_bats_seam "${_EDGE_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
   local _edge_src="${_edge_dir}/microsoft-edge.sources"
   local _edge_list="${_edge_dir}/microsoft-edge.list"
-  local _edge_keyring="${_EDGE_BOOTSTRAP_KEYRING:-/usr/share/keyrings/microsoft-edge-bootstrap.gpg}"
+  local _edge_keyring
+  _edge_keyring="$(_bats_seam "${_EDGE_BOOTSTRAP_KEYRING:-}" /usr/share/keyrings/microsoft-edge-bootstrap.gpg)"
   if grep -q '^URIs:' "${_edge_src}" 2> /dev/null \
     && ! grep -iE '^Enabled:' "${_edge_src}" | grep -qviE '^Enabled:[[:space:]]*(yes|true|with|on|enable|1)[[:space:]]*$'; then
     sudo rm -f "${_edge_list}" "${_edge_keyring}"
@@ -2035,9 +2052,12 @@ _install_ubuntu_edge_source() {
 # both are removed. No EXIT/RETURN trap (check-lib-exit-traps.sh; shell.md): every
 # path below reaches the one rm -rf.
 _install_ubuntu_albert() {
-  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
-  local _trusted="${_APT_TRUSTED_DIR:-/etc/apt/trusted.gpg.d}"
+  local _sources
+  _sources="$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
+  local _keyrings
+  _keyrings="$(_bats_seam "${_APT_KEYRINGS_DIR:-}" /usr/share/keyrings)"
+  local _trusted
+  _trusted="$(_bats_seam "${_APT_TRUSTED_DIR:-}" /etc/apt/trusted.gpg.d)"
   local _list="${_sources}/albert.list"
   local _ring="${_keyrings}/albert-obs.gpg"
   local _release _url _dir _brc _keep_note _fprs _npub _f
@@ -2117,8 +2137,10 @@ _install_ubuntu_gui_tools() {
   # other sub-install failed, each named in a warning, else 0. Every sub-install
   # is attempted regardless of an earlier failure.
   local _gui_rc=0 _albert_rc=0 _ring _snap
-  local _sources="${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}"
-  local _keyrings="${_APT_KEYRINGS_DIR:-/usr/share/keyrings}"
+  local _sources
+  _sources="$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)"
+  local _keyrings
+  _keyrings="$(_bats_seam "${_APT_KEYRINGS_DIR:-}" /usr/share/keyrings)"
   if [[ -n ${HAS_DEVTOOLS} ]]; then
     printf "Installing Virtualbox\\n"
     _ring="${_keyrings}/oracle-virtualbox-2016.gpg"
@@ -2206,7 +2228,8 @@ _install_ubuntu_gui_tools() {
 # sequence -- exactly where a hand copy drops the verify step, so two
 # consumers are enough to justify one helper.
 #
-# Reads ${_RELEASE_BIN_DIR:-/usr/local/bin}/<name>'s own --version output,
+# Reads <dir>/<name>'s own --version output (dir: the optional 7th argument, else
+# _RELEASE_BIN_DIR under bats, else /usr/local/bin),
 # never the copy on PATH (shell.md: an absolute-path default is the only
 # thing a PATH mock cannot defeat, and here a PATH stub must not satisfy the
 # skip check when the target directory is genuinely empty). <version-line-
@@ -2225,7 +2248,8 @@ _install_ubuntu_gui_tools() {
 # existing /usr/local/bin the mkdir -p is a no-op.
 _install_pinned_release_binary() {
   local _name="$1" _version="$2" _url="$3" _sha256="$4" _kind="$5" _version_regex="$6"
-  local _dir="${_RELEASE_BIN_DIR:-/usr/local/bin}"
+  local _dir
+  _dir="${7:-$(_bats_seam "${_RELEASE_BIN_DIR:-}" /usr/local/bin)}"
 
   if [[ -x "${_dir}/${_name}" ]]; then
     local _current
@@ -2414,7 +2438,8 @@ _install_ubuntu_tfenv() {
   [[ -n ${HAS_DEVTOOLS} ]] || return 0
 
   local _root="${_TFENV_ROOT:-${HOME}/.tfenv}"
-  local _links="${_TFENV_LINK_DIR:-/usr/local/bin}"
+  local _links
+  _links="$(_bats_seam "${_TFENV_LINK_DIR:-}" /usr/local/bin)"
   # _TFENV_REPO_URL is a test seam honoured only under bats, so an exported value
   # cannot redirect the real clone; `--` keeps a value starting with `-` from
   # being read as a git option (`--upload-pack=` runs a command).
@@ -2508,7 +2533,8 @@ _install_ubuntu_misc() {
     # Unset in normal operation — identical to `! command -v tofu`.
     if [[ -n ${_FORCE_OPENTOFU_INSTALL:-} ]] || ! command -v tofu &>/dev/null; then
       printf "Installing opentofu\\n"
-      local _tofu_keyrings="${_APT_KEYRINGS_DIR:-/etc/apt/keyrings}"
+      local _tofu_keyrings
+      _tofu_keyrings="$(_bats_seam "${_APT_KEYRINGS_DIR:-}" /etc/apt/keyrings)"
       local _tofu_ring="${_tofu_keyrings}/opentofu-archive-keyring.gpg"
       # Advisory: if the directory cannot be made, the keyring install below
       # fails and names the cause.
@@ -2517,7 +2543,7 @@ _install_ubuntu_misc() {
         log_warn "misc: opentofu: keyring install failed"
         _misc_rc=1
       }
-      _write_apt_source_list misc opentofu "${_tofu_ring}" "${_APT_SOURCES_DIR:-/etc/apt/sources.list.d}/opentofu.list" \
+      _write_apt_source_list misc opentofu "${_tofu_ring}" "$(_bats_seam "${_APT_SOURCES_DIR:-}" /etc/apt/sources.list.d)/opentofu.list" \
         "deb [signed-by=${_tofu_ring}] https://packages.opentofu.org/opentofu/tofu/any/ any main" || _misc_rc=1
       # base owns the update warning; a failed refresh must not mask the install result.
       sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq || :
