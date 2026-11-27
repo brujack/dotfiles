@@ -2345,6 +2345,11 @@ SHIM
   export _OVERRIDE_NVIDIA_LIST="${BATS_TEST_TMPDIR}/nvidia-container-toolkit.list"
   local _fx="${BATS_TEST_TMPDIR}/resolved-daemon.json"
   eval "_docker_nvidia_daemon_json_path() { printf '%s\\n' '${_fx}'; }"
+  # BATS_TEST_TMPDIR='' makes the keyring seam fall back to the real path, which
+  # exists on a provisioned GPU host and is absent on a CI runner; there the
+  # keyring step ran the mock gpg and returned before the daemon.json read.
+  # The keyring is not under test here.
+  _install_apt_keyring() { return 0; }
   sudo() { printf 'sudo %s\n' "$*" >> "${MOCK_CALLS_FILE}"; return 0; }
   BATS_TEST_TMPDIR='' run _install_ubuntu_nvidia
   grep -qF "sudo -H cat ${_fx}" "${MOCK_CALLS_FILE}"
