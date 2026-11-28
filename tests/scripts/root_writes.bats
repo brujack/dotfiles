@@ -24,7 +24,8 @@ setup() {
   STUBS="${TMP}/stubs"
   mkdir -p "${STUBS}"
   printf '#!/usr/bin/env bash\nexit 1\n' > "${STUBS}/sudo-refuse"
-  printf '#!/usr/bin/env bash\n[[ "$1" == -n ]] && shift\nexec "$@"\n' > "${STUBS}/sudo-ok"
+  SUDO_LOG="${TMP}/sudo.log"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\n[[ "$1" == -n ]] && shift\nexec "$@"\n' "${SUDO_LOG}" > "${STUBS}/sudo-ok"
   chmod +x "${STUBS}/sudo-refuse" "${STUBS}/sudo-ok"
   # A find that replays canned output, for statuses a real find cannot be made to return.
   mkdir -p "${STUBS}/findbin"
@@ -178,7 +179,7 @@ _lacks_line() {
 
 @test "check fails when a non-empty root is walked but nothing below it is visited" {
   _arm
-  printf '%s\n' "${ROOT}" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" > "${TMP}/find.out"
   : > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=0 \
     run bash "${SCRIPT}" check "${MARKER}"
@@ -211,7 +212,7 @@ _lacks_line() {
 
 @test "check without sudo fails on a stderr line that is not Permission denied" {
   _arm
-  printf '%s\n' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
   printf '%s\n' "find: '${ROOT}/a': No such file or directory" > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=1 \
     run bash "${SCRIPT}" check "${MARKER}"
@@ -220,7 +221,7 @@ _lacks_line() {
 
 @test "check without sudo fails when one stderr line is Permission denied and another is not" {
   _arm
-  printf '%s\n' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
   printf '%s\n' "find: '${ROOT}/d': Permission denied" "find: oops" > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=1 \
     run bash "${SCRIPT}" check "${MARKER}"
@@ -229,7 +230,7 @@ _lacks_line() {
 
 @test "check without sudo fails on a find status other than 1" {
   _arm
-  printf '%s\n' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
   printf '%s\n' "find: '${ROOT}/d': Permission denied" > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=2 \
     run bash "${SCRIPT}" check "${MARKER}"
@@ -238,7 +239,7 @@ _lacks_line() {
 
 @test "check accepts a Permission denied status 1 from the stub find without sudo" {
   _arm
-  printf '%s\n' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
   printf '%s\n' "find: '${ROOT}/d': Permission denied" > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=1 \
     run bash "${SCRIPT}" check "${MARKER}"
@@ -252,6 +253,9 @@ _lacks_line() {
   _check
   [ "${status}" -eq 0 ]
   [ "${output}" = "root-writes: none (${ROOT} 4)" ]
+  # Both the walk and the emptiness listing must carry the privilege prefix.
+  command grep -q -- "^-n find ${ROOT} -xdev " "${SUDO_LOG}"
+  command grep -qFx -- "-n ls -A ${ROOT}/." "${SUDO_LOG}"
 }
 
 @test "check with sudo reports a hit" {
@@ -266,12 +270,84 @@ _lacks_line() {
 @test "check with sudo fails on any non-zero find status, even Permission denied" {
   export ROOT_WRITES_SUDO="${STUBS}/sudo-ok"
   _arm
-  printf '%s\n' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
   printf '%s\n' "find: '${ROOT}/d': Permission denied" > "${TMP}/find.err"
   PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=1 \
     run bash "${SCRIPT}" check "${MARKER}"
   [ "${status}" -eq 1 ]
   [[ "${output}" == *"under sudo"* ]]
+}
+
+
+@test "check fails when find exits 0 but writes to stderr" {
+  _arm
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  printf '%s\n' "find: warning: something odd" > "${TMP}/find.err"
+  PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=0 \
+    run bash "${SCRIPT}" check "${MARKER}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"wrote to stderr"* ]]
+}
+
+@test "check without sudo fails when find exits 1 with empty stderr" {
+  _arm
+  printf '%s\0' "${ROOT}" "${ROOT}/a" > "${TMP}/find.out"
+  : > "${TMP}/find.err"
+  PATH="${STUBS}/findbin:${PATH}" FAKE_FIND_OUT="${TMP}/find.out" FAKE_FIND_ERR="${TMP}/find.err" FAKE_FIND_RC=1 \
+    run bash "${SCRIPT}" check "${MARKER}"
+  [ "${status}" -eq 1 ]
+}
+
+@test "an unknown subcommand exits 2 with the usage line" {
+  run bash "${SCRIPT}" frobnicate
+  [ "${status}" -eq 2 ]
+  [[ "${output}" == *"usage: root-writes.sh mark|check <marker>"* ]]
+}
+
+@test "check fails on a root that exists but cannot be resolved" {
+  [[ ${EUID} -ne 0 ]] || skip "root can enter any directory"
+  _arm
+  chmod 000 "${ROOT}"
+  _check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"cannot resolve root ${ROOT}"* ]]
+}
+
+@test "the script exits 1 when lib/helpers.sh cannot be loaded" {
+  mkdir -p "${TMP}/copy/scripts"
+  cp "${SCRIPT}" "${TMP}/copy/scripts/root-writes.sh"
+  _arm
+  run bash "${TMP}/copy/scripts/root-writes.sh" check "${MARKER}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" != *"root-writes: none"* ]]
+  # Stopped at the failed load, not later by another check on the half-loaded script.
+  [[ "${output}" != *"command not found"* ]]
+}
+
+@test "check exits 1 when the roots list is empty" {
+  export ROOT_WRITES_ROOTS=" "
+  _arm
+  _check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" != *"root-writes: none"* ]]
+}
+
+@test "check reports a file whose name contains a newline and keeps the counts exact" {
+  _arm
+  : > "${ROOT}/nl"$'\n'"x"
+  _check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"root-writes: the suite changed real host paths:"* ]]
+  [[ "${output}" == *"nl"* ]]
+  rm "${ROOT}/nl"$'\n'"x"
+}
+
+@test "newline names do not disturb the visited count" {
+  : > "${ROOT}/nl"$'\n'"x"
+  _arm
+  _check
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "root-writes: none (${ROOT} 5)" ]
 }
 
 @test "check exits 1 when the marker is missing" {
@@ -294,6 +370,12 @@ _lacks_line() {
   [ "${output}" = $'/etc\n/usr/local\n/usr/share/keyrings\n/opt' ]
   run bash -c 'source "$1" && _rw_roots' _ "${SCRIPT}"
   [ "${output}" = "${ROOT}" ]
+  # The sudo seam is resolved, not run: outside bats the default sudo wins.
+  run env BATS_TEST_TMPDIR= ROOT_WRITES_SUDO="${STUBS}/sudo-ok" bash -c 'source "$1" && _rw_sudo_cmd' _ "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = "sudo" ]
+  run bash -c 'source "$1" && _rw_sudo_cmd' _ "${SCRIPT}"
+  [ "${output}" = "${STUBS}/sudo-refuse" ]
 }
 
 @test "ROOT_WRITES_PRUNE is ignored when BATS_TEST_TMPDIR is empty" {

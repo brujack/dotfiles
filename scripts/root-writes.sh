@@ -17,9 +17,9 @@
 # ROOT_WRITES_SUDO (default sudo), ROOT_WRITES_PRUNE (whitespace-separated
 # paths replacing the chosen per-OS prune list).
 
-_RW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || return 1
+_RW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 # shellcheck source=lib/helpers.sh
-source "${_RW_DIR}/../lib/helpers.sh" || return 1
+source "${_RW_DIR}/../lib/helpers.sh" || exit 1
 
 # Per-OS prune lists. A prune enters only by spec amendment, each entry with a
 # comment citing the measurement that produced it. No entry may equal or
@@ -38,6 +38,21 @@ _rw_roots() {
   for _r in "${_split[@]}"; do
     printf '%s\n' "${_r}"
   done
+}
+
+# _rw_sudo_cmd -- print the sudo command; the override counts only under bats.
+_rw_sudo_cmd() {
+  _bats_seam "${ROOT_WRITES_SUDO:-}" sudo
+}
+
+# _rw_show <path> -- print one reported path on one line; a name holding a
+# newline is shown in printf %q form (the only case that changes the text).
+_rw_show() {
+  if [[ $1 == *$'\n'* ]]; then
+    printf '%q\n' "$1"
+  else
+    printf '%s\n' "$1"
+  fi
 }
 
 # _rw_prune_list -- print the prune paths for this OS, one per line.
@@ -124,10 +139,11 @@ _rw_scan_root() {
 
   _out="${_RW_TMP}/out.$$.${#_RW_COUNTS[@]}"
   _err="${_RW_TMP}/err.$$.${#_RW_COUNTS[@]}"
-  # Every entry prints once (the count of entries visited); an entry changed
-  # after the marker prints a second time straight after, which marks it a hit.
-  "${_RW_PRIV[@]}" find "${_resolved}" -xdev "${_prunes[@]}" -print \
-    \( \( -newer "${_marker}" -o -cnewer "${_marker}" \) -print \) \
+  # Every entry prints once, NUL-terminated so a name holding a newline cannot
+  # split (the count of entries visited); an entry changed after the marker
+  # prints a second time straight after, which marks it a hit.
+  "${_RW_PRIV[@]}" find "${_resolved}" -xdev "${_prunes[@]}" -print0 \
+    \( \( -newer "${_marker}" -o -cnewer "${_marker}" \) -print0 \) \
     > "${_out}" 2> "${_err}" || _frc=$?
 
   if (( _frc != 0 )); then
@@ -148,7 +164,7 @@ _rw_scan_root() {
   fi
 
   _prev=""
-  while IFS= read -r _line; do
+  while IFS= read -r -d '' _line; do
     if [[ -n ${_prev} && ${_line} == "${_prev}" ]]; then
       _RW_HITS+=("${_line}")
     else
@@ -168,7 +184,7 @@ _rw_scan_root() {
 
 # root_writes_check <marker>
 root_writes_check() {
-  local _marker="${1:-}" _sudo _root _entry _joined="" _f
+  local _marker="${1:-}" _sudo _root _entry _joined="" _f _nroots=0
   if [[ -z ${_marker} || ! -f ${_marker} ]]; then
     printf 'root-writes: marker %s is missing\n' "${_marker}" >&2
     return 1
@@ -178,7 +194,7 @@ root_writes_check() {
   _RW_COUNTS=()
   _RW_FAILS=()
   _RW_PRIV=()
-  _sudo="$(_bats_seam "${ROOT_WRITES_SUDO:-}" sudo)"
+  _sudo="$(_rw_sudo_cmd)"
   if "${_sudo}" -n true < /dev/null > /dev/null 2>&1; then
     _RW_PRIV=("${_sudo}" -n)
   fi
@@ -187,8 +203,14 @@ root_writes_check() {
     return 1
   }
   while IFS= read -r _root; do
+    _nroots=$((_nroots + 1))
     _rw_scan_root "${_root}" "${_marker}"
   done < <(_rw_roots)
+  if (( _nroots == 0 )); then
+    rm -rf "${_RW_TMP}"
+    printf 'root-writes: the roots list is empty\n' >&2
+    return 1
+  fi
   rm -rf "${_RW_TMP}"
 
   for _f in ${_RW_NOTES[@]+"${_RW_NOTES[@]}"}; do printf '%s\n' "${_f}"; done
@@ -196,13 +218,13 @@ root_writes_check() {
     for _f in "${_RW_FAILS[@]}"; do printf 'root-writes: %s\n' "${_f}" >&2; done
     if (( ${#_RW_HITS[@]} > 0 )); then
       printf 'root-writes: the suite changed real host paths:\n'
-      printf '%s\n' "${_RW_HITS[@]}"
+      for _f in "${_RW_HITS[@]}"; do _rw_show "${_f}"; done
     fi
     return 1
   fi
   if (( ${#_RW_HITS[@]} > 0 )); then
     printf 'root-writes: the suite changed real host paths:\n'
-    printf '%s\n' "${_RW_HITS[@]}"
+    for _f in "${_RW_HITS[@]}"; do _rw_show "${_f}"; done
     return 1
   fi
   for _entry in ${_RW_COUNTS[@]+"${_RW_COUNTS[@]}"}; do
