@@ -189,8 +189,8 @@ _lacks_line() {
 @test "check without sudo names an unreadable directory and still reports a hit beside it" {
   [[ ${EUID} -ne 0 ]] || skip "root reads any directory, so nothing is unreadable"
   mkdir "${ROOT}/locked"
-  _arm
   chmod 000 "${ROOT}/locked"
+  _arm
   : > "${ROOT}/beside"
   _check
   [ "${status}" -eq 1 ]
@@ -201,8 +201,8 @@ _lacks_line() {
 @test "check without sudo passes with an unreadable directory and no hit" {
   [[ ${EUID} -ne 0 ]] || skip "root reads any directory, so nothing is unreadable"
   mkdir "${ROOT}/locked"
-  _arm
   chmod 000 "${ROOT}/locked"
+  _arm
   _check
   [ "${status}" -eq 0 ]
   _has_line "not scanned: ${ROOT}/locked"
