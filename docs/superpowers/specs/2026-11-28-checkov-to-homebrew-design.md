@@ -278,6 +278,10 @@ The rollout record lives in the PR body. No migration code is added.
 - **N3.** No new install function, update section or migration code for checkov.
 - **N4.** `checkov` is not added to `Brewfile` or `Brewfile.gui`.
 
+## Amendments
+
+- R7 -> `tests/setup_env/developer.bats` asserts that `Brewfile.devtools` has a `brew "checkov"` line and that `Brewfile` and `Brewfile.gui` have none, and `tests/setup_env/linux_ubuntu.bats` asserts that `_install_ubuntu_brew_packages` records `brew install checkov` in `MOCK_CALLS_FILE`, beside the existing `installs uv via brew` test. — a behavioural test of the function catches a list entry that never reaches `brew_install_formula`, which a text extraction of the loop cannot; plan time, 2026-11-28.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `aef88473` (spec as first written, before Step 8 dispatch)
