@@ -381,7 +381,8 @@ _lacks_line() {
 @test "ROOT_WRITES_PRUNE is ignored when BATS_TEST_TMPDIR is empty" {
   run env BATS_TEST_TMPDIR= ROOT_WRITES_PRUNE="${ROOT}/d" bash -c 'source "$1" && _rw_prune_list' _ "${SCRIPT}"
   [ "${status}" -eq 0 ]
-  [ -z "${output}" ]
+  # The production list for this OS, never the override.
+  [ "${output}" = "/opt/hca" ]
 }
 
 @test "prune: a write beside a pruned subtree is reported" {
@@ -442,4 +443,13 @@ _no_overlap() {
   done
   _no_overlap /etc/ssl/certs
   _no_overlap /opt/other
+}
+
+# The hosted runner's own agent log is a background writer on both OSes
+# (rollout run 46103860810, test-shard 1 and 2, test-macos-shard 2 and 3;
+# null-window run 46103849102, macos 9), pruned by spec amendment.
+@test "prune lists: both OSes prune the hosted runner agent's /opt/hca" {
+  run bash -c 'source "$1" && printf "%s\n" "${ROOT_WRITES_PRUNE_LINUX[@]}" && printf -- "--\n" && printf "%s\n" "${ROOT_WRITES_PRUNE_DARWIN[@]}"' _ "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [ "${output}" = $'/opt/hca\n--\n/opt/hca' ]
 }
