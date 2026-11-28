@@ -1,7 +1,7 @@
 # Root-writes scan around the bats suite
 
 - **Date:** 2026-11-27
-- **Status:** Draft (revised after Step 8 round 3)
+- **Status:** Draft (revised after external review round 1)
 
 ## Problem
 
@@ -39,6 +39,12 @@ Two subcommands:
 
   On macOS `/etc` is a symlink to `private/etc`, and a plain `find /etc -xdev` lists the link itself, exits 0 and visits nothing (measured on the Studio: 1 entry, against 295 for the resolved directory), so every root is resolved before it is walked (below). `-newer` catches a created or rewritten file and a directory whose entries changed (so a deletion shows as its directory); `-cnewer` adds a chmod, chown or rename. The roots are `/etc /usr/local /usr/share/keyrings /opt`, replaced in tests by `ROOT_WRITES_ROOTS` (a space-separated list), honoured only under bats (`_bats_seam`, the repo's rule for seams). A root that does not exist is skipped and named.
 
+#### Prune list
+
+The script carries one prune list per OS (`ROOT_WRITES_PRUNE_LINUX`, `ROOT_WRITES_PRUNE_DARWIN`), empty at first, applied to the walk as `-path <p> -prune -o`. A prune enters the list only by spec amendment, and each entry's comment cites the V1 or V2 run that produced it. No prune may equal or contain a directory that `lib/` installs into: today `/etc/apt`, `/etc/docker`, `/etc/sysctl.d`, `/usr/share/keyrings`, `/usr/local/bin`, `/opt/homebrew` (and on macOS `/private/etc/apt`, `/private/etc/docker`, `/private/etc/sysctl.d`). A hit that could only be cleared by such a prune means the gate does not ship.
+
+#### Walk
+
 Each existing root is first resolved to the directory it names (`cd <root>/. && pwd -P`, so `/etc` on macOS becomes `/private/etc`) and then walked separately. Resolution is the one mechanism against a symlinked root; `find` gets no `-H`.
 
 The walk counts the entries it visits below the root itself (`find` always prints its starting point, so a walk that never descended visits exactly one entry, the same as a genuinely empty directory). Whether a root is empty is decided independently of the walk: by listing `<root>/.` (`ls -A`), run with the same privilege as `find`. A root whose listing shows at least one entry but whose walk visits none fails the check; a root whose listing is refused fails the check; a root whose listing succeeds and is empty is reported as `empty: <root>` and is not a failure. The `none` line carries every root's visited count, for example `root-writes: none (/etc 1840, /usr/local 9120, /usr/share/keyrings 12, /opt 30544)`, so each green log shows the scan saw something.
@@ -59,7 +65,8 @@ There is no local, warn-only mode. On `claude` the scan window collects writes t
 
 The scan wraps the make step in CI, not the Makefile. A Makefile hook would also run inside `tests/makefile_shard_list.bats`, which invokes a real `make test-bats` about seven times during the suite, each inheriting CI's environment.
 
-- In `.github/workflows/ci.yml`, the `test-shard` step that runs `make bash-coverage` and the `test-macos-shard` step that runs `make test` / `make test-bats` each run `bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"` before make and `bash scripts/root-writes.sh check "${RUNNER_TEMP}/root-writes.marker"` after it, also when make failed. The step fails if any check inside it fails, and keeps every check it already runs: the `test-macos-shard` step already runs `scripts/ci-suite-report.sh` (executed tests equal declared) and exits with that report's status when make passes, so there the step exits with make's status if make failed, else the report's if the report failed, else `check`'s. The `test-shard` suite report is a separate step and is unchanged. The Linux step is a bare `run: make bash-coverage` today, so it gains `set +e` to reach `check` after a failing make.
+- On Linux, shard 1 runs `make test-prereqs` as its own step before `make bash-coverage`, while macOS shard 1's `make test` includes the prerequisites. So that both OSes scan the same work, `test-shard` gets a separate `mark` step placed before the prerequisites step, and its `make bash-coverage` step runs `check`; the `test-macos-shard` step that runs `make test` / `make test-bats` runs both `mark` and `check`.
+- Concretely: in `.github/workflows/ci.yml`, `test-shard` runs `bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"` in its own step before the prerequisites step, and the `test-macos-shard` step runs it before make and `bash scripts/root-writes.sh check "${RUNNER_TEMP}/root-writes.marker"` after it, also when make failed. The step fails if any check inside it fails, and keeps every check it already runs: the `test-macos-shard` step already runs `scripts/ci-suite-report.sh` (executed tests equal declared) and exits with that report's status when make passes, so there the step exits with make's status if make failed, else the report's if the report failed, else `check`'s. The `test-shard` suite report is a separate step and is unchanged. The Linux step is a bare `run: make bash-coverage` today, so it gains `set +e` to reach `check` after a failing make.
 - The check runs from the PR branch's own copy of the script and workflow, so it catches accidental escapes; it is not tamper-proof against a change that edits the scan itself.
 
 ### Reproducing a red shard
@@ -72,7 +79,8 @@ Before the check is allowed to fail a job, a scratch branch (never merged) runs,
 
 - **Null windows:** 10 runs per OS (`ubuntu-latest`, `macos-latest`) of `mark`, a sleep as long as the longest shard's suite step, then `check`, with no suite. Any hit is a background writer: its subtree is pruned by spec amendment, or the gate does not ship.
 - **Suite windows:** 2 runs per OS of the real wrapped steps, recording each `check` output (visited counts included), the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`. Any hit in a suite window is either an escape, fixed before merge, or a harmless write, pruned by spec amendment before merge; either way the gate does not ship with it unexplained.
-- **Stop rule:** if a null or suite window can only be cleared by pruning `/private/etc`, `/etc`, `/usr/local/bin` or `/opt/homebrew` wholesale, the gate does not ship: those are where real escapes land, and pruning them blinds the scan.
+- **Stop rule:** a window that can only be cleared by a prune equal to or containing a directory `lib/` installs into (the list under "Prune list") means the gate does not ship: those are where real escapes land, and the 2026-11-26 escape landed in `/etc/apt`.
+- **`find` status:** every window records `check`'s output, including `find`'s exit status and stderr under `sudo -n`. A non-zero status or a stderr line (for example `Operation not permitted` from SIP/TCC on macOS) in a null window means the gate does not ship until the cause is resolved by amendment.
 - **Deliberate escape:** a bats file that does not call `load_mocks` and skips unless `GITHUB_ACTIONS` is set (so a pre-push `make test` on a developer box never runs it) calls the absolute `/usr/bin/sudo` to create a file under `/usr/local/bin`. The wrapped step must go red on both OSes with `root-writes: the suite changed real host paths:` and that path in its log. Going through `tests/mocks/sudo` would not do: the existing ledger guard already fails that test, so a red step would prove nothing about the scan.
 
 ### Tests
@@ -89,7 +97,11 @@ Before the check is allowed to fail a job, a scratch branch (never merged) runs,
 - a missing root is skipped and named;
 - `ROOT_WRITES_ROOTS` is ignored when `BATS_TEST_TMPDIR` is empty.
 
-Each listed behaviour gets a mutation shown to fail its test.
+Each listed behaviour gets a mutation shown to fail its test. Paths in expectations are resolved with `pwd -P` too, since on macOS `BATS_TEST_TMPDIR` under `/var/folders` resolves to `/private/var/folders`.
+
+The prune list gets its own tests: a write beside a pruned subtree is reported and a write inside it is not; a prune equal to or containing a `lib/` install directory is refused by a test that reads the list.
+
+The CI wiring gets a test in the repo's per-job style (parse `ci.yml` per job, never grep the whole file): in `test-shard` a `mark` step precedes the prerequisites step and the `make bash-coverage` step runs `check` after make; in `test-macos-shard` the make step runs `mark` before make and `check` after it; neither step has an `exit` between make and `check`; and each step's final exit can come from `check`.
 
 ### Backlog
 
@@ -106,23 +118,24 @@ Each listed behaviour gets a mutation shown to fail its test.
 ## Requirements
 
 - **R1.** `scripts/root-writes.sh mark <marker>` creates the marker file and exits 1 if it cannot.
-- **R2.** `scripts/root-writes.sh check <marker>` resolves each existing root with `cd <root>/. && pwd -P`, walks the resolved directory with `find <resolved> -xdev \( -newer <marker> -o -cnewer <marker> \)` (no `-H`), and reports every path created, modified, chmodded or chowned after the marker, and the directory of every entry deleted after it.
+- **R2.** `scripts/root-writes.sh check <marker>` resolves each existing root with `cd <root>/. && pwd -P`, walks the resolved directory with `find <resolved> -xdev` applying each entry of the OS's prune list as `-path <p> -prune -o` and then `\( -newer <marker> -o -cnewer <marker> \)` (no `-H`), and reports every path created, modified, chmodded or chowned after the marker, and the directory of every entry deleted after it.
 - **R3.** The roots are `/etc /usr/local /usr/share/keyrings /opt`; `ROOT_WRITES_ROOTS` replaces them only when `BATS_TEST_TMPDIR` is non-empty; a root that does not exist is skipped and named in the output.
 - **R4.** A reported path makes `check` print `root-writes: the suite changed real host paths:` followed by one path per line, and exit 1.
 - **R5.** With no changed path, `check` prints `root-writes: none (` followed by each walked root and the number of entries visited below it, comma-separated, then `)`, and exits 0.
 - **R6.** A missing marker makes `check` exit 1. Emptiness is decided by `ls -A <root>/.` run with the same privilege as `find`: a root whose listing shows an entry but whose walk visits no entry below the root makes `check` exit 1; a root whose listing is refused makes `check` exit 1; a root whose listing succeeds and is empty is printed as `empty: <root>` and does not fail.
 - **R7.** When `sudo -n true` succeeds, `check` runs `find` through `sudo -n`, and any non-zero `find` status makes it exit 1.
 - **R8.** Without passwordless sudo, `find` runs as the invoking user; a `find` status of 1 is accepted only when every stderr line ends in `Permission denied`, each such directory is printed as `not scanned: <dir>`, and paths found elsewhere are still reported; any other non-zero status or stderr line makes `check` exit 1.
-- **R9.** In `.github/workflows/ci.yml`, the `test-shard` step that runs `make bash-coverage` and the `test-macos-shard` step that runs make each run `root-writes.sh mark` before make and `root-writes.sh check` after it, also when make failed; the `test-shard` step exits with make's status if make failed, else `check`'s; the `test-macos-shard` step exits with make's status if make failed, else `ci-suite-report.sh`'s if it failed, else `check`'s.
-- **R10.** `tests/scripts/root_writes.bats` covers each of R1-R8 against fixture roots, including a root given as a symlink and an empty root, and `tests/bats-files.txt` lists it.
+- **R9.** In `.github/workflows/ci.yml`, `test-shard` runs `root-writes.sh mark` in its own step before the shard-1 prerequisites step and its `make bash-coverage` step runs `root-writes.sh check` after make, also when make failed; the `test-macos-shard` step that runs make runs `root-writes.sh mark` before make and `root-writes.sh check` after it, also when make failed; the `test-shard` step exits with make's status if make failed, else `check`'s; the `test-macos-shard` step exits with make's status if make failed, else `ci-suite-report.sh`'s if it failed, else `check`'s.
+- **R10.** `tests/scripts/root_writes.bats` covers each of R1-R8 and R12 against fixture roots, including a root given as a symlink and an empty root, with expected paths resolved by `pwd -P`; a per-job test of `ci.yml` covers R9 (mark before the work, `check` after make with no `exit` between, the step's final exit able to come from `check`); `tests/bats-files.txt` lists each new file.
 - **R11.** The two guard Backlog rows are rewritten as watch items carrying the 2026-11-27 measurement, and a new Backlog row records builtin read probes as host-state dependence not covered by the scan.
-- **V1.** Before R9 merges, a scratch branch runs 10 null windows per OS on `ubuntu-latest` and `macos-latest` (`mark`, a sleep as long as the longest shard's suite step, `check`, no suite); every run reports `none`, or each hit's subtree is pruned by spec amendment before merge.
+- **R12.** The script carries a prune list per OS, empty at merge unless V1 or V2 added an entry by amendment; each entry is applied as `-path <p> -prune`; no entry equals or contains `/etc/apt`, `/etc/docker`, `/etc/sysctl.d`, `/usr/share/keyrings`, `/usr/local/bin`, `/opt/homebrew`, `/private/etc/apt`, `/private/etc/docker` or `/private/etc/sysctl.d`, and a test reading the list enforces it.
+- **V1.** Before R9 merges, a scratch branch runs 10 null windows per OS on `ubuntu-latest` and `macos-latest` (`mark`, a sleep as long as the longest shard's suite step, `check`, no suite), recording `find`'s exit status and stderr; every run reports `none` with a zero status and empty stderr, or each hit is pruned by spec amendment under R12 before merge; a hit only R12-forbidden pruning could clear, or an unresolved non-zero status, means the gate does not ship.
 - **V2.** On the same branch, 2 runs per OS of the wrapped suite steps record each `check` output with its visited counts, the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`; every hit is fixed as an escape or pruned by spec amendment before merge, and the gate does not ship if clearing a window needs `/etc`, `/private/etc`, `/usr/local/bin` or `/opt/homebrew` pruned wholesale.
 - **V3.** On the same branch, a bats file that does not call `load_mocks` and skips unless `GITHUB_ACTIONS` is set uses `/usr/bin/sudo` to create a file under `/usr/local/bin`, and the wrapped step goes red on both OSes with `root-writes: the suite changed real host paths:` and that path in the log.
 - **V4.** On the first green CI run after merge, every `test-shard` and `test-macos-shard` log shows `root-writes: none (` with a non-zero visited count for every non-empty root.
 - **N1.** No change to `assert_no_real_root_paths`, `_unguarded_path_resets` or any ledger.
 - **N2.** No Makefile target runs the scan.
-- **N3.** No fixed list of files or directories to hash.
+- **N3.** No fixed list of files or directories to hash; the only path list is R12's prune list.
 - **N4.** The scan never writes, moves or deletes anything under its roots.
 - **N5.** No check the `test-shard` or `test-macos-shard` jobs run today is dropped or weakened.
 
@@ -187,3 +200,21 @@ Reviewed at commit: `68a61d3c`, sections new in that revision only
 Finding: Root resolution with `pwd -P` makes `-H` redundant, so deleting `-H` breaks no test and R6's failure branch (the blind walk) cannot be reached by the mutation the spec described. "Empty" was not defined apart from the walk, so a root the user can enter but not list would print `empty:` and pass. Minor: a `-cnewer`-only hit prints a pre-marker mtime, mtime printing needs GNU/BSD `stat` variants under sudo; V2 gave no rule for a harmless suite-window hit.
 Assumption: null windows on hosted runners show no background writes under the roots, or few enough to prune by subtree without blinding the scan where escapes land.
 Disposition: Addressed (operator, 2026-11-27) — `-H` dropped, resolution is the one mechanism; emptiness by `ls -A <root>/.` under the same privilege, a refused listing fails; the R6 test mutates the resolution away; mtime printing dropped; suite-window hits are fixed or pruned by amendment, and a stop rule refuses wholesale pruning of `/etc`, `/private/etc`, `/usr/local/bin` or `/opt/homebrew`.
+
+## External Review
+
+### Round 1 (reviewed at `291f0a56d506b0f713c9e936956a4d8f8c18929f`)
+
+Report: [round1.md](2026-11-27-root-writes-scan-design.external-review/round1.md)
+
+#### Author response
+
+| finding | disposition | evidence | reviewer verdict | operator (Step 9) |
+| ------- | ----------- | -------- | ---------------- | ----------------- |
+| F1.1 | Fixed | Added "Prune list" (per-OS lists, `-path <p> -prune`, entries only by amendment citing their run), R12 with the `lib/` install directories no prune may equal or contain, a test enforcing it, the restated stop rule, R2 and N3 amended. | unjudged | |
+| F1.2 | Fixed | `test-shard` gets its own `mark` step before the shard-1 prerequisites step, so both OSes scan the prerequisites; R9 amended. | unjudged | |
+| F1.3 | Fixed | R10 now includes a per-job `ci.yml` test pinning R9's order, the absence of an `exit` between make and `check`, and that the step's exit can come from `check`. | unjudged | |
+| F1.4 | Fixed | V1 records `find`'s exit status and stderr; a non-zero status or stderr line in a null window stops the gate until resolved by amendment. The measurement itself is V1's, run on the hosted runner. | unjudged | |
+| F1.5 | Fixed | Test expectations resolve paths with `pwd -P` (stated under Tests and in R10). | unjudged | |
+
+Stopped: reviewer recommended stopping in round 1
