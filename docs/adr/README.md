@@ -65,3 +65,4 @@ Cross-cutting decisions that apply across personal repos. Repo-specific decision
 | [0059](0059-repo-sessions-on-linux-hosts-and-pinned-lan-routing.md) | Repo sessions on the Linux hosts, with LAN routing pinned by host key | 2026-11-20 | Accepted |
 | [0060](0060-bats-suite-hooks-sentinel-home.md) | Bats suite hooks give every run a sentinel HOME | 2026-11-21 | Accepted |
 | [0061](0061-doctor-hook-identity-and-ggshield-probe.md) | Doctor judges hook identity by name-matched source and probes ggshield with `quota` | 2026-11-22 | Accepted |
+| [0062](0062-ci-root-writes-scan.md) | CI scans the real root directories for suite writes | 2026-11-27 | Accepted |
