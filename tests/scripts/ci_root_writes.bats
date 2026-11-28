@@ -129,3 +129,43 @@ _line_of() { awk -v pat="$1" '$0 ~ pat { print NR; exit }'; }
   # The report status is tested before check_rc is the fallback.
   [ "$(printf '%s\n' "${_after}" | _line_of 'report_rc')" -lt "$(printf '%s\n' "${_after}" | _line_of 'exit "[$][{]check_rc[}]"')" ]
 }
+
+@test "test-shard set +e comes before make bash-coverage" {
+  local _s
+  _s="$(_step test-shard 'Run traced suite')"
+  [ -n "$(printf '%s\n' "${_s}" | _line_of '^          set [+]e$')" ]
+  [ "$(printf '%s\n' "${_s}" | _line_of '^          set [+]e$')" -lt "$(printf '%s\n' "${_s}" | _line_of 'make bash-coverage < /dev/null')" ]
+}
+
+@test "test-macos-shard set +e comes before mark and make" {
+  local _s _set
+  _s="$(_step test-macos-shard 'Run tests')"
+  _set="$(printf '%s\n' "${_s}" | _line_of '^          set [+]e$')"
+  [ -n "${_set}" ]
+  [ "${_set}" -lt "$(printf '%s\n' "${_s}" | _line_of 'root-writes.sh mark')" ]
+  [ "${_set}" -lt "$(printf '%s\n' "${_s}" | _line_of 'make test( |-bats )')" ]
+}
+
+@test "test-macos-shard mark is unconditional: it precedes the shard if" {
+  local _s _mark _if
+  _s="$(_step test-macos-shard 'Run tests')"
+  _mark="$(printf '%s\n' "${_s}" | _line_of 'root-writes.sh mark')"
+  _if="$(printf '%s\n' "${_s}" | _line_of '^          if [[] "[$][{][{] matrix.shard [}][}]" = "1" []]; then$')"
+  [ -n "${_mark}" ]
+  [ -n "${_if}" ]
+  [ "${_mark}" -lt "${_if}" ]
+}
+
+@test "the final exit check_rc is reachable: no top-level exit after make precedes it" {
+  local _job _s
+  for _job in "test-shard|Run traced suite|make bash-coverage" "test-macos-shard|Run tests|make test-bats "; do
+    _s="$(_step "${_job%%|*}" "$(printf '%s' "${_job}" | cut -d'|' -f2)")"
+    # Lines after the make line, up to the final exit, at the step's own indent.
+    run bash -c 'printf "%s\n" "$1" | awk -v pat="$2" "
+      index(\$0, pat) { f=1; next }
+      f && /^          exit / && !/check_rc/ { bad=1 }
+      f && /^          exit .*check_rc/ { found=1; exit }
+      END { exit (found && !bad) ? 0 : 1 }"' _ "${_s}" "${_job##*|}"
+    [ "${status}" -eq 0 ]
+  done
+}
