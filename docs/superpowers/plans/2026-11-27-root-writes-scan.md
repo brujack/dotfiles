@@ -69,7 +69,7 @@ description: Run root-writes mark/check around the bats work in both CI shard jo
 role: executor
 model: sonnet
 tdd: required
-requirements: [R9, R10]
+requirements: [R9, R10, R13]
 acceptance:
   - cmd: bats tests/scripts/ci_root_writes.bats
     exit_code: 0
@@ -145,3 +145,7 @@ Context, Decision, Consequences, Related, following `docs/adr/0061-doctor-hook-i
 Reviewer output (`nongoal.json`): N1 CLEAR, N2 CLEAR, N3 CLEAR, N4 CLEAR, N5 UNCLEAR.
 
 - **N5 — UNCLEAR.** Quote: "Task 2: `Run traced suite` becomes `set +e; make bash-coverage < /dev/null; rc=$?; ... exit "${check_rc}"`". Why: "becomes" could drop lines beyond `make bash-coverage`. Resolution: plan revision after checking the repo (ci.yml line 98: the step's run body is exactly `make bash-coverage < /dev/null`). Before: "(the separate `Check executed tests equal declared` step is unchanged)." After: "(its run body today is exactly `make bash-coverage < /dev/null`, ci.yml line 98, so no existing line is dropped; its `env:` block is kept unchanged, and the separate `Check executed tests equal declared` step is unchanged)."
+
+## Re-plan during O1 (2026-11-27)
+
+Suite run 46103860810 and null-window run 46103849102 found two writers under the roots: the hosted runner agent's log (`/opt/hca`, both OSes) and Homebrew Python bytecode (`/opt/homebrew/Cellar/python@3.15/**/__pycache__`, macOS, written by the suite). With operator approval: `/opt/hca` joins both prune lists (spec amendment to R12) and the two wrapped steps set `PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache` (spec amendment adding R13, built under Task 2), each with a test written first.

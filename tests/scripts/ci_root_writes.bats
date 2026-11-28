@@ -169,3 +169,13 @@ _line_of() { awk -v pat="$1" '$0 ~ pat { print NR; exit }'; }
     [ "${status}" -eq 0 ]
   done
 }
+
+# Homebrew Python writes stdlib bytecode under /opt/homebrew/Cellar when the
+# suite runs python3 (rollout run 46103860810, every test-macos-shard); the
+# wrapped steps send it to the runner's temp dir instead of pruning /opt/homebrew.
+@test "both wrapped steps send Python bytecode caches to the runner temp dir" {
+  _step test-shard 'Run traced suite' |
+    command grep -qE '^          PYTHONPYCACHEPREFIX: [$][{][{] runner[.]temp [}][}]/pycache$'
+  _step test-macos-shard 'Run tests' |
+    command grep -qE '^          PYTHONPYCACHEPREFIX: [$][{][{] runner[.]temp [}][}]/pycache$'
+}

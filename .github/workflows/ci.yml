@@ -98,6 +98,7 @@ jobs:
       - name: Run traced suite
         env:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
           COVERAGE_TRACE_DIR: shard-out
         run: |
           set +e
@@ -299,6 +300,7 @@ jobs:
       - name: Run tests
         env:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
         run: |
           set +e
           bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"

@@ -26,8 +26,11 @@ source "${_RW_DIR}/../lib/helpers.sh" || exit 1
 # contain a directory lib/ installs into (/etc/apt, /etc/docker,
 # /etc/sysctl.d, /usr/share/keyrings, /usr/local/bin, /opt/homebrew and the
 # macOS /private/etc equivalents); tests/scripts/root_writes.bats enforces it.
-ROOT_WRITES_PRUNE_LINUX=()
-ROOT_WRITES_PRUNE_DARWIN=()
+# /opt/hca: the hosted runner's own agent log (hosted-compute-agent.log), a
+# background writer on both OSes: rollout CI run 46103860810 (test-shard 1 and 2,
+# test-macos-shard 2 and 3) and null-window run 46103849102 (macos 9).
+ROOT_WRITES_PRUNE_LINUX=(/opt/hca)
+ROOT_WRITES_PRUNE_DARWIN=(/opt/hca)
 
 # _rw_roots -- print the roots to scan, one per line.
 _rw_roots() {
