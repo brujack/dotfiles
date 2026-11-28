@@ -1,0 +1,40 @@
+# Scratch only (never merged): measures background writers under the scanned
+# roots on hosted runners with no suite running, for the root-writes rollout
+# (spec docs/superpowers/specs/2026-11-27-root-writes-scan-design.md, V1).
+name: root-writes-null
+
+on:
+  push:
+    branches: ["scratch/root-writes-rollout"]
+    paths: [".github/workflows/root-writes-null.yml"]
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  null-window:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        run: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Null window
+        run: |
+          set +e
+          bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker" || exit 1
+          printf 'sudo -n true: '; sudo -n true; echo "rc=$?"
+          sleep 600
+          start=$(date +%s)
+          bash scripts/root-writes.sh check "${RUNNER_TEMP}/root-writes.marker"
+          rc=$?
+          printf 'check rc=%d, scan seconds=%d\n' "${rc}" "$(( $(date +%s) - start ))"
+          exit "${rc}"
