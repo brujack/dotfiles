@@ -1,7 +1,7 @@
 # Root-writes scan around the bats suite
 
 - **Date:** 2026-11-27
-- **Status:** Draft (revised after Step 8 round 2)
+- **Status:** Draft (revised after Step 8 round 3)
 
 ## Problem
 
@@ -34,12 +34,14 @@ Two subcommands:
 - `check <marker>` lists every path under the roots changed since the marker:
 
   ```bash
-  find -H <root> -xdev \( -newer <marker> -o -cnewer <marker> \) -print
+  find <resolved root> -xdev \( -newer <marker> -o -cnewer <marker> \) -print
   ```
 
-  `-H` follows a root given as a symlink (on macOS `/etc` is a symlink to `private/etc`; a plain `find /etc -xdev` lists the link itself, exits 0 and visits nothing: measured on the Studio, 1 entry against 295 with `-H`). `-newer` catches a created or rewritten file and a directory whose entries changed (so a deletion shows as its directory); `-cnewer` adds a chmod, chown or rename. The roots are `/etc /usr/local /usr/share/keyrings /opt`, replaced in tests by `ROOT_WRITES_ROOTS` (a space-separated list), honoured only under bats (`_bats_seam`, the repo's rule for seams). A root that does not exist is skipped and named.
+  On macOS `/etc` is a symlink to `private/etc`, and a plain `find /etc -xdev` lists the link itself, exits 0 and visits nothing (measured on the Studio: 1 entry, against 295 for the resolved directory), so every root is resolved before it is walked (below). `-newer` catches a created or rewritten file and a directory whose entries changed (so a deletion shows as its directory); `-cnewer` adds a chmod, chown or rename. The roots are `/etc /usr/local /usr/share/keyrings /opt`, replaced in tests by `ROOT_WRITES_ROOTS` (a space-separated list), honoured only under bats (`_bats_seam`, the repo's rule for seams). A root that does not exist is skipped and named.
 
-Each existing root is first resolved to the directory it names (`cd <root>/. && pwd -P`, so `/etc` on macOS becomes `/private/etc`) and then walked separately. The walk counts the entries it visits below the root itself (`find` always prints its starting point, so a walk that never descended, such as `find /etc` without `-H` on macOS, visits exactly one entry, the same as a genuinely empty directory). A root that resolves to a directory with at least one entry below it but whose walk visits none fails the check; an empty root directory is reported as `empty: <root>` and is not a failure. The `none` line carries every root's visited count, for example `root-writes: none (/etc 1840, /usr/local 9120, /usr/share/keyrings 12, /opt 30544)`, so each green log shows the scan saw something.
+Each existing root is first resolved to the directory it names (`cd <root>/. && pwd -P`, so `/etc` on macOS becomes `/private/etc`) and then walked separately. Resolution is the one mechanism against a symlinked root; `find` gets no `-H`.
+
+The walk counts the entries it visits below the root itself (`find` always prints its starting point, so a walk that never descended visits exactly one entry, the same as a genuinely empty directory). Whether a root is empty is decided independently of the walk: by listing `<root>/.` (`ls -A`), run with the same privilege as `find`. A root whose listing shows at least one entry but whose walk visits none fails the check; a root whose listing is refused fails the check; a root whose listing succeeds and is empty is reported as `empty: <root>` and is not a failure. The `none` line carries every root's visited count, for example `root-writes: none (/etc 1840, /usr/local 9120, /usr/share/keyrings 12, /opt 30544)`, so each green log shows the scan saw something.
 
 Privilege: when `sudo -n true` succeeds, `check` runs `sudo -n find`, which can enter root-only directories such as `/etc/sudoers.d`, exactly where a `sudo` write lands. Then any non-zero `find` status fails the check. Without passwordless sudo, `find` runs as the user; a status of 1 is accepted only when every line `find` wrote to stderr ends in `Permission denied`, and each such directory is printed as `not scanned: <dir>`. Any other non-zero status, or any other stderr line, fails the check.
 
@@ -48,8 +50,8 @@ Outcomes of `check` (exit 0 only for the first row):
 | Situation | Output | Exit |
 |---|---|---|
 | no changed path, every existing root walked | `root-writes: none (<root> <count>, ...)` | 0 |
-| changed paths | `root-writes: the suite changed real host paths:` then one line per path giving its mtime and the path, after a line giving the marker's time | 1 |
-| marker missing, a non-empty root whose walk visited nothing below it, or a `find` failure as defined above | the reason | 1 |
+| changed paths | `root-writes: the suite changed real host paths:` then one path per line | 1 |
+| marker missing, a non-empty root whose walk visited nothing below it, a root whose listing is refused, or a `find` failure as defined above | the reason | 1 |
 
 There is no local, warn-only mode. On `claude` the scan window collects writes the suite never made: 30 paths outside the suite changed in the 24 hours to 2026-11-27 (Edge's cron, the operator's `rex` install, `ld.so.cache`, and `/opt/github-runner-*` when the self-hosted runners pick up jobs), plus whatever concurrent sessions install; and 28 directories are unreadable to the user on every run. A warning that fires for those would be tuned out. The script stays runnable by hand.
 
@@ -62,14 +64,15 @@ The scan wraps the make step in CI, not the Makefile. A Makefile hook would also
 
 ### Reproducing a red shard
 
-A red shard names paths, not tests (a shard runs about 40 files under `--jobs`). The script stays runnable by hand, and the clean place to run it is the container CLAUDE.md already names for CI reproduction: in `ubuntu:26.04` with the repo mounted, `bash scripts/root-writes.sh mark /tmp/m`, then `BATS_FILES_FROM=<shard list> make test-bats`, then `bash scripts/root-writes.sh check /tmp/m`, bisecting the list. The mtimes printed beside each hit place it within the run.
+A red shard names paths, not tests (a shard runs about 40 files under `--jobs`). The script stays runnable by hand, and the clean place to run it is the container CLAUDE.md already names for CI reproduction: in `ubuntu:26.04` with the repo mounted, `bash scripts/root-writes.sh mark /tmp/m`, then `BATS_FILES_FROM=<shard list> make test-bats`, then `bash scripts/root-writes.sh check /tmp/m`, bisecting the list.
 
 ### Gate rollout
 
 Before the check is allowed to fail a job, a scratch branch (never merged) runs, from a push-triggered workflow on that branch:
 
 - **Null windows:** 10 runs per OS (`ubuntu-latest`, `macos-latest`) of `mark`, a sleep as long as the longest shard's suite step, then `check`, with no suite. Any hit is a background writer: its subtree is pruned by spec amendment, or the gate does not ship.
-- **Suite windows:** 2 runs per OS of the real wrapped steps, recording each `check` output (visited counts included), the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`.
+- **Suite windows:** 2 runs per OS of the real wrapped steps, recording each `check` output (visited counts included), the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`. Any hit in a suite window is either an escape, fixed before merge, or a harmless write, pruned by spec amendment before merge; either way the gate does not ship with it unexplained.
+- **Stop rule:** if a null or suite window can only be cleared by pruning `/private/etc`, `/etc`, `/usr/local/bin` or `/opt/homebrew` wholesale, the gate does not ship: those are where real escapes land, and pruning them blinds the scan.
 - **Deliberate escape:** a bats file that does not call `load_mocks` and skips unless `GITHUB_ACTIONS` is set (so a pre-push `make test` on a developer box never runs it) calls the absolute `/usr/bin/sudo` to create a file under `/usr/local/bin`. The wrapped step must go red on both OSes with `root-writes: the suite changed real host paths:` and that path in its log. Going through `tests/mocks/sudo` would not do: the existing ledger guard already fails that test, so a red step would prove nothing about the scan.
 
 ### Tests
@@ -78,8 +81,8 @@ Before the check is allowed to fail a job, a scratch branch (never merged) runs,
 
 - untouched roots report `none`, exit 0;
 - a file created, a file rewritten, a file chmodded and a file deleted after the marker are each reported, exit 1 (the deletion by its directory);
-- a root given as a symlink to a directory is walked, and a file created through it is reported;
-- a non-empty root whose walk visits nothing below it fails (modelled with a symlinked root walked without `-H` in a mutation), and an empty root directory is reported as `empty:` and passes;
+- a root given as a symlink to a directory is resolved and walked, and a file created through it is reported; the mutation that removes the resolution makes the walk visit nothing below the link while the listing shows entries, so the check fails;
+- an empty root directory is reported as `empty:` and passes; a root whose listing is refused fails;
 - the `none` line carries each root's visited count;
 - without sudo, an unreadable subdirectory is named under `not scanned:` and a hit beside it is still reported; a `find` stderr line other than `Permission denied` fails;
 - a missing marker exits 1;
@@ -103,18 +106,18 @@ Each listed behaviour gets a mutation shown to fail its test.
 ## Requirements
 
 - **R1.** `scripts/root-writes.sh mark <marker>` creates the marker file and exits 1 if it cannot.
-- **R2.** `scripts/root-writes.sh check <marker>` resolves each existing root with `cd <root>/. && pwd -P`, walks it with `find -H <resolved> -xdev \( -newer <marker> -o -cnewer <marker> \)`, and reports every path created, modified, chmodded or chowned after the marker, and the directory of every entry deleted after it.
+- **R2.** `scripts/root-writes.sh check <marker>` resolves each existing root with `cd <root>/. && pwd -P`, walks the resolved directory with `find <resolved> -xdev \( -newer <marker> -o -cnewer <marker> \)` (no `-H`), and reports every path created, modified, chmodded or chowned after the marker, and the directory of every entry deleted after it.
 - **R3.** The roots are `/etc /usr/local /usr/share/keyrings /opt`; `ROOT_WRITES_ROOTS` replaces them only when `BATS_TEST_TMPDIR` is non-empty; a root that does not exist is skipped and named in the output.
-- **R4.** A reported path makes `check` print `root-writes: the suite changed real host paths:`, a line giving the marker's mtime, then one line per path giving its mtime and the path, and exit 1.
+- **R4.** A reported path makes `check` print `root-writes: the suite changed real host paths:` followed by one path per line, and exit 1.
 - **R5.** With no changed path, `check` prints `root-writes: none (` followed by each walked root and the number of entries visited below it, comma-separated, then `)`, and exits 0.
-- **R6.** A missing marker makes `check` exit 1; a root that contains at least one entry but whose walk visits no entry below the root itself makes `check` exit 1; an empty root directory is printed as `empty: <root>` and does not fail.
+- **R6.** A missing marker makes `check` exit 1. Emptiness is decided by `ls -A <root>/.` run with the same privilege as `find`: a root whose listing shows an entry but whose walk visits no entry below the root makes `check` exit 1; a root whose listing is refused makes `check` exit 1; a root whose listing succeeds and is empty is printed as `empty: <root>` and does not fail.
 - **R7.** When `sudo -n true` succeeds, `check` runs `find` through `sudo -n`, and any non-zero `find` status makes it exit 1.
 - **R8.** Without passwordless sudo, `find` runs as the invoking user; a `find` status of 1 is accepted only when every stderr line ends in `Permission denied`, each such directory is printed as `not scanned: <dir>`, and paths found elsewhere are still reported; any other non-zero status or stderr line makes `check` exit 1.
 - **R9.** In `.github/workflows/ci.yml`, the `test-shard` step that runs `make bash-coverage` and the `test-macos-shard` step that runs make each run `root-writes.sh mark` before make and `root-writes.sh check` after it, also when make failed; the `test-shard` step exits with make's status if make failed, else `check`'s; the `test-macos-shard` step exits with make's status if make failed, else `ci-suite-report.sh`'s if it failed, else `check`'s.
 - **R10.** `tests/scripts/root_writes.bats` covers each of R1-R8 against fixture roots, including a root given as a symlink and an empty root, and `tests/bats-files.txt` lists it.
 - **R11.** The two guard Backlog rows are rewritten as watch items carrying the 2026-11-27 measurement, and a new Backlog row records builtin read probes as host-state dependence not covered by the scan.
 - **V1.** Before R9 merges, a scratch branch runs 10 null windows per OS on `ubuntu-latest` and `macos-latest` (`mark`, a sleep as long as the longest shard's suite step, `check`, no suite); every run reports `none`, or each hit's subtree is pruned by spec amendment before merge.
-- **V2.** On the same branch, 2 runs per OS of the wrapped suite steps record each `check` output with its visited counts, the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`.
+- **V2.** On the same branch, 2 runs per OS of the wrapped suite steps record each `check` output with its visited counts, the scan's run time per leg, and whether `sudo -n true` succeeds on `macos-latest`; every hit is fixed as an escape or pruned by spec amendment before merge, and the gate does not ship if clearing a window needs `/etc`, `/private/etc`, `/usr/local/bin` or `/opt/homebrew` pruned wholesale.
 - **V3.** On the same branch, a bats file that does not call `load_mocks` and skips unless `GITHUB_ACTIONS` is set uses `/usr/bin/sudo` to create a file under `/usr/local/bin`, and the wrapped step goes red on both OSes with `root-writes: the suite changed real host paths:` and that path in the log.
 - **V4.** On the first green CI run after merge, every `test-shard` and `test-macos-shard` log shows `root-writes: none (` with a non-zero visited count for every non-empty root.
 - **N1.** No change to `assert_no_real_root_paths`, `_unguarded_path_resets` or any ledger.
@@ -174,3 +177,13 @@ Disposition: Addressed (operator, 2026-11-27) — roots resolved with `pwd -P`, 
 ### Adversarial Spec Review (comparison/judge designs only)
 
 N/A — spec has no comparison/evaluator/ambiguous-criteria trigger.
+
+## Multi-Lens Review, round 3 (scoped Risk re-review)
+
+Reviewed at commit: `68a61d3c`, sections new in that revision only
+
+### Risk
+
+Finding: Root resolution with `pwd -P` makes `-H` redundant, so deleting `-H` breaks no test and R6's failure branch (the blind walk) cannot be reached by the mutation the spec described. "Empty" was not defined apart from the walk, so a root the user can enter but not list would print `empty:` and pass. Minor: a `-cnewer`-only hit prints a pre-marker mtime, mtime printing needs GNU/BSD `stat` variants under sudo; V2 gave no rule for a harmless suite-window hit.
+Assumption: null windows on hosted runners show no background writes under the roots, or few enough to prune by subtree without blinding the scan where escapes land.
+Disposition: Addressed (operator, 2026-11-27) — `-H` dropped, resolution is the one mechanism; emptiness by `ls -A <root>/.` under the same privilege, a refused listing fails; the R6 test mutates the resolution away; mtime printing dropped; suite-window hits are fixed or pruned by amendment, and a stop rule refuses wholesale pruning of `/etc`, `/private/etc`, `/usr/local/bin` or `/opt/homebrew`.
