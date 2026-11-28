@@ -98,7 +98,6 @@ jobs:
       - name: Run traced suite
         env:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
-          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
           COVERAGE_TRACE_DIR: shard-out
         run: |
           set +e
@@ -297,10 +296,16 @@ jobs:
       - name: Compute shard list
         run: bash scripts/bats-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}" > "shard-${{ matrix.shard }}.files"
 
+      # Homebrew Python writes stdlib bytecode into /opt/homebrew/Cellar the first
+      # time a module is imported; the suite's `python3 -I` callers ignore
+      # PYTHONPYCACHEPREFIX. Compiled here, before the root-writes window opens,
+      # nothing is left for the suite to write there (spec R13).
+      - name: Precompile Homebrew Python stdlib
+        run: python3 -m compileall -q -j 0 -x /test/ "$(python3 -c 'import sysconfig; print(sysconfig.get_path("stdlib"))')"
+
       - name: Run tests
         env:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
-          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache
         run: |
           set +e
           bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"
