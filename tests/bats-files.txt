@@ -42,6 +42,7 @@ tests/scripts/refresh_sha256_pins.bats
 tests/scripts/refresh_uv_lock.bats
 tests/scripts/repo_session.bats
 tests/scripts/root_writes.bats
+tests/scripts/root_writes_escape.bats
 tests/scripts/ssh_routing.bats
 tests/scripts/unit.bats
 tests/scripts/uv_lock_refresh_workflow.bats
