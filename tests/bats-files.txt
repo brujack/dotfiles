@@ -15,6 +15,7 @@ tests/scripts/check_requirements_install.bats
 tests/scripts/ci_auto_merge.bats
 tests/scripts/ci_download_retry.bats
 tests/scripts/ci_download_verify.bats
+tests/scripts/ci_root_writes.bats
 tests/scripts/ci_runner_pins.bats
 tests/scripts/ci_shard_gate.bats
 tests/scripts/ci_suite_report.bats
