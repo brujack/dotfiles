@@ -140,6 +140,12 @@ The CI wiring gets a test in the repo's per-job style (parse `ci.yml` per job, n
 - **N4.** The scan never writes, moves or deletes anything under its roots.
 - **N5.** No check the `test-shard` or `test-macos-shard` jobs run today is dropped or weakened.
 
+## Amendments
+
+- R12 -> The script carries a prune list per OS, each holding exactly `/opt/hca` at merge; each entry is applied as `-path <p> -prune`; no entry equals or contains `/etc/apt`, `/etc/docker`, `/etc/sysctl.d`, `/usr/share/keyrings`, `/usr/local/bin`, `/opt/homebrew`, `/private/etc/apt`, `/private/etc/docker` or `/private/etc/sysctl.d`, and a test reading the list enforces it. — V1/V2 rollout: `/opt/hca/logs/hosted-compute-agent.log`, the hosted runner's own agent log, changed during suite run 46103860810 (test-shard 1 and 2, test-macos-shard 2 and 3) and null-window run 46103849102 (macos 9), on both OSes; operator approved 2026-11-27.
+- adds R13: The `test-shard` step that runs `make bash-coverage` and the `test-macos-shard` step that runs make set `PYTHONPYCACHEPREFIX: ${{ runner.temp }}/pycache` in their step env, and a per-job test in `tests/scripts/ci_root_writes.bats` pins both. — V2 rollout: every `test-macos-shard` in suite run 46103860810 reported 40-62 `__pycache__` paths under `/opt/homebrew/Cellar/python@3.15`, written by the suite's own `python3`; stopping the write at its source keeps `/opt/homebrew` unpruned; operator approved 2026-11-27.
+- R13 -> `test-macos-shard` runs a step named `Precompile Homebrew Python stdlib`, before its `Run tests` step and with no `if:`, that runs `python3 -m compileall -q -j 0 -x /test/` over `sysconfig.get_path("stdlib")`; no shard step sets `PYTHONPYCACHEPREFIX`; a per-job test in `tests/scripts/ci_root_writes.bats` pins both. — Suite run 46107517429 still showed 28 and 40 `__pycache__` paths on test-macos-shard 1 and 3: the suite's `python3 -I` callers (tests/helpers/http_listener.bash, scripts/refresh-sha256-pins.sh, scripts/pre-push) ignore every PYTHON* variable, so `PYTHONPYCACHEPREFIX` cannot stop the write; compiling the stdlib before the window opens leaves nothing to write (Studio probe: rc 0, 760 .pyc, 0.5 s); operator approved 2026-11-27.
+
 ## Multi-Lens Review
 
 Reviewed at commit: `874aa250` (Step 7 self-review commit, before Step 8 dispatch)
