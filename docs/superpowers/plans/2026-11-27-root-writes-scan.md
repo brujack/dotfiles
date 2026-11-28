@@ -2,6 +2,8 @@
 
 spec: docs/superpowers/specs/2026-11-27-root-writes-scan-design.md
 
+> **Status: DONE** — dotfiles#504 (cd60673b), 2026-11-28.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fail a CI test shard when the bats suite changed real host paths under `/etc /usr/local /usr/share/keyrings /opt`, measured on the filesystem rather than through mock-call ledgers.
