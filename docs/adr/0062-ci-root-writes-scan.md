@@ -30,9 +30,16 @@ CI shard jobs (`test-shard` and `test-macos-shard`) only.
   walk a root. It never rewrites or removes anything.
 - **No local mode.** On `claude` there were 30 non-suite changes under the roots in 24 hours and 28
   unreadable directories, so a local run would warn on writes the suite never made.
-- **Prune lists.** Each OS has a prune list in the script, empty today. An entry enters only by spec
-  amendment, with the measurement that produced it. No entry may equal or contain a directory `lib/`
-  installs into; `tests/scripts/root_writes.bats` enforces that.
+- **Prune lists.** Each OS has a prune list in the script, holding only `/opt/hca` at merge: the
+  hosted runner writes its own agent log there (`hosted-compute-agent.log`) on both OSes during a
+  job (rollout runs 46103860810 and 46103849102). An entry enters only by spec amendment, with the
+  measurement that produced it. No entry may equal or contain a directory `lib/` installs into;
+  `tests/scripts/root_writes.bats` enforces that.
+- **macOS stdlib precompile.** Homebrew Python writes stdlib bytecode under `/opt/homebrew/Cellar`
+  the first time the suite imports a module, and the suite's `python3 -I` callers ignore
+  `PYTHONPYCACHEPREFIX`. `test-macos-shard` compiles the stdlib (`python3 -m compileall`) in a step
+  before the window opens, so `/opt/homebrew` stays scanned rather than pruned (rollout run
+  46107517429; clean afterwards in run 46110149073, attempts 1 and 2).
 - **Rollout gate.** The step merges only after a never-merged scratch branch shows 10 null windows
   per OS, 2 suite windows, and a deliberate `/usr/bin/sudo` escape that the scan catches.
 
