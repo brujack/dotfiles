@@ -84,6 +84,10 @@ jobs:
       - name: Compute shard list
         run: bash scripts/bats-shard.sh "${{ matrix.shard }}" "${{ strategy.job-total }}" > "shard-${{ matrix.shard }}.files"
 
+      # Opens the root-writes window before any bats work, on every shard.
+      - name: Mark root-writes window
+        run: bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"
+
       # Only shard 1 carries the non-bats half of `make test`.
       - name: Run test prerequisites (shard 1 only)
         if: matrix.shard == 1
@@ -95,7 +99,16 @@ jobs:
         env:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
           COVERAGE_TRACE_DIR: shard-out
-        run: make bash-coverage < /dev/null
+        run: |
+          set +e
+          make bash-coverage < /dev/null
+          rc=$?
+          bash scripts/root-writes.sh check "${RUNNER_TEMP}/root-writes.marker"
+          check_rc=$?
+          if [ "${rc}" -ne 0 ]; then
+            exit "${rc}"
+          fi
+          exit "${check_rc}"
 
       # No `if:`: a green make over fewer tests than declared must fail.
       - name: Check executed tests equal declared
@@ -288,6 +301,7 @@ jobs:
           BATS_FILES_FROM: shard-${{ matrix.shard }}.files
         run: |
           set +e
+          bash scripts/root-writes.sh mark "${RUNNER_TEMP}/root-writes.marker"
           if [ "${{ matrix.shard }}" = "1" ]; then
             make test > /tmp/make-test.log 2>&1 < /dev/null
           else
@@ -296,12 +310,17 @@ jobs:
           rc=$?
           bash scripts/ci-suite-report.sh /tmp/make-test.log --files "shard-${{ matrix.shard }}.files"
           report_rc=$?
+          bash scripts/root-writes.sh check "${RUNNER_TEMP}/root-writes.marker"
+          check_rc=$?
           if [ "${rc}" -ne 0 ]; then
             printf 'make exited %d\n' "${rc}" >&2
             tail -40 /tmp/make-test.log
             exit 1
           fi
-          exit "${report_rc}"
+          if [ "${report_rc}" -ne 0 ]; then
+            exit "${report_rc}"
+          fi
+          exit "${check_rc}"
 
       # Default success() condition on purpose: a shard that failed leaves no
       # list for this attempt, so the gate's coverage check fails too.
