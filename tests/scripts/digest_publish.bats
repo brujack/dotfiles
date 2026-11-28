@@ -1,10 +1,12 @@
 #!/usr/bin/env bats
 
 # Tests for scripts/digest-publish.sh: publish_digest pushes the committed
-# digest to its own branch and opens a PR, refuses anything outside the
-# digest's directory, and fails loudly when it cannot publish.
-# Real git against a local bare remote (the git mock cannot fail push alone);
-# gh is the recording stub behind _DIGEST_GH_BIN, so no test reaches GitHub.
+# digest to its own branch, refuses anything outside the digest's directory,
+# and fails loudly when it cannot publish. It never calls gh: the cloud
+# session's proxy failed `gh pr create` with HTTP 403 on 2026-11-23, so
+# .github/workflows/digest-pr.yml opens the PR from the push (scripts/digest-pr.sh).
+# Real git against a local bare remote (the git mock cannot fail push alone).
+# MOCK_CALLS_FILE records any gh call; the tests assert there is none.
 
 bats_require_minimum_version 1.5.0
 
@@ -14,7 +16,11 @@ setup() {
   load_mocks
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   : > "${MOCK_CALLS_FILE}"
-  export _DIGEST_GH_BIN="${REPO_ROOT}/tests/stubs/gh-stub"
+  # A gh on PATH records itself; publish_digest must never reach it.
+  mkdir -p "${BATS_TEST_TMPDIR}/ghbin"
+  printf '#!/usr/bin/env bash\nprintf "gh %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${BATS_TEST_TMPDIR}/ghbin/gh"
+  chmod +x "${BATS_TEST_TMPDIR}/ghbin/gh"
+  export PATH="${BATS_TEST_TMPDIR}/ghbin:${PATH}"
 
   # Real git only: tests/mocks/git would record instead of pushing.
   REAL_PATH="$(printf '%s' "${PATH}" | tr ':' '\n' | grep -v 'tests/mocks' | tr '\n' ':' | sed 's/:$//')"
@@ -46,14 +52,15 @@ remote_tip() {
   PATH="${REAL_PATH}" git -C "${REMOTE}" rev-parse --verify -q "refs/heads/$1"
 }
 
-@test "publish_digest pushes HEAD to its own branch and opens a PR against master" {
+@test "publish_digest pushes HEAD to its own branch, opens no PR and says the digest-pr workflow will" {
   cd "${WORK}"
   PATH="${REAL_PATH}" run publish_digest digest/test-2026-11-23 "docs: digest 2026-11-23" "${DIR}"
   [ "${status}" -eq 0 ]
   [ "$(remote_tip digest/test-2026-11-23)" = "$(PATH="${REAL_PATH}" git -C "${WORK}" rev-parse HEAD)" ]
   # master on the remote is untouched: the digest reaches it only through the PR.
   [ "$(remote_tip master)" = "$(PATH="${REAL_PATH}" git -C "${WORK}" rev-parse HEAD~1)" ]
-  grep -qx -- "gh pr create --repo brujack/dotfiles --base master --head digest/test-2026-11-23 --title docs: digest 2026-11-23 --body Weekly digest committed by the scheduled routine." "${MOCK_CALLS_FILE}"
+  [[ "${output}" == *"digest-pr workflow will open the PR"* ]]
+  run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
 }
 
 @test "publish_digest works from a detached HEAD, as the cloud sandbox checks out" {
@@ -122,7 +129,7 @@ remote_tip() {
   [ -z "$(remote_tip digest/empty)" ]
 }
 
-@test "publish_digest exits 1 naming the branch, and opens no PR, when the push fails" {
+@test "publish_digest exits 1 naming the branch when the push fails" {
   cd "${WORK}"
   # Fetch still works; only the push is refused, by a pre-receive hook.
   printf '#!/bin/sh\nexit 1\n' > "${REMOTE}/hooks/pre-receive"
@@ -159,33 +166,10 @@ remote_tip() {
   [ "$(remote_tip digest/taken)" = "${_before}" ]
 }
 
-@test "publish_digest exits 1 saying the branch is pushed when gh pr create fails" {
-  cd "${WORK}"
-  export MOCK_GH_EXIT=1
-  PATH="${REAL_PATH}" run publish_digest digest/noprgh "docs: digest" "${DIR}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"pushed digest/noprgh but could not open the PR"* ]]
-  [ -n "$(remote_tip digest/noprgh)" ]
-}
-
-@test "publish_digest exits 1 when gh is not installed" {
-  cd "${WORK}"
-  export _DIGEST_GH_BIN="${BATS_TEST_TMPDIR}/no-such-gh"
-  PATH="${REAL_PATH}" run publish_digest digest/nogh "docs: digest" "${DIR}"
-  [ "${status}" -eq 1 ]
-  [[ "${output}" == *"could not open the PR"* ]]
-}
-
 @test "publish_digest exits 2 on a wrong argument count, before any push" {
   cd "${WORK}"
   PATH="${REAL_PATH}" run publish_digest digest/only-two "docs: digest"
   [ "${status}" -eq 2 ]
   [ -z "$(remote_tip digest/only-two)" ]
   run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
-}
-
-@test "load_mocks points _DIGEST_GH_BIN at the recording stub, so no test reaches real gh" {
-  unset _DIGEST_GH_BIN
-  load_mocks
-  [ "${_DIGEST_GH_BIN}" = "${REPO_ROOT}/tests/stubs/gh-stub" ]
 }

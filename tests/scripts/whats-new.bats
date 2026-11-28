@@ -20,6 +20,13 @@ setup() {
 
   export MOCK_CALLS_FILE="${BATS_TEST_TMPDIR}/mock_calls"
   touch "${MOCK_CALLS_FILE}"
+  # A recording gh first on PATH: the publish path must never call gh, and the
+  # "no PR" assertions below can only fail if a call is recorded. Exits 1 so a
+  # regression can never reach the real gh.
+  mkdir -p "${BATS_TEST_TMPDIR}/ghbin"
+  printf '#!/usr/bin/env bash\nprintf "gh %%s\\n" "$*" >> "${MOCK_CALLS_FILE}"\nexit 1\n' > "${BATS_TEST_TMPDIR}/ghbin/gh"
+  chmod +x "${BATS_TEST_TMPDIR}/ghbin/gh"
+  export PATH="${BATS_TEST_TMPDIR}/ghbin:${PATH}"
 
   export MOCK_CURL_STDOUT="${FAKE_CHANGELOG}"
   export MOCK_CLAUDE_STDOUT="## New Features
@@ -248,11 +255,11 @@ existing content"
   [ "${_rc}" -ne 0 ]
 }
 
-@test "commit_and_push: publishes to digest/claude-code-<today> and opens a PR" {
+@test "commit_and_push: publishes to digest/claude-code-<today> and opens no PR itself" {
   source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
   commit_and_push
   grep -qx "git push origin HEAD:refs/heads/digest/claude-code-${TODAY}" "${MOCK_CALLS_FILE}"
-  grep -q "^gh pr create --repo brujack/dotfiles --base master --head digest/claude-code-${TODAY} --title docs: add Claude Code weekly features digest ${TODAY}" "${MOCK_CALLS_FILE}"
+  run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
 }
 
 @test "commit_and_push: refuses a commit outside its own digest dir" {
@@ -262,14 +269,6 @@ existing content"
   commit_and_push 2>/dev/null || _rc=$?
   [ "${_rc}" -eq 1 ]
   run ! grep -q '^gh ' "${MOCK_CALLS_FILE}"
-}
-
-@test "commit_and_push: returns 1 when the PR cannot be opened" {
-  source "${REPO_ROOT}/scripts/whats-new-claude-code.sh"
-  export MOCK_GH_EXIT=1
-  local _rc=0
-  commit_and_push 2>/dev/null || _rc=$?
-  [ "${_rc}" -eq 1 ]
 }
 
 @test "commit_and_push: returns 1 when origin is unreachable after a successful commit" {

@@ -145,9 +145,6 @@ load_mocks() {
   export _TMUX_BIN="/usr/bin/false"
   export _SYSTEMD_USER_DIR="${BATS_TEST_TMPDIR:-/nonexistent}/systemd-user"
   export REPO_SESSIONS_FILE="${BATS_TEST_TMPDIR:-/nonexistent}/repo-sessions-empty.sh"
-  # The whats-new scripts open a PR through gh (scripts/digest-publish.sh); unset,
-  # a test reaching main would run the real gh pr create against GitHub.
-  export _DIGEST_GH_BIN="${REPO_ROOT}/tests/stubs/gh-stub"
   [[ -z "${BATS_TEST_TMPDIR:-}" ]] || : > "${REPO_SESSIONS_FILE}"
   # claude and workstation have a real /sys/module/nvidia/version, so an unset
   # seam would read the live driver version and make results machine-dependent.
