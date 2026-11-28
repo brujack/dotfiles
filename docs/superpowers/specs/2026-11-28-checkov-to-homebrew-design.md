@@ -1,7 +1,8 @@
 # Move checkov out of the shared uv lock into Homebrew
 
 - **Date:** 2026-11-28
-- **Status:** Draft
+- **Status:** Approved
+- **Approved:** 2026-11-28
 
 ## Problem
 
@@ -308,7 +309,7 @@ N4 forbade `Brewfile.devtools` without a reason, though it matches the venv's sc
 Assumption: packaging 26.3 in the three consumed renderings does not break ai-config's or
 state-ledger's CI; settle by running each consumer's CI test target against renderings from
 the cooldown lock.
-Disposition:
+Disposition: Addressed (operator, 2026-11-28: "Looks good"). Revised at `2d23dd54`; see the round-2 changes in Design 2, 4, 6, 7, R2, R5, R7, R8, V1-V3, V5, N2, N4.
 
 ### Ergonomics
 
@@ -333,7 +334,7 @@ Rollout step 1 gave no command that works over plain `ssh` (brew is not on `PATH
 terraform_ansible's bare `checkov` call names no remedy when missing.
 Assumption: No fleet mac that runs `-t setup`/`-t brew_install` is Intel; settle with
 `uname -m` on each mac.
-Disposition:
+Disposition: Addressed (operator, 2026-11-28: "Looks good"). Revised at `2d23dd54`; see the round-2 changes in Design 2, 4, 6, 7, R2, R5, R7, R8, V1-V3, V5, N2, N4.
 
 ### Risk
 
@@ -358,7 +359,7 @@ vendored tree, not checkov alone. Low: consumer CI breaks only after merge (noti
 etch apply can roll the venv back until the next update; Monday's uv-lock refresh may conflict
 (merged by hand).
 Assumption: No Intel mac runs `install_macos_casks`; settle with `uname -m` on each mac.
-Disposition:
+Disposition: Addressed (operator, 2026-11-28: "Looks good"). Revised at `2d23dd54`; see the round-2 changes in Design 2, 4, 6, 7, R2, R5, R7, R8, V1-V3, V5, N2, N4.
 
 ### Adversarial Spec Review (comparison/judge designs only)
 
@@ -374,11 +375,11 @@ Report: [round1.md](2026-11-28-checkov-to-homebrew-design.external-review/round1
 
 | finding | disposition | evidence                                                                                                                                                                                                                                                                  | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- | ----------------- |
-| F1.1    | Measured    | Import grep over all nine repos, `*.py` and `*.j2`, with import names: 0 hits; `from_xml`/`to_xml` in `*.yml`/`*.yaml`/`*.j2`: 0 hits; positive control `yaml\|json` finds 157 (ai-config) and 2 (dotfiles). `claude`, git grep, 2026-11-28. Recorded under Measurements. | unjudged         |                   |
-| F1.2    | Fixed       | Design 6 and R8 now state the whole vendored tree is unmonitored with no cooldown and name the `pip-audit --path` re-check; "Not handled" lists the missing automated watch.                                                                                              | unjudged         |                   |
-| F1.3    | Fixed       | Design 4 gives the four-step recipe (lock, capped upgrade, plain lock, sync); R5 requires no `exclude-newer` and `make check-lock`; V1 runs `scripts/uv_lock_cooldown.py verify`.                                                                                         | unjudged         |                   |
-| F1.4    | Fixed       | checkov moves to `Brewfile.devtools` (Design 2, R2, R7, N4), so a failed install cannot skip the main or GUI bundle and the `mac_mini` hosts do not get it; Studio measured arm64, macOS 27.2.1 (bottled); laptop and work macs unreachable, stated in Measurements.      | unjudged         |                   |
-| F1.5    | Fixed       | V3 asserts `checkov --version` prints the formula's version and no `checkov` remains under `~/.pyenv/versions/*/bin` or `*/envs/*/bin`.                                                                                                                                   | unjudged         |                   |
-| F1.6    | Fixed       | R2 no longer requires an alphabetical position.                                                                                                                                                                                                                           | unjudged         |                   |
+| F1.1    | Measured    | Import grep over all nine repos, `*.py` and `*.j2`, with import names: 0 hits; `from_xml`/`to_xml` in `*.yml`/`*.yaml`/`*.j2`: 0 hits; positive control `yaml\|json` finds 157 (ai-config) and 2 (dotfiles). `claude`, git grep, 2026-11-28. Recorded under Measurements. | unjudged         | operator: "Looks good" (2026-11-28) |
+| F1.2    | Fixed       | Design 6 and R8 now state the whole vendored tree is unmonitored with no cooldown and name the `pip-audit --path` re-check; "Not handled" lists the missing automated watch.                                                                                              | unjudged         | operator: "Looks good" (2026-11-28) |
+| F1.3    | Fixed       | Design 4 gives the four-step recipe (lock, capped upgrade, plain lock, sync); R5 requires no `exclude-newer` and `make check-lock`; V1 runs `scripts/uv_lock_cooldown.py verify`.                                                                                         | unjudged         | operator: "Looks good" (2026-11-28) |
+| F1.4    | Fixed       | checkov moves to `Brewfile.devtools` (Design 2, R2, R7, N4), so a failed install cannot skip the main or GUI bundle and the `mac_mini` hosts do not get it; Studio measured arm64, macOS 27.2.1 (bottled); laptop and work macs unreachable, stated in Measurements.      | unjudged         | operator: "Looks good" (2026-11-28) |
+| F1.5    | Fixed       | V3 asserts `checkov --version` prints the formula's version and no `checkov` remains under `~/.pyenv/versions/*/bin` or `*/envs/*/bin`.                                                                                                                                   | unjudged         | operator: "Looks good" (2026-11-28) |
+| F1.6    | Fixed       | R2 no longer requires an alphabetical position.                                                                                                                                                                                                                           | unjudged         | operator: "Looks good" (2026-11-28) |
 
 Stopped: reviewer recommended stopping in round 1
