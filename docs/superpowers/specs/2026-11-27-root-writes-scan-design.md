@@ -1,7 +1,8 @@
 # Root-writes scan around the bats suite
 
 - **Date:** 2026-11-27
-- **Status:** Draft (revised after external review round 1)
+- **Status:** Approved
+- **Approved:** 2026-11-27
 
 ## Problem
 
@@ -211,10 +212,10 @@ Report: [round1.md](2026-11-27-root-writes-scan-design.external-review/round1.md
 
 | finding | disposition | evidence | reviewer verdict | operator (Step 9) |
 | ------- | ----------- | -------- | ---------------- | ----------------- |
-| F1.1 | Fixed | Added "Prune list" (per-OS lists, `-path <p> -prune`, entries only by amendment citing their run), R12 with the `lib/` install directories no prune may equal or contain, a test enforcing it, the restated stop rule, R2 and N3 amended. | unjudged | |
-| F1.2 | Fixed | `test-shard` gets its own `mark` step before the shard-1 prerequisites step, so both OSes scan the prerequisites; R9 amended. | unjudged | |
-| F1.3 | Fixed | R10 now includes a per-job `ci.yml` test pinning R9's order, the absence of an `exit` between make and `check`, and that the step's exit can come from `check`. | unjudged | |
-| F1.4 | Fixed | V1 records `find`'s exit status and stderr; a non-zero status or stderr line in a null window stops the gate until resolved by amendment. The measurement itself is V1's, run on the hosted runner. | unjudged | |
-| F1.5 | Fixed | Test expectations resolve paths with `pwd -P` (stated under Tests and in R10). | unjudged | |
+| F1.1 | Fixed | Added "Prune list" (per-OS lists, `-path <p> -prune`, entries only by amendment citing their run), R12 with the `lib/` install directories no prune may equal or contain, a test enforcing it, the restated stop rule, R2 and N3 amended. | unjudged | "spec approved" (2026-11-27) |
+| F1.2 | Fixed | `test-shard` gets its own `mark` step before the shard-1 prerequisites step, so both OSes scan the prerequisites; R9 amended. | unjudged | "spec approved" (2026-11-27) |
+| F1.3 | Fixed | R10 now includes a per-job `ci.yml` test pinning R9's order, the absence of an `exit` between make and `check`, and that the step's exit can come from `check`. | unjudged | "spec approved" (2026-11-27) |
+| F1.4 | Fixed | V1 records `find`'s exit status and stderr; a non-zero status or stderr line in a null window stops the gate until resolved by amendment. The measurement itself is V1's, run on the hosted runner. | unjudged | "spec approved" (2026-11-27) |
+| F1.5 | Fixed | Test expectations resolve paths with `pwd -P` (stated under Tests and in R10). | unjudged | "spec approved" (2026-11-27) |
 
 Stopped: reviewer recommended stopping in round 1
