@@ -170,12 +170,25 @@ _line_of() { awk -v pat="$1" '$0 ~ pat { print NR; exit }'; }
   done
 }
 
-# Homebrew Python writes stdlib bytecode under /opt/homebrew/Cellar when the
-# suite runs python3 (rollout run 46103860810, every test-macos-shard); the
-# wrapped steps send it to the runner's temp dir instead of pruning /opt/homebrew.
-@test "both wrapped steps send Python bytecode caches to the runner temp dir" {
-  _step test-shard 'Run traced suite' |
-    command grep -qE '^          PYTHONPYCACHEPREFIX: [$][{][{] runner[.]temp [}][}]/pycache$'
-  _step test-macos-shard 'Run tests' |
-    command grep -qE '^          PYTHONPYCACHEPREFIX: [$][{][{] runner[.]temp [}][}]/pycache$'
+# Homebrew Python writes stdlib bytecode under /opt/homebrew/Cellar the first
+# time the suite imports a module (rollout runs 46103860810 and 46107517429, every
+# test-macos-shard). PYTHONPYCACHEPREFIX cannot stop it: the suite's `python3 -I`
+# callers ignore every PYTHON* variable. Compiling the stdlib before the window
+# opens leaves Python nothing to write; /opt/homebrew stays unpruned.
+@test "test-macos-shard precompiles the Homebrew Python stdlib in a step before Run tests" {
+  local _t _pre _run
+  _t="$(_code test-macos-shard)"
+  _pre="$(printf '%s\n' "${_t}" | _line_of '^      - name: Precompile Homebrew Python stdlib$')"
+  _run="$(printf '%s\n' "${_t}" | _line_of '^      - name: Run tests$')"
+  [ -n "${_pre}" ]
+  [ -n "${_run}" ]
+  [ "${_pre}" -lt "${_run}" ]
+  _step test-macos-shard 'Precompile Homebrew Python stdlib' |
+    command grep -qF 'python3 -m compileall -q -j 0 -x /test/ "$(python3 -c '"'"'import sysconfig; print(sysconfig.get_path("stdlib"))'"'"')"'
+  [ -z "$(_step test-macos-shard 'Precompile Homebrew Python stdlib' | command grep -E '^        if:' || true)" ]
+}
+
+@test "no shard step sets PYTHONPYCACHEPREFIX" {
+  [ -z "$(_code test-shard | command grep PYTHONPYCACHEPREFIX || true)" ]
+  [ -z "$(_code test-macos-shard | command grep PYTHONPYCACHEPREFIX || true)" ]
 }
